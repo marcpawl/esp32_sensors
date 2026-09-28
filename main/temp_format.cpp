@@ -22,18 +22,20 @@ std::string format_temp_c_x100(std::int16_t temp_c_x100) {
     }
     const int value = negative ? -tenths : tenths;
 
-    // `value` is in tenths; split into whole and fractional parts. C integer
-    // division truncates toward zero, so for negative values both parts are
-    // non-positive and `frac` must be negated for display.
-    const int whole = value / 10;
-    const int frac = value % 10;
+    // `value` is in tenths; split into magnitude parts. C integer division
+    // truncates toward zero, so work on the absolute value and emit the sign
+    // explicitly: for -1 <= value <= 0 the whole part is 0, and relying on the
+    // sign of `value % 10` would drop the '-' (e.g. -0.5 -> "0.5").
+    const int abs_value = (value < 0) ? -value : value;
+    const int whole = abs_value / 10;
+    const int frac = abs_value % 10;
+
+    // A negative input that rounds to zero must render as "0.0", not "-0.0".
+    const bool emit_sign = negative && abs_value != 0;
 
     char buf[16];
-    if (frac < 0) {
-        std::snprintf(buf, sizeof(buf), "%d.%d", whole, -frac);
-    } else {
-        std::snprintf(buf, sizeof(buf), "%d.%d", whole, frac);
-    }
+    std::snprintf(buf, sizeof(buf), "%s%d.%d", emit_sign ? "-" : "", whole,
+                  frac);
     return buf;
 }
 
