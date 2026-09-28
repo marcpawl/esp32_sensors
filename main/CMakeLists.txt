@@ -1,0 +1,37 @@
+idf_component_register(
+    SRCS
+        "main.cpp"
+        "app_config.cpp"
+        "app_config_store.cpp"
+        "battery_monitor.cpp"
+        "led_manager.cpp"
+        "mode_controller.cpp"
+        "onewire_bus.cpp"
+        "ds18b20.cpp"
+        "sensor_manager.cpp"
+        "rtc_state.cpp"
+        "temp_format.cpp"
+        "payload.cpp"
+        "configure_mode.cpp"
+        "https_server.cpp"
+        "config_page.cpp"
+        "wifi_ap.cpp"
+        "ntp_client.cpp"
+        "run_mode.cpp"
+        "certs/self_signed_cert.cpp"
+    INCLUDE_DIRS
+        "include"
+    REQUIRES
+        nvs_flash
+        esp_wifi
+        esp_netif
+        esp_event
+        esp_https_server
+        esp_http_client
+        esp_adc
+        esp_driver_gpio
+        esp_driver_uart
+        esp_timer
+        mbedtls
+        lwip
+)

@@ -1,0 +1,54 @@
+# ESP-IDF defaults for the ESP32 Solar-Powered Thermometer Logger.
+# See Specification.md Rev 12. Only options that are known-good for ESP-IDF
+# v6.1 on the classic ESP32 are set here; anything else is left at its default.
+
+# Target chip.
+CONFIG_IDF_TARGET="esp32"
+
+# --- C++ ---
+# ESP-IDF v6.1 already defaults to gnu++26 (GNU extensions) for chip targets;
+# noted here so the intent survives future IDF changes. Exceptions and RTTI are
+# disabled by default for code-size reasons (spec §1, feature notes).
+CONFIG_COMPILER_CXX_EXCEPTIONS=n
+CONFIG_COMPILER_CXX_RTTI=n
+
+# --- Logging ---
+# Info level by default; the app logs mode, sampling, and errors.
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+
+# --- Wi-Fi ---
+# Required for both the Configure-mode SoftAP and Run-mode station.
+CONFIG_ESP_WIFI_ENABLED=y
+CONFIG_ESP_WIFI_SOFTAP_SUPPORT=y
+# Modest buffer counts: the device sends small, infrequent payloads.
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=8
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=16
+CONFIG_ESP_WIFI_STATIC_TX_BUFFER_NUM=8
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=16
+
+# --- HTTPS server (Configure mode, §6) ---
+# The config UI is served over TLS on port 443.
+CONFIG_ESP_HTTPS_SERVER_ENABLE=y
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+CONFIG_HTTPD_MAX_URI_LEN=512
+
+# --- mbedTLS ---
+# Keep the TLS stack lean; a self-signed development certificate is used (§6).
+CONFIG_MBEDTLS_SSL_MAX_CONTENT_LEN=8192
+CONFIG_MBEDTLS_DYNAMIC_BUFFER=y
+
+# --- ADC (battery measurement, §2.5) ---
+# Classic ESP32 supports line-fitting calibration only.
+CONFIG_ESP_ADC_CAL_LINE_FITTING_SUPPORTED=y
+
+# --- FreeRTOS ---
+CONFIG_FREERTOS_HZ=100
+
+# --- Partition table ---
+# A single factory app plus NVS; no OTA in this revision.
+CONFIG_PARTITION_TABLE_SINGLE_APP=y
+CONFIG_PARTITION_TABLE_FILENAME="partitions_singleapp.csv"
+
+# --- Compiler optimisation ---
+# -Os keeps the image small, which matters for the ESP32 flash footprint.
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
