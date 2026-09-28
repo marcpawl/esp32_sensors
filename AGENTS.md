@@ -69,6 +69,7 @@ Refer to `Specification.md` for the detailed contracts: operating modes, sample 
 ```
 esp32_sensors/
 ├── Specification.md     # Authoritative software spec (Rev 12) — read this first
+├── RELEASE_NOTES.md     # Human-readable release notes
 ├── CMakeLists.txt       # Top-level ESP-IDF project definition
 ├── sdkconfig.defaults   # Committed IDF defaults (sdkconfig itself is generated)
 ├── main/                # Firmware component (C++26) — see module map below
@@ -89,6 +90,7 @@ esp32_sensors/
 - `sdkconfig.defaults` — the committed configuration intent (target, C++ exceptions/RTTI off, partition table, `-Os`). `sdkconfig` is generated from this and is **not** tracked.
 - `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash environment. Extend these (not ad-hoc `docker run`) when adding tooling.
 - `LICENSE` — GPL-3.0.
+- `RELEASE_NOTES.md` — human-readable release notes; keep the "Implemented" / "Not yet implemented" split honest as milestones land.
 
 **`main/` module map:**
 
