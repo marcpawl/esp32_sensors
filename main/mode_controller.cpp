@@ -1,8 +1,8 @@
 // 3-position ON-OFF-ON switch reading (§2.3, §3).
 #include "mode_controller.hpp"
 
-#include "esp_log.h"
 #include "driver/gpio.h"
+#include "esp_log.h"
 
 namespace thermo {
 namespace {
@@ -21,7 +21,7 @@ gpio_config_t input_config(int gpio) {
     return cfg;
 }
 
-} // namespace
+}  // namespace
 
 ModeController::ModeController(int config_gpio, int run_gpio)
     : config_gpio_(config_gpio), run_gpio_(run_gpio) {}
@@ -37,8 +37,7 @@ esp_err_t ModeController::init() {
 }
 
 Mode ModeController::read() const {
-    const int cfg_level =
-        gpio_get_level(static_cast<gpio_num_t>(config_gpio_));
+    const int cfg_level = gpio_get_level(static_cast<gpio_num_t>(config_gpio_));
     const int run_level = gpio_get_level(static_cast<gpio_num_t>(run_gpio_));
 
     if (cfg_level && run_level) {
@@ -56,4 +55,4 @@ Mode ModeController::read() const {
     return Mode::kOff;
 }
 
-} // namespace thermo
+}  // namespace thermo

@@ -12,12 +12,12 @@
 #include "rtc_state.hpp"
 #include "temp_format.hpp"
 
-using thermo::limits::kMaxBufferRecords;
 using thermo::rtc_buffer_clear;
 using thermo::rtc_buffer_push;
 using thermo::rtc_wifi_cache_clear;
 using thermo::RtcState;
 using thermo::SampleRecord;
+using thermo::limits::kMaxBufferRecords;
 
 namespace {
 
@@ -32,7 +32,7 @@ SampleRecord make_record(std::uint32_t age, std::uint16_t batt,
     return rec;
 }
 
-} // namespace
+}  // namespace
 
 // --- Record layout (§4.1) ---------------------------------------------------
 
@@ -93,15 +93,15 @@ TEST_CASE("rtc: buffer fills to capacity exactly", "[rtc_buffer]") {
 TEST_CASE("rtc: overflow evicts the oldest sample (FIFO)", "[rtc_buffer]") {
     RtcState st{};
     for (std::size_t i = 0; i < kMaxBufferRecords; ++i) {
-        rtc_buffer_push(st, make_record(static_cast<std::uint32_t>(i), 3000, 0));
+        rtc_buffer_push(st,
+                        make_record(static_cast<std::uint32_t>(i), 3000, 0));
     }
     // One more sample: capacity is unchanged and the oldest (age 0) is gone.
     rtc_buffer_push(st, make_record(9999, 3000, 0));
 
     TEST_ASSERT_EQUAL_UINT16(kMaxBufferRecords, st.buffer_len);
-    TEST_ASSERT_EQUAL_UINT32(1, st.buffer[0].age_base);        // was index 1
-    TEST_ASSERT_EQUAL_UINT32(9999,
-                             st.buffer[kMaxBufferRecords - 1].age_base);
+    TEST_ASSERT_EQUAL_UINT32(1, st.buffer[0].age_base);  // was index 1
+    TEST_ASSERT_EQUAL_UINT32(9999, st.buffer[kMaxBufferRecords - 1].age_base);
 }
 
 TEST_CASE("rtc: continued pushes stay at capacity and keep newest",

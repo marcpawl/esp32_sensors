@@ -32,12 +32,11 @@ std::vector<std::string> names(const std::string& a, const std::string& b,
     return {a, b, c};
 }
 
-} // namespace
+}  // namespace
 
 // --- Structure with no samples ---------------------------------------------
 
-TEST_CASE("payload: empty batch has zero size and empty array",
-          "[payload]") {
+TEST_CASE("payload: empty batch has zero size and empty array", "[payload]") {
     const std::string json =
         build_batch_json("greenhouse", names("a", "b", "c"), {});
 
@@ -150,11 +149,12 @@ TEST_CASE("payload: device name is JSON-escaped", "[payload]") {
 TEST_CASE("payload: control characters are escaped as \\u00XX", "[payload]") {
     // NOTE: "\x01" "ctrl" uses literal concatenation so the hex escape does
     // not swallow the following 'c' (a hex escape consumes all hex digits).
-    std::string name = "line\nbreak\tand\x01" "ctrl";
+    std::string name =
+        "line\nbreak\tand\x01"
+        "ctrl";
 
     const std::vector<NamedSample> samples{make_sample(1, 1, 1, 1, 1)};
-    const std::string json =
-        build_batch_json("dev", {name, "b", "c"}, samples);
+    const std::string json = build_batch_json("dev", {name, "b", "c"}, samples);
 
     TEST_ASSERT_NOT_NULL(strstr(json.c_str(), "\\n"));
     TEST_ASSERT_NOT_NULL(strstr(json.c_str(), "\\t"));
@@ -163,22 +163,21 @@ TEST_CASE("payload: control characters are escaped as \\u00XX", "[payload]") {
 
 // --- Document is well-formed at the edges ----------------------------------
 
-TEST_CASE("payload: every sample has exactly the expected keys",
-          "[payload]") {
-    const std::vector<NamedSample> samples{
-        make_sample(5, 3750, 111, 222, 333)};
+TEST_CASE("payload: every sample has exactly the expected keys", "[payload]") {
+    const std::vector<NamedSample> samples{make_sample(5, 3750, 111, 222, 333)};
     const std::string json =
         build_batch_json("d", names("a", "b", "c"), samples);
 
-    for (const char* key : {"\"age_s\":", "\"batt_mv\":", "\"a\":", "\"b\":",
-                            "\"c\":"}) {
+    for (const char* key :
+         {"\"age_s\":", "\"batt_mv\":", "\"a\":", "\"b\":", "\"c\":"}) {
         TEST_ASSERT_NOT_NULL_MESSAGE(strstr(json.c_str(), key), key);
     }
 }
 
 TEST_CASE("payload: zero-age and zero-battery sample is valid", "[payload]") {
     const std::vector<NamedSample> samples{make_sample(0, 0, 0, 0, 0)};
-    const std::string json = build_batch_json("d", names("a", "b", "c"), samples);
+    const std::string json =
+        build_batch_json("d", names("a", "b", "c"), samples);
 
     TEST_ASSERT_NOT_NULL(strstr(json.c_str(), "\"age_s\":0"));
     TEST_ASSERT_NOT_NULL(strstr(json.c_str(), "\"batt_mv\":0"));

@@ -22,4 +22,4 @@ extern const char kServerKeyPem[];
 std::size_t server_cert_len();
 std::size_t server_key_len();
 
-} // namespace thermo::certs
+}  // namespace thermo::certs

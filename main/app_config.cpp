@@ -12,9 +12,8 @@ namespace {
 bool all_alnum_etc(std::string_view v) {
     // Reject control characters and whitespace for credentials/SSIDs; allow a
     // broad set of printable ASCII.
-    return std::all_of(v.begin(), v.end(), [](unsigned char c) {
-        return c >= 0x20 && c < 0x7F;
-    });
+    return std::all_of(v.begin(), v.end(),
+                       [](unsigned char c) { return c >= 0x20 && c < 0x7F; });
 }
 
 std::optional<std::string> check_length(std::string_view v, std::size_t lo,
@@ -40,7 +39,7 @@ std::optional<std::uint32_t> parse_u32(std::string_view v) {
     return value;
 }
 
-} // namespace
+}  // namespace
 
 std::optional<std::string> validate_ssid(const std::string& v) {
     return check_length(v, 1, 32, "SSID");
@@ -147,4 +146,4 @@ ValidationResult validate(const Config& cfg) {
     return result;
 }
 
-} // namespace thermo::validation
+}  // namespace thermo::validation

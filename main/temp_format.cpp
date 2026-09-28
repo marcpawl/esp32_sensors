@@ -39,4 +39,4 @@ std::string format_temp_c_x100(std::int16_t temp_c_x100) {
     return buf;
 }
 
-} // namespace thermo
+}  // namespace thermo

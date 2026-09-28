@@ -7,7 +7,7 @@
 
 #include "app_config.hpp"
 #include "esp_err.h"
-#include "led_manager.hpp" // TxState
+#include "led_manager.hpp"  // TxState
 
 namespace thermo {
 
@@ -34,4 +34,4 @@ class BatteryMonitor {
     int gate_gpio_ = -1;
 };
 
-} // namespace thermo
+}  // namespace thermo

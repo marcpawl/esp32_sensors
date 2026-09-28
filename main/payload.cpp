@@ -3,7 +3,7 @@
 
 #include <cstddef>
 
-#include "temp_format.hpp" // format_temp_c_x100, kTempNull
+#include "temp_format.hpp"  // format_temp_c_x100, kTempNull
 
 namespace thermo::payload {
 namespace {
@@ -15,38 +15,39 @@ void append_json_string(std::string& out, const std::string& s) {
     out.push_back('"');
     for (const char c : s) {
         switch (c) {
-        case '"':
-            out += "\\\"";
-            break;
-        case '\\':
-            out += "\\\\";
-            break;
-        case '\b':
-            out += "\\b";
-            break;
-        case '\f':
-            out += "\\f";
-            break;
-        case '\n':
-            out += "\\n";
-            break;
-        case '\r':
-            out += "\\r";
-            break;
-        case '\t':
-            out += "\\t";
-            break;
-        default:
-            if (static_cast<unsigned char>(c) < 0x20) {
-                // Non-printable control character: emit \u00XX.
-                constexpr char kHex[] = "0123456789abcdef";
-                out += "\\u00";
-                out.push_back(kHex[(static_cast<unsigned char>(c) >> 4) & 0xF]);
-                out.push_back(kHex[static_cast<unsigned char>(c) & 0xF]);
-            } else {
-                out.push_back(c);
-            }
-            break;
+            case '"':
+                out += "\\\"";
+                break;
+            case '\\':
+                out += "\\\\";
+                break;
+            case '\b':
+                out += "\\b";
+                break;
+            case '\f':
+                out += "\\f";
+                break;
+            case '\n':
+                out += "\\n";
+                break;
+            case '\r':
+                out += "\\r";
+                break;
+            case '\t':
+                out += "\\t";
+                break;
+            default:
+                if (static_cast<unsigned char>(c) < 0x20) {
+                    // Non-printable control character: emit \u00XX.
+                    constexpr char kHex[] = "0123456789abcdef";
+                    out += "\\u00";
+                    out.push_back(
+                        kHex[(static_cast<unsigned char>(c) >> 4) & 0xF]);
+                    out.push_back(kHex[static_cast<unsigned char>(c) & 0xF]);
+                } else {
+                    out.push_back(c);
+                }
+                break;
         }
     }
     out.push_back('"');
@@ -65,7 +66,7 @@ void append_temp(std::string& out, std::int16_t temp_c_x100) {
     out += format_temp_c_x100(temp_c_x100);
 }
 
-} // namespace
+}  // namespace
 
 std::string build_batch_json(const std::string& device,
                              const std::vector<std::string>& names,
@@ -112,4 +113,4 @@ std::string build_batch_json(const std::string& device,
     return out;
 }
 
-} // namespace thermo::payload
+}  // namespace thermo::payload

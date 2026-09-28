@@ -14,6 +14,7 @@
 
 // Unity requires these, even when empty.
 void setUp(void) {}
+
 void tearDown(void) {}
 
 extern "C" void app_main(void) {

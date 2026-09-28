@@ -81,7 +81,8 @@ std::uint8_t read_u8(nvs_handle_t h, const char* key, std::uint8_t def) {
 // Enumerates `map_<ROMID>` keys and loads them into cfg.mappings.
 void load_mappings(nvs_handle_t h, Config& cfg) {
     nvs_iterator_t it = nullptr;
-    esp_err_t err = nvs_entry_find("nvs", config::kNamespace, NVS_TYPE_STR, &it);
+    esp_err_t err =
+        nvs_entry_find("nvs", config::kNamespace, NVS_TYPE_STR, &it);
     while (err == ESP_OK && it != nullptr) {
         nvs_entry_info_t info{};
         nvs_entry_info(it, &info);
@@ -101,7 +102,7 @@ void load_mappings(nvs_handle_t h, Config& cfg) {
     }
 }
 
-} // namespace
+}  // namespace
 
 std::string default_ap_ssid() {
     std::uint8_t mac[6] = {};
@@ -169,7 +170,8 @@ esp_err_t config_save(const Config& cfg) {
     nvs_set_u32(h, kBattHighMv, cfg.batt_high_mv);
     nvs_set_u32(h, kBattRTop, cfg.batt_r_top);
     nvs_set_u32(h, kBattRBot, cfg.batt_r_bot);
-    nvs_set_blob(h, kBattCalGain, &cfg.batt_cal_gain, sizeof(cfg.batt_cal_gain));
+    nvs_set_blob(h, kBattCalGain, &cfg.batt_cal_gain,
+                 sizeof(cfg.batt_cal_gain));
     nvs_set_i32(h, kBattCalOffset, cfg.batt_cal_offset);
     nvs_set_u8(h, kBattGateEn, cfg.batt_gate_en ? 1 : 0);
     nvs_set_str(h, kDevName, cfg.dev_name.c_str());
@@ -200,4 +202,4 @@ esp_err_t config_reset() {
     return err;
 }
 
-} // namespace thermo
+}  // namespace thermo

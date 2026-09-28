@@ -1,0 +1,69 @@
+# clang-format configuration for the ESP32 sensors firmware.
+#
+# Style: Google base, 4-space indent, 80-column limit. This mirrors the way the
+# firmware is already written — reformatting the existing sources with this
+# file should be (near) a no-op. Verify with:
+#
+#   clang-format --dry-run --Werror main/*.cpp main/include/*.hpp test/main/*.cpp
+#
+# See https://clang.llvm.org/docs/ClangFormatStyleOptions.html for the full set
+# of options.
+---
+Language: Cpp
+BasedOnStyle: Google
+
+# --- Layout -----------------------------------------------------------------
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 80
+AccessModifierOffset: -2
+
+# Long function calls/decls, initializer lists and string literals: wrap rather
+# than overflow the column limit. `Always` keeps wrapped continuation lines
+# distinct from the block body.
+BreakBeforeBraces: Attach
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+
+# --- Includes ---------------------------------------------------------------
+# Matches the existing convention: the translation unit's own header first, then
+# a blank line, then standard library, then third-party/ESP-IDF, then project
+# headers. Sorted within each group.
+SortIncludes: CaseSensitive
+IncludeBlocks: Preserve
+
+# --- Pointer and reference alignment ----------------------------------------
+# The firmware uses `Type& name` / `Type* name`.
+PointerAlignment: Left
+ReferenceAlignment: Pointer
+
+# --- C++ --------------------------------------------------------------------
+Standard: c++20 # clang-format has no c++26 token set; c++20 parses the
+                # constructs used here (no C++23+ syntax in this codebase).
+DerivePointerAlignment: false
+SpaceAfterTemplateKeyword: false
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyParentheses: false
+SpacesInAngles: Never
+
+# Suffix the `i`/`U`/`ULL` literal and keep `u`/`U` int types lowercase-free of
+# spaces, e.g. `1000000ULL`, `0xF`.
+SpaceBeforeParensOptions:
+  AfterControlStatements: true
+  AfterFunctionDeclarationName: false
+  AfterFunctionDefinitionName: false
+
+# Trailing return / namespace closing comments are hand-written; leave them.
+FixNamespaceComments: true
+NamespaceIndentation: None
+
+# --- Misc -------------------------------------------------------------------
+# Keep the em-dash/§/µ Unicode characters in comments intact.
+# (Standard: Any would prevent clang-format from worrying about encoding.)
+MaxEmptyLinesToKeep: 1
+EmptyLineBeforeAccessModifier: Leave
+SeparateDefinitionBlocks: Always

@@ -13,4 +13,4 @@ namespace thermo {
 // Blocks until the device is reconfigured away from Configure mode or reset.
 void run_configure_mode();
 
-} // namespace thermo
+}  // namespace thermo

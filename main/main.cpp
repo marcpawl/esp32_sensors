@@ -33,7 +33,7 @@ esp_err_t init_nvs() {
     return err;
 }
 
-} // namespace
+}  // namespace
 
 extern "C" void app_main(void) {
     ESP_ERROR_CHECK(init_nvs());
@@ -46,23 +46,23 @@ extern "C" void app_main(void) {
     ESP_LOGI(kTag, "boot: mode=%s", thermo::to_string(mode));
 
     switch (mode) {
-    case thermo::Mode::kConfigure:
-        thermo::run_configure_mode();
-        break;
+        case thermo::Mode::kConfigure:
+            thermo::run_configure_mode();
+            break;
 
-    case thermo::Mode::kRun:
-        // Run mode executes one cycle, then deep-sleeps (does not return).
-        // If it does return (e.g. sleep disabled for debugging), loop.
-        while (true) {
-            thermo::run_mode_cycle();
-        }
-        break;
+        case thermo::Mode::kRun:
+            // Run mode executes one cycle, then deep-sleeps (does not return).
+            // If it does return (e.g. sleep disabled for debugging), loop.
+            while (true) {
+                thermo::run_mode_cycle();
+            }
+            break;
 
-    case thermo::Mode::kOff:
-        // The switch cuts power in the center position, so reaching here means
-        // the sense pins read low transiently. Nothing to do; the device will
-        // power down.
-        ESP_LOGI(kTag, "Off position (no power path); idling");
-        break;
+        case thermo::Mode::kOff:
+            // The switch cuts power in the center position, so reaching here
+            // means the sense pins read low transiently. Nothing to do; the
+            // device will power down.
+            ESP_LOGI(kTag, "Off position (no power path); idling");
+            break;
     }
 }

@@ -24,4 +24,4 @@ class WifiAp {
     bool started_ = false;
 };
 
-} // namespace thermo
+}  // namespace thermo

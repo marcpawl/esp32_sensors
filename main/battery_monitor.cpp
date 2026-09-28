@@ -4,13 +4,13 @@
 #include <algorithm>
 
 #include "constants.hpp"
+#include "driver/gpio.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "driver/gpio.h"
 
 namespace thermo {
 namespace {
@@ -48,7 +48,8 @@ std::optional<int> read_filtered_mv() {
     int samples[kSampleCount];
     for (int i = 0; i < kSampleCount; ++i) {
         int raw = 0;
-        if (adc_oneshot_read(g_adc, ADC_CHANNEL_6 /* GPIO34 */, &raw) != ESP_OK) {
+        if (adc_oneshot_read(g_adc, ADC_CHANNEL_6 /* GPIO34 */, &raw) !=
+            ESP_OK) {
             return std::nullopt;
         }
         samples[i] = raw;
@@ -73,7 +74,7 @@ std::optional<int> read_filtered_mv() {
     return mv;
 }
 
-} // namespace
+}  // namespace
 
 esp_err_t BatteryMonitor::init() {
     adc_oneshot_unit_init_cfg_t unit_cfg = {};
@@ -101,7 +102,7 @@ esp_err_t BatteryMonitor::init() {
     cali_cfg.unit_id = ADC_UNIT_1;
     cali_cfg.atten = kAtten;
     cali_cfg.bitwidth = kBitWidth;
-    cali_cfg.default_vref = 1100; // Typical ESP32 eFuse Vref (mV).
+    cali_cfg.default_vref = 1100;  // Typical ESP32 eFuse Vref (mV).
     g_cali_enabled =
         (adc_cali_create_scheme_line_fitting(&cali_cfg, &g_cali) == ESP_OK);
 
@@ -133,9 +134,8 @@ std::optional<std::uint32_t> BatteryMonitor::read_mv(const Config& cfg) {
     }
 
     // Undo the divider: V_batt = V_adc * (R_top + R_bottom) / R_bottom (§2.5).
-    const double ratio =
-        static_cast<double>(cfg.batt_r_top + cfg.batt_r_bot) /
-        static_cast<double>(cfg.batt_r_bot);
+    const double ratio = static_cast<double>(cfg.batt_r_top + cfg.batt_r_bot) /
+                         static_cast<double>(cfg.batt_r_bot);
     double batt = static_cast<double>(*adc_mv) * ratio;
     // Apply calibration gain and offset.
     batt = batt * cfg.batt_cal_gain + cfg.batt_cal_offset;
@@ -153,18 +153,18 @@ TxState BatteryMonitor::evaluate_tx_state(std::uint32_t batt_mv,
     //  - TX_OK drops to inhibited when batt < low water.
     //  - TX_INHIBITED returns to OK when batt > high water.
     switch (current) {
-    case TxState::kTxOk:
-        if (batt_mv < cfg.batt_low_mv) {
-            return TxState::kTxInhibited;
-        }
-        return TxState::kTxOk;
-    case TxState::kTxInhibited:
-        if (batt_mv > cfg.batt_high_mv) {
+        case TxState::kTxOk:
+            if (batt_mv < cfg.batt_low_mv) {
+                return TxState::kTxInhibited;
+            }
             return TxState::kTxOk;
-        }
-        return TxState::kTxInhibited;
+        case TxState::kTxInhibited:
+            if (batt_mv > cfg.batt_high_mv) {
+                return TxState::kTxOk;
+            }
+            return TxState::kTxInhibited;
     }
     return current;
 }
 
-} // namespace thermo
+}  // namespace thermo

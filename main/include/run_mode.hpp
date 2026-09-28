@@ -12,4 +12,4 @@ namespace thermo {
 // should loop.
 void run_mode_cycle();
 
-} // namespace thermo
+}  // namespace thermo

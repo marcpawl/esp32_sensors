@@ -10,13 +10,13 @@
 #include "config_page.hpp"
 #include "constants.hpp"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "https_server.hpp"
 #include "led_manager.hpp"
 #include "ntp_client.hpp"
 #include "sensor.hpp"
 #include "wifi_ap.hpp"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 
 namespace thermo {
 namespace {
@@ -60,8 +60,9 @@ std::optional<std::string> on_save(Config& cfg) {
     // the HTTPS server before this callback runs.
     const auto epoch = ntp_get_utc_epoch(cfg.ntp_server);
     if (!epoch) {
-        return std::string("NTP sync failed; 'Last Configuration Saved' was "
-                           "not updated. Other settings were saved.");
+        return std::string(
+            "NTP sync failed; 'Last Configuration Saved' was "
+            "not updated. Other settings were saved.");
     }
     cfg.saved_time = *epoch;
     // Persist the updated saved_time alongside the rest of the configuration.
@@ -70,7 +71,7 @@ std::optional<std::string> on_save(Config& cfg) {
     return std::nullopt;
 }
 
-} // namespace
+}  // namespace
 
 void run_configure_mode() {
     ESP_LOGI(kTag, "entering Configure mode");
@@ -125,4 +126,4 @@ void run_configure_mode() {
     }
 }
 
-} // namespace thermo
+}  // namespace thermo

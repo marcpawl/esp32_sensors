@@ -27,11 +27,13 @@ void field_num(std::string& out, const char* name, const char* label,
 
 void checkbox(std::string& out, const char* name, const char* label, bool on) {
     out += "<p><label><input type='checkbox' name='" + std::string(name) +
-           "' value='1' " + (on ? "checked" : "") + "> " +
-           html_escape(label) + "</label></p>\n";
+           "' value='1' " + (on ? "checked" : "") + "> " + html_escape(label) +
+           "</label></p>\n";
 }
 
-std::string to_string_u32(std::uint32_t v) { return std::to_string(v); }
+std::string to_string_u32(std::uint32_t v) {
+    return std::to_string(v);
+}
 
 std::string to_string_f(float v) {
     char buf[32];
@@ -39,30 +41,30 @@ std::string to_string_f(float v) {
     return buf;
 }
 
-} // namespace
+}  // namespace
 
 std::string html_escape(const std::string& in) {
     std::string out;
     out.reserve(in.size());
     for (char c : in) {
         switch (c) {
-        case '&':
-            out += "&amp;";
-            break;
-        case '<':
-            out += "&lt;";
-            break;
-        case '>':
-            out += "&gt;";
-            break;
-        case '"':
-            out += "&quot;";
-            break;
-        case '\'':
-            out += "&#39;";
-            break;
-        default:
-            out.push_back(c);
+            case '&':
+                out += "&amp;";
+                break;
+            case '<':
+                out += "&lt;";
+                break;
+            case '>':
+                out += "&gt;";
+                break;
+            case '"':
+                out += "&quot;";
+                break;
+            case '\'':
+                out += "&#39;";
+                break;
+            default:
+                out.push_back(c);
         }
     }
     return out;
@@ -70,7 +72,7 @@ std::string html_escape(const std::string& in) {
 
 std::string format_saved_time(std::uint32_t epoch_utc) {
     if (epoch_utc == 0) {
-        return "never"; // §6.2 initial state.
+        return "never";  // §6.2 initial state.
     }
     const std::time_t t = static_cast<std::time_t>(epoch_utc);
     std::tm tm_utc{};
@@ -122,18 +124,22 @@ std::string render_form(const Config& cfg, const ScanSnapshot& scan,
                         const std::vector<ValidationError>& errors) {
     std::string out;
     out += "<!DOCTYPE html><html><head><meta charset='utf-8'>";
-    out += "<meta name='viewport' content='width=device-width,initial-scale=1'>";
+    out +=
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>";
     out += "<title>ESP32 Thermometer Configuration</title>";
-    out += "<style>body{font-family:sans-serif;margin:1rem;max-width:40rem}"
-           "fieldset{margin-bottom:1rem}label{display:block}"
-           "table{border-collapse:collapse;width:100%}"
-           "td,th{border:1px solid #ccc;padding:4px;text-align:left}"
-           ".err{color:#b00;font-size:0.9em}</style></head><body>";
+    out +=
+        "<style>body{font-family:sans-serif;margin:1rem;max-width:40rem}"
+        "fieldset{margin-bottom:1rem}label{display:block}"
+        "table{border-collapse:collapse;width:100%}"
+        "td,th{border:1px solid #ccc;padding:4px;text-align:left}"
+        ".err{color:#b00;font-size:0.9em}</style></head><body>";
     out += "<h1>ESP32 Thermometer Configuration</h1>";
 
     // Surface per-field validation errors after a failed save (§5.3 step 2).
     if (!errors.empty()) {
-        out += "<div class='err'><strong>Please correct the following:</strong><ul>";
+        out +=
+            "<div class='err'><strong>Please correct the "
+            "following:</strong><ul>";
         for (const auto& e : errors) {
             out += "<li>" + html_escape(e.field) + ": " +
                    html_escape(e.message) + "</li>";
@@ -184,8 +190,9 @@ std::string render_form(const Config& cfg, const ScanSnapshot& scan,
 
     // --- Device ID → Name Mapping (§5.1.3) ---
     out += "<fieldset><legend>Device ID &rarr; Name Mapping</legend>";
-    out += "<table><tr><th>ROM ID</th><th>Friendly Name</th>"
-           "<th>Current Temp</th></tr>";
+    out +=
+        "<table><tr><th>ROM ID</th><th>Friendly Name</th>"
+        "<th>Current Temp</th></tr>";
     for (const auto& reading : scan.sensors) {
         const std::string rom = reading.rom.to_hex();
         std::string name = rom;
@@ -229,4 +236,4 @@ std::string render_saved(const Config& cfg, const std::string& warning) {
     return out;
 }
 
-} // namespace thermo::config_page
+}  // namespace thermo::config_page

@@ -17,9 +17,11 @@ RTC_DATA_ATTR RtcState g_rtc_state;
 // Marks whether the RTC block has been initialized since power-on.
 RTC_DATA_ATTR std::uint8_t g_rtc_initialized;
 
-} // namespace
+}  // namespace
 
-RtcState& rtc_state() { return g_rtc_state; }
+RtcState& rtc_state() {
+    return g_rtc_state;
+}
 
 void rtc_state_init() {
     if (rtc_woke_from_deep_sleep()) {
@@ -42,4 +44,4 @@ bool rtc_woke_from_deep_sleep() {
 // rtc_buffer.cpp so they can be unit-tested on the host target without pulling
 // in esp_sleep.h (unavailable for the ESP-IDF `linux` target).
 
-} // namespace thermo
+}  // namespace thermo

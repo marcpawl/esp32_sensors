@@ -48,4 +48,4 @@ std::optional<RomId> RomId::from_hex(std::string_view hex) {
     return id;
 }
 
-} // namespace thermo
+}  // namespace thermo

@@ -113,7 +113,6 @@ ESP-IDF dependencies so they build for the `linux` target and are covered by
 calls behind them.
 
 **Not yet present (expected next):**
-- `.clang-format` — formatting config.
 - `components/` — reusable ESP-IDF components (currently everything is in `main/`).
 - On-target tests for hardware-dependent code (1-Wire, deep-sleep, Wi-Fi).
 
@@ -185,7 +184,22 @@ fails, so it is CI-friendly.
 
 ### Lint and format
 
-- **Formatting:** `clang-format` (GNU/LLVM-based style); use a committed `.clang-format` once added.
+Formatting is governed by the committed **`.clang-format`** (Google base, 4-space
+indent, 80 columns). The existing sources already conform, so a format run is a
+no-op on clean code — keep it that way and format before committing:
+
+```bash
+# Check (non-zero exit if anything is unformatted) — CI-friendly.
+clang-format --dry-run --Werror main/*.cpp main/include/*.hpp test/main/*.cpp
+
+# Apply.
+clang-format -i main/*.cpp main/include/*.hpp test/main/*.cpp
+```
+
+The Espressif toolchain ships a compatible `clang-format` (20.x) inside the
+container. Note `.clang-format` sets `Standard: c++20` — clang-format has no
+C++26 token set, and the codebase uses no C++23+ *syntax* that would confuse it.
+
 - **Static checks:** clang-tidy via `idf.py` or standalone; ensure C++26 compatibility with the ESP-IDF toolchain.
 
 ### Conventions to follow

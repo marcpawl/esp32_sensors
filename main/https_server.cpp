@@ -11,8 +11,8 @@
 #include "app_config_store.hpp"
 #include "config_page.hpp"
 #include "constants.hpp"
-#include "esp_log.h"
 #include "esp_https_server.h"
+#include "esp_log.h"
 #include "self_signed_cert.hpp"
 
 namespace thermo {
@@ -47,11 +47,11 @@ std::optional<std::string> read_body(httpd_req_t* req) {
     std::string body(req->content_len, '\0');
     std::size_t received = 0;
     while (received < body.size()) {
-        const int ret = httpd_req_recv(req, body.data() + received,
-                                       body.size() - received);
+        const int ret =
+            httpd_req_recv(req, body.data() + received, body.size() - received);
         if (ret <= 0) {
             if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
-                continue; // Retry on timeout.
+                continue;  // Retry on timeout.
             }
             return std::nullopt;
         }
@@ -68,13 +68,16 @@ std::string url_decode(const std::string& in, bool plus_is_space) {
         const char c = in[i];
         if (c == '%' && i + 2 < in.size()) {
             auto hex = [](char h) -> int {
-                if (h >= '0' && h <= '9') return h - '0';
-                if (h >= 'a' && h <= 'f') return h - 'a' + 10;
-                if (h >= 'A' && h <= 'F') return h - 'A' + 10;
+                if (h >= '0' && h <= '9')
+                    return h - '0';
+                if (h >= 'a' && h <= 'f')
+                    return h - 'a' + 10;
+                if (h >= 'A' && h <= 'F')
+                    return h - 'A' + 10;
                 return 0;
             };
-            out.push_back(static_cast<char>((hex(in[i + 1]) << 4) |
-                                            hex(in[i + 2])));
+            out.push_back(
+                static_cast<char>((hex(in[i + 1]) << 4) | hex(in[i + 2])));
             i += 2;
         } else if (c == '+' && plus_is_space) {
             out.push_back(' ');
@@ -92,9 +95,8 @@ std::vector<std::pair<std::string, std::string>> parse_form(
     std::size_t pos = 0;
     while (pos < body.size()) {
         const std::size_t amp = body.find('&', pos);
-        const std::string pair =
-            body.substr(pos, amp == std::string::npos ? std::string::npos
-                                                      : amp - pos);
+        const std::string pair = body.substr(
+            pos, amp == std::string::npos ? std::string::npos : amp - pos);
         const std::size_t eq = pair.find('=');
         if (eq != std::string::npos) {
             fields.emplace_back(url_decode(pair.substr(0, eq), true),
@@ -281,7 +283,7 @@ esp_err_t handler_saved(httpd_req_t* req) {
 
 HandlerContext g_ctx{};
 
-} // namespace
+}  // namespace
 
 HttpsServer::HttpsServer(Config& cfg, ScanProvider scan_provider,
                          SaveHandler save_handler)
@@ -298,11 +300,11 @@ esp_err_t HttpsServer::start() {
 
     httpd_ssl_config_t conf = HTTPD_SSL_CONFIG_DEFAULT();
     conf.port_secure = 443;
-    conf.servercert = reinterpret_cast<const std::uint8_t*>(
-        certs::kServerCertPem);
+    conf.servercert =
+        reinterpret_cast<const std::uint8_t*>(certs::kServerCertPem);
     conf.servercert_len = certs::server_cert_len();
-    conf.prvtkey_pem = reinterpret_cast<const std::uint8_t*>(
-        certs::kServerKeyPem);
+    conf.prvtkey_pem =
+        reinterpret_cast<const std::uint8_t*>(certs::kServerKeyPem);
     conf.prvtkey_len = certs::server_key_len();
 
     httpd_handle_t server = nullptr;
@@ -349,4 +351,4 @@ esp_err_t HttpsServer::stop() {
     return err;
 }
 
-} // namespace thermo
+}  // namespace thermo

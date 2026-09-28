@@ -26,14 +26,14 @@
 #include "battery_monitor.hpp"
 #include "constants.hpp"
 #include "esp_log.h"
+#include "esp_sleep.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "led_manager.hpp"
 #include "payload.hpp"
 #include "rtc_state.hpp"
 #include "sensor.hpp"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "esp_sleep.h"
 
 namespace thermo {
 namespace {
@@ -102,9 +102,8 @@ std::vector<std::string> names_for(const Config& cfg,
 bool stub_upload(const Config& cfg, RtcState& st,
                  const std::vector<SensorReading>& readings) {
     const auto batch = collect_batch(st);
-    const std::string json =
-        payload::build_batch_json(cfg.dev_name, names_for(cfg, readings),
-                                  batch);
+    const std::string json = payload::build_batch_json(
+        cfg.dev_name, names_for(cfg, readings), batch);
     ESP_LOGW(kTag,
              "STUB: %u samples to '%s' not uploaded. Payload (%u bytes): %s",
              static_cast<unsigned>(st.buffer_len), cfg.dest_url.c_str(),
@@ -115,11 +114,12 @@ bool stub_upload(const Config& cfg, RtcState& st,
 // Enters deep sleep for `seconds` (§3.8).
 void deep_sleep_for(std::uint32_t seconds) {
     ESP_LOGI(kTag, "deep sleep for %u s", static_cast<unsigned>(seconds));
-    esp_sleep_enable_timer_wakeup(static_cast<std::uint64_t>(seconds) * 1000000ULL);
+    esp_sleep_enable_timer_wakeup(static_cast<std::uint64_t>(seconds) *
+                                  1000000ULL);
     esp_deep_sleep_start();
 }
 
-} // namespace
+}  // namespace
 
 void run_mode_cycle() {
     RtcState& st = rtc_state();
@@ -177,13 +177,14 @@ void run_mode_cycle() {
         for (std::size_t i = 0; i < st.rom_count; ++i) {
             st.rom_ids[i] = discovered[i];
         }
-        ESP_LOGI(kTag, "cached %u ROM IDs", static_cast<unsigned>(st.rom_count));
+        ESP_LOGI(kTag, "cached %u ROM IDs",
+                 static_cast<unsigned>(st.rom_count));
     }
 
     const std::uint32_t age_s =
         static_cast<std::uint32_t>(esp_timer_get_time() / 1000000ULL);
-    rtc_buffer_push(st, make_record(age_s, static_cast<std::uint16_t>(batt_mv),
-                                    readings));
+    rtc_buffer_push(
+        st, make_record(age_s, static_cast<std::uint16_t>(batt_mv), readings));
 
     // --- Upload decision (§3.4 step 4, §3.5) ---
     const bool tx_allowed = tx_state == TxState::kTxOk;
@@ -199,13 +200,14 @@ void run_mode_cycle() {
             st.fail_count = 0;
             st.last_upload_ok = 1;
         } else {
-            // Failure path (§3.7): red on, increment backoff, clear Wi-Fi cache.
+            // Failure path (§3.7): red on, increment backoff, clear Wi-Fi
+            // cache.
             leds.set_tx_error();
             if (st.fail_count < 0xFF) {
                 st.fail_count++;
             }
             st.last_upload_ok = 0;
-            rtc_wifi_cache_clear(st); // §3.10
+            rtc_wifi_cache_clear(st);  // §3.10
         }
     } else if (!tx_allowed) {
         // §7 "Run - TX inhibited": red blink every 10 s. In deep sleep the LED
@@ -220,8 +222,8 @@ void run_mode_cycle() {
     std::uint32_t sleep_s = cfg.interval_s;
     if (tx_allowed && batch_ready && st.fail_count > 0) {
         // §3.7 exponential backoff: min(base * 2^(fail_count-1), max).
-        std::uint64_t backoff =
-            static_cast<std::uint64_t>(cfg.retry_base_s) << (st.fail_count - 1);
+        std::uint64_t backoff = static_cast<std::uint64_t>(cfg.retry_base_s)
+                                << (st.fail_count - 1);
         if (backoff > cfg.retry_max_s) {
             backoff = cfg.retry_max_s;
         }
@@ -234,7 +236,7 @@ void run_mode_cycle() {
     // §8: track absolute next sample time (drift avoidance).
     st.next_sample_at += sleep_s;
 
-    deep_sleep_for(sleep_s); // Does not return.
+    deep_sleep_for(sleep_s);  // Does not return.
 }
 
-} // namespace thermo
+}  // namespace thermo

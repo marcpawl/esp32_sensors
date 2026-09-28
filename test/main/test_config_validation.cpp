@@ -43,7 +43,7 @@ Config valid_config() {
     return cfg;
 }
 
-} // namespace
+}  // namespace
 
 // --- Baseline ---------------------------------------------------------------
 
@@ -56,10 +56,11 @@ TEST_CASE("validate: a well-formed config passes", "[validation]") {
 // --- SSID -------------------------------------------------------------------
 
 TEST_CASE("validate_ssid: length bounds", "[validation]") {
-    TEST_ASSERT_TRUE(validate_ssid("").has_value());         // too short
-    TEST_ASSERT_FALSE(validate_ssid("A").has_value());       // 1 char ok
+    TEST_ASSERT_TRUE(validate_ssid("").has_value());    // too short
+    TEST_ASSERT_FALSE(validate_ssid("A").has_value());  // 1 char ok
     TEST_ASSERT_FALSE(validate_ssid(std::string(32, 'a')).has_value());
-    TEST_ASSERT_TRUE(validate_ssid(std::string(33, 'a')).has_value()); // too long
+    TEST_ASSERT_TRUE(
+        validate_ssid(std::string(33, 'a')).has_value());  // too long
 }
 
 TEST_CASE("validate_ssid: rejects control characters", "[validation]") {
@@ -70,7 +71,7 @@ TEST_CASE("validate_ssid: rejects control characters", "[validation]") {
 // --- Passwords --------------------------------------------------------------
 
 TEST_CASE("validate_ap_password: 8-63 characters", "[validation]") {
-    TEST_ASSERT_TRUE(validate_ap_password("short").has_value()); // 5 chars
+    TEST_ASSERT_TRUE(validate_ap_password("short").has_value());  // 5 chars
     TEST_ASSERT_FALSE(validate_ap_password("12345678").has_value());
     TEST_ASSERT_FALSE(validate_ap_password(std::string(63, 'x')).has_value());
     TEST_ASSERT_TRUE(validate_ap_password(std::string(64, 'x')).has_value());
@@ -107,7 +108,7 @@ TEST_CASE("validate_interval: positive integers only", "[validation]") {
     TEST_ASSERT_TRUE(validate_interval("0").has_value());
     TEST_ASSERT_TRUE(validate_interval("-5").has_value());
     TEST_ASSERT_TRUE(validate_interval("abc").has_value());
-    TEST_ASSERT_TRUE(validate_interval("12abc").has_value()); // trailing junk
+    TEST_ASSERT_TRUE(validate_interval("12abc").has_value());  // trailing junk
     TEST_ASSERT_TRUE(validate_interval("").has_value());
 }
 
@@ -132,7 +133,7 @@ TEST_CASE("validate_ntp_server: hostname, no scheme", "[validation]") {
 
 TEST_CASE("validate: high-water must exceed low-water", "[validation]") {
     Config cfg = valid_config();
-    cfg.batt_high_mv = cfg.batt_low_mv; // not strictly greater
+    cfg.batt_high_mv = cfg.batt_low_mv;  // not strictly greater
     const auto result = validate(cfg);
     TEST_ASSERT_FALSE(result.ok);
     TEST_ASSERT_EQUAL_STRING("batt_high_mv", result.errors[0].field.c_str());
@@ -182,7 +183,7 @@ TEST_CASE("validate: battery thresholds and resistors must be positive",
 TEST_CASE("validate: retry_base of zero is rejected", "[validation]") {
     Config cfg = valid_config();
     cfg.retry_base_s = 0;
-    cfg.retry_max_s = 3600; // keep max >= base so only the base rule fires
+    cfg.retry_max_s = 3600;  // keep max >= base so only the base rule fires
     TEST_ASSERT_FALSE(validate(cfg).ok);
 }
 

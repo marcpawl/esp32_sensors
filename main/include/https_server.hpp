@@ -39,7 +39,7 @@ class HttpsServer {
     Config& cfg_;
     ScanProvider scan_provider_;
     SaveHandler save_handler_;
-    void* handle_ = nullptr; // httpd_handle_t
+    void* handle_ = nullptr;  // httpd_handle_t
 };
 
-} // namespace thermo
+}  // namespace thermo

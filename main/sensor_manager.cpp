@@ -13,11 +13,13 @@ constexpr const char* kTag = "sensors";
 // DS18B20 conversion time at 12-bit resolution is ~750 ms.
 constexpr int kConversionWaitMs = 800;
 
-} // namespace
+}  // namespace
 
 SensorManager::SensorManager(int gpio) : bus_(gpio), device_(bus_) {}
 
-esp_err_t SensorManager::init() { return bus_.init(); }
+esp_err_t SensorManager::init() {
+    return bus_.init();
+}
 
 std::vector<SensorReading> SensorManager::read_all(
     const std::vector<RomId>& roms, std::vector<RomId>* out_roms) {
@@ -53,4 +55,4 @@ std::vector<SensorReading> SensorManager::read_all(
     return readings;
 }
 
-} // namespace thermo
+}  // namespace thermo

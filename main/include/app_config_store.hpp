@@ -22,4 +22,4 @@ esp_err_t config_reset();
 // Derives the factory-default AP SSID (ESP32-Thermo-XXXX) from the base MAC.
 std::string default_ap_ssid();
 
-} // namespace thermo
+}  // namespace thermo

@@ -14,8 +14,8 @@ namespace thermo {
 
 // Per-sensor friendly-name mapping (§5.1.3).
 struct SensorMapping {
-    std::string rom;  // 16 hex chars, uppercase.
-    std::string name; // 1-32 chars.
+    std::string rom;   // 16 hex chars, uppercase.
+    std::string name;  // 1-32 chars.
 };
 
 struct Config {
@@ -31,7 +31,7 @@ struct Config {
     std::uint32_t batch_size = 1;
     std::string dev_name;
     std::string ntp_server;
-    std::uint32_t saved_time = 0; // Unix epoch UTC; 0 == "never".
+    std::uint32_t saved_time = 0;  // Unix epoch UTC; 0 == "never".
 
     // §5.1.2 Battery thresholds & calibration.
     std::uint32_t batt_low_mv = 3400;
@@ -74,6 +74,6 @@ std::optional<std::string> validate_ntp_server(const std::string& v);
 // Cross-field rules: high-water > low-water, retry max >= base, etc.
 ValidationResult validate(const Config& cfg);
 
-} // namespace validation
+}  // namespace validation
 
-} // namespace thermo
+}  // namespace thermo

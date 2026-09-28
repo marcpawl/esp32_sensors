@@ -35,4 +35,4 @@ std::string build_batch_json(const std::string& device,
                              const std::vector<std::string>& names,
                              const std::vector<NamedSample>& samples);
 
-} // namespace thermo::payload
+}  // namespace thermo::payload

@@ -25,7 +25,7 @@ RomId make_rom(std::initializer_list<unsigned> bytes) {
     return id;
 }
 
-} // namespace
+}  // namespace
 
 // --- Formatting -------------------------------------------------------------
 
@@ -42,8 +42,10 @@ TEST_CASE("rom: leading zeros are preserved", "[rom_id]") {
 }
 
 TEST_CASE("rom: all-0xFF and all-zero are distinct", "[rom_id]") {
-    const RomId ones = make_rom({0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF});
-    const RomId zeros = make_rom({0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00});
+    const RomId ones =
+        make_rom({0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF});
+    const RomId zeros =
+        make_rom({0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00});
     TEST_ASSERT_EQUAL_STRING("FFFFFFFFFFFFFFFF", ones.to_hex().c_str());
     TEST_ASSERT_EQUAL_STRING("0000000000000000", zeros.to_hex().c_str());
     TEST_ASSERT_FALSE(ones == zeros);
@@ -74,22 +76,22 @@ TEST_CASE("rom: from_hex accepts lowercase and mixed case", "[rom_id]") {
 
 TEST_CASE("rom: from_hex rejects wrong lengths", "[rom_id]") {
     TEST_ASSERT_FALSE(RomId::from_hex("").has_value());
-    TEST_ASSERT_FALSE(RomId::from_hex("28FF").has_value());            // 4
-    TEST_ASSERT_FALSE(RomId::from_hex("28FF641D000000").has_value());  // 14
-    TEST_ASSERT_FALSE(RomId::from_hex("28FF641D0000007A0").has_value()); // 17
+    TEST_ASSERT_FALSE(RomId::from_hex("28FF").has_value());               // 4
+    TEST_ASSERT_FALSE(RomId::from_hex("28FF641D000000").has_value());     // 14
+    TEST_ASSERT_FALSE(RomId::from_hex("28FF641D0000007A0").has_value());  // 17
 }
 
 TEST_CASE("rom: from_hex rejects non-hex characters", "[rom_id]") {
-    TEST_ASSERT_FALSE(RomId::from_hex("28FF641D0000007G").has_value()); // G
-    TEST_ASSERT_FALSE(RomId::from_hex("28FF641D0000007 ").has_value()); // space
-    TEST_ASSERT_FALSE(RomId::from_hex("28FF641D-000007A").has_value()); // dash
+    TEST_ASSERT_FALSE(RomId::from_hex("28FF641D0000007G").has_value());  // G
+    TEST_ASSERT_FALSE(
+        RomId::from_hex("28FF641D0000007 ").has_value());  // space
+    TEST_ASSERT_FALSE(RomId::from_hex("28FF641D-000007A").has_value());  // dash
     // 0x prefix or colon separators are not accepted.
     TEST_ASSERT_FALSE(RomId::from_hex("0x28FF641D00007A").has_value());
     TEST_ASSERT_FALSE(RomId::from_hex("28:FF:641D00007A").has_value());
 }
 
-TEST_CASE("rom: canonical form is uppercase for config keys",
-          "[rom_id]") {
+TEST_CASE("rom: canonical form is uppercase for config keys", "[rom_id]") {
     // §5.1.3 stores keys as map_<ROMID> in uppercase; normalizing through
     // from_hex(...)->to_hex() must always yield the canonical key.
     const auto parsed = RomId::from_hex("28ff641d0000007a");

@@ -8,9 +8,9 @@
 
 #include <cstring>
 
+#include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_rom_sys.h"
-#include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -18,7 +18,9 @@ namespace thermo {
 namespace {
 
 // Microsecond spin using the ROM delay (accurate enough for 1-Wire slots).
-inline void delay_us(std::uint32_t us) { esp_rom_delay_us(us); }
+inline void delay_us(std::uint32_t us) {
+    esp_rom_delay_us(us);
+}
 
 // A critical-section guard that disables interrupts for tight bit timing.
 // Uses `portDISABLE_INTERRUPTS`/`portENABLE_INTERRUPTS` via the task-level
@@ -26,6 +28,7 @@ inline void delay_us(std::uint32_t us) { esp_rom_delay_us(us); }
 class IrqGuard {
   public:
     IrqGuard() { portENTER_CRITICAL(&mux_); }
+
     ~IrqGuard() { portEXIT_CRITICAL(&mux_); }
 
     IrqGuard(const IrqGuard&) = delete;
@@ -45,9 +48,11 @@ inline void release(int gpio) {
     gpio_set_level(static_cast<gpio_num_t>(gpio), 1);
 }
 
-inline int sample(int gpio) { return gpio_get_level(static_cast<gpio_num_t>(gpio)); }
+inline int sample(int gpio) {
+    return gpio_get_level(static_cast<gpio_num_t>(gpio));
+}
 
-} // namespace
+}  // namespace
 
 OneWireBus::OneWireBus(int gpio) : gpio_(gpio) {}
 
@@ -60,8 +65,8 @@ OneWireBus::~OneWireBus() {
 esp_err_t OneWireBus::init() {
     gpio_config_t cfg = {};
     cfg.pin_bit_mask = 1ULL << gpio_;
-    cfg.mode = GPIO_MODE_INPUT_OUTPUT_OD; // Open-drain.
-    cfg.pull_up_en = GPIO_PULLUP_ENABLE;  // Internal pull-up on top of 4.7k.
+    cfg.mode = GPIO_MODE_INPUT_OUTPUT_OD;  // Open-drain.
+    cfg.pull_up_en = GPIO_PULLUP_ENABLE;   // Internal pull-up on top of 4.7k.
     cfg.pull_down_en = GPIO_PULLDOWN_DISABLE;
     cfg.intr_type = GPIO_INTR_DISABLE;
     esp_err_t err = gpio_config(&cfg);
@@ -151,4 +156,4 @@ bool OneWireBus::crc8_ok(const std::uint8_t* data, std::size_t len) {
 // NOTE: RomId::to_hex / RomId::from_hex live in rom_id.cpp so they can be
 // unit-tested on the host target without pulling in the GPIO driver.
 
-} // namespace thermo
+}  // namespace thermo

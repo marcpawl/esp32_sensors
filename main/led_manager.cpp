@@ -2,11 +2,11 @@
 #include "led_manager.hpp"
 
 #include "constants.hpp"
+#include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "driver/gpio.h"
 
 namespace thermo {
 namespace {
@@ -27,7 +27,7 @@ std::uint32_t now_ms() {
     return static_cast<std::uint32_t>(esp_timer_get_time() / 1000);
 }
 
-} // namespace
+}  // namespace
 
 esp_err_t LedManager::init() {
     // Both LEDs become outputs and start OFF.
@@ -152,4 +152,4 @@ void LedManager::poll(std::uint32_t now_ms_value) {
     }
 }
 
-} // namespace thermo
+}  // namespace thermo

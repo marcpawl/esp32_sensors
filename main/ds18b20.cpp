@@ -30,7 +30,7 @@ std::uint8_t crc8(const std::uint8_t* data, std::size_t len) {
     return crc;
 }
 
-} // namespace
+}  // namespace
 
 std::vector<RomId> Ds18b20::scan() {
     // Full ROM search (binary tree walk) is not implemented; this simple form
@@ -45,7 +45,8 @@ std::vector<RomId> Ds18b20::scan() {
     for (std::size_t i = 0; i < id.bytes.size(); ++i) {
         id.bytes[i] = bus_.read_byte();
     }
-    if (id.bytes[0] == kFamilyDs18b20 && crc8(id.bytes.data(), 7) == id.bytes[7]) {
+    if (id.bytes[0] == kFamilyDs18b20 &&
+        crc8(id.bytes.data(), 7) == id.bytes[7]) {
         found.push_back(id);
     }
     return found;
@@ -84,4 +85,4 @@ std::optional<std::int16_t> Ds18b20::read_temperature(const RomId& rom) {
     return static_cast<std::int16_t>(raw * 100 / 16);
 }
 
-} // namespace thermo
+}  // namespace thermo

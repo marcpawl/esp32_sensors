@@ -6,7 +6,7 @@
 #include <cstdint>
 
 #include "constants.hpp"
-#include "led_manager.hpp" // TxState
+#include "led_manager.hpp"  // TxState
 #include "sensor.hpp"
 
 namespace thermo {
@@ -21,8 +21,10 @@ struct SampleRecord {
     std::int16_t t2;
     std::int16_t t3;
 };
+
 static_assert(sizeof(SampleRecord) == 12, "SampleRecord layout must be stable");
-static_assert(alignof(SampleRecord) == 4, "SampleRecord must be 4-byte aligned");
+static_assert(alignof(SampleRecord) == 4,
+              "SampleRecord must be 4-byte aligned");
 
 // Cached Wi-Fi connection parameters (§3.9).
 struct WifiCache {
@@ -36,7 +38,7 @@ struct WifiCache {
 struct RtcState {
     std::uint32_t boot_count;
     std::uint8_t fail_count;
-    std::uint8_t tx_state; // TxState
+    std::uint8_t tx_state;  // TxState
     std::array<SampleRecord, limits::kMaxBufferRecords> buffer;
     std::uint16_t buffer_len;
     std::uint32_t next_sample_at;
@@ -67,4 +69,4 @@ void rtc_buffer_clear(RtcState& st);
 // §3.10: invalidate the cached Wi-Fi parameters.
 void rtc_wifi_cache_clear(RtcState& st);
 
-} // namespace thermo
+}  // namespace thermo

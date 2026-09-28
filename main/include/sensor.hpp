@@ -12,7 +12,7 @@
 
 #include "constants.hpp"
 #include "esp_err.h"
-#include "temp_format.hpp" // kTempNull, format_temp_c_x100
+#include "temp_format.hpp"  // kTempNull, format_temp_c_x100
 
 namespace thermo {
 
@@ -32,7 +32,7 @@ struct RomId {
 // A single reading for one sensor.
 struct SensorReading {
     RomId rom{};
-    std::optional<std::int16_t> temp_c_x100; // nullopt == missing/null.
+    std::optional<std::int16_t> temp_c_x100;  // nullopt == missing/null.
 };
 
 // Low-level 1-Wire bus operations. Bit-banged on a single GPIO since ESP-IDF
@@ -104,4 +104,4 @@ class SensorManager {
     Ds18b20 device_;
 };
 
-} // namespace thermo
+}  // namespace thermo

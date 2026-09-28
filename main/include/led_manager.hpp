@@ -60,4 +60,4 @@ class LedManager {
     bool blink_phase_ = false;
 };
 
-} // namespace thermo
+}  // namespace thermo

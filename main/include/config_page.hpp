@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "app_config.hpp"
-#include "https_server.hpp" // ScanSnapshot
+#include "https_server.hpp"  // ScanSnapshot
 
 namespace thermo::config_page {
 
@@ -30,4 +30,4 @@ std::string format_saved_time(std::uint32_t epoch_utc);
 // Minimal HTML escaping for values interpolated into the page.
 std::string html_escape(const std::string& in);
 
-} // namespace thermo::config_page
+}  // namespace thermo::config_page

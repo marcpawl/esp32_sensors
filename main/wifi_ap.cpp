@@ -30,7 +30,7 @@ void ensure_netif_and_events() {
     }
 }
 
-} // namespace
+}  // namespace
 
 esp_err_t WifiAp::start(const Config& cfg) {
     ensure_netif_and_events();
@@ -50,8 +50,8 @@ esp_err_t WifiAp::start(const Config& cfg) {
     std::strncpy(reinterpret_cast<char*>(wifi_cfg.ap.password),
                  cfg.ap_pass.c_str(), sizeof(wifi_cfg.ap.password) - 1);
     wifi_cfg.ap.max_connection = 4;
-    wifi_cfg.ap.authmode = cfg.ap_pass.empty() ? WIFI_AUTH_OPEN
-                                               : WIFI_AUTH_WPA2_PSK;
+    wifi_cfg.ap.authmode =
+        cfg.ap_pass.empty() ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
     wifi_cfg.ap.channel = 1;
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
@@ -79,4 +79,4 @@ std::string WifiAp::ip_address() const {
     return buf;
 }
 
-} // namespace thermo
+}  // namespace thermo

@@ -15,4 +15,4 @@ namespace thermo {
 // Starts the SNTP client on demand; the Wi-Fi interface must already be up.
 std::optional<std::uint32_t> ntp_get_utc_epoch(const std::string& server);
 
-} // namespace thermo
+}  // namespace thermo

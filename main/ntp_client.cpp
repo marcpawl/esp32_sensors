@@ -32,7 +32,7 @@ bool wait_for_sync(std::uint32_t timeout_ms) {
     }
 }
 
-} // namespace
+}  // namespace
 
 std::optional<std::uint32_t> ntp_get_utc_epoch(const std::string& server) {
     // (Re)configure SNTP for the requested server. The Wi-Fi interface must
@@ -61,4 +61,4 @@ std::optional<std::uint32_t> ntp_get_utc_epoch(const std::string& server) {
     return std::nullopt;
 }
 
-} // namespace thermo
+}  // namespace thermo

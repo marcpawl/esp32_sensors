@@ -21,11 +21,13 @@ void rtc_buffer_push(RtcState& st, const SampleRecord& rec) {
     st.buffer[limits::kMaxBufferRecords - 1] = rec;
 }
 
-void rtc_buffer_clear(RtcState& st) { st.buffer_len = 0; }
+void rtc_buffer_clear(RtcState& st) {
+    st.buffer_len = 0;
+}
 
 void rtc_wifi_cache_clear(RtcState& st) {
     std::memset(&st.wifi, 0, sizeof(st.wifi));
     st.wifi.valid = 0;
 }
 
-} // namespace thermo
+}  // namespace thermo
