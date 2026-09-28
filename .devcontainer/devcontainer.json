@@ -1,0 +1,79 @@
+// CLion / VS Code Dev Container definition for the ESP32 Solar-Powered
+// Thermometer Logger.
+//
+// This REUSES the existing `dev` service from ../docker-compose.yml so that
+// the Dev Container and the documented `docker compose run --rm dev <cmd>`
+// workflow share one image, one container user (host UID/GID mapped), and the
+// same serial (/dev) passthrough. Do NOT add a duplicate service here — edit
+// docker-compose.yml instead.
+//
+// What this gives you in CLion:
+//   * CLion builds/pulls the image and starts the container automatically.
+//   * Toolchain, CMake, Ninja, and the ESP-IDF Python venv all run inside the
+//     container (see customizations / AGENTS.md).
+//   * CMake is configured over SSH through the Dev Container so the compiler,
+//     headers, and build directory live in the container, not on the host.
+{
+  "name": "ESP32 Sensors Dev (ESP-IDF v6.1)",
+
+  // Reuse the committed compose service. `runServices` starts only `dev`.
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "dev",
+  "runServices": ["dev"],
+  "workspaceFolder": "/project",
+
+  // Keep the container alive while the IDE is attached (the compose command
+  // is an interactive shell that would otherwise exit immediately).
+  "overrideCommand": false,
+  "shutdownAction": "stopCompose",
+
+  // CLion connects as the mapped host user (not root). This is intentional:
+  // the image is already built with the correct UID/GID so build artifacts
+  // are not root-owned on the host.
+  "updateRemoteUserUID": false,
+  "remoteUser": "dev",
+
+  // ESP-IDF exports its whole toolchain (PATH, IDF_PATH, IDF_PYTHON_ENV_...)
+  // through $IDF_PATH/export.sh. Login shells source it via ~/.bashrc, but
+  // IDE-driven processes get a non-interactive environment, so source it
+  // explicitly here to make the toolchain visible to CMake/compilers/CLion.
+  "remoteEnv": {
+    "IDF_PATH": "/opt/esp/idf",
+    "IDF_TOOLS_PATH": "/home/dev/.espressif",
+    "HISTFILE": "/home/dev/.commandhistory/.bash_history"
+  },
+
+  // The IDF PATH is prepended via a login shell so it is present for tools
+  // that are launched without sourcing export.sh first.
+  "containerEnv": {
+    "BASH_ENV": "/home/dev/.bashrc"
+  },
+
+  "customizations": {
+    "jetbrains": {
+      "backend": "CLion"
+    },
+    "vscode": {
+      "extensions": [
+        "espressif.esp-idf-extension",
+        "ms-vscode.cpptools"
+      ]
+    }
+  },
+
+  // `idf.py build` is the canonical entry point. Exposed so CLion / the
+  // Dev Containers CLI can run common tasks without a shell.
+  "postCreateCommand": "idf.py --version || . $IDF_PATH/export.sh && idf.py --version",
+
+  // Match the compose user so the bind-mounted /dev serial nodes work.
+  // (Group membership is granted via `group_add` in docker-compose.yml.)
+  "runArgs": ["--init"],
+
+  "forwardPorts": [443],
+  "portsAttributes": {
+    "443": {
+      "label": "Configure-mode HTTPS server (device SoftAP)",
+      "onAutoForward": "silent"
+    }
+  }
+}

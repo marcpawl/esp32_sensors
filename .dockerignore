@@ -16,6 +16,7 @@ sdkconfig.old
 dependencies.lock
 
 # Local caches / editor noise
-.devcontainer/
+# NOTE: .devcontainer/ is deliberately NOT ignored — the Dev Container
+# definition must stay in the build context for `devcontainer up` / CLion.
 .vscode/
 *.swp

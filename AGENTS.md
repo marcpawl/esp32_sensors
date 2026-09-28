@@ -76,19 +76,24 @@ esp32_sensors/
 ├── test/                # Host-based unit tests (IDF `linux` target, Unity)
 ├── Dockerfile           # Dev container: ESP-IDF v6.1 + non-root host-mapped user
 ├── docker-compose.yml   # `dev` service with serial (/dev) passthrough
+├── .devcontainer/       # CLion / VS Code Dev Container definition (reuses compose)
+├── scripts/dev.sh       # Container task runner (build/flash/test/format/shell)
 ├── .dockerignore        # Build-context exclusions
-├── .gitignore           # Excludes build/, sdkconfig, .idea/, caches
+├── .gitignore           # Excludes build/, sdkconfig, local IDE state
 ├── AGENTS.md            # This file — guidance for AI agents and developers
 ├── LICENSE              # GNU General Public License v3.0
 ├── install.sh           # Unrelated Continue CLI installer (not firmware)
-└── .idea/               # CLion project metadata (git-ignored)
+└── .idea/               # CLion metadata (shared run configs tracked; workspace.xml local)
 ```
 
 **Key files:**
 - `Specification.md` — the single source of truth for hardware, modes, RTC memory layout, payload format, and power budget. Any implementation must conform to it.
 - `main/CMakeLists.txt` — lists all sources and the IDF component `REQUIRES` (nvs_flash, esp_wifi, esp_https_server, esp_http_client, esp_adc, esp_driver_gpio, mbedtls, …). **Add new sources here** or they will not compile.
 - `sdkconfig.defaults` — the committed configuration intent (target, C++ exceptions/RTTI off, partition table, `-Os`). `sdkconfig` is generated from this and is **not** tracked.
-- `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash environment. Extend these (not ad-hoc `docker run`) when adding tooling.
+- `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash environment. Extend these (not ad-hoc `docker run`) when adding tooling. The compose `dev` service is also the target of the Dev Container (see below).
+- `.devcontainer/devcontainer.json` — the CLion / VS Code **Dev Container** definition. It **reuses the compose `dev` service** (it does not define its own image), so CLion builds/starts the same container the CLI uses. Edit `docker-compose.yml` for image/mount/user changes; edit `devcontainer.json` only for IDE-level wiring.
+- `scripts/dev.sh` — the single container task runner (`build`, `flash`, `monitor`, `menuconfig`, `test`, `format`, `format-check`, `shell`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place.
+- `.idea/runConfigurations/*.xml` — **committed** shared CLion run configurations that shell into the container via `scripts/dev.sh`. `.idea/workspace.xml` (local, git-ignored) holds the same configs for the current machine.
 - `LICENSE` — GPL-3.0.
 - `RELEASE_NOTES.md` — human-readable release notes; keep the "Implemented" / "Not yet implemented" split honest as milestones land.
 
@@ -142,6 +147,44 @@ The container user is mapped to your host UID/GID, so build artifacts are not ro
 ```bash
 . $IDF_PATH/export.sh
 ```
+
+### CLion: work inside the container
+
+CLion 2026.2 is wired to the **same** compose `dev` service through a Dev
+Container, so the IDE builds/starts the container automatically ("starts if
+necessary") and the toolchain, CMake, Ninja, and the ESP-IDF Python venv all run
+**inside** it. No host-side ESP-IDF install is required.
+
+- **Definition:** `.devcontainer/devcontainer.json` (reuses `docker-compose.yml`;
+  it never defines its own image).
+- **Connect:** open the repo in CLion and accept the Dev Container prompt, or use
+  *Remote Development → Dev Containers → docker-compose.yml → `dev`*. CLion
+  (re)builds the image if the `Dockerfile` changed and starts the service on demand.
+- **Toolchain/CMake:** select the container as the remote host (SSH into the Dev
+  Container). CMake then configures and builds under `/project/build` in the
+  container, so the compiler cache lives on the container side, not the host.
+
+> Editing the image, mounts, or user? Change `docker-compose.yml` (and `Dockerfile`),
+> **not** `devcontainer.json`. The Dev Container deliberately inherits everything
+> from the compose service so the CLI and the IDE cannot drift apart.
+
+#### Run configurations
+
+Six shared run configurations are committed under `.idea/runConfigurations/`
+(and mirrored in the local `.idea/workspace.xml`). They all call
+`scripts/dev.sh`, so a single script is the source of truth for container
+commands — run them from the CLion Run/Debug toolbar:
+
+| Run configuration | `scripts/dev.sh` | What it does |
+|---|---|---|
+| Build firmware (container) | `build` | `idf.py build` in the container |
+| Flash & monitor (container) | `flash` | `idf.py -p $ESP32_PORT flash monitor` (default `/dev/ttyUSB0`) |
+| Host unit tests (container) | `test` | builds + runs the `linux`-target Unity tests |
+| clang-format check (container) | `format-check` | `clang-format --dry-run --Werror` |
+| menuconfig (container) | `menuconfig` | Kconfig UI |
+| Container shell (ESP-IDF) | `shell` | login shell with the IDF env sourced |
+
+Set `ESP32_PORT` (e.g. `/dev/ttyACM0`) to target a different serial device.
 
 ### Build
 

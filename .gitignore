@@ -18,7 +18,16 @@ CMakeFiles/
 compile_commands.json
 
 # IDE / editor
-.idea/
+# `.idea/` is ignored wholesale, then specific shared CLion configuration is
+# un-ignored below (run configurations, module) so the container workflow is
+# reproducible across machines. See .idea/.gitignore for workspace-local state.
+.idea/*
+!.idea/runConfigurations/
+!.idea/.gitignore
+!.idea/editor.xml
+!.idea/esp32_sensors.iml
+!.idea/modules.xml
+!.idea/vcs.xml
 .vscode/
 *.swp
 *.swo

@@ -5,6 +5,12 @@
 #   docker compose run --rm dev                 # interactive shell
 #   docker compose run --rm dev idf.py build    # run a single command
 #
+# --- CLion / Dev Containers ----------------------------------------------
+# The `dev` service below is also the target of `.devcontainer/devcontainer.json`,
+# so CLion ("From VCS" / "Open Dev Container") builds and starts this exact
+# container and runs the toolchain inside it. Keep both in sync: change the
+# image, mounts, or user here, not in the devcontainer file.
+#
 # --- Flashing / monitoring the ESP32 -------------------------------------
 # The host `/dev` tree is bind-mounted into the container, so any USB serial
 # device that appears on the host (e.g. /dev/ttyUSB0, /dev/ttyACM0) is visible
@@ -36,7 +42,6 @@ services:
         GID: "${GID:-1000}"
         DIALOUT_GID: "${DIALOUT_GID:-20}"
     image: esp32-sensors-dev:latest
-    container_name: esp32-sensors-dev
 
     # Interactive TTY so `idf.py monitor` and its menus work correctly.
     stdin_open: true
