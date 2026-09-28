@@ -10,6 +10,7 @@ Dockerfile
 
 # ESP-IDF build output and local state (never needed inside the image)
 build/
+test/build/
 managed_components/
 sdkconfig.old
 dependencies.lock

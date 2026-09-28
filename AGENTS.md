@@ -72,6 +72,7 @@ esp32_sensors/
 ├── CMakeLists.txt       # Top-level ESP-IDF project definition
 ├── sdkconfig.defaults   # Committed IDF defaults (sdkconfig itself is generated)
 ├── main/                # Firmware component (C++26) — see module map below
+├── test/                # Host-based unit tests (IDF `linux` target, Unity)
 ├── Dockerfile           # Dev container: ESP-IDF v6.1 + non-root host-mapped user
 ├── docker-compose.yml   # `dev` service with serial (/dev) passthrough
 ├── .dockerignore        # Build-context exclusions
@@ -96,17 +97,23 @@ esp32_sensors/
 | Entry point | `main.cpp` (`extern "C" void app_main`), `constants.hpp`, `mode.hpp` |
 | Mode switching | `mode_controller.cpp`, `led_manager.cpp` |
 | Sensors | `onewire_bus.cpp` (bit-banged 1-Wire), `ds18b20.cpp`, `sensor_manager.cpp`, `sensor.hpp` |
-| RTC state / buffer | `rtc_state.cpp` (`RTC_DATA_ATTR` state block) |
+| RTC state / buffer | `rtc_state.cpp` (`RTC_DATA_ATTR` state block), `rtc_buffer.cpp` (FIFO) |
 | Power / battery | `battery_monitor.cpp` |
-| Config | `app_config.cpp`, `app_config_store.cpp` (NVS) |
+| Config | `app_config.cpp` (validation), `app_config_store.cpp` (NVS) |
 | Configure mode | `configure_mode.cpp`, `wifi_ap.cpp`, `https_server.cpp`, `config_page.cpp`, `certs/self_signed_cert.cpp` |
 | Run mode | `run_mode.cpp` (stubbed network path), `ntp_client.cpp` |
-| Payload | `payload.cpp`, `temp_format.cpp` |
+| Payload | `payload.cpp`, `temp_format.cpp`, `rom_id.cpp` (ROM-ID hex) |
+
+**Host-testable modules.** `temp_format.cpp`, `payload.cpp`, `app_config.cpp`,
+`rom_id.cpp`, and `rtc_buffer.cpp` are deliberately free of chip-specific
+ESP-IDF dependencies so they build for the `linux` target and are covered by
+`test/`. **Keep it that way** — put pure logic in these files and hardware/IDF
+calls behind them.
 
 **Not yet present (expected next):**
-- `test/` — host-based (Unity, `linux` target) and on-target tests.
 - `.clang-format` — formatting config.
 - `components/` — reusable ESP-IDF components (currently everything is in `main/`).
+- On-target tests for hardware-dependent code (1-Wire, deep-sleep, Wi-Fi).
 
 **Entry point:** In ESP-IDF, `app_main(void)` is the firmware entry point and must be declared with C linkage:
 ```cpp
@@ -157,14 +164,22 @@ Replace `/dev/ttyUSB0` with the actual serial device (`/dev/ttyACM0`, etc.). Exi
 
 ### Testing approach
 
-- Prefer **host-based unit tests** for pure logic (payload formatting, buffer/backoff state machines, RTC memory layout encode/decode) using the ESP-IDF `linux` target and Unity.
-- Use **on-target tests** for hardware-dependent code (1-Wire/DS18B20 reads, deep-sleep wake, WiFi upload).
-- Keep hardware interactions behind thin interfaces so business logic remains host-testable.
+- **Host-based unit tests** live in `test/` and run on the ESP-IDF `linux`
+  target with Unity — no hardware needed. They cover the pure-logic modules
+  (`temp_format`, `payload`, `app_config` validation, `rom_id`, `rtc_buffer`).
+- **On-target tests** are planned for hardware-dependent code (1-Wire/DS18B20
+  reads, deep-sleep wake, Wi-Fi upload).
+- Keep hardware interactions behind thin interfaces so business logic remains
+  host-testable. When adding pure logic, put it in a host-testable translation
+  unit and add it to both `main/CMakeLists.txt` and `test/main/CMakeLists.txt`.
 
 ```bash
-# Host-based test run (once test scaffolding exists)
-cd test && idf.py --preview set-target linux && idf.py build && ./build/project.elf
+# Build and run the host-based unit tests (exit code is non-zero on failure).
+docker compose run --rm dev bash -lc 'cd test && idf.py --preview set-target linux && idf.py build && ./build/esp32_sensors_tests.elf'
 ```
+
+The test binary prints Unity `PASS`/`FAIL` lines and exits non-zero if any case
+fails, so it is CI-friendly.
 
 ### Lint and format
 

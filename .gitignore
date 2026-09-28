@@ -1,5 +1,6 @@
-# ESP-IDF build output
+# ESP-IDF build output (firmware at the root, host tests under test/)
 build/
+test/build/
 managed_components/
 dependencies.lock
 
@@ -7,7 +8,9 @@ dependencies.lock
 # sdkconfig is produced from sdkconfig.defaults by `idf.py`; keep only the
 # committed defaults (sdkconfig.defaults) under version control.
 sdkconfig
+test/sdkconfig
 sdkconfig.old
+test/sdkconfig.old
 
 # CMake / ninja ephemera
 CMakeCache.txt
