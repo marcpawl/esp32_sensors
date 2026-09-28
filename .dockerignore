@@ -1,0 +1,20 @@
+# Keep the Docker build context small and reproducible.
+.git
+.idea
+.continue
+AGENTS.md
+*.md
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+# ESP-IDF build output and local state (never needed inside the image)
+build/
+managed_components/
+sdkconfig.old
+dependencies.lock
+
+# Local caches / editor noise
+.devcontainer/
+.vscode/
+*.swp

@@ -1,0 +1,74 @@
+# ESP32 Solar-Powered Thermometer Logger — development environment.
+#
+# Usage:
+#   docker compose build
+#   docker compose run --rm dev                 # interactive shell
+#   docker compose run --rm dev idf.py build    # run a single command
+#
+# --- Flashing / monitoring the ESP32 -------------------------------------
+# The host `/dev` tree is bind-mounted into the container, so any USB serial
+# device that appears on the host (e.g. /dev/ttyUSB0, /dev/ttyACM0) is visible
+# inside the container. Serial access is granted by joining the host `dialout`
+# GID via `group_add`, so the container does NOT need --privileged.
+#
+# udev is not run inside the container, so the device node must already exist
+# on the host before you start the container. Plug the board in first, then:
+#
+#   docker compose run --rm dev idf.py -p /dev/ttyUSB0 flash monitor
+#
+# If your board enumerates as a different path, pass it explicitly:
+#
+#   docker compose run --rm dev idf.py -p /dev/ttyACM0 flash monitor
+#
+# Because `/dev` is bind-mounted, no device needs to be hard-coded in this
+# file — which also means `docker compose run` works fine when no board is
+# attached (useful for `idf.py build` and host tests).
+
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Match the container user to your host user so build artifacts are
+        # not root-owned. Defaults are sensible for UID/GID 1000.
+        UID: "${UID:-1000}"
+        GID: "${GID:-1000}"
+        DIALOUT_GID: "${DIALOUT_GID:-20}"
+    image: esp32-sensors-dev:latest
+    container_name: esp32-sensors-dev
+
+    # Interactive TTY so `idf.py monitor` and its menus work correctly.
+    stdin_open: true
+    tty: true
+    init: true
+
+    # Join the host `dialout` GID so serial devices in the bind-mounted /dev
+    # are readable/writable without --privileged.
+    group_add:
+      - "${DIALOUT_GID:-20}"
+
+    volumes:
+      # Project source is bind-mounted so edits on the host are visible live.
+      - .:/project
+      # Expose host USB/serial device nodes (ttyUSB*, ttyACM*, etc.).
+      - /dev:/dev
+      # Persist shell history and the IDF component cache between runs.
+      - idf-bash-history:/home/dev/.commandhistory
+      - idf-espressif-cache:/home/dev/.espressif
+
+    working_dir: /project
+    environment:
+      HISTFILE: /home/dev/.commandhistory/.bash_history
+
+    # Optional: expose the device's HTTPS config server for host-side testing
+    # once Configure mode is implemented (adjust the container-side port).
+    # ports:
+    #   - "443:443"
+
+    # Run an interactive login shell by default.
+    command: ["/bin/bash", "-l"]
+
+volumes:
+  idf-bash-history:
+  idf-espressif-cache:
