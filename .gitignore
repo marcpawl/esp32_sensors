@@ -1,0 +1,29 @@
+# ESP-IDF build output
+build/
+managed_components/
+dependencies.lock
+
+# Generated project configuration.
+# sdkconfig is produced from sdkconfig.defaults by `idf.py`; keep only the
+# committed defaults (sdkconfig.defaults) under version control.
+sdkconfig
+sdkconfig.old
+
+# CMake / ninja ephemera
+CMakeCache.txt
+CMakeFiles/
+compile_commands.json
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Local Continue CLI / agent state (install.sh artifact is committed, state is not)
+.continue/.cache/
