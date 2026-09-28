@@ -42,7 +42,7 @@ The `espressif/idf` Docker image is the officially supported build environment f
 
 ### C++26 Configuration
 
-ESP-IDF v6.1 compiles C++ code using **C++26 with GNU extensions** (`-std=gnu++26`) by default for chip targets. The toolchain includes GCC 15.1.0, which is required for ESP-IDF v6.0 and later. No per-component compiler flag is needed to enable C++26 — it is the default standard.
+ESP-IDF v6.1 compiles C++ code using **C++26 with GNU extensions** (`-std=gnu++26`) by default for chip targets. The toolchain includes GCC 15.2.0 (Xtensa `esp-15.2.0_20251204`), which is required for ESP-IDF v6.0 and later. No per-component compiler flag is needed to enable C++26 — it is the default standard.
 
 For components that mix C and C++, ensure `app_main` is declared with C linkage:
 
