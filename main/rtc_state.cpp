@@ -38,22 +38,8 @@ bool rtc_woke_from_deep_sleep() {
     return (causes & (1u << ESP_SLEEP_WAKEUP_TIMER)) != 0;
 }
 
-void rtc_buffer_push(RtcState& st, const SampleRecord& rec) {
-    if (st.buffer_len < limits::kMaxBufferRecords) {
-        st.buffer[st.buffer_len++] = rec;
-        return;
-    }
-    // Overflow: drop the oldest (§4.2, FIFO eviction).
-    std::memmove(&st.buffer[0], &st.buffer[1],
-                 sizeof(SampleRecord) * (limits::kMaxBufferRecords - 1));
-    st.buffer[limits::kMaxBufferRecords - 1] = rec;
-}
-
-void rtc_buffer_clear(RtcState& st) { st.buffer_len = 0; }
-
-void rtc_wifi_cache_clear(RtcState& st) {
-    std::memset(&st.wifi, 0, sizeof(st.wifi));
-    st.wifi.valid = 0;
-}
+// NOTE: rtc_buffer_push / rtc_buffer_clear / rtc_wifi_cache_clear live in
+// rtc_buffer.cpp so they can be unit-tested on the host target without pulling
+// in esp_sleep.h (unavailable for the ESP-IDF `linux` target).
 
 } // namespace thermo
