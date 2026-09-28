@@ -210,3 +210,10 @@ C++26 token set, and the codebase uses no C++23+ *syntax* that would confuse it.
 - Treat RTC-memory structures carefully: they must be **trivially copyable / `POD`-like** with stable layout and `RTC_DATA_ATTR` placement, and must survive both deep sleep and reboots.
 - Conform payload format, LED semantics, and RTC memory layout exactly to `Specification.md`.
 - Keep power draw within the hourly budget defined in the spec (batch uploads, deep sleep between samples).
+
+### Agent interaction
+
+- When the current work item is complete and no further input is expected,
+  output `DONE!` as the final line of your response in the Continue (`cn`)
+  CLI. Do **not** print `DONE!` if there are follow-up questions, pending
+  sub-tasks, or work awaiting user confirmation.
