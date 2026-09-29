@@ -69,6 +69,13 @@ services:
     # Run an interactive login shell by default.
     command: ["/bin/bash", "-l"]
 
+  jetbrains-backends:
+    build:
+      context: docker/jetbrains-backends
+      dockerfile: Dockerfile
+    image: jetbrains-backends:latest
+    container_name: jetbrains-backends
+
 volumes:
   idf-bash-history:
   idf-espressif-cache:
