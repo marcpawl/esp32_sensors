@@ -1,0 +1,39 @@
+{
+  // CLion "Docker" / Dev Containers integration for the ESP32 project.
+  //
+  // Reuses the existing `dev` service from docker-compose.yml so CLion, the
+  // command line, and CI all share the exact same ESP-IDF v6.1 toolchain and
+  // bind-mounted /dev for serial flashing.
+  //
+  // Open in CLion: Settings | Build, Execution, Deployment | Toolchains, or
+  // use the "Dev Containers" / "Remote Development" start action and point it
+  // at this file (CLion 2026.2 understands devcontainer.json natively).
+  //
+  // IMPORTANT: this configuration does NOT build a separate image. It targets
+  // the compose service `dev`, which must be built once first:
+  //   docker compose build
+  "name": "esp32_sensors (ESP-IDF v6.1)",
+
+  // Path to the compose file, relative to the workspace root.
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "dev",
+  // Directory inside the container that the project is mounted at.
+  "workspaceFolder": "/project",
+
+  // The base image already exports IDF_PATH=/opt/esp/idf and IDF_TOOLS_PATH,
+  // and the Dockerfile sources $IDF_PATH/export.sh in ~/.bashrc.
+  "remoteUser": "dev",
+
+  // CLion uses these to drive CMake inside the container. `idf.py` wraps the
+  // CMake configure step and injects the ESP-IDF toolchain files, so point the
+  // IDE at the IDF build wrapper rather than raw cmake.
+  "customizations": {
+    "jetbrains": {
+      "backend": "CLion",
+      "settings": {
+        "cmake.generator": "Ninja",
+        "cmake.buildDirectory": "${workspaceFolder}/build"
+      }
+    }
+  }
+}
