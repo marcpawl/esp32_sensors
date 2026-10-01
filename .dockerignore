@@ -7,6 +7,7 @@ AGENTS.md
 docker-compose.yml
 Dockerfile
 .dockerignore
+clion_remote_setup.py
 
 # ESP-IDF build output and local state (never needed inside the image)
 build/

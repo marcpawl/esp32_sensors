@@ -3,7 +3,7 @@
 # This image is the *serving* half of the fully-offline CLion setup described in
 # https://www.jetbrains.com/help/clion/fully-offline-mode.html#config_local_jb_client
 #
-FROM espressif/idf:release-v6.1
+FROM nginx:latest
 USER root
 
 # ---------------------------------------------------------------------------
@@ -60,6 +60,7 @@ RUN  \
     /bin/bash \
         /JetBrains/jetbrains-clients-downloader-linux-x86_64/bin/jetbrains-clients-downloader \
         --products-filter CL \
+        --versions-filter '2026.2+' \
         --build-filter 262.10968.117 \
         --include-eap-builds \
         --platforms-filter linux-x64 \
@@ -73,6 +74,7 @@ RUN  \
         /JetBrains/jetbrains-clients-downloader-linux-x86_64/bin/jetbrains-clients-downloader \
         --verbose \
         --products-filter CL \
+        --versions-filter '2026.2+' \
         --build-filter 262.10968.117 \
         --include-eap-builds \
         --platforms-filter linux-x64 \
@@ -82,6 +84,7 @@ RUN  \
 # Make the files visible to nginx
 # ---------------------------------------------------------------------------
 RUN chmod --recursive +r /JetBrains
+RUN find /JetBrains -type d -exec chmod +rx "{}" ";"
 
 # ---------------------------------------------------------------------------
 # Hand nginx the mirror's server block 
