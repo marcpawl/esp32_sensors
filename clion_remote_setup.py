@@ -174,6 +174,10 @@ that the remote backends come from another container
     print("Press return to continue.")
     sys.stdin.readline()
     print("")
+    print("Did it fail?")
+    print("Enable the internet, restart clion, open the project")
+    print("in the devcontainer, and while downloading disable")
+    print("the internet.")
 
     sys.exit(0)
 
