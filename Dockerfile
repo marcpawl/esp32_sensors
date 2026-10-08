@@ -88,6 +88,8 @@ RUN if getent passwd "${UID}" >/dev/null 2>&1; then \
     # Source the IDF environment for every interactive login shell.
     && printf 'source %s/export.sh\n' "${IDF_PATH}" >> "/home/${USERNAME}/.bashrc"
 
+RUN $IDF_PATH/install.sh
+
 # Persist bash history across container restarts (volume-mounted in compose).
 RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/home/${USERNAME}/.commandhistory/.bash_history" \
     && echo "${SNIPPET}" >> "/home/${USERNAME}/.bashrc" \
