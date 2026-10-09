@@ -52,6 +52,9 @@ services:
     # are readable/writable without --privileged.
     group_add:
       - "${DIALOUT_GID:-20}"
+        
+    devices:
+      - "/dev/ttyACM0:/dev/ttyACM0"
 
     volumes:
       # Project source is bind-mounted so edits on the host are visible live.
