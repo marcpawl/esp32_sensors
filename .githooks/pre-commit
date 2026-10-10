@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+#
+# pre-commit hook: reject a commit if any staged C/C++ source is not
+# clang-format clean (style governed by the committed .clang-format).
+#
+# Install once per clone (activates the version-controlled hooks dir):
+#     git config core.hooksPath .githooks
+#
+# The check runs clang-format on the *staged* content of each changed file, so
+# it never complains about unrelated working-tree edits. It prefers the tool
+# inside the dev container (pinned to the same version as the image) and falls
+# back to a host `clang-format` if present.
+#
+# Bypass for a single commit (use sparingly):
+#     git commit --no-verify
+#
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "${REPO_ROOT}"
+
+# Directories whose staged C/C++ files are style-checked. Keep in sync with
+# scripts/dev.sh and the .clang-format header comment. (Git pathspecs are not
+# shell globs, so match the whole subtree and filter by extension below.)
+ROOTS=('main' 'test')
+
+# Staged, added/copied/modified C/C++ files (deleted files are skipped).
+mapfile -t FILES < <(
+    git diff --cached --name-only --diff-filter=ACMR -- "${ROOTS[@]}" \
+        | grep -E '\.(cpp|hpp|h|cc|cxx)$' || true
+)
+
+if [ "${#FILES[@]}" -eq 0 ]; then
+    exit 0
+fi
+
+# Materialize the staged (index) version of each file into a temp tree, so we
+# check exactly what is being committed rather than the working copy.
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "${TMP_DIR}"' EXIT
+for f in "${FILES[@]}"; do
+    mkdir -p "${TMP_DIR}/$(dirname "${f}")"
+    git show ":${f}" > "${TMP_DIR}/${f}"
+done
+# Place the committed style inside the temp tree so clang-format discovers it
+# (it searches upward from each source file) for both the host and container
+# runners. Copying beats bind-mounting a single file, which fails when the
+# parent is mounted read-only.
+cp "${REPO_ROOT}/.clang-format" "${TMP_DIR}/.clang-format"
+
+# Choose a clang-format runner.
+if command -v clang-format >/dev/null 2>&1; then
+    RUNNER="host"
+elif command -v docker >/dev/null 2>&1; then
+    RUNNER="docker"
+else
+    echo "pre-commit: clang-format not found (host or container); skipping." >&2
+    exit 0
+fi
+
+# Compose the file list relative to TMP_DIR for the runner.
+run_format_check() {
+    local -a args=(--dry-run --Werror)
+    if [ "${RUNNER}" = "host" ]; then
+        ( cd "${TMP_DIR}" && clang-format "${args[@]}" "${FILES[@]}" )
+    else
+        docker run --rm \
+            -v "${TMP_DIR}:/check:ro" \
+            -w /check \
+            --entrypoint clang-format \
+            esp32-sensors-dev:latest \
+            "${args[@]}" "${FILES[@]}"
+    fi
+}
+
+if run_format_check 2>"${TMP_DIR}/.err"; then
+    exit 0
+fi
+
+echo "" >&2
+echo "pre-commit: clang-format check FAILED — these staged files need formatting:" >&2
+sed 's/^/    /' "${TMP_DIR}/.err" >&2
+echo "" >&2
+echo "Fix with:  scripts/dev.sh format" >&2
+echo "Or bypass (not recommended):  git commit --no-verify" >&2
+exit 1

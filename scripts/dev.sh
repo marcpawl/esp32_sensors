@@ -8,7 +8,7 @@
 # the AGENTS.md workflow, so `docker compose` specifics live in one place.
 #
 # Usage:
-#   scripts/dev.sh [build|flash|monitor|menuconfig|test|format|format-check|shell]
+#   scripts/dev.sh [build|flash|monitor|menuconfig|test|format|format-check|install-hooks|shell]
 #
 # Environment:
 #   ESP32_PORT   Serial device for flash/monitor (default: /dev/ttyUSB0)
@@ -20,6 +20,11 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
 PORT="${ESP32_PORT:-/dev/ttyUSB0}"
+
+# C/C++ sources checked/formatted by clang-format, discovered via git so the
+# list always matches the tracked files (no missing-glob errors). Keep the
+# directory filter in sync with the pre-commit hook (.githooks/pre-commit).
+FORMAT_CMD='git ls-files "main/*" "test/*" | grep -E "\.(cpp|hpp|h|cc|cxx)\$"'
 
 # Run a command inside the `dev` service defined by docker-compose.yml. The
 # service is created on demand and removed afterwards (--rm), matching the
@@ -50,18 +55,24 @@ case "${1:-build}" in
         ;;
     format)
         # Apply the committed .clang-format (Google base, 4-space, 80 cols).
-        run bash -lc 'clang-format -i main/*.cpp main/include/*.hpp test/main/*.cpp'
+        run bash -lc "${FORMAT_CMD} | xargs clang-format -i"
         ;;
     format-check)
         # CI-friendly check; non-zero exit if anything is unformatted.
-        run bash -lc 'clang-format --dry-run --Werror main/*.cpp main/include/*.hpp test/main/*.cpp'
+        run bash -lc "${FORMAT_CMD} | xargs clang-format --dry-run --Werror"
+        ;;
+    install-hooks)
+        # Activate the version-controlled git hooks (.githooks/pre-commit),
+        # which reject commits whose staged C/C++ files are not clang-formatted.
+        git -C "${REPO_ROOT}" config core.hooksPath .githooks
+        echo "Installed git hooks: core.hooksPath -> .githooks"
         ;;
     shell)
         # Interactive login shell with the ESP-IDF environment sourced.
         run bash -l
         ;;
     *)
-        echo "usage: $0 [build|flash|monitor|menuconfig|test|format|format-check|shell]" >&2
+        echo "usage: $0 [build|flash|monitor|menuconfig|test|format|format-check|install-hooks|shell]" >&2
         exit 2
         ;;
 esac
