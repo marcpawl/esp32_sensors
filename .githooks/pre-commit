@@ -33,8 +33,10 @@ def main() -> int:
             file=sys.stderr,
         )
         return 0
+    command = (sys.executable, str(dev), "format-check-staged")
+    print(f"command={command}")
     return subprocess.run(
-        (sys.executable, str(dev), "format-check-staged"),
+        command,
         cwd=REPO_ROOT,
     ).returncode
 

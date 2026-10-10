@@ -56,6 +56,7 @@ USAGE = (
 
 def run(*cmd: str) -> int:
     """Run a command in the repo root, inheriting stdio; return exit code."""
+    print(cmd)
     return subprocess.run(cmd, cwd=REPO_ROOT).returncode
 
 
@@ -188,9 +189,11 @@ def _run_staged_format_check(tmp_dir: Path, files: list[str]) -> int:
         f"{tmp_dir}:/check:ro",
         "-w",
         "/check",
-        "--entrypoint",
-        "clang-format",
         DEV_IMAGE,
+        "bash",
+        "-i",
+        "-c",
+        "clang-format",
         *FORMAT_ARGS,
         *files,
     )
@@ -250,6 +253,7 @@ COMMANDS = {
 
 
 def main(argv: list[str]) -> int:
+    print()
     command = argv[1] if len(argv) > 1 else "build"
     handler = COMMANDS.get(command)
     if handler is None:
