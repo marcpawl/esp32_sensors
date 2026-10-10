@@ -26,8 +26,10 @@ void rtc_buffer_clear(RtcState& st) {
 }
 
 void rtc_wifi_cache_clear(RtcState& st) {
-    std::memset(&st.wifi, 0, sizeof(st.wifi));
-    st.wifi.valid = 0;
+    // Value-initialize rather than memset: WifiCache is a class type, so
+    // clearing it with memset trips -Wclass-memaccess and bypasses the type's
+    // own initialization.
+    st.wifi = WifiCache{};
 }
 
 }  // namespace thermo
