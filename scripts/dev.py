@@ -145,11 +145,23 @@ def cmd_menuconfig() -> int:
 
 def cmd_test() -> int:
     """Host-based Unity tests on the ESP-IDF `linux` target."""
-    return compose_bash(
-        f"cd test && idf.py --preview -B {TEST_BUILD_DIR} set-target linux && "
-        f"idf.py -B {TEST_BUILD_DIR} build && "
-        f"./{TEST_BUILD_DIR}/esp32_sensors_tests.elf"
-    )
+    if not is_in_container():
+        return compose(
+            "/project/scripts/dev.py",
+            "test" )
+
+    cmds = [
+            [ "idf.py", "--preview", "-B",  TEST_BUILD_DIR,
+              "set-target", "linux" ],
+            [ "idf.py", "-B",  TEST_BUILD_DIR, "build" ],
+            [ f"./{TEST_BUILD_DIR}/esp32_sensors_tests.elf"]
+           ]
+    for cmd in cmds:
+        print(cmd)
+        rc = subprocess.run( cmd, cwd="test").returncode
+        if rc != 0:
+            return 1
+    return 0
 
 
 def cmd_format() -> int:
