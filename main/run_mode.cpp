@@ -139,10 +139,10 @@ void run_mode_cycle() {
              static_cast<unsigned>(st.buffer_len));
 
     // --- Battery + hysteresis (§3.6) ---
-    BatteryMonitor battery;
+    BatteryMonitor battery(cfg);
     battery.init();
     std::uint32_t batt_mv = 0;
-    if (auto mv = battery.read_mv(cfg)) {
+    if (auto mv = battery.read_mv()) {
         batt_mv = *mv;
     } else {
         ESP_LOGW(kTag, "battery read failed; assuming 0 mV");

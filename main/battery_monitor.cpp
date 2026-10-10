@@ -125,12 +125,12 @@ esp_err_t BatteryMonitor::init() {
     return ESP_OK;
 }
 
-std::optional<std::uint32_t> BatteryMonitor::read_mv(const Config& cfg) {
+std::optional<std::uint32_t> BatteryMonitor::read_mv() {
     if (!initialized_) {
         return std::nullopt;
     }
 
-    const bool gated = cfg.batt_gate_en;
+    const bool gated = config_.batt_gate_en;
     if (gated) {
         gate_enable(true);
         // Allow the divider to settle before sampling.
@@ -148,11 +148,11 @@ std::optional<std::uint32_t> BatteryMonitor::read_mv(const Config& cfg) {
     }
 
     // Undo the divider: V_batt = V_adc * (R_top + R_bottom) / R_bottom (§2.5).
-    const double ratio = static_cast<double>(cfg.batt_r_top + cfg.batt_r_bot) /
-                         static_cast<double>(cfg.batt_r_bot);
+    const double ratio = static_cast<double>(config_.batt_r_top + config_.batt_r_bot) /
+                         static_cast<double>(config_.batt_r_bot);
     double batt = static_cast<double>(*adc_mv) * ratio;
     // Apply calibration gain and offset.
-    batt = batt * cfg.batt_cal_gain + cfg.batt_cal_offset;
+    batt = batt * config_.batt_cal_gain + config_.batt_cal_offset;
     if (batt < 0) {
         batt = 0;
     }

@@ -13,7 +13,9 @@ namespace thermo {
 
 class BatteryMonitor {
   public:
-    BatteryMonitor() = default;
+    BatteryMonitor(Config const& config)
+        : config_(config)
+    {}
 
     // Configures the ADC (12 dB attenuation) and curve-fitting calibration.
     esp_err_t init();
@@ -22,7 +24,7 @@ class BatteryMonitor {
     // configured calibration gain/offset. Returns nullopt on read failure.
     // When divider gating is enabled (§2.6), the gate is energized around the
     // read only.
-    std::optional<std::uint32_t> read_mv(const Config& cfg);
+    std::optional<std::uint32_t> read_mv();
 
     // Applies the §3.6 hysteresis rules against `current` state.
     // Pure w.r.t. hardware; exposed as a static for host testing.
@@ -32,6 +34,7 @@ class BatteryMonitor {
   private:
     bool initialized_ = false;
     int gate_gpio_ = -1;
+    Config const& config_;
 };
 
 }  // namespace thermo

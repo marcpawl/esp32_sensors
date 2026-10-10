@@ -28,7 +28,7 @@ ScanSnapshot make_snapshot(Config& cfg, SensorManager& sensors,
                            BatteryMonitor& battery) {
     ScanSnapshot snap;
 
-    if (auto mv = battery.read_mv(cfg)) {
+    if (auto mv = battery.read_mv()) {
         snap.battery_mv = *mv;
     }
 
@@ -96,7 +96,7 @@ void run_configure_mode() {
     SensorManager sensors(pins::kWireBus);
     sensors.init();
 
-    BatteryMonitor battery;
+    BatteryMonitor battery(cfg);
     battery.init();
 
     // The server holds references to `cfg`, `sensors`, and `battery`, all of
