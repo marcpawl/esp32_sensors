@@ -229,14 +229,17 @@ fails, so it is CI-friendly.
 
 Formatting is governed by the committed **`.clang-format`** (Google base, 4-space
 indent, 80 columns). The existing sources already conform, so a format run is a
-no-op on clean code — keep it that way and format before committing:
+no-op on clean code — keep it that way and format before committing.
+
+**Always run clang-format via the container task runner**, which formats all
+`.hpp` and `.cpp` source files under `main/` and `test/`:
 
 ```bash
-# Check (non-zero exit if anything is unformatted) — CI-friendly.
-clang-format --dry-run --Werror main/*.cpp main/include/*.hpp test/main/*.cpp
+# Apply clang-format to every .hpp and .cpp source file.
+scripts/dev.py format
 
-# Apply.
-clang-format -i main/*.cpp main/include/*.hpp test/main/*.cpp
+# Check only (non-zero exit if anything is unformatted) — CI-friendly.
+scripts/dev.py format-check
 ```
 
 The Espressif toolchain ships a compatible `clang-format` (20.x) inside the
