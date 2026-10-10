@@ -53,6 +53,39 @@ USAGE = (
     "format-check-staged|install-hooks|shell]"
 )
 
+def is_in_container():
+    return os.environ.get("DOCKER_IMAGE") == "esp32_sensors"
+
+def split_list(items, max_size):
+    # Step through the list from 0 to n, skipping by max_size each time
+    return [items[i : i + max_size] for i in range(0, len(items), max_size)]
+
+def source_files():
+    try:
+        # Run the git command safely
+        # This matches tracked files in the main/ and test/ directories
+        result = subprocess.run(
+            ["git", "ls-files", "main/*", "test/*"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+    
+        # Split the output into individual file paths and strip whitespace
+        all_files = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    
+        # Filter the files using the EXTENSIONS tuple
+        filtered_files = [file for file in all_files if file.endswith(EXTENSIONS)]
+        return filtered_files
+    
+    except subprocess.CalledProcessError as e:
+        print(f"Git command failed with exit code {e.returncode}", file=sys.stderr)
+        print(f"Error output: {e.stderr}", file=sys.stderr)
+        raise
+    except FileNotFoundError:
+        print("Error: 'git' command-line tool not found on this system.", file=sys.stderr)
+        raise
+    
 
 def run(*cmd: str) -> int:
     """Run a command in the repo root, inheriting stdio; return exit code."""
@@ -115,12 +148,34 @@ def cmd_test() -> int:
 
 def cmd_format() -> int:
     """Apply the committed .clang-format (Google base, 4-space, 80 cols)."""
-    return compose_bash(f"{GIT_LS_FILES} | xargs clang-format -i")
+    if not is_in_container():
+        return compose(
+            "/project/scripts/dev.py",
+            "format")
+
+    for file in source_files():
+        cmd = [ "clang-format", "-i", file ]
+        rc = subprocess.run(cmd).returncode
+        if rc != 0:
+            print(f"Format failed: {file}", file=sys.stderr)
+            return 1
+    return 0
 
 
 def cmd_format_check() -> int:
     """CI-friendly check; non-zero exit if anything is unformatted."""
-    return compose_bash(f"{GIT_LS_FILES} | xargs clang-format --dry-run --Werror")
+    if not is_in_container():
+        return compose(
+            "/project/scripts/dev.py",
+            "format-check")
+
+    for file in source_files():
+        cmd = [ "clang-format", "--dry-run", "--Werror", file ]
+        rc = subprocess.run(cmd).returncode
+        if rc != 0:
+            print(f"Format check failed: {file}", file=sys.stderr)
+            return 1
+    return 0
 
 
 def cmd_install_hooks() -> int:
@@ -175,29 +230,11 @@ def _materialize_staged(files: list[str], tmp_dir: Path) -> None:
 
 
 def _run_staged_format_check(tmp_dir: Path, files: list[str]) -> int:
-    """Run clang-format --dry-run --Werror, preferring the host tool."""
-    if shutil.which("clang-format"):
-        return subprocess.run(
+    """Run clang-format --dry-run --Werror"""
+    return subprocess.run(
             ("clang-format", *FORMAT_ARGS, *files),
             cwd=tmp_dir,
         ).returncode
-    return run(
-        "docker",
-        "run",
-        "--rm",
-        "-v",
-        f"{tmp_dir}:/check:ro",
-        "-w",
-        "/check",
-        DEV_IMAGE,
-        "bash",
-        "-i",
-        "-c",
-        "clang-format",
-        *FORMAT_ARGS,
-        *files,
-    )
-
 
 def cmd_format_check_staged() -> int:
     """Check only the staged C/C++ content (used by the pre-commit hook).
@@ -206,16 +243,13 @@ def cmd_format_check_staged() -> int:
     files, so it never complains about unrelated working-tree edits and always
     validates exactly what is about to be committed.
     """
+    if not is_in_container():
+        return compose(
+            "/project/scripts/dev.py",
+            "format-check-staged")
+            
     files = _staged_files()
     if not files:
-        return 0
-
-    if not shutil.which("clang-format") and not shutil.which("docker"):
-        print(
-            "format-check-staged: clang-format not found "
-            "(host or container); skipping.",
-            file=sys.stderr,
-        )
         return 0
 
     with tempfile.TemporaryDirectory() as tmp:
