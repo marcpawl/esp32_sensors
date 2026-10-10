@@ -185,8 +185,8 @@ Solar → Charge controller (TBD) → Battery → Switch → Regulator → ESP32
 
 | GPIO | Configure | Center | Run |
 |---|---|---|---|
-| GPIO 18 (CFG) | HIGH | LOW | LOW |
-| GPIO 19 (RUN) | LOW | LOW | HIGH |
+| GPIO 1 (CFG) | HIGH | LOW | LOW |
+| GPIO 2 (RUN) | LOW | LOW | HIGH |
 
 ### 2.4 GPIO Assignment
 
@@ -195,8 +195,8 @@ Solar → Charge controller (TBD) → Battery → Switch → Regulator → ESP32
 | GPIO 4 | 1-Wire bus (DS18B20 ×3 + 4.7 kΩ pull-up) |
 | GPIO 16 | Red LED |
 | GPIO 17 | Green LED |
-| GPIO 18 | Mode sense: Configure |
-| GPIO 19 | Mode sense: Run |
+| GPIO 1 | Mode sense: Configure |
+| GPIO 2 | Mode sense: Run |
 | GPIO 34 | Battery voltage ADC (via divider) |
 | GPIO 25 (optional) | Divider gate (P-MOSFET control) |
 
