@@ -56,5 +56,13 @@ dev@cf552928deb3:/project$
 
 Container is now ready for use with ESP-IDF.
 
+Configure the envioronment
+
+```
+$ rm -rf build
+$ idf.py fullclean
+$ idf.py set-target esp32s3
+$ 
+
 
 
