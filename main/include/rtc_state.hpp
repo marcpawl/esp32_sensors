@@ -15,11 +15,11 @@ namespace thermo {
 // can live in RTC memory. Layout: 4 + 2 + 2 + 2 + 2 = 12 bytes, no padding,
 // which keeps ~450 records well within the ~8 KB RTC slow memory budget.
 struct SampleRecord {
-    std::uint32_t age_base;  // Seconds since boot at sample time.
-    std::uint16_t batt_mv;   // Battery voltage (mV).
-    std::int16_t t1;         // Temperature x100, or kTempNull.
-    std::int16_t t2;
-    std::int16_t t3;
+    std::uint32_t age_base = 0;   // Seconds since boot at sample time.
+    std::uint16_t batt_mv = 0;    // Battery voltage (mV).
+    std::int16_t t1 = kTempNull;  // Temperature x100, or kTempNull.
+    std::int16_t t2 = kTempNull;
+    std::int16_t t3 = kTempNull;
 };
 
 static_assert(sizeof(SampleRecord) == 12, "SampleRecord layout must be stable");
@@ -28,24 +28,24 @@ static_assert(alignof(SampleRecord) == 4,
 
 // Cached Wi-Fi connection parameters (§3.9).
 struct WifiCache {
-    std::uint8_t bssid[6];
-    std::uint8_t channel;
-    std::uint32_t ip;
-    std::uint8_t valid;
+    std::uint8_t bssid[6] = {};
+    std::uint8_t channel = 0;
+    std::uint32_t ip = 0;
+    std::uint8_t valid = 0;
 };
 
 // The complete RTC-resident application state (§8).
 struct RtcState {
-    std::uint32_t boot_count;
-    std::uint8_t fail_count;
-    std::uint8_t tx_state;  // TxState
-    std::array<SampleRecord, limits::kMaxBufferRecords> buffer;
-    std::uint16_t buffer_len;
-    std::uint32_t next_sample_at;
-    std::array<RomId, limits::kSensorCount> rom_ids;
-    std::uint8_t rom_count;
-    WifiCache wifi;
-    std::uint8_t last_upload_ok;
+    std::uint32_t boot_count = 0;
+    std::uint8_t fail_count = 0;
+    std::uint8_t tx_state = static_cast<std::uint8_t>(TxState::kTxOk);
+    std::array<SampleRecord, limits::kMaxBufferRecords> buffer = {};
+    std::uint16_t buffer_len = 0;
+    std::uint32_t next_sample_at = 0;
+    std::array<RomId, limits::kSensorCount> rom_ids = {};
+    std::uint8_t rom_count = 0;
+    WifiCache wifi = {};
+    std::uint8_t last_upload_ok = 0;
 };
 
 // Obtains the single RTC-resident state.

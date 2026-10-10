@@ -30,7 +30,7 @@ void rtc_state_init() {
     }
     // Cold boot: clear everything deterministic. The buffer and caches are
     // intentionally lost on power removal (§4.3).
-    std::memset(&g_rtc_state, 0, sizeof(g_rtc_state));
+    g_rtc_state = RtcState();
     g_rtc_state.tx_state = static_cast<std::uint8_t>(TxState::kTxOk);
     g_rtc_initialized = 1;
 }
