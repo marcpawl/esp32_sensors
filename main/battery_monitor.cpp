@@ -94,10 +94,21 @@ esp_err_t BatteryMonitor::init() {
         return err;
     }
 
-    // Classic ESP32 supports line-fitting calibration (curve fitting is only
-    // available on newer SoCs). Line fitting on ESP32 additionally requires a
-    // reference voltage; if the scheme cannot be created we fall back to an
-    // approximate conversion in read_filtered_mv().
+    // Calibration schemes are selected at compile time: the config struct and
+    // create function for a scheme only exist when its *_SUPPORTED macro is
+    // defined (classic ESP32 uses line fitting; newer SoCs use curve fitting;
+    // neither is available on the `linux` host target).
+#if ADC_CALI_SCHEME_CURVE_FITTING_SUPPORTED
+    adc_cali_curve_fitting_config_t cali_cfg = {};
+    cali_cfg.unit_id = ADC_UNIT_1;
+    cali_cfg.chan = ADC_CHANNEL_6;  // GPIO34
+    cali_cfg.atten = kAtten;
+    cali_cfg.bitwidth = kBitWidth;
+    g_cali_enabled =
+        (adc_cali_create_scheme_curve_fitting(&cali_cfg, &g_cali) == ESP_OK);
+#elif ADC_CALI_SCHEME_LINE_FITTING_SUPPORTED
+    // Line fitting on classic ESP32 additionally requires a reference voltage;
+    // if the scheme cannot be created we fall back to a raw reading.
     adc_cali_line_fitting_config_t cali_cfg = {};
     cali_cfg.unit_id = ADC_UNIT_1;
     cali_cfg.atten = kAtten;
@@ -105,6 +116,9 @@ esp_err_t BatteryMonitor::init() {
     cali_cfg.default_vref = 1100;  // Typical ESP32 eFuse Vref (mV).
     g_cali_enabled =
         (adc_cali_create_scheme_line_fitting(&cali_cfg, &g_cali) == ESP_OK);
+#else
+    g_cali_enabled = false;
+#endif
 
     ensure_gate_gpio();
     initialized_ = true;
