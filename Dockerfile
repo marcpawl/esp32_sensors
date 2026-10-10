@@ -49,6 +49,26 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # ---------------------------------------------------------------------------
+# esp-clang: the Espressif-maintained LLVM toolchain, which ships the
+# `clang-format` / `clang-tidy` binaries used by the pre-commit hook
+# (.githooks/pre-commit) and scripts/dev.sh.
+#
+# It is *not* installed by `install.sh` (its tools.json entry is
+# "install": "on_request"), so it must be requested explicitly. Installing it
+# here also adds `.../esp-clang/bin` to PATH via $IDF_PATH/export.sh, so
+# `clang-format` / `clang-tidy` resolve to the Espressif build.
+#
+# This pins the version to whatever the current ESP-IDF release manages
+# (v6.1 -> esp-21.1.3_20260408), keeping formatting reproducible and identical
+# to what the IDF toolchain ships. To use a different release, change the
+# ESP-IDF base image (the version comes from tools.json).
+# ---------------------------------------------------------------------------
+RUN cd $IDF_PATH && \
+    . "$IDF_PATH/export.sh" && \
+     "$IDF_PATH/tools/idf_tools.py" install esp-clang
+
+
+# ---------------------------------------------------------------------------
 # Project-specific software installation.
 # Add additional `RUN` commands here for tooling the project needs
 # (e.g. python packages into the IDF venv, extra CLI utilities, formatters).
@@ -87,6 +107,7 @@ RUN if getent passwd "${UID}" >/dev/null 2>&1; then \
         "/home/${USERNAME}/.commandhistory" \
     && chown -R "${UID}:${GID}" "/home/${USERNAME}" \
     # Source the IDF environment for every interactive login shell.
+    && echo "ESP_IDF_EXPORT_DEBUG=1" >> "/home/${USERNAME}/.bashrc" \
     && printf 'source %s/export.sh\n' "${IDF_PATH}" >> "/home/${USERNAME}/.bashrc"
 
 
@@ -95,6 +116,28 @@ RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/home/${USERN
     && echo "${SNIPPET}" >> "/home/${USERNAME}/.bashrc" \
     && chown -R "${UID}:${GID}" "/home/${USERNAME}/.commandhistory"
 
+RUN mkdir -p /tmp/esp_idf_activate_dev && chmod 777 /tmp/esp_idf_activate_dev
+
 USER ${USERNAME}
-RUN $IDF_PATH/install.sh && /opt/esp/idf/tools/idf_tools.py install-python-env
+# ---------------------------------------------------------------------------
+# esp-clang: the Espressif-maintained LLVM toolchain, which ships the
+# `clang-format` / `clang-tidy` binaries used by the pre-commit hook
+# (.githooks/pre-commit) and scripts/dev.sh.
+#
+# It is *not* installed by `install.sh` (its tools.json entry is
+# "install": "on_request"), so it must be requested explicitly. Installing it
+# here also adds `.../esp-clang/bin` to PATH via $IDF_PATH/export.sh, so
+# `clang-format` / `clang-tidy` resolve to the Espressif build.
+#
+# This pins the version to whatever the current ESP-IDF release manages
+# (v6.1 -> esp-21.1.3_20260408), keeping formatting reproducible and identical
+# to what the IDF toolchain ships. To use a different release, change the
+# ESP-IDF base image (the version comes from tools.json).
+# ---------------------------------------------------------------------------
+RUN cd $IDF_PATH && \
+    $IDF_PATH/install.sh && \
+    /opt/esp/idf/tools/idf_tools.py install-python-env && \
+    . "$IDF_PATH/export.sh" && \
+    "$IDF_PATH/tools/idf_tools.py" install esp-clang
+
 WORKDIR /project
