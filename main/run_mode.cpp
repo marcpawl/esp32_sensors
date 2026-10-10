@@ -140,7 +140,6 @@ void run_mode_cycle() {
 
     // --- Battery + hysteresis (§3.6) ---
     BatteryMonitor battery(cfg);
-    battery.init();
     std::uint32_t batt_mv = 0;
     if (auto mv = battery.read_mv()) {
         batt_mv = *mv;

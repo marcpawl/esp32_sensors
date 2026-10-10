@@ -76,7 +76,14 @@ std::optional<int> read_filtered_mv() {
 
 }  // namespace
 
-esp_err_t BatteryMonitor::init() {
+
+BatteryMonitor::BatteryMonitor(Config const &config)
+    : config_(config) {
+
+    init();
+}
+
+esp_err_t BatteryMonitor::init() noexcept {
     adc_oneshot_unit_init_cfg_t unit_cfg = {};
     unit_cfg.unit_id = ADC_UNIT_1;
     unit_cfg.clk_src = ADC_RTC_CLK_SRC_DEFAULT;

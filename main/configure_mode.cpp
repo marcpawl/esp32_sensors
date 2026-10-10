@@ -97,7 +97,6 @@ void run_configure_mode() {
     sensors.init();
 
     BatteryMonitor battery(cfg);
-    battery.init();
 
     // The server holds references to `cfg`, `sensors`, and `battery`, all of
     // which outlive it for the duration of Configure mode.
