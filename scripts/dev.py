@@ -48,6 +48,11 @@ DEV_IMAGE = "esp32-sensors-dev:latest"
 
 FORMAT_ARGS = ("--dry-run", "--Werror")
 
+# Build directories are named after the ESP-IDF target so the firmware
+# (esp32s3) and host-test (linux) builds never clobber each other.
+FW_BUILD_DIR = "build_esp32s3"
+TEST_BUILD_DIR = "build_linux"
+
 USAGE = (
     "usage: dev.py [build|flash|monitor|menuconfig|test|format|format-check|"
     "format-check-staged|install-hooks|shell]"
@@ -119,30 +124,31 @@ def git(*args: str) -> subprocess.CompletedProcess:
 
 
 def cmd_build() -> int:
-    """Build the firmware for the configured chip target (esp32)."""
-    return compose("idf.py", "build")
+    """Build the firmware for the configured chip target (esp32s3)."""
+    return compose("idf.py", "-B", FW_BUILD_DIR, "build")
 
 
 def cmd_flash() -> int:
     """Flash then attach the serial monitor; exit it with Ctrl+]."""
-    return compose("idf.py", "-p", PORT, "flash", "monitor")
+    return compose("idf.py", "-B", FW_BUILD_DIR, "-p", PORT, "flash", "monitor")
 
 
 def cmd_monitor() -> int:
     """Attach the serial monitor; exit it with Ctrl+]."""
-    return compose("idf.py", "-p", PORT, "monitor")
+    return compose("idf.py", "-B", FW_BUILD_DIR, "-p", PORT, "monitor")
 
 
 def cmd_menuconfig() -> int:
     """Interactive Kconfig UI; edits sdkconfig (generated from defaults)."""
-    return compose("idf.py", "menuconfig")
+    return compose("idf.py", "-B", FW_BUILD_DIR, "menuconfig")
 
 
 def cmd_test() -> int:
     """Host-based Unity tests on the ESP-IDF `linux` target."""
     return compose_bash(
-        "cd test && idf.py --preview set-target linux && idf.py build && "
-        "./build/esp32_sensors_tests.elf"
+        f"cd test && idf.py --preview -B {TEST_BUILD_DIR} set-target linux && "
+        f"idf.py -B {TEST_BUILD_DIR} build && "
+        f"./{TEST_BUILD_DIR}/esp32_sensors_tests.elf"
     )
 
 

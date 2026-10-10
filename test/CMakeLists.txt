@@ -8,7 +8,10 @@
 #
 # Run with:
 #   docker compose run --rm dev bash -lc 'cd test && idf.py --preview
-#   set-target linux && idf.py build && ./build/esp32_sensors_tests.elf'
+#   -B build_linux set-target linux && idf.py -B build_linux build &&
+#   ./build_linux/esp32_sensors_tests.elf'
+# (or simply `scripts/dev.py test`). The build directory is named after the
+# target (`build_linux`) so it never clashes with the firmware `build_esp32s3`.
 #
 # See the "Testing approach" section of AGENTS.md.
 cmake_minimum_required(VERSION 3.22)

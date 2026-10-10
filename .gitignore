@@ -1,6 +1,7 @@
-# ESP-IDF build output (firmware at the root, host tests under test/)
-build/
-test/build/
+# ESP-IDF build output. Build directories are named after the target so the
+# firmware (esp32s3) and host-test (linux) builds stay separate.
+build_esp32s3/
+test/build_linux/
 managed_components/
 dependencies.lock
 

@@ -6,7 +6,8 @@
 //
 // Run with:
 //   docker compose run --rm dev bash -lc 'cd test && idf.py --preview
-//   set-target linux && idf.py build && ./build/esp32_sensors_tests.elf'
+//   -B build_linux set-target linux && idf.py -B build_linux build &&
+//   ./build_linux/esp32_sensors_tests.elf'
 #include "unity.h"
 #include "unity_test_runner.h"
 

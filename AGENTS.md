@@ -78,8 +78,9 @@ esp32_sensors/
 ├── docker-compose.yml   # `dev` service with serial (/dev) passthrough
 ├── .devcontainer/       # CLion / VS Code Dev Container definition (reuses compose)
 ├── scripts/dev.py       # Container task runner (build/flash/test/format/shell)
+├── build_esp32s3/       # Firmware build output (git-ignored; per-target)
 ├── .dockerignore        # Build-context exclusions
-├── .gitignore           # Excludes build/, sdkconfig, local IDE state
+├── .gitignore           # Excludes build_esp32s3/, test/build_linux/, sdkconfig, local IDE state
 ├── AGENTS.md            # This file — guidance for AI agents and developers
 ├── LICENSE              # GNU General Public License v3.0
 ├── install.sh           # Unrelated Continue CLI installer (not firmware)
@@ -161,8 +162,8 @@ necessary") and the toolchain, CMake, Ninja, and the ESP-IDF Python venv all run
   *Remote Development → Dev Containers → docker-compose.yml → `dev`*. CLion
   (re)builds the image if the `Dockerfile` changed and starts the service on demand.
 - **Toolchain/CMake:** select the container as the remote host (SSH into the Dev
-  Container). CMake then configures and builds under `/project/build` in the
-  container, so the compiler cache lives on the container side, not the host.
+  Container). CMake then configures and builds under `/project/build_esp32s3` in
+  the container, so the compiler cache lives on the container side, not the host.
 
 > Editing the image, mounts, or user? Change `docker-compose.yml` (and `Dockerfile`),
 > **not** `devcontainer.json`. The Dev Container deliberately inherits everything
@@ -177,9 +178,9 @@ commands — run them from the CLion Run/Debug toolbar:
 
 | Run configuration | `scripts/dev.py` | What it does |
 |---|---|---|
-| Build firmware (container) | `build` | `idf.py build` in the container |
-| Flash & monitor (container) | `flash` | `idf.py -p $ESP32_PORT flash monitor` (default `/dev/ttyUSB0`) |
-| Host unit tests (container) | `test` | builds + runs the `linux`-target Unity tests |
+| Build firmware (container) | `build` | `idf.py -B build_esp32s3 build` in the container |
+| Flash & monitor (container) | `flash` | `idf.py -B build_esp32s3 -p $ESP32_PORT flash monitor` (default `/dev/ttyUSB0`) |
+| Host unit tests (container) | `test` | builds + runs the `linux`-target Unity tests (`build_linux/`) |
 | clang-format check (container) | `format-check` | `clang-format --dry-run --Werror` |
 | menuconfig (container) | `menuconfig` | Kconfig UI |
 | Container shell (ESP-IDF) | `shell` | login shell with the IDF env sourced |
@@ -189,9 +190,10 @@ Set `ESP32_PORT` (e.g. `/dev/ttyACM0`) to target a different serial device.
 ### Build
 
 ```bash
-# Run any IDF command via compose
-docker compose run --rm dev idf.py set-target esp32   # first time only
-docker compose run --rm dev idf.py build
+# Run any IDF command via compose. The build directory is named after the
+# target (`build_esp32s3`) so it never clashes with the host-test build.
+docker compose run --rm dev idf.py -B build_esp32s3 set-target esp32s3   # first time only
+docker compose run --rm dev idf.py -B build_esp32s3 build
 ```
 
 C++26 (`-std=gnu++26`) is the ESP-IDF v6.1 default for chip targets — no extra compiler flags are required.
@@ -201,7 +203,7 @@ C++26 (`-std=gnu++26`) is the ESP-IDF v6.1 default for chip targets — no extra
 The host `/dev` tree is bind-mounted into the container, so plug the board in **before** starting the container and pass the port explicitly:
 
 ```bash
-docker compose run --rm dev idf.py -p /dev/ttyUSB0 flash monitor
+docker compose run --rm dev idf.py -B build_esp32s3 -p /dev/ttyUSB0 flash monitor
 ```
 
 Replace `/dev/ttyUSB0` with the actual serial device (`/dev/ttyACM0`, etc.). Exit the monitor with `Ctrl+]`.
@@ -219,7 +221,7 @@ Replace `/dev/ttyUSB0` with the actual serial device (`/dev/ttyACM0`, etc.). Exi
 
 ```bash
 # Build and run the host-based unit tests (exit code is non-zero on failure).
-docker compose run --rm dev bash -lc 'cd test && idf.py --preview set-target linux && idf.py build && ./build/esp32_sensors_tests.elf'
+docker compose run --rm dev bash -lc 'cd test && idf.py --preview -B build_linux set-target linux && idf.py -B build_linux build && ./build_linux/esp32_sensors_tests.elf'
 ```
 
 The test binary prints Unity `PASS`/`FAIL` lines and exits non-zero if any case

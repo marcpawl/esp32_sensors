@@ -59,9 +59,9 @@ Container is now ready for use with ESP-IDF.
 Configure the envioronment
 
 ```
-$ rm -rf build
-$ idf.py fullclean
-$ idf.py set-target esp32s3
+$ rm -rf build_esp32s3
+$ idf.py -B build_esp32s3 fullclean
+$ idf.py -B build_esp32s3 set-target esp32s3
 $ 
 
 
