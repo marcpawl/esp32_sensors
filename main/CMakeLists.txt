@@ -4,6 +4,7 @@ idf_component_register(
         "app_config.cpp"
         "app_config_store.cpp"
         "battery_monitor.cpp"
+        "power_manager.cpp"
         "led_manager.cpp"
         "mode_controller.cpp"
         "onewire_bus.cpp"
@@ -33,6 +34,7 @@ idf_component_register(
         esp_http_client
         esp_adc
         esp_driver_gpio
+        esp_driver_usb_serial_jtag
         esp_driver_uart
         esp_timer
         mbedtls
