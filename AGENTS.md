@@ -77,7 +77,7 @@ esp32_sensors/
 ├── Dockerfile           # Dev container: ESP-IDF v6.1 + non-root host-mapped user
 ├── docker-compose.yml   # `dev` service with serial (/dev) passthrough
 ├── .devcontainer/       # CLion / VS Code Dev Container definition (reuses compose)
-├── scripts/dev.sh       # Container task runner (build/flash/test/format/shell)
+├── scripts/dev.py       # Container task runner (build/flash/test/format/shell)
 ├── .dockerignore        # Build-context exclusions
 ├── .gitignore           # Excludes build/, sdkconfig, local IDE state
 ├── AGENTS.md            # This file — guidance for AI agents and developers
@@ -92,8 +92,8 @@ esp32_sensors/
 - `sdkconfig.defaults` — the committed configuration intent (target, C++ exceptions/RTTI off, partition table, `-Os`). `sdkconfig` is generated from this and is **not** tracked.
 - `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash environment. Extend these (not ad-hoc `docker run`) when adding tooling. The compose `dev` service is also the target of the Dev Container (see below).
 - `.devcontainer/devcontainer.json` — the CLion / VS Code **Dev Container** definition. It **reuses the compose `dev` service** (it does not define its own image), so CLion builds/starts the same container the CLI uses. Edit `docker-compose.yml` for image/mount/user changes; edit `devcontainer.json` only for IDE-level wiring.
-- `scripts/dev.sh` — the single container task runner (`build`, `flash`, `monitor`, `menuconfig`, `test`, `format`, `format-check`, `shell`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place.
-- `.idea/runConfigurations/*.xml` — **committed** shared CLion run configurations that shell into the container via `scripts/dev.sh`. `.idea/workspace.xml` (local, git-ignored) holds the same configs for the current machine.
+- `scripts/dev.py` — the single container task runner (`build`, `flash`, `monitor`, `menuconfig`, `test`, `format`, `format-check`, `format-check-staged`, `install-hooks`, `shell`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. The pre-commit hook (`.githooks/pre-commit`) delegates its check to `scripts/dev.py format-check-staged`.
+- `.idea/runConfigurations/*.xml` — **committed** shared CLion run configurations that invoke the container tasks via `python3 scripts/dev.py`. `.idea/workspace.xml` (local, git-ignored) holds the same configs for the current machine.
 - `LICENSE` — GPL-3.0.
 - `RELEASE_NOTES.md` — human-readable release notes; keep the "Implemented" / "Not yet implemented" split honest as milestones land.
 
@@ -172,10 +172,10 @@ necessary") and the toolchain, CMake, Ninja, and the ESP-IDF Python venv all run
 
 Six shared run configurations are committed under `.idea/runConfigurations/`
 (and mirrored in the local `.idea/workspace.xml`). They all call
-`scripts/dev.sh`, so a single script is the source of truth for container
+`scripts/dev.py`, so a single script is the source of truth for container
 commands — run them from the CLion Run/Debug toolbar:
 
-| Run configuration | `scripts/dev.sh` | What it does |
+| Run configuration | `scripts/dev.py` | What it does |
 |---|---|---|
 | Build firmware (container) | `build` | `idf.py build` in the container |
 | Flash & monitor (container) | `flash` | `idf.py -p $ESP32_PORT flash monitor` (default `/dev/ttyUSB0`) |

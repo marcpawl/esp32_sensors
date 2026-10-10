@@ -5,7 +5,7 @@
 -->
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="clang-format check (container)" type="ShConfigurationType">
-    <option name="SCRIPT_TEXT" value="scripts/dev.sh format-check" />
+    <option name="SCRIPT_TEXT" value="python3 scripts/dev.py format-check" />
     <option name="INDEPENDENT_SCRIPT_PATH" value="true" />
     <option name="SCRIPT_PATH" value="" />
     <option name="SCRIPT_OPTIONS" value="" />

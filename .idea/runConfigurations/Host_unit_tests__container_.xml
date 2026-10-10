@@ -5,7 +5,7 @@
 -->
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="Host unit tests (container)" type="ShConfigurationType">
-    <option name="SCRIPT_TEXT" value="scripts/dev.sh test" />
+    <option name="SCRIPT_TEXT" value="python3 scripts/dev.py test" />
     <option name="INDEPENDENT_SCRIPT_PATH" value="true" />
     <option name="SCRIPT_PATH" value="" />
     <option name="SCRIPT_OPTIONS" value="" />

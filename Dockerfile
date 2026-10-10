@@ -51,7 +51,7 @@ RUN apt-get update \
 # ---------------------------------------------------------------------------
 # esp-clang: the Espressif-maintained LLVM toolchain, which ships the
 # `clang-format` / `clang-tidy` binaries used by the pre-commit hook
-# (.githooks/pre-commit) and scripts/dev.sh.
+# (.githooks/pre-commit) and scripts/dev.py.
 #
 # It is *not* installed by `install.sh` (its tools.json entry is
 # "install": "on_request"), so it must be requested explicitly. Installing it
@@ -122,7 +122,7 @@ USER ${USERNAME}
 # ---------------------------------------------------------------------------
 # esp-clang: the Espressif-maintained LLVM toolchain, which ships the
 # `clang-format` / `clang-tidy` binaries used by the pre-commit hook
-# (.githooks/pre-commit) and scripts/dev.sh.
+# (.githooks/pre-commit) and scripts/dev.py.
 #
 # It is *not* installed by `install.sh` (its tools.json entry is
 # "install": "on_request"), so it must be requested explicitly. Installing it
