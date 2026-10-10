@@ -42,6 +42,7 @@ RUN apt-get update \
         ca-certificates \
         curl \
         vim \
+        psmisc \
         # libbsd is required by the ESP-IDF `linux` target (host unit tests);
         # the IDF build emits a warning / link error without it.
         libbsd-dev \
