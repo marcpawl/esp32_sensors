@@ -141,3 +141,4 @@ RUN cd $IDF_PATH && \
     "$IDF_PATH/tools/idf_tools.py" install esp-clang
 
 WORKDIR /project
+ENV DOCKER_IMAGE=esp32_sensors
