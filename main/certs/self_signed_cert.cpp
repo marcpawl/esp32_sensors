@@ -33,9 +33,7 @@ const char kServerCertPem[] =
     "PYxmLELewWneLRkjBcCkMebx+UKEeWyTbX4imwEkr4xsX3S3unQnP6bsSbMsNfS7\n"
     "+j9FcEE/s+ZF+Uo+Cwnx8L/EnmacHZo2A3PNRLsx6py/gIHNOBSmN/EjVmGyd6O7\n"
     "rv6ccF4H28XgWPy+J79z5uGLavI=\n"
-    "-----END CERTIFICATE-----\n"
-;
-
+    "-----END CERTIFICATE-----\n";
 
 const char kServerKeyPem[] =
     "-----BEGIN PRIVATE KEY-----\n"
@@ -65,10 +63,14 @@ const char kServerKeyPem[] =
     "VAa98lFleHgV+NoV0jKn8Hiiw+avUmIokr+M4v09qpH+ZWchVeHV4JahZ0Q5j8ze\n"
     "uWaQL+EnmgRiVz7avJR9o+AmkoGPHpDc83D0c5F4trjfalfqBe3OVfYutzDesYvF\n"
     "hjT7grH2Bm1zhm09SaFVO8uf\n"
-    "-----END PRIVATE KEY-----\n"
-;
+    "-----END PRIVATE KEY-----\n";
 
-std::size_t server_cert_len() { return std::strlen(kServerCertPem); }
-std::size_t server_key_len() { return std::strlen(kServerKeyPem); }
+std::size_t server_cert_len() {
+    return std::strlen(kServerCertPem);
+}
 
-} // namespace thermo::certs
+std::size_t server_key_len() {
+    return std::strlen(kServerKeyPem);
+}
+
+}  // namespace thermo::certs

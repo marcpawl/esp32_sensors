@@ -10,28 +10,28 @@
 #include "led_manager.hpp"  // TxState
 
 namespace thermo {
-    class BatteryMonitor {
-    public:
-        BatteryMonitor(Config const &config);
+class BatteryMonitor {
+  public:
+    BatteryMonitor(Config const& config);
 
-        // Reads battery voltage in millivolts, applying the divider ratio and the
-        // configured calibration gain/offset. Returns nullopt on read failure.
-        // When divider gating is enabled (§2.6), the gate is energized around the
-        // read only.
-        std::optional<std::uint32_t> read_mv();
+    // Reads battery voltage in millivolts, applying the divider ratio and the
+    // configured calibration gain/offset. Returns nullopt on read failure.
+    // When divider gating is enabled (§2.6), the gate is energized around the
+    // read only.
+    std::optional<std::uint32_t> read_mv();
 
-        // Applies the §3.6 hysteresis rules against `current` state.
-        // Pure w.r.t. hardware; exposed as a static for host testing.
-        static TxState evaluate_tx_state(std::uint32_t batt_mv, const Config &cfg,
-                                         TxState current);
+    // Applies the §3.6 hysteresis rules against `current` state.
+    // Pure w.r.t. hardware; exposed as a static for host testing.
+    static TxState evaluate_tx_state(std::uint32_t batt_mv, const Config& cfg,
+                                     TxState current);
 
-    private:
-        // Configures the ADC (12 dB attenuation) and curve-fitting calibration.
-        esp_err_t init() noexcept;
+  private:
+    // Configures the ADC (12 dB attenuation) and curve-fitting calibration.
+    esp_err_t init() noexcept;
 
-    private:
-        bool initialized_ = false;
-        int gate_gpio_ = -1;
-        Config const &config_;
-    };
-} // namespace thermo
+  private:
+    bool initialized_ = false;
+    int gate_gpio_ = -1;
+    Config const& config_;
+};
+}  // namespace thermo

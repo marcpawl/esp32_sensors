@@ -1,16 +1,14 @@
 // 3-position ON-OFF-ON switch reading (§2.3, §3).
 
-
 #include <chrono>
 
 #include "driver/gpio.h"
+#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "esp_log.h"
 
 #include "mode_controller.hpp"
 #include "reboot.hpp"
-
 
 namespace thermo {
 namespace {
@@ -48,8 +46,12 @@ void ModeController::read_once(ReadCounts& counts) const {
     const int cfg_level = gpio_get_level(static_cast<gpio_num_t>(config_gpio_));
     const int run_level = gpio_get_level(static_cast<gpio_num_t>(run_gpio_));
     counts.attempts_++;
-    if (cfg_level) {counts.config_++;}
-    if (run_level) {counts.run_++;}
+    if (cfg_level) {
+        counts.config_++;
+    }
+    if (run_level) {
+        counts.run_++;
+    }
 }
 
 ModeController::ReadCounts ModeController::read_many_times() const {
@@ -59,19 +61,19 @@ ModeController::ReadCounts ModeController::read_many_times() const {
     ReadCounts counts;
     while (std::chrono::steady_clock::now() - start_time < duration) {
         read_once(counts);
-        // Yield execution to allow FreeRTOS tasks / watchdog reset (1 RTOS tick)
+        // Yield execution to allow FreeRTOS tasks / watchdog reset (1 RTOS
+        // tick)
         vTaskDelay(1);
     }
     return counts;
 }
 
-
 Mode ModeController::read() const {
     ReadCounts const counts = read_many_times();
-    int const low_threshold = (counts.attempts_  + 3) / 4;
+    int const low_threshold = (counts.attempts_ + 3) / 4;
     int const high_threshold = low_threshold * 3;
     ESP_LOGI(kTag, "attempts %d config %d run %d threshold %d",
-        counts.attempts_, counts.config_, counts.run_, high_threshold);
+             counts.attempts_, counts.config_, counts.run_, high_threshold);
     if (high_threshold < counts.config_) {
         ESP_LOGI(kTag, "configure mode");
         return Mode::kConfigure;
@@ -81,7 +83,7 @@ Mode ModeController::read() const {
         return Mode::kRun;
     }
 
-    if (( low_threshold > counts.run_) && ( low_threshold > counts.config_)) {
+    if ((low_threshold > counts.run_) && (low_threshold > counts.config_)) {
         ESP_LOGI(kTag, "off mode, rebooting");
     } else {
         ESP_LOGE(kTag, "Inconclusive button state, rebooting");

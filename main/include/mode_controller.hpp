@@ -16,23 +16,22 @@ class ModeController {
     Mode read() const;
 
   private:
-  /** Count of the button state when read repeatedly. */
-  struct ReadCounts {
-    int attempts_ = 0;
-    int config_ = 0;
-    int run_ = 0;
-  };
+    /** Count of the button state when read repeatedly. */
+    struct ReadCounts {
+        int attempts_ = 0;
+        int config_ = 0;
+        int run_ = 0;
+    };
 
-  void read_once(ReadCounts& counts) const;
+    void read_once(ReadCounts& counts) const;
 
-  /** Read the button many times, returning the number
-   *  of times each button state was read.
-   */
-  ReadCounts read_many_times() const;
+    /** Read the button many times, returning the number
+     *  of times each button state was read.
+     */
+    ReadCounts read_many_times() const;
 
-  int const config_gpio_;
-  int const run_gpio_;
-
+    int const config_gpio_;
+    int const run_gpio_;
 };
 
 }  // namespace thermo

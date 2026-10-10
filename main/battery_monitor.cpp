@@ -76,10 +76,7 @@ std::optional<int> read_filtered_mv() {
 
 }  // namespace
 
-
-BatteryMonitor::BatteryMonitor(Config const &config)
-    : config_(config) {
-
+BatteryMonitor::BatteryMonitor(Config const& config) : config_(config) {
     init();
 }
 
@@ -155,8 +152,9 @@ std::optional<std::uint32_t> BatteryMonitor::read_mv() {
     }
 
     // Undo the divider: V_batt = V_adc * (R_top + R_bottom) / R_bottom (§2.5).
-    const double ratio = static_cast<double>(config_.batt_r_top + config_.batt_r_bot) /
-                         static_cast<double>(config_.batt_r_bot);
+    const double ratio =
+        static_cast<double>(config_.batt_r_top + config_.batt_r_bot) /
+        static_cast<double>(config_.batt_r_bot);
     double batt = static_cast<double>(*adc_mv) * ratio;
     // Apply calibration gain and offset.
     batt = batt * config_.batt_cal_gain + config_.batt_cal_offset;
