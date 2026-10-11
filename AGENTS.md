@@ -255,6 +255,7 @@ C++26 token set, and the codebase uses no C++23+ *syntax* that would confuse it.
 - Target **ESP-IDF v6.1** APIs only.
 - Use **C++26** with GNU extensions; do not introduce the C-only style where C++ is appropriate.
 - Declare `app_main` with `extern "C"` linkage.
+- Use constexpr and noexcept as much as possible
 - Treat RTC-memory structures carefully: they must be **trivially copyable / `POD`-like** with stable layout and `RTC_DATA_ATTR` placement, and must survive both deep sleep and reboots.
 - Conform payload format, LED semantics, and RTC memory layout exactly to `Specification.md`.
 - Keep power draw within the hourly budget defined in the spec (batch uploads, deep sleep between samples).
