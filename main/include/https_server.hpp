@@ -8,13 +8,16 @@
 
 #include "app_config.hpp"
 #include "esp_err.h"
+#include "power_manager.hpp"
 #include "sensor.hpp"
 
 namespace thermo {
 
 // Snapshot of live sensor/battery data exposed via GET /scan (§6.1).
 struct ScanSnapshot {
-    std::uint32_t battery_mv = 0;
+    PowerSource power_source;
+    /** Battery strength, absent when running without a battery (on USB). */
+    std::optional<std::uint32_t> battery_mv = std::nullopt;
     std::vector<SensorReading> sensors;
 };
 

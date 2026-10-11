@@ -13,6 +13,7 @@ set(test_srcs
     "test_temp_format.cpp"
     "test_payload.cpp"
     "test_config_validation.cpp"
+    "test_config_page.cpp"
     "test_rom_id.cpp"
     "test_rtc_buffer.cpp"
 )
@@ -22,6 +23,8 @@ set(sut_srcs
     "${CMAKE_CURRENT_LIST_DIR}/../../main/temp_format.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../../main/payload.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../../main/app_config.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../../main/config_page.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../../main/power_source.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../../main/rom_id.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../../main/rtc_buffer.cpp"
 )

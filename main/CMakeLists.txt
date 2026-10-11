@@ -5,6 +5,7 @@ idf_component_register(
         "app_config_store.cpp"
         "battery_monitor.cpp"
         "power_manager.cpp"
+        "power_source.cpp"
         "led_manager.cpp"
         "mode_controller.cpp"
         "onewire_bus.cpp"

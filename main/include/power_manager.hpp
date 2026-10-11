@@ -11,19 +11,9 @@
 
 #include "app_config.hpp"
 #include "battery_monitor.hpp"
+#include "power_source.hpp"
 
 namespace thermo {
-
-// Where the ESP32 is currently drawing power from (§2.2).
-enum class PowerSource : std::uint8_t {
-    kSolarBattery = 0,  // Solar-powered battery pack is installed and powering.
-    kUsbBatteryPack = 1,  // USB port, dumb battery pack (VBUS only, no host).
-    kUsbComputer = 2,     // USB port, host computer (enumerated data lines).
-};
-
-// Human-readable name for a power source, e.g. for logging. The returned
-// pointer is to a string literal and has static storage duration.
-const char* to_string(PowerSource source) noexcept;
 
 // Detects the power source at construction time and, when the board runs from
 // the solar battery, owns the BatteryMonitor used to read and evaluate it.
@@ -50,6 +40,9 @@ class PowerManager {
     const std::optional<BatteryMonitor>& battery() const noexcept {
         return battery_;
     }
+
+    /** If we are on battery, return the strength of the battery. */
+    std::optional<uint32_t> read_mv() noexcept;
 
     // True when running from a USB port (either battery pack or computer).
     bool on_usb() const noexcept {

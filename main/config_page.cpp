@@ -86,7 +86,15 @@ std::string render_scan_json(const Config& cfg, const ScanSnapshot& scan) {
     // §6.1 response: battery_mv, unit, and a sensors array of
     // {rom, name, temp_c}. Field order is stable for easy diffing.
     std::string out = "{\n";
-    out += "  \"battery_mv\": " + std::to_string(scan.battery_mv) + ",\n";
+
+    out += "  \"power_source\": \"";
+    out += to_string(scan.power_source);
+    out += "\",\n";
+
+    if (scan.battery_mv.has_value()) {
+        out += "  \"battery_mv\": " + std::to_string(scan.battery_mv.value()) +
+               ",\n";
+    }
     out += "  \"unit\": \"C\",\n";
     out += "  \"sensors\": [\n";
 

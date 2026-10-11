@@ -24,18 +24,6 @@ constexpr std::uint32_t kBatteryPresentMv = 3000;
 
 }  // namespace
 
-const char* to_string(PowerSource source) noexcept {
-    switch (source) {
-        case PowerSource::kSolarBattery:
-            return "solar battery";
-        case PowerSource::kUsbBatteryPack:
-            return "USB battery pack";
-        case PowerSource::kUsbComputer:
-            return "USB computer";
-    }
-    return "unknown";
-}
-
 PowerManager::PowerManager(Config const& config)
     : config_(config), source_(detect()) {
     // Only the solar-battery path needs the (and can own) the ADC-backed
@@ -88,6 +76,15 @@ bool PowerManager::solar_battery_installed() const noexcept {
     BatteryMonitor probe(config_);
     const auto mv = probe.read_mv();
     return mv.has_value() && *mv >= kBatteryPresentMv;
+}
+
+/** If we are on battery, return the strength of the battery. */
+std::optional<uint32_t> PowerManager::read_mv() noexcept {
+    if (!battery_.has_value()) {
+        return std::nullopt;
+    }
+    auto const mv = battery_.value().read_mv();
+    return mv;
 }
 
 }  // namespace thermo

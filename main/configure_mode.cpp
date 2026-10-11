@@ -15,6 +15,7 @@
 #include "https_server.hpp"
 #include "led_manager.hpp"
 #include "ntp_client.hpp"
+#include "power_manager.hpp"
 #include "sensor.hpp"
 #include "wifi_ap.hpp"
 
@@ -25,12 +26,10 @@ constexpr const char* kTag = "configure";
 
 // Builds a scan snapshot from live hardware for the /scan and / form routes.
 ScanSnapshot make_snapshot(Config& cfg, SensorManager& sensors,
-                           BatteryMonitor& battery) {
+                           PowerManager& power_manager) {
     ScanSnapshot snap;
-
-    if (auto mv = battery.read_mv()) {
-        snap.battery_mv = *mv;
-    }
+    snap.power_source = power_manager.source();
+    snap.battery_mv = power_manager.read_mv();
 
     // Read every sensor whose ROM ID is known from the mapping table. When the
     // table is empty (fresh device), SensorManager performs a bus scan.
@@ -96,14 +95,14 @@ void run_configure_mode() {
     SensorManager sensors(pins::kWireBus);
     sensors.init();
 
-    BatteryMonitor battery(cfg);
+    PowerManager power_manager(cfg);
 
     // The server holds references to `cfg`, `sensors`, and `battery`, all of
     // which outlive it for the duration of Configure mode.
     HttpsServer server(
         cfg,
-        [&cfg, &sensors, &battery]() {
-            return make_snapshot(cfg, sensors, battery);
+        [&cfg, &sensors, &power_manager]() {
+            return make_snapshot(cfg, sensors, power_manager);
         },
         [&cfg](const Config&) { return on_save(cfg); });
 
