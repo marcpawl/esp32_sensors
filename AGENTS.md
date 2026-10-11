@@ -258,6 +258,7 @@ C++26 token set, and the codebase uses no C++23+ *syntax* that would confuse it.
 - Treat RTC-memory structures carefully: they must be **trivially copyable / `POD`-like** with stable layout and `RTC_DATA_ATTR` placement, and must survive both deep sleep and reboots.
 - Conform payload format, LED semantics, and RTC memory layout exactly to `Specification.md`.
 - Keep power draw within the hourly budget defined in the spec (batch uploads, deep sleep between samples).
+- **Fail loudly, not silently.** When a precondition or capacity limit is violated, `assert()` (or `abort()`) instead of silently truncating, clamping, or dropping data. Silent fallbacks hide bugs; `assert()` in this firmware is fatal and makes the contract explicit. Only use a bounded/tolerant path (e.g. a `try_*` API or an explicit early `return`) when the recovery is deliberate and the caller is expected to handle it.
 
 ### Agent interaction
 
