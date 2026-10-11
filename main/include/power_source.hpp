@@ -10,9 +10,10 @@ namespace thermo {
 
 // Where the ESP32 is currently drawing power from (§2.2).
 enum class PowerSource : std::uint8_t {
-    kSolarBattery = 0,  // Solar-powered battery pack is installed and powering.
-    kUsbBatteryPack = 1,  // USB port, dumb battery pack (VBUS only, no host).
-    kUsbComputer = 2,     // USB port, host computer (enumerated data lines).
+    kUnknown = 0,
+    kSolarBattery,    // Solar-powered battery pack is installed and powering.
+    kUsbBatteryPack,  // USB port, dumb battery pack (VBUS only, no host).
+    kUsbComputer,     // USB port, host computer (enumerated data lines).
 };
 
 // Human-readable name for a power source, e.g. for logging or the /scan JSON.

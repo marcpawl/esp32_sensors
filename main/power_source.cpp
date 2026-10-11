@@ -13,6 +13,8 @@ const char* to_string(PowerSource source) noexcept {
             return "USB battery pack";
         case PowerSource::kUsbComputer:
             return "USB computer";
+        case PowerSource::kUnknown:
+            return "Unknown";
     }
     return "unknown";
 }

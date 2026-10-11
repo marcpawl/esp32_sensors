@@ -36,24 +36,26 @@ PowerManager::PowerManager(Config const& config)
 }
 
 PowerSource PowerManager::detect() const noexcept {
-    // A connected computer enumerates the USB-Serial-JTAG data lines; a dumb
-    // battery pack only provides VBUS and never enumerates.
+    if (solar_battery_installed()) {
+        return PowerSource::kSolarBattery;
+    }
     if (usb_host_connected()) {
         return PowerSource::kUsbComputer;
     }
     if (usb_vbus_present()) {
         return PowerSource::kUsbBatteryPack;
     }
-    if (solar_battery_installed()) {
-        return PowerSource::kSolarBattery;
-    }
-    // Nothing detected: with no USB and no battery the board would be dead, so
-    // this is only reachable transiently (e.g. divider settling). Default to
-    // the battery so the hysteresis path still runs.
-    return PowerSource::kSolarBattery;
+    return PowerSource::kUnknown;
 }
 
 bool PowerManager::usb_host_connected() noexcept {
+    // Ensure the driver is installed if not already used by the system console
+    if (!usb_serial_jtag_is_driver_installed()) {
+        usb_serial_jtag_driver_config_t cfg =
+            USB_SERIAL_JTAG_DRIVER_CONFIG_DEFAULT();
+        ESP_ERROR_CHECK(usb_serial_jtag_driver_install(&cfg));
+    }
+
     // The ESP32-S3 USB-Serial-JTAG peripheral reports "connected" only once a
     // host has enumerated it; a charger/battery pack keeps it disconnected.
     return usb_serial_jtag_is_connected();

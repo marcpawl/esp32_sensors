@@ -3,7 +3,7 @@ Hardware Setup to Laptop
 ========================
 
 Connect USB3.0-SuperSpeed 4Ports Hub to back left USB port.
-Connect USB1 to V.
+Connect USB1 to S (Serial).
 Use button to disable USB1.
 Wait 30 Seconds
 Use botton to enable USB1, ESP should have red light.

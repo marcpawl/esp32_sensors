@@ -83,6 +83,7 @@ TEST_CASE("scan json: every power source maps to its quoted name",
         PowerSource source;
         const char* expected;
     } cases[] = {
+        {PowerSource::kUnknown, "\"power_source\": \"Unknown\""},
         {PowerSource::kSolarBattery, "\"power_source\": \"solar battery\""},
         {PowerSource::kUsbBatteryPack,
          "\"power_source\": \"USB battery pack\""},
