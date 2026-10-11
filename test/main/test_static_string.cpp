@@ -4,15 +4,74 @@
 // valid NUL terminator, so c_str() is always safe. It is pure logic with no
 // IDF dependencies and is covered on the host. Overflow asserts (a programming
 // error) rather than truncating, so the boundary cases below exercise exact-fit
-// operations only; the asserting overflow paths are not host-testable.
+// operations only. The asserting overflow paths are verified in forked children
+// that exec the standalone `static_string_assert` program (see the [assert]
+// cases at the end).
 #include "unity.h"
 
+#include <sys/wait.h>
+#include <unistd.h>
+#include <cerrno>
 #include <cstddef>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <string>
 
+#include "static_string_assert_cases.hpp"
 #include "thermo_static_string.hpp"
 
 using thermo::static_string;
+
+namespace {
+
+// Absolute path to the standalone assert program. It is emitted next to the
+// test ELF, so resolve this process's own directory via /proc/self/exe.
+std::string assert_program_path() {
+    char exe[4096];
+    const ssize_t n = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
+    TEST_ASSERT_TRUE_MESSAGE(n > 0, "readlink(/proc/self/exe) failed");
+    exe[n] = '\0';
+    std::string path(exe);
+    const std::size_t slash = path.find_last_of('/');
+    path.resize(slash == std::string::npos ? 0 : slash + 1);
+    return path + "static_string_assert";
+}
+
+// Forks, execs the standalone assert program with `case_name`, and waits for
+// it. Returns true iff the child terminated abnormally, i.e. the assert fired.
+bool assert_program_aborted(const std::string& program, const char* case_name) {
+    const pid_t pid = fork();
+    TEST_ASSERT_TRUE_MESSAGE(pid >= 0, "fork() failed");
+    if (pid == 0) {
+        // Child: run the trigger in a fresh process so its abort cannot take
+        // down the test runner.
+        execl(program.c_str(), program.c_str(), case_name,
+              static_cast<char*>(nullptr));
+        // execl only returns on failure.
+        _exit(127);
+    }
+
+    // The parent is a multi-threaded FreeRTOS/linux process, so the wait may be
+    // interrupted by a signal; retry until the child is actually reaped.
+    int status = 0;
+    pid_t waited;
+    do {
+        waited = waitpid(pid, &status, 0);
+    } while (waited == -1 && errno == EINTR);
+    TEST_ASSERT_EQUAL_INT(pid, waited);
+
+    // NOTE: on the ESP-IDF `linux` target, the assert handler prints
+    // "ERROR: Aborted" and calls _exit(1), so the child may exit non-zero
+    // rather than die from SIGABRT. Accept either form; a clean 0 means the
+    // assert did not fire (e.g. an unknown case name).
+    if (WIFSIGNALED(status)) {
+        return WTERMSIG(status) == SIGABRT;
+    }
+    return WIFEXITED(status) && WEXITSTATUS(status) != 0;
+}
+
+}  // namespace
 
 // --- Construction and capacity ----------------------------------------------
 
@@ -156,4 +215,30 @@ TEST_CASE("static_string: remaining tracks free character slots",
     s.append("def");
     TEST_ASSERT_EQUAL_UINT(0, s.remaining());
     TEST_ASSERT_TRUE(s.size() == s.capacity());
+}
+
+// --- Overflow asserts (fork + exec the standalone program) ------------------
+
+TEST_CASE("static_string: constructing past capacity aborts",
+          "[static_string][assert]") {
+    TEST_ASSERT_TRUE(
+        assert_program_aborted(assert_program_path(), "construct_overflow"));
+}
+
+TEST_CASE("static_string: append past capacity aborts",
+          "[static_string][assert]") {
+    TEST_ASSERT_TRUE(
+        assert_program_aborted(assert_program_path(), "append_overflow"));
+}
+
+TEST_CASE("static_string: assign past capacity aborts",
+          "[static_string][assert]") {
+    TEST_ASSERT_TRUE(
+        assert_program_aborted(assert_program_path(), "assign_overflow"));
+}
+
+TEST_CASE("static_string: push_back when full aborts",
+          "[static_string][assert]") {
+    TEST_ASSERT_TRUE(
+        assert_program_aborted(assert_program_path(), "push_back_when_full"));
 }

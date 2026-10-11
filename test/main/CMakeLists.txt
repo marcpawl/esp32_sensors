@@ -40,3 +40,18 @@ idf_component_register(
         unity
     WHOLE_ARCHIVE
 )
+
+# Standalone assert-trigger program.
+#
+# The Unity tests fork+exec this program to verify that contract violations
+# abort, without aborting the test runner itself. It is built as a plain host
+# executable (no IDF runtime) into the build directory next to the test ELF, so
+# `test_static_string.cpp` can locate it via a path derived from its own argv[0].
+add_executable(static_string_assert "test_static_string_assert.cpp")
+target_include_directories(static_string_assert PRIVATE
+    "${CMAKE_CURRENT_LIST_DIR}"
+    "${CMAKE_CURRENT_LIST_DIR}/../../main/include"
+)
+set_target_properties(static_string_assert PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+)

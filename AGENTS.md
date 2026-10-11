@@ -259,6 +259,11 @@ C++26 token set, and the codebase uses no C++23+ *syntax* that would confuse it.
 - Conform payload format, LED semantics, and RTC memory layout exactly to `Specification.md`.
 - Keep power draw within the hourly budget defined in the spec (batch uploads, deep sleep between samples).
 - **Fail loudly, not silently.** When a precondition or capacity limit is violated, `assert()` (or `abort()`) instead of silently truncating, clamping, or dropping data. Silent fallbacks hide bugs; `assert()` in this firmware is fatal and makes the contract explicit. Only use a bounded/tolerant path (e.g. a `try_*` API or an explicit early `return`) when the recovery is deliberate and the caller is expected to handle it.
+- ** asserts can be tested.** For classes that are being tested on linux that have an assert test the the assert is triggered. 
+Assert tests should be in a stand alone program whose name ends with "_assert".  The assert program should take as a command line parameter the name of the test case to execute, if there is no name, or if the name is invalid the program should exit with 0. 
+
+The test case should fork and exec the "_assert" program with the name of the test case, wait for the child, and confirm that it was aborted.
+
 
 ### Agent interaction
 
