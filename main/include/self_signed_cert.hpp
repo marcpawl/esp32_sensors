@@ -18,7 +18,11 @@ extern const char kServerCertPem[];
 // PEM-encoded private key (NUL-terminated).
 extern const char kServerKeyPem[];
 
-// Lengths excluding the trailing NUL.
+// Lengths excluding the trailing NUL (i.e. strlen).
+//
+// NOTE: mbedTLS 4.x (ESP-IDF v6.1) requires the length passed to
+// mbedtls_x509_crt_parse() to INCLUDE the terminating NUL for PEM input, so
+// callers must add 1 to these values.
 std::size_t server_cert_len();
 std::size_t server_key_len();
 
