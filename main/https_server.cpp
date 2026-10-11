@@ -300,12 +300,18 @@ esp_err_t HttpsServer::start() {
 
     httpd_ssl_config_t conf = HTTPD_SSL_CONFIG_DEFAULT();
     conf.port_secure = 443;
+    // mbedTLS 4.x (shipped with ESP-IDF v6.1) requires the PEM buffer length
+    // to include the terminating NUL byte; the `*_len()` helpers return the
+    // length excluding it (i.e. strlen), so add 1 for each PEM buffer.
+    // Passing the NUL-less length makes the parser fail with
+    // MBEDTLS_ERR_X509_INVALID_FORMAT (-0x2180), which surfaces as a HTTPD
+    // connection-accept error.
     conf.servercert =
         reinterpret_cast<const std::uint8_t*>(certs::kServerCertPem);
-    conf.servercert_len = certs::server_cert_len();
+    conf.servercert_len = certs::server_cert_len() + 1;
     conf.prvtkey_pem =
         reinterpret_cast<const std::uint8_t*>(certs::kServerKeyPem);
-    conf.prvtkey_len = certs::server_key_len();
+    conf.prvtkey_len = certs::server_key_len() + 1;
 
     httpd_handle_t server = nullptr;
     esp_err_t err = httpd_ssl_start(&server, &conf);
