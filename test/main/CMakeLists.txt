@@ -17,6 +17,7 @@ set(test_srcs
     "test_rom_id.cpp"
     "test_rtc_buffer.cpp"
     "test_static_vector.cpp"
+    "test_static_string.cpp"
 )
 
 # Production sources under test (paths are relative to this component dir).
