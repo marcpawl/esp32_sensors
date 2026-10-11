@@ -7,6 +7,7 @@ idf_component_register(
         "power_manager.cpp"
         "power_source.cpp"
         "led_manager.cpp"
+        "led_task.cpp"
         "mode_controller.cpp"
         "onewire_bus.cpp"
         "rom_id.cpp"
