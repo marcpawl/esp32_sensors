@@ -125,22 +125,38 @@ def git(*args: str) -> subprocess.CompletedProcess:
 
 def cmd_build() -> int:
     """Build the firmware for the configured chip target (esp32s3)."""
-    return compose("idf.py", "-B", FW_BUILD_DIR, "build")
+    if not is_in_container():
+        return compose(
+            "/project/scripts/dev.py",
+            "build" )
+    return subprocess.run(["idf.py", "-B", FW_BUILD_DIR, "build"]).returncode
 
 
 def cmd_flash() -> int:
     """Flash then attach the serial monitor; exit it with Ctrl+]."""
-    return compose("idf.py", "-B", FW_BUILD_DIR, "-p", PORT, "flash", "monitor")
+    if not is_in_container():
+        return compose(
+            "/project/scripts/dev.py",
+            "flash" )
+    return subprocess.run(["idf.py", "-B", FW_BUILD_DIR, "-p", PORT, "flash", "monitor"]).returncode
 
 
 def cmd_monitor() -> int:
     """Attach the serial monitor; exit it with Ctrl+]."""
-    return compose("idf.py", "-B", FW_BUILD_DIR, "-p", PORT, "monitor")
+    if not is_in_container():
+        return compose(
+            "/project/scripts/dev.py",
+            "monitor" )
+    return subprocess.run(["idf.py", "-B", FW_BUILD_DIR, "-p", PORT, "monitor"]).returncode
 
 
 def cmd_menuconfig() -> int:
     """Interactive Kconfig UI; edits sdkconfig (generated from defaults)."""
-    return compose("idf.py", "-B", FW_BUILD_DIR, "menuconfig")
+    if not is_in_container():
+        return compose(
+            "/project/scripts/dev.py",
+            "menuconfig" )
+    return subprocess.run(["idf.py", "-B", FW_BUILD_DIR, "menuconfig"]).returncode
 
 
 def cmd_test() -> int:
