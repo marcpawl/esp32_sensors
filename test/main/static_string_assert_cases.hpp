@@ -9,12 +9,12 @@
 #include <array>
 #include <span>
 
+#include "assert_test_support.hpp"
 #include "thermo_static_string.hpp"
 
 namespace static_string_assert_cases {
 
-// One trigger per assert path. Each must abort when executed.
-using Trigger = void (*)();
+using assert_test_support::Case;
 
 // Constructing past capacity: strlen("abcdefgh") == 8 > capacity() == 4.
 inline void construct_overflow() {
@@ -41,13 +41,6 @@ inline void push_back_when_full() {
     s.push_back('b');
     s.push_back('c');  // Full: remaining() == 0.
 }
-
-// Case table. The names are the command-line arguments accepted by the
-// standalone _assert program and referenced by the Unity tests.
-struct Case {
-    const char* name;
-    Trigger trigger;
-};
 
 inline constexpr std::array<Case, 4> kCases = {{
     {"construct_overflow", &construct_overflow},

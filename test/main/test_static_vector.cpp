@@ -3,14 +3,16 @@
 // This stands in for C++26 std::static_vector, which the toolchain's libstdc++
 // does not yet provide. It is pure logic with no IDF dependencies, so it is
 // covered on the host. Overflow of push_back/emplace_back is a hard error
-// (aborts) and cannot be exercised here; try_push_back reports it via a return
-// value and is tested instead.
+// (aborts) and is verified in forked children that exec the standalone
+// `static_vector_assert` program (see the [assert] cases at the end);
+// try_push_back reports overflow via a return value and is tested inline.
 #include "unity.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <string>
 
+#include "assert_unity_support.hpp"
 #include "thermo_static_vector.hpp"
 
 using thermo::static_vector;
@@ -170,4 +172,41 @@ TEST_CASE("static_vector: empty data pointer is valid", "[static_vector]") {
     static_vector<int, 4> v;
     TEST_ASSERT_NOT_NULL(v.data());
     TEST_ASSERT_EQUAL_PTR(v.begin(), v.end());
+}
+
+// --- Overflow asserts (fork + exec the standalone program) ------------------
+
+namespace {
+
+// Path to the sibling static_vector_assert program (shared by the cases below).
+const std::string& assert_program() {
+    static const std::string path =
+        assert_test_support::assert_program_path("static_vector_assert");
+    return path;
+}
+
+}  // namespace
+
+TEST_CASE("static_vector: push_back(lvalue) when full aborts",
+          "[static_vector][assert]") {
+    TEST_ASSERT_TRUE(assert_test_support::assert_program_aborted(
+        assert_program(), "push_back_lvalue_when_full"));
+}
+
+TEST_CASE("static_vector: push_back(rvalue) when full aborts",
+          "[static_vector][assert]") {
+    TEST_ASSERT_TRUE(assert_test_support::assert_program_aborted(
+        assert_program(), "push_back_rvalue_when_full"));
+}
+
+TEST_CASE("static_vector: emplace_back when full aborts",
+          "[static_vector][assert]") {
+    TEST_ASSERT_TRUE(assert_test_support::assert_program_aborted(
+        assert_program(), "emplace_back_when_full"));
+}
+
+TEST_CASE("static_vector: resize past capacity aborts",
+          "[static_vector][assert]") {
+    TEST_ASSERT_TRUE(assert_test_support::assert_program_aborted(
+        assert_program(), "resize_past_capacity"));
 }
