@@ -104,7 +104,11 @@ def compose(*args: str) -> int:
     The service is created on demand and removed afterwards (--rm), matching
     the documented `docker compose run --rm dev <cmd>` workflow.
     """
-    return run("docker", "compose", "run", "--rm", "dev", *args)
+    uid = os.geteuid()
+    gid = os.getegid()
+    return run("docker", "compose", "run",
+               "--user", f"{uid}:{gid}",
+               "--rm", "dev", *args)
 
 
 def compose_bash(script: str) -> int:
