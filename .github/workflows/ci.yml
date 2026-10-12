@@ -17,9 +17,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: env
+        run: |
+          env
+
       - name: build image
         run: |
-          docker compose build
+          python3 ./scripts/dev.py image
 
       - name: Run build
         run: |

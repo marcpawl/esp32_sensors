@@ -9,7 +9,7 @@
 # specifics live in one place.
 #
 # Usage:
-#   scripts/dev.py [build|flash|monitor|menuconfig|test|format|format-check|\
+#   scripts/dev.py [image|build|flash|monitor|menuconfig|test|format|format-check|\
 #                   format-check-staged|install-hooks|shell]
 #
 # Environment:
@@ -94,11 +94,19 @@ def source_files():
 
 def run(*cmd: str) -> int:
     """Run a command in the repo root, inheriting stdio; return exit code."""
+
+    # Add UID and GID to environment
+    uid = os.geteuid()
+    gid = os.getegid()
+    env = os.environ.copy()
+    env["UID"] = str(os.getuid())
+    env["GID"] = str(os.getgid())
+
     print(cmd)
-    return subprocess.run(cmd, cwd=REPO_ROOT).returncode
+    return subprocess.run(cmd, env=env, cwd=REPO_ROOT).returncode
 
 
-def compose(*args: str) -> int:
+def compose_run(*args: str) -> int:
     """Run a command inside the `dev` service defined by docker-compose.yml.
 
     The service is created on demand and removed afterwards (--rm), matching
@@ -113,7 +121,7 @@ def compose(*args: str) -> int:
 
 def compose_bash(script: str) -> int:
     """Run a bash -lc script inside the dev container."""
-    return compose("bash", "-lc", script)
+    return compose_run("bash", "-lc", script)
 
 
 def git(*args: str) -> subprocess.CompletedProcess:
@@ -126,11 +134,17 @@ def git(*args: str) -> subprocess.CompletedProcess:
         text=True,
     )
 
+def cmd_image() -> int:
+    """Build the docker image"""
+    if is_in_container():
+        print("Image cannot be built while in container", file=sys.stderr)
+        return 1
+    return run("docker", "compose", "build")
 
 def cmd_build() -> int:
     """Build the firmware for the configured chip target (esp32s3)."""
     if not is_in_container():
-        return compose(
+        return compose_run(
             "/project/scripts/dev.py",
             "build" )
     return subprocess.run(["idf.py", "-B", FW_BUILD_DIR, "build"]).returncode
@@ -139,7 +153,7 @@ def cmd_build() -> int:
 def cmd_flash() -> int:
     """Flash then attach the serial monitor; exit it with Ctrl+]."""
     if not is_in_container():
-        return compose(
+        return compose_run(
             "/project/scripts/dev.py",
             "flash" )
     return subprocess.run(["idf.py", "-B", FW_BUILD_DIR, "-p", PORT, "flash", "monitor"]).returncode
@@ -148,7 +162,7 @@ def cmd_flash() -> int:
 def cmd_monitor() -> int:
     """Attach the serial monitor; exit it with Ctrl+]."""
     if not is_in_container():
-        return compose(
+        return compose_run(
             "/project/scripts/dev.py",
             "monitor" )
     return subprocess.run(["idf.py", "-B", FW_BUILD_DIR, "-p", PORT, "monitor"]).returncode
@@ -157,7 +171,7 @@ def cmd_monitor() -> int:
 def cmd_menuconfig() -> int:
     """Interactive Kconfig UI; edits sdkconfig (generated from defaults)."""
     if not is_in_container():
-        return compose(
+        return compose_run(
             "/project/scripts/dev.py",
             "menuconfig" )
     return subprocess.run(["idf.py", "-B", FW_BUILD_DIR, "menuconfig"]).returncode
@@ -166,7 +180,7 @@ def cmd_menuconfig() -> int:
 def cmd_test() -> int:
     """Host-based Unity tests on the ESP-IDF `linux` target."""
     if not is_in_container():
-        return compose(
+        return compose_run(
             "/project/scripts/dev.py",
             "test" )
 
@@ -187,7 +201,7 @@ def cmd_test() -> int:
 def cmd_format() -> int:
     """Apply the committed .clang-format (Google base, 4-space, 80 cols)."""
     if not is_in_container():
-        return compose(
+        return compose_run(
             "/project/scripts/dev.py",
             "format")
 
@@ -203,7 +217,7 @@ def cmd_format() -> int:
 def cmd_format_check() -> int:
     """CI-friendly check; non-zero exit if anything is unformatted."""
     if not is_in_container():
-        return compose(
+        return compose_run(
             "/project/scripts/dev.py",
             "format-check")
 
@@ -230,7 +244,7 @@ def cmd_install_hooks() -> int:
 
 def cmd_shell() -> int:
     """Interactive login shell with the ESP-IDF environment sourced."""
-    return compose("bash", "-l")
+    return compose_run("bash", "-l")
 
 
 def _staged_files() -> list[str]:
@@ -282,7 +296,7 @@ def cmd_format_check_staged() -> int:
     validates exactly what is about to be committed.
     """
     if not is_in_container():
-        return compose(
+        return compose_run(
             "/project/scripts/dev.py",
             "format-check-staged")
             
@@ -311,6 +325,7 @@ def cmd_format_check_staged() -> int:
 
 
 COMMANDS = {
+    "image": cmd_image,
     "build": cmd_build,
     "flash": cmd_flash,
     "monitor": cmd_monitor,
