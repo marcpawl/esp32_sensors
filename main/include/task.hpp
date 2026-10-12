@@ -54,6 +54,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#include "task_deleter.hpp"
 #include "thermo_static_string.hpp"
 
 namespace thermo {
@@ -116,20 +117,18 @@ class Task {
             abort();
         }
 
+        TaskHandle_t handle;
         const BaseType_t created =
             xTaskCreate(&Task::trampoline, name_.c_str(), params_.stack_size,
-                        this, params_.priority, &handle_);
+                        this, params_.priority, &handle);
         if (created != pdPASS) {
             ESP_LOGE(kTag, "xTaskCreate failed for '%s'", name_.c_str());
             abort();
         }
+        handle_.reset(handle);
     }
 
     ~Task() {
-        if (handle_ != nullptr) {
-            vTaskDelete(handle_);
-            handle_ = nullptr;
-        }
         if (queue_ != nullptr) {
             vQueueDelete(queue_);
             queue_ = nullptr;
@@ -142,7 +141,7 @@ class Task {
     Task& operator=(Task&&) = delete;
 
     // FreeRTOS task handle (for notifications, priority changes, ...).
-    TaskHandle_t handle() const noexcept { return handle_; }
+    TaskHandle_t handle() const noexcept { return handle_.get(); }
 
     // The task name, NUL-terminated and owned by this Task.
     const char* name() const noexcept { return name_.c_str(); }
@@ -211,7 +210,7 @@ class Task {
 
     TaskParams params_;
     static_string<kTaskNameCapacity> name_;
-    TaskHandle_t handle_ = nullptr;
+    UniqueTaskHandle handle_;
     QueueHandle_t queue_ = nullptr;
 };
 
