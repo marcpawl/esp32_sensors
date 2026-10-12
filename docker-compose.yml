@@ -17,18 +17,12 @@
 # inside the container. Serial access is granted by joining the host `dialout`
 # GID via `group_add`, so the container does NOT need --privileged.
 #
-# udev is not run inside the container, so the device node must already exist
-# on the host before you start the container. Plug the board in first, then:
-#
-#   docker compose run --rm dev idf.py -p /dev/ttyUSB0 flash monitor
-#
-# If your board enumerates as a different path, pass it explicitly:
-#
-#   docker compose run --rm dev idf.py -p /dev/ttyACM0 flash monitor
-#
 # Because `/dev` is bind-mounted, no device needs to be hard-coded in this
 # file — which also means `docker compose run` works fine when no board is
 # attached (useful for `idf.py build` and host tests).
+#
+# If the ESP32 board is connected after the container starts it will
+# be visisble in the container.
 
 services:
   dev:
@@ -52,10 +46,10 @@ services:
     # are readable/writable without --privileged.
     group_add:
       - "${DIALOUT_GID:-20}"
-        
-    devices:
-      - "/dev/ttyACM0:/dev/ttyACM0"
 
+    device_cgroup_rules:
+      - 'c *:* rmw' # Essential: Allows container to read/write/make new char devices
+        
     volumes:
       # Project source is bind-mounted so edits on the host are visible live.
       - .:/project
