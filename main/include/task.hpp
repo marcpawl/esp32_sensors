@@ -54,7 +54,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
-#include "task_deleter.hpp"
+#include "handle_deleter.hpp"
 #include "thermo_static_string.hpp"
 
 namespace thermo {
@@ -87,7 +87,6 @@ class Task {
   public:
     // The concrete task type, and the message-queue element type it consumes.
     using DerivedType = Derived;
-    using QueueHandle = QueueHandle_t;
 
     // Creates the message queue and the FreeRTOS task, then starts it. The
     // task body (`Derived::run`) runs on the new task, not the caller's thread;
@@ -111,7 +110,7 @@ class Task {
         name_.assign(params_.name);
 
         // Single-slot queue: a new send overwrites any unread message.
-        queue_ = xQueueCreate(1, sizeof(typename Derived::Message));
+        queue_.reset(xQueueCreate(1, sizeof(typename Derived::Message)));
         if (queue_ == nullptr) {
             ESP_LOGE(kTag, "xQueueCreate failed for '%s'", name_.c_str());
             abort();
@@ -128,12 +127,7 @@ class Task {
         handle_.reset(handle);
     }
 
-    ~Task() {
-        if (queue_ != nullptr) {
-            vQueueDelete(queue_);
-            queue_ = nullptr;
-        }
-    }
+    ~Task() = default;
 
     Task(const Task&) = delete;
     Task& operator=(const Task&) = delete;
@@ -147,7 +141,7 @@ class Task {
     const char* name() const noexcept { return name_.c_str(); }
 
     // Message-queue handle.
-    QueueHandle queue() const noexcept { return queue_; }
+    QueueHandle_t queue() const noexcept { return queue_.get(); }
 
     // Publishes `msg`, overwriting any message not yet received. Never blocks
     // (the queue has a single slot, so there is always room to overwrite).
@@ -160,7 +154,7 @@ class Task {
                               typename Derived::Message>
     void send(Msg&& msg) noexcept {
         std::remove_cvref_t<Msg> copy = std::forward<Msg>(msg);
-        xQueueOverwrite(queue_, &copy);
+        xQueueOverwrite(queue_.get(), &copy);
     }
 
     // Receive, blocking up to `timeout` ticks. Returns the message when one was
@@ -171,7 +165,7 @@ class Task {
     // definition time) `Derived::Message`.
     auto receive(TickType_t timeout) noexcept {
         typename Derived::Message out{};
-        if (xQueueReceive(queue_, &out, timeout) == pdTRUE) {
+        if (xQueueReceive(queue_.get(), &out, timeout) == pdTRUE) {
             return std::optional<typename Derived::Message>{std::move(out)};
         }
         return std::optional<typename Derived::Message>{};
@@ -211,7 +205,7 @@ class Task {
     TaskParams params_;
     static_string<kTaskNameCapacity> name_;
     UniqueTaskHandle handle_;
-    QueueHandle_t queue_ = nullptr;
+    UniqueQueueHandle queue_;
 };
 
 }  // namespace thermo
