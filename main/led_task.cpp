@@ -64,7 +64,9 @@ template<std::size_t N>
             // Wait for a state change for this step's duration; if one
             // arrives, stop the cycle and hand the new state back.
             if (auto next = receive(step.duration_)) {
-                return *next;
+                if (*next != current_state_) {
+                    return *next;
+                }
             }
         }
     }
