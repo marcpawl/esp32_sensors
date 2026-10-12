@@ -142,6 +142,35 @@ class LedTask : public Task<LedTask> {
     // sent by set_state.
     [[nodiscard]] LedState on_state_changed(LedState new_state) noexcept;
 
+    // Publishes `msg`, overwriting any message not yet received. Never blocks
+    // (the queue has a single slot, so there is always room to overwrite).
+    //
+    // `Msg` is deduced and constrained to `Derived::Message`. This is a member
+    // function template purely to defer naming the (incomplete, at class
+    // definition time) `Derived::Message` until first use.
+    void send(LedState state) noexcept {
+        xQueueOverwrite(queue_.get(), &state);
+    }
+
+    // Receive, blocking up to `timeout` ticks. Returns the message when one was
+    // dequeued, or `std::nullopt` on timeout.
+    //
+    std::optional<LedState> receive(TickType_t timeout) noexcept {
+        LedState out;
+        if (xQueueReceive(queue_.get(), &out, timeout) == pdTRUE) {
+            return std::optional<LedState>{out};
+        }
+        return std::nullopt;
+    }
+
+    // Receive, blocking up to `timeout` milliseconds. Convenience overload for
+    // callers that prefer a `std::chrono` duration over raw FreeRTOS ticks.
+    std::optional<LedState> receive(
+        std::chrono::milliseconds timeout) noexcept {
+        return receive(
+            pdMS_TO_TICKS(static_cast<std::uint32_t>(timeout.count())));
+    }
+
     LedState current_state_ = LedState::kOff;
 };
 

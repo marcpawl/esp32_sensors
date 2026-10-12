@@ -142,42 +142,6 @@ class Task {
 
     // Message-queue handle.
     QueueHandle_t queue() const noexcept { return queue_.get(); }
-
-    // Publishes `msg`, overwriting any message not yet received. Never blocks
-    // (the queue has a single slot, so there is always room to overwrite).
-    //
-    // `Msg` is deduced and constrained to `Derived::Message`. This is a member
-    // function template purely to defer naming the (incomplete, at class
-    // definition time) `Derived::Message` until first use.
-    template<typename Msg>
-        requires std::same_as<std::remove_cvref_t<Msg>,
-                              typename Derived::Message>
-    void send(Msg&& msg) noexcept {
-        std::remove_cvref_t<Msg> copy = std::forward<Msg>(msg);
-        xQueueOverwrite(queue_.get(), &copy);
-    }
-
-    // Receive, blocking up to `timeout` ticks. Returns the message when one was
-    // dequeued, or `std::nullopt` on timeout.
-    //
-    // The return type is `auto` (deduced) and the message type is named only in
-    // the body, so the signature never touches the (incomplete, at class
-    // definition time) `Derived::Message`.
-    auto receive(TickType_t timeout) noexcept {
-        typename Derived::Message out{};
-        if (xQueueReceive(queue_.get(), &out, timeout) == pdTRUE) {
-            return std::optional<typename Derived::Message>{std::move(out)};
-        }
-        return std::optional<typename Derived::Message>{};
-    }
-
-    // Receive, blocking up to `timeout` milliseconds. Convenience overload for
-    // callers that prefer a `std::chrono` duration over raw FreeRTOS ticks.
-    auto receive(std::chrono::milliseconds timeout) noexcept {
-        return receive(
-            pdMS_TO_TICKS(static_cast<std::uint32_t>(timeout.count())));
-    }
-
   private:
     // Detects a `Message` member type on `Derived` without hard-erroring when
     // it is missing, so the static_assert can report a clear message.
@@ -205,6 +169,7 @@ class Task {
     TaskParams params_;
     static_string<kTaskNameCapacity> name_;
     UniqueTaskHandle handle_;
+  protected:
     UniqueQueueHandle queue_;
 };
 
