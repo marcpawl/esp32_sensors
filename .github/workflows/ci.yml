@@ -17,14 +17,18 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: build image
+        run: |
+          docker compose build
+
       - name: Run build
         run: |
-          docker compose run --rm dev python3 /project/scripts/dev.py build
+          python3 ./scripts/dev.py build
 
       - name: Run tests
         run: |
-          docker compose run --rm dev python3 /project/scripts/dev.py test
+          python3 ./scripts/dev.py test
 
       - name: Run format-check
         run: |
-          docker compose run --rm dev python3 /project/scripts/dev.py format-check
+          python3 ./scripts/dev.py format-check
