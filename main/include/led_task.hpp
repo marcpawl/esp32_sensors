@@ -24,15 +24,16 @@ enum class LedState : std::uint8_t {
     kRun_upload_error,
 };
 
-// Owns a FreeRTOS task that translates `LedState` messages into LED output.
-// Other tasks publish state changes with `set_state()`; the LED work itself
-// happens on this task.
-class LedTask : public Task<LedTask> {
+/** Turns on and off the LEDs.
+ */
+class LedRunner {
   public:
-    // The queue element type consumed by this task.
-    using Message = LedState;
-
-    explicit LedTask(TaskParams params = {}) : Task<LedTask>(params) {}
+    LedRunner();
+    LedRunner(LedRunner const&) = delete;
+    LedRunner(LedRunner&&) = default;
+    ~LedRunner() = default;
+    LedRunner& operator=(LedRunner const&) = delete;
+    LedRunner& operator=(LedRunner&&) = delete;
 
     // Publishes a new LED state. Safe to call from any task; overwrites any
     // state not yet displayed.
@@ -172,6 +173,21 @@ class LedTask : public Task<LedTask> {
     }
 
     LedState current_state_ = LedState::kOff;
+    UniqueQueueHandle queue_;
+};
+
+class LedTask : protected Task<LedRunner> {
+  public:
+    LedTask();
+    LedTask(LedTask const&) = delete;
+    LedTask(LedTask&&) = delete;
+    ~LedTask() = default;
+    LedTask& operator=(LedTask const&) = delete;
+    LedTask& operator=(LedTask&&) = delete;
+
+    void set_state(LedState new_state) noexcept {
+        runner_.set_state(new_state);
+    }
 };
 
 }  // namespace thermo

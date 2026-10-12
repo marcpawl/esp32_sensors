@@ -14,8 +14,6 @@
 namespace thermo {
 namespace {
 
-// Not `kTag`: `Task<LedTask>` has a private member of that name, which would be
-// found first by unqualified lookup inside LedTask's members.
 constexpr const char* kLedTag = "led_task";
 
 // Configures both LED pins as push-pull outputs and turns them off. Runs on the
@@ -35,7 +33,17 @@ void init_led_pins() {
 
 }  // namespace
 
-[[noreturn]] void LedTask::run() noexcept {
+LedRunner::LedRunner() noexcept {
+    // Single-slot queue: a new send overwrites any unread message.
+    QueueHandle_t queue = xQueueCreate(1, sizeof(LedState));
+    if (queue == nullptr) {
+        ESP_LOGE(kLedTag, "xQueueCreate failed");
+        abort();
+    }
+    queue_.reset(queue);
+}
+
+[[noreturn]] void LedRunner::run() noexcept {
     init_led_pins();
     LedState state = LedState::kBoot;
     while (true) {
@@ -43,7 +51,7 @@ void init_led_pins() {
     }
 }
 
-LedTask::Cycle const& LedTask::lookup_cycle(LedState state) const noexcept {
+LedRunner::Cycle const& LedRunner::lookup_cycle(LedState state) const noexcept {
     // `cycles()` returns by value, so bind it to a function-local static to
     // give the table (and thus the returned reference) static storage duration.
     static constexpr Cycles kTable = cycles();
@@ -63,14 +71,14 @@ LedTask::Cycle const& LedTask::lookup_cycle(LedState state) const noexcept {
     return *it;
 }
 
-LedState LedTask::on_state_changed(LedState new_state) noexcept {
+LedState LedRunner::on_state_changed(LedState new_state) noexcept {
     const Cycle& cycle = lookup_cycle(new_state);
     return std::visit(
         [this](const auto& steps) -> LedState { return execute_cycle(steps); },
         cycle);
 }
 
-void LedTask::change_leds(Step const& step) noexcept {
+void LedRunner::change_leds(Step const& step) noexcept {
     gpio_set_level(static_cast<gpio_num_t>(pins::kRedLed),
                    step.red_led_ == RedLed::On ? 1 : 0);
     gpio_set_level(static_cast<gpio_num_t>(pins::kGreenLed),
@@ -78,7 +86,7 @@ void LedTask::change_leds(Step const& step) noexcept {
 }
 
 template<std::size_t N>
-[[nodiscard]] LedState LedTask::execute_cycle(
+[[nodiscard]] LedState LedRunner::execute_cycle(
     const CycleSteps<N>& cycle) noexcept {
     while (true) {
         for (Step const& step : cycle.steps_) {
@@ -97,5 +105,7 @@ template<std::size_t N>
     [[assume(false)]];
     return LedState::kOff;
 }
+
+LedTask::LedTask() : Task<LedRunner>(LedRunner(), TaskParams()) {}
 
 }  // namespace thermo
