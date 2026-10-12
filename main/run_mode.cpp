@@ -30,7 +30,6 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "led_manager.hpp"
 #include "payload.hpp"
 #include "rtc_state.hpp"
 #include "sensor.hpp"
@@ -121,14 +120,11 @@ void deep_sleep_for(std::uint32_t seconds) {
 
 }  // namespace
 
-void run_mode_cycle() {
+[[noreturn]] void run_mode_cycle(LedTask& led_task) {
     RtcState& st = rtc_state();
     st.boot_count++;
 
-    // §7 "Run - boot": both LEDs briefly on (self-test).
-    LedManager leds;
-    leds.init();
-    leds.boot_flash();
+    led_task.set_state(LedState::kRun);
 
     Config cfg;
     config_load(cfg);
@@ -148,16 +144,11 @@ void run_mode_cycle() {
     }
 
     auto tx_state = static_cast<TxState>(st.tx_state);
-    const TxState previous = tx_state;
     tx_state = BatteryMonitor::evaluate_tx_state(batt_mv, cfg, tx_state);
     st.tx_state = static_cast<std::uint8_t>(tx_state);
-    if (previous == TxState::kTxInhibited && tx_state == TxState::kTxOk) {
-        // §7 "Run - recovered": green 1 s, then off.
-        leds.recovered_pulse();
-    }
 
     // --- Sample (§3.4) ---
-    leds.set_sampling();
+    led_task.set_state(LedState::kRun);
 
     SensorManager sensors(pins::kWireBus);
     sensors.init();
@@ -189,32 +180,32 @@ void run_mode_cycle() {
     const bool tx_allowed = tx_state == TxState::kTxOk;
     const bool batch_ready = st.buffer_len >= cfg.batch_size;
 
-    if (tx_allowed && batch_ready) {
-        leds.set_uploading();
-        if (stub_upload(cfg, st, readings)) {
-            // Success path (unreachable until the uploader is implemented):
-            // pulse green, clear the buffer, reset fail_count, update cache.
-            leds.upload_ok_pulse();
-            rtc_buffer_clear(st);
-            st.fail_count = 0;
-            st.last_upload_ok = 1;
-        } else {
-            // Failure path (§3.7): red on, increment backoff, clear Wi-Fi
-            // cache.
-            leds.set_tx_error();
-            if (st.fail_count < 0xFF) {
-                st.fail_count++;
-            }
-            st.last_upload_ok = 0;
-            rtc_wifi_cache_clear(st);  // §3.10
-        }
-    } else if (!tx_allowed) {
-        // §7 "Run - TX inhibited": red blink every 10 s. In deep sleep the LED
-        // is off between wakes, so we simply signal briefly then sleep.
-        leds.set_inhibited();
-        leds.poll(static_cast<std::uint32_t>(esp_timer_get_time() / 1000));
-        ESP_LOGI(kTag, "TX inhibited (batt %u mV); buffering sample",
+    if (!tx_allowed) {
+        ESP_LOGI(kTag, "TX inhibited (batt %u mV)",
                  static_cast<unsigned>(batt_mv));
+        led_task.set_state(LedState::kRun_battery_low);
+    } else {
+        if (batch_ready) {
+            led_task.set_state(LedState::kRun_uploading);
+            if (stub_upload(cfg, st, readings)) {
+                // Success path (unreachable until the uploader is implemented):
+                // pulse green, clear the buffer, reset fail_count, update
+                // cache.
+                rtc_buffer_clear(st);
+                st.fail_count = 0;
+                st.last_upload_ok = 1;
+                led_task.set_state(LedState::kRun);
+            } else {
+                // Failure path (§3.7): red on, increment backoff, clear Wi-Fi
+                // cache.
+                led_task.set_state(LedState::kRun_upload_error);
+                if (st.fail_count < 0xFF) {
+                    st.fail_count++;
+                }
+                st.last_upload_ok = 0;
+                rtc_wifi_cache_clear(st);  // §3.10
+            }
+        }
     }
 
     // --- Determine sleep duration ---
@@ -236,6 +227,7 @@ void run_mode_cycle() {
     st.next_sample_at += sleep_s;
 
     deep_sleep_for(sleep_s);  // Does not return.
+    abort();
 }
 
 }  // namespace thermo

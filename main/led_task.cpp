@@ -3,6 +3,10 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 
+#include <algorithm>
+#include <cstdlib>
+#include <variant>
+
 #include "constants.hpp"
 #include "driver/gpio.h"
 #include "led_task.hpp"
@@ -39,13 +43,31 @@ void init_led_pins() {
     }
 }
 
+LedTask::Cycle const& LedTask::lookup_cycle(LedState state) const noexcept {
+    // `cycles()` returns by value, so bind it to a function-local static to
+    // give the table (and thus the returned reference) static storage duration.
+    static constexpr Cycles kTable = cycles();
+    const auto it = std::find_if(kTable.begin(), kTable.end(),
+                                 [state](const Cycle& cycle) noexcept {
+                                     return std::visit(
+                                         [state](const auto& steps) noexcept {
+                                             return steps.state_ == state;
+                                         },
+                                         cycle);
+                                 });
+    if (it == kTable.end()) {
+        ESP_LOGE(kLedTag, "no LED cycle for state %u",
+                 static_cast<unsigned>(state));
+        std::abort();
+    }
+    return *it;
+}
+
 LedState LedTask::on_state_changed(LedState new_state) noexcept {
-    const Cycles& table = cycles();
-    const std::size_t index = static_cast<std::size_t>(new_state);
-    assert(index < table.size());
+    const Cycle& cycle = lookup_cycle(new_state);
     return std::visit(
-        [this](const auto& cycle) -> LedState { return execute_cycle(cycle); },
-        table[index]);
+        [this](const auto& steps) -> LedState { return execute_cycle(steps); },
+        cycle);
 }
 
 void LedTask::change_leds(Step const& step) noexcept {
@@ -56,7 +78,8 @@ void LedTask::change_leds(Step const& step) noexcept {
 }
 
 template<std::size_t N>
-[[nodiscard]] LedState LedTask::execute_cycle(const Cycle<N>& cycle) noexcept {
+[[nodiscard]] LedState LedTask::execute_cycle(
+    const CycleSteps<N>& cycle) noexcept {
     while (true) {
         for (Step const& step : cycle.steps_) {
             change_leds(step);

@@ -536,17 +536,7 @@ On `POST /save`:
 
 ## 7. LED Semantics
 
-| State | Red | Green |
-|---|---|---|
-| Configure mode | ON (solid) | ON (solid) |
-| Run – boot | 200 ms flash | 200 ms flash |
-| Run – sampling | OFF | OFF |
-| Run – uploading | OFF | ON |
-| Run – upload OK | OFF | 200 ms pulse |
-| Run – TX error | ON | OFF |
-| Run – TX inhibited (low battery) | 500 ms blink every 10 s | OFF |
-| Run – recovered (crossed high water) | OFF | 1 s solid, then OFF |
-| Fatal error | Blink 0.5 Hz | OFF |
+Red indicates that samples are not being sent.
 
 ---
 

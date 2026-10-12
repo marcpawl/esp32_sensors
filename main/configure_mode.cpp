@@ -13,7 +13,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "https_server.hpp"
-#include "led_manager.hpp"
 #include "ntp_client.hpp"
 #include "power_manager.hpp"
 #include "sensor.hpp"
@@ -72,13 +71,9 @@ std::optional<std::string> on_save(Config& cfg) {
 
 }  // namespace
 
-void run_configure_mode() {
+[[noreturn]]
+void run_configure_mode(LedTask& led_task) {
     ESP_LOGI(kTag, "entering Configure mode");
-
-    // §7: both LEDs solid ON.
-    LedManager leds;
-    leds.init();
-    leds.set_configure_mode();
 
     Config cfg;
     config_load(cfg);
@@ -88,8 +83,7 @@ void run_configure_mode() {
     esp_err_t err = ap.start(cfg);
     if (err != ESP_OK) {
         ESP_LOGE(kTag, "failed to start SoftAP: %s", esp_err_to_name(err));
-        leds.set_fatal();
-        return;
+        abort();
     }
 
     SensorManager sensors(pins::kWireBus);
@@ -110,12 +104,12 @@ void run_configure_mode() {
     if (err != ESP_OK) {
         ESP_LOGE(kTag, "failed to start HTTPS server: %s",
                  esp_err_to_name(err));
-        leds.set_fatal();
-        return;
+        abort();
     }
 
     ESP_LOGI(kTag, "config server ready at https://%s/",
              ap.ip_address().c_str());
+    led_task.set_state(LedState::kConfig);
 
     // Stay in Configure mode. The switch is checked periodically; moving to
     // Run requires a power re-gate, so we simply idle here.

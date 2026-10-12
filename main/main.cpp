@@ -10,6 +10,7 @@
 #include "constants.hpp"
 #include "esp_err.h"
 #include "esp_log.h"
+#include "led_task.hpp"
 #include "mode.hpp"
 #include "mode_controller.hpp"
 #include "nvs_flash.h"
@@ -36,6 +37,7 @@ esp_err_t init_nvs() {
 }  // namespace
 
 extern "C" void app_main(void) {
+    thermo::LedTask led_task;
     ESP_ERROR_CHECK(init_nvs());
     thermo::rtc_state_init();
 
@@ -47,14 +49,14 @@ extern "C" void app_main(void) {
 
     switch (mode) {
         case thermo::Mode::kConfigure:
-            thermo::run_configure_mode();
+            thermo::run_configure_mode(led_task);
             break;
 
         case thermo::Mode::kRun:
             // Run mode executes one cycle, then deep-sleeps (does not return).
             // If it does return (e.g. sleep disabled for debugging), loop.
             while (true) {
-                thermo::run_mode_cycle();
+                thermo::run_mode_cycle(led_task);
             }
             break;
 
