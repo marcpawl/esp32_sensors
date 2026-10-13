@@ -233,6 +233,23 @@ def cmd_shell() -> int:
     return run(["bash", "-l"])
 
 
+def cmd_complete() -> int:
+    """Print the command names matching a prefix (used by shell completion).
+
+    Internal helper: the bash completion script calls this to list the
+    subcommands that start with the word being completed. Returns 0 even when
+    nothing matches (an empty candidate list is not an error for completion).
+    """
+    prefix = sys.argv[2] if len(sys.argv) > 2 else ""
+    for name in COMMANDS:
+        # Don't advertise the internal completion helper itself.
+        if name == "complete":
+            continue
+        if name.startswith(prefix):
+            print(name)
+    return 0
+
+
 def _staged_files() -> list[str]:
     """Staged, added/copied/modified C/C++ files (deleted files skipped)."""
     out = git(
@@ -319,6 +336,7 @@ COMMANDS = {
     "format-check-staged": cmd_format_check_staged,
     "install-hooks": cmd_install_hooks,
     "shell": cmd_shell,
+    "complete": cmd_complete,
 }
 
 
@@ -332,6 +350,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # Preserve the historical one-line order in --help output.
     for name, handler in COMMANDS.items():
+        # `complete` is an internal helper invoked by the bash completion
+        # script; it is handled before argparse and hidden from --help.
+        if name == "complete":
+            continue
         subparser = subparsers.add_parser(
             name,
             help=(handler.__doc__ or "").strip().splitlines()[0],
@@ -343,6 +365,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str]) -> int:
+    # `complete` takes a trailing prefix argument (e.g. `dev.py complete form`)
+    # that argparse would reject, so handle it before building the parser.
+    if len(argv) > 1 and argv[1] == "complete":
+        return cmd_complete()
+
     # Convert the path relative to REPO_ROOT since the commands
     # are executed with cwd as REPO_ROOT.  Needed when we
     # re-execute dev.py inside the container.

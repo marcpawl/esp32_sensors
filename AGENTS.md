@@ -78,6 +78,7 @@ esp32_sensors/
 ├── docker-compose.yml   # `dev` service with serial (/dev) passthrough
 ├── .devcontainer/       # CLion / VS Code Dev Container definition (reuses compose)
 ├── scripts/dev.py       # Container task runner (build/flash/test/format/shell)
+├── scripts/dev.py-completion.bash  # Bash tab-completion for scripts/dev.py
 ├── build_esp32s3/       # Firmware build output (git-ignored; per-target)
 ├── .dockerignore        # Build-context exclusions
 ├── .gitignore           # Excludes build_esp32s3/, test/build_linux/, sdkconfig, local IDE state
@@ -93,7 +94,8 @@ esp32_sensors/
 - `sdkconfig.defaults` — the committed configuration intent (target, C++ exceptions/RTTI off, partition table, `-Os`). `sdkconfig` is generated from this and is **not** tracked.
 - `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash environment. Extend these (not ad-hoc `docker run`) when adding tooling. The compose `dev` service is also the target of the Dev Container (see below).
 - `.devcontainer/devcontainer.json` — the CLion / VS Code **Dev Container** definition. It **reuses the compose `dev` service** (it does not define its own image), so CLion builds/starts the same container the CLI uses. Edit `docker-compose.yml` for image/mount/user changes; edit `devcontainer.json` only for IDE-level wiring.
-- `scripts/dev.py` — the single container task runner (`build`, `flash`, `monitor`, `menuconfig`, `test`, `format`, `format-check`, `format-check-staged`, `install-hooks`, `shell`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. The pre-commit hook (`.githooks/pre-commit`) delegates its check to `scripts/dev.py format-check-staged`.
+- `scripts/dev.py` — the single container task runner (`build`, `flash`, `monitor`, `menuconfig`, `test`, `format`, `format-check`, `format-check-staged`, `install-hooks`, `shell`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. The pre-commit hook (`.githooks/pre-commit`) delegates its check to `scripts/dev.py format-check-staged`. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
+- `scripts/dev.py-completion.bash` — bash tab-completion for `scripts/dev.py`. Source it to complete subcommands (e.g. `./scripts/dev.py form<TAB>` → `format`, `format-check`, `format-check-staged`). It asks `dev.py complete <prefix>` for candidates, so the command list is defined in exactly one place.
 - `.idea/runConfigurations/*.xml` — **committed** shared CLion run configurations that invoke the container tasks via `python3 scripts/dev.py`. `.idea/workspace.xml` (local, git-ignored) holds the same configs for the current machine.
 - `LICENSE` — GPL-3.0.
 - `RELEASE_NOTES.md` — human-readable release notes; keep the "Implemented" / "Not yet implemented" split honest as milestones land.
@@ -201,7 +203,7 @@ when enacted in a container.  Commands that are both will
 create and execute the same command in a container when
 enacted on the host.
 
-|platform|coammand|action|
+|platform|command|action|
 |===|===|===|
 |both|build|Compile the source code|
 |both|test|Compile and execute the host test code|
@@ -212,12 +214,24 @@ enacted on the host.
 |both|format-check|Check if code is formatted, non-zero exit if anything is unformatted |
 |both|format-check-staged|Check if staged code is formatted, non-zero exit if anything is unformatted |
 |both|shell|Bash command in the container|
+|both|complete|Print subcommands matching a prefix (internal; used by bash completion)|
 |host|image|Create the docker image|
 |host|install-hooks|install git commit hooks|
 
+### Shell completion
 
-### Build
+`scripts/dev.py-completion.bash` provides bash tab-completion for the
+subcommands. Enable it for the current shell or permanently via `~/.bashrc`:
 
+```bash
+source scripts/dev.py-completion.bash
+```
+
+Then `./scripts/dev.py form<TAB>` completes to `format`, `format-check`,
+`format-check-staged`. The script delegates candidate lookup to
+`dev.py complete <prefix>`, so the command list has a single source of truth.
+
+### Container commands
 ```bash
 # Run any IDF command via compose. The build directory is named after the
 # target (`build_esp32s3`) so it never clashes with the host-test build.
@@ -229,13 +243,13 @@ C++26 (`-std=gnu++26`) is the ESP-IDF v6.1 default for chip targets — no extra
 
 ### Flash and monitor
 
-The host `/dev` tree is bind-mounted into the container, so plug the board in **before** starting the container and pass the port explicitly:
+The host `/dev` tree is bind-mounted into the container.  The board
+can be plugged in at any time and it will be accessible by
+the container.
 
 ```bash
-docker compose run --rm dev idf.py -B build_esp32s3 -p /dev/ttyUSB0 flash monitor
+./scripts/dev.py flash
 ```
-
-Replace `/dev/ttyUSB0` with the actual serial device (`/dev/ttyACM0`, etc.). Exit the monitor with `Ctrl+]`.
 
 ### Testing approach
 
@@ -250,7 +264,7 @@ Replace `/dev/ttyUSB0` with the actual serial device (`/dev/ttyACM0`, etc.). Exi
 
 ```bash
 # Build and run the host-based unit tests (exit code is non-zero on failure).
-docker compose run --rm dev bash -lc 'cd test && idf.py --preview -B build_linux set-target linux && idf.py -B build_linux build && ./build_linux/esp32_sensors_tests.elf'
+./scripts/dev.py test
 ```
 
 The test binary prints Unity `PASS`/`FAIL` lines and exits non-zero if any case
