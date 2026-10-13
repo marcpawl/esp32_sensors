@@ -187,6 +187,35 @@ commands — run them from the CLion Run/Debug toolbar:
 
 Set `ESP32_PORT` (e.g. `/dev/ttyACM0`) to target a different serial device.
 
+
+### python scripts/dev.py
+
+dev.py can be executed on the host or in the container.
+Command Format is 
+```bash
+./scripts/dev.py COMMAND
+'''
+
+Platform is either host or both.  Host only commands will fail
+when enacted in a container.  Commands that are both will
+create and execute the same command in a container when
+enacted on the host.
+
+|platform|coammand|action|
+|===|===|===|
+|both|build|Compile the source code|
+|both|test|Compile and execute the host test code|
+|both|flash|idf.py flash monitor|
+|both|monitor|idf.py monitor|
+|both|menuteconfig|idf.py menuconfig|
+|both|format|clang-format all source code|
+|both|format-check|Check if code is formatted, non-zero exit if anything is unformatted |
+|both|format-check-staged|Check if staged code is formatted, non-zero exit if anything is unformatted |
+|both|shell|Bash command in the container|
+|host|image|Create the docker image|
+|host|install-hooks|install git commit hooks|
+
+
 ### Build
 
 ```bash
