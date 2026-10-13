@@ -14,7 +14,9 @@
 #   scripts/dev.py --help        # full help, including per-command details
 #
 # Environment:
-#   ESP32_PORT   Serial device for flash/monitor (default: /dev/ttyUSB0)
+#   ESP32_PORT   Serial device for flash/monitor (optional)
+#                docker-compose.yml will pass into the container the value 
+#                on the host.
 #
 """Container task runner for the ESP32 thermometer logger."""
 
@@ -30,8 +32,6 @@ import tempfile
 
 # Always operate from the repository root, regardless of the caller's cwd.
 REPO_ROOT = Path(__file__).resolve().parent.parent
-
-PORT = os.environ.get("ESP32_PORT", "/dev/ttyUSB0")
 
 # C/C++ sources checked/formatted by clang-format, discovered via git so the
 # list always matches the tracked files (no missing-glob errors). Keep the
@@ -156,13 +156,13 @@ def cmd_build() -> int:
 def cmd_flash() -> int:
     """Flash then attach the serial monitor; exit it with Ctrl+]."""
     change_to_container()
-    return run(["idf.py", "-B", FW_BUILD_DIR, "-p", PORT, "flash", "monitor"])
+    return run(["idf.py", "-B", FW_BUILD_DIR, "flash", "monitor"])
 
 
 def cmd_monitor() -> int:
     """Attach the serial monitor; exit it with Ctrl+]."""
     change_to_container()
-    return run(["idf.py", "-B", FW_BUILD_DIR, "-p", PORT, "monitor"])
+    return run(["idf.py", "-B", FW_BUILD_DIR, "monitor"])
 
 
 def cmd_menuconfig() -> int:
