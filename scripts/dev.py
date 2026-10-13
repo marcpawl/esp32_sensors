@@ -11,6 +11,7 @@
 # Usage:
 #   scripts/dev.py [image|build|flash|monitor|menuconfig|test|format|format-check|\
 #                   format-check-staged|install-hooks|shell]
+#   scripts/dev.py --help        # full help, including per-command details
 #
 # Environment:
 #   ESP32_PORT   Serial device for flash/monitor (default: /dev/ttyUSB0)
@@ -19,6 +20,7 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 from pathlib import Path
 import shutil
@@ -53,10 +55,6 @@ FORMAT_ARGS = ("--dry-run", "--Werror")
 FW_BUILD_DIR = "build_esp32s3"
 TEST_BUILD_DIR = "build_linux"
 
-USAGE = (
-    "usage: dev.py [build|flash|monitor|menuconfig|test|format|format-check|"
-    "format-check-staged|install-hooks|shell]"
-)
 
 def is_in_container():
     return os.environ.get("DOCKER_IMAGE") == "esp32_sensors"
@@ -324,6 +322,26 @@ COMMANDS = {
 }
 
 
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="dev.py",
+        description="Container task runner for the ESP32 thermometer logger.",
+    )
+    subparsers = parser.add_subparsers(dest="command", metavar="command")
+    subparsers.required = True
+
+    # Preserve the historical one-line order in --help output.
+    for name, handler in COMMANDS.items():
+        subparser = subparsers.add_parser(
+            name,
+            help=(handler.__doc__ or "").strip().splitlines()[0],
+            description=handler.__doc__,
+        )
+        subparser.set_defaults(handler=handler)
+
+    return parser
+
+
 def main(argv: list[str]) -> int:
     # Convert the path relative to REPO_ROOT since the commands
     # are executed with cwd as REPO_ROOT.  Needed when we
@@ -332,12 +350,9 @@ def main(argv: list[str]) -> int:
     relative_prog = prog.relative_to(REPO_ROOT)
     sys.argv[0] = str(relative_prog)
 
-    command = argv[1] 
-    handler = COMMANDS.get(command)
-    if handler is None:
-        print(USAGE, file=sys.stderr)
-        return 2
-    return handler()
+    parser = _build_parser()
+    args = parser.parse_args(argv[1:])
+    return args.handler()
 
 
 if __name__ == "__main__":
