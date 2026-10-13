@@ -11,6 +11,7 @@
 # Usage:
 #   scripts/dev.py [image|build|flash|monitor|menuconfig|test|format|format-check|\
 #                   format-check-staged|install-hooks|shell]
+#   scripts/dev.py --help        # full help, including per-command details
 #
 # Environment:
 #   ESP32_PORT   Serial device for flash/monitor (default: /dev/ttyUSB0)
@@ -19,12 +20,13 @@
 
 from __future__ import annotations
 
+import argparse
 import os
+from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
-from pathlib import Path
 
 # Always operate from the repository root, regardless of the caller's cwd.
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -53,10 +55,6 @@ FORMAT_ARGS = ("--dry-run", "--Werror")
 FW_BUILD_DIR = "build_esp32s3"
 TEST_BUILD_DIR = "build_linux"
 
-USAGE = (
-    "usage: dev.py [build|flash|monitor|menuconfig|test|format|format-check|"
-    "format-check-staged|install-hooks|shell]"
-)
 
 def is_in_container():
     return os.environ.get("DOCKER_IMAGE") == "esp32_sensors"
@@ -92,7 +90,7 @@ def source_files():
         raise
     
 
-def run(*cmd: str) -> int:
+def run(cmd: list[str]) -> int:
     """Run a command in the repo root, inheriting stdio; return exit code."""
 
     # Add UID and GID to environment
@@ -106,7 +104,7 @@ def run(*cmd: str) -> int:
     return subprocess.run(cmd, env=env, cwd=REPO_ROOT).returncode
 
 
-def compose_run(*args: str) -> int:
+def compose_run(args: list[str]) -> int:
     """Run a command inside the `dev` service defined by docker-compose.yml.
 
     The service is created on demand and removed afterwards (--rm), matching
@@ -114,14 +112,22 @@ def compose_run(*args: str) -> int:
     """
     uid = os.geteuid()
     gid = os.getegid()
-    return run("docker", "compose", "run",
+    command = ["docker", "compose", "run",
                "--user", f"{uid}:{gid}",
-               "--rm", "dev", *args)
+               "--rm", "dev"] 
+    command.extend(args)
+    return run(command)
 
 
-def compose_bash(script: str) -> int:
-    """Run a bash -lc script inside the dev container."""
-    return compose_run("bash", "-lc", script)
+def change_to_container():
+    """If we are not in the container, then
+       reexecute dev.py command in the container.
+
+       Otherwise do noting.
+    """
+    if not is_in_container():
+        rc = compose_run(sys.argv)
+        sys.exit(rc)
 
 
 def git(*args: str) -> subprocess.CompletedProcess:
@@ -139,50 +145,35 @@ def cmd_image() -> int:
     if is_in_container():
         print("Image cannot be built while in container", file=sys.stderr)
         return 1
-    return run("docker", "compose", "build")
+    return run(["docker", "compose", "build"])
 
 def cmd_build() -> int:
     """Build the firmware for the configured chip target (esp32s3)."""
-    if not is_in_container():
-        return compose_run(
-            "/project/scripts/dev.py",
-            "build" )
-    return subprocess.run(["idf.py", "-B", FW_BUILD_DIR, "build"]).returncode
+    change_to_container()
+    return run(["idf.py", "-B", FW_BUILD_DIR, "build"])
 
 
 def cmd_flash() -> int:
     """Flash then attach the serial monitor; exit it with Ctrl+]."""
-    if not is_in_container():
-        return compose_run(
-            "/project/scripts/dev.py",
-            "flash" )
-    return subprocess.run(["idf.py", "-B", FW_BUILD_DIR, "-p", PORT, "flash", "monitor"]).returncode
+    change_to_container()
+    return run(["idf.py", "-B", FW_BUILD_DIR, "-p", PORT, "flash", "monitor"])
 
 
 def cmd_monitor() -> int:
     """Attach the serial monitor; exit it with Ctrl+]."""
-    if not is_in_container():
-        return compose_run(
-            "/project/scripts/dev.py",
-            "monitor" )
-    return subprocess.run(["idf.py", "-B", FW_BUILD_DIR, "-p", PORT, "monitor"]).returncode
+    change_to_container()
+    return run(["idf.py", "-B", FW_BUILD_DIR, "-p", PORT, "monitor"])
 
 
 def cmd_menuconfig() -> int:
     """Interactive Kconfig UI; edits sdkconfig (generated from defaults)."""
-    if not is_in_container():
-        return compose_run(
-            "/project/scripts/dev.py",
-            "menuconfig" )
-    return subprocess.run(["idf.py", "-B", FW_BUILD_DIR, "menuconfig"]).returncode
+    change_to_container()
+    return (["idf.py", "-B", FW_BUILD_DIR, "menuconfig"])
 
 
 def cmd_test() -> int:
     """Host-based Unity tests on the ESP-IDF `linux` target."""
-    if not is_in_container():
-        return compose_run(
-            "/project/scripts/dev.py",
-            "test" )
+    change_to_container()
 
     cmds = [
             [ "idf.py", "--preview", "-B",  TEST_BUILD_DIR,
@@ -192,7 +183,7 @@ def cmd_test() -> int:
            ]
     for cmd in cmds:
         print(cmd)
-        rc = subprocess.run( cmd, cwd="test").returncode
+        rc = run( cmd, cwd="test")
         if rc != 0:
             return 1
     return 0
@@ -200,14 +191,11 @@ def cmd_test() -> int:
 
 def cmd_format() -> int:
     """Apply the committed .clang-format (Google base, 4-space, 80 cols)."""
-    if not is_in_container():
-        return compose_run(
-            "/project/scripts/dev.py",
-            "format")
+    change_to_container()
 
     for file in source_files():
         cmd = [ "clang-format", "-i", file ]
-        rc = subprocess.run(cmd).returncode
+        rc = run(cmd)
         if rc != 0:
             print(f"Format failed: {file}", file=sys.stderr)
             return 1
@@ -216,14 +204,11 @@ def cmd_format() -> int:
 
 def cmd_format_check() -> int:
     """CI-friendly check; non-zero exit if anything is unformatted."""
-    if not is_in_container():
-        return compose_run(
-            "/project/scripts/dev.py",
-            "format-check")
+    change_to_container()
 
     for file in source_files():
         cmd = [ "clang-format", "--dry-run", "--Werror", file ]
-        rc = subprocess.run(cmd).returncode
+        rc = run(cmd)
         if rc != 0:
             print(f"Format check failed: {file}", file=sys.stderr)
             return 1
@@ -244,7 +229,8 @@ def cmd_install_hooks() -> int:
 
 def cmd_shell() -> int:
     """Interactive login shell with the ESP-IDF environment sourced."""
-    return compose_run("bash", "-l")
+    change_to_container()
+    return run(["bash", "-l"])
 
 
 def _staged_files() -> list[str]:
@@ -283,10 +269,10 @@ def _materialize_staged(files: list[str], tmp_dir: Path) -> None:
 
 def _run_staged_format_check(tmp_dir: Path, files: list[str]) -> int:
     """Run clang-format --dry-run --Werror"""
-    return subprocess.run(
+    return run(
             ("clang-format", *FORMAT_ARGS, *files),
             cwd=tmp_dir,
-        ).returncode
+        )
 
 def cmd_format_check_staged() -> int:
     """Check only the staged C/C++ content (used by the pre-commit hook).
@@ -295,10 +281,7 @@ def cmd_format_check_staged() -> int:
     files, so it never complains about unrelated working-tree edits and always
     validates exactly what is about to be committed.
     """
-    if not is_in_container():
-        return compose_run(
-            "/project/scripts/dev.py",
-            "format-check-staged")
+    change_to_container()
             
     files = _staged_files()
     if not files:
@@ -339,14 +322,37 @@ COMMANDS = {
 }
 
 
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="dev.py",
+        description="Container task runner for the ESP32 thermometer logger.",
+    )
+    subparsers = parser.add_subparsers(dest="command", metavar="command")
+    subparsers.required = True
+
+    # Preserve the historical one-line order in --help output.
+    for name, handler in COMMANDS.items():
+        subparser = subparsers.add_parser(
+            name,
+            help=(handler.__doc__ or "").strip().splitlines()[0],
+            description=handler.__doc__,
+        )
+        subparser.set_defaults(handler=handler)
+
+    return parser
+
+
 def main(argv: list[str]) -> int:
-    print()
-    command = argv[1] if len(argv) > 1 else "build"
-    handler = COMMANDS.get(command)
-    if handler is None:
-        print(USAGE, file=sys.stderr)
-        return 2
-    return handler()
+    # Convert the path relative to REPO_ROOT since the commands
+    # are executed with cwd as REPO_ROOT.  Needed when we
+    # re-execute dev.py inside the container.
+    prog = Path(argv[0]).resolve()
+    relative_prog = prog.relative_to(REPO_ROOT)
+    sys.argv[0] = str(relative_prog)
+
+    parser = _build_parser()
+    args = parser.parse_args(argv[1:])
+    return args.handler()
 
 
 if __name__ == "__main__":
