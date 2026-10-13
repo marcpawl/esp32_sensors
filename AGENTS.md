@@ -94,7 +94,7 @@ esp32_sensors/
 - `sdkconfig.defaults` — the committed configuration intent (target, C++ exceptions/RTTI off, partition table, `-Os`). `sdkconfig` is generated from this and is **not** tracked.
 - `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash environment. Extend these (not ad-hoc `docker run`) when adding tooling. The compose `dev` service is also the target of the Dev Container (see below).
 - `.devcontainer/devcontainer.json` — the CLion / VS Code **Dev Container** definition. It **reuses the compose `dev` service** (it does not define its own image), so CLion builds/starts the same container the CLI uses. Edit `docker-compose.yml` for image/mount/user changes; edit `devcontainer.json` only for IDE-level wiring.
-- `scripts/dev.py` — the single container task runner (`build`, `flash`, `monitor`, `menuconfig`, `test`, `format`, `format-check`, `format-check-staged`, `install-hooks`, `shell`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. The pre-commit hook (`.githooks/pre-commit`) delegates its check to `scripts/dev.py format-check-staged`. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
+- `scripts/dev.py` — the single container task runner (`build`, `flash`, `monitor`, `menuconfig`, `test`, `format`, `format-check`, `format-check-staged`, `install-hooks`, `shell`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. `shell` is the preferred way to run a container command from the host: with no arguments it opens an interactive login shell, and with arguments it runs them in the container (e.g. `./scripts/dev.py shell ls -1d /`). The pre-commit hook (`.githooks/pre-commit`) delegates its check to `scripts/dev.py format-check-staged`. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
 - `scripts/dev.py-completion.bash` — bash tab-completion for `scripts/dev.py`. Source it to complete subcommands (e.g. `./scripts/dev.py form<TAB>` → `format`, `format-check`, `format-check-staged`). It asks `dev.py complete <prefix>` for candidates, so the command list is defined in exactly one place.
 - `.idea/runConfigurations/*.xml` — **committed** shared CLion run configurations that invoke the container tasks via `python3 scripts/dev.py`. `.idea/workspace.xml` (local, git-ignored) holds the same configs for the current machine.
 - `LICENSE` — GPL-3.0.
@@ -145,6 +145,20 @@ docker compose build
 docker compose run --rm dev
 ```
 
+> **Preferred way to run a command in the container from the host.**
+> Use `./scripts/dev.py shell <command> [args...]` instead of ad-hoc
+> `docker compose run`, which guarantees the container user mapping and the
+> ESP-IDF environment are set up exactly as the documented tasks expect:
+>
+> ```bash
+> # Interactive login shell (no arguments)
+> ./scripts/dev.py shell
+>
+> # Run a one-off command in the container shell (arguments passed through)
+> ./scripts/dev.py shell ls -1d /
+> ./scripts/dev.py shell "echo hi | wc -l"   # shell syntax works too
+> ```
+
 The container user is mapped to your host UID/GID, so build artifacts are not root-owned, and the `dialout` group is joined for serial access. Inside the container, ESP-IDF is already on the environment; if needed, source it manually:
 
 ```bash
@@ -185,7 +199,7 @@ commands — run them from the CLion Run/Debug toolbar:
 | Host unit tests (container) | `test` | builds + runs the `linux`-target Unity tests (`build_linux/`) |
 | clang-format check (container) | `format-check` | `clang-format --dry-run --Werror` |
 | menuconfig (container) | `menuconfig` | Kconfig UI |
-| Container shell (ESP-IDF) | `shell` | login shell with the IDF env sourced |
+| Container shell (ESP-IDF) | `shell` | login shell with the IDF env sourced (accepts trailing args to run a command) |
 
 Set `ESP32_PORT` (e.g. `/dev/ttyACM0`) to target a different serial device.
 
@@ -213,7 +227,7 @@ enacted on the host.
 |both|format|clang-format all source code|
 |both|format-check|Check if code is formatted, non-zero exit if anything is unformatted |
 |both|format-check-staged|Check if staged code is formatted, non-zero exit if anything is unformatted |
-|both|shell|Bash command in the container|
+|both|shell|Run a bash command in the container (arguments after `shell` are executed); with no arguments, an interactive login shell|
 |both|complete|Print subcommands matching a prefix (internal; used by bash completion)|
 |host|image|Create the docker image|
 |host|install-hooks|install git commit hooks|

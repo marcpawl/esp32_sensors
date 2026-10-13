@@ -26,6 +26,7 @@ import argparse
 import os
 from pathlib import Path
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -227,10 +228,23 @@ def cmd_install_hooks() -> int:
     return rc
 
 
-def cmd_shell() -> int:
-    """Interactive login shell with the ESP-IDF environment sourced."""
+def cmd_shell(extra: list[str]) -> int:
+    """Interactive shell with the ESP-IDF environment sourced.
+
+    With no extra arguments this starts an interactive login shell. Any
+    arguments after `shell` are executed in that shell instead, e.g.:
+
+        scripts/dev.py shell ls -1d /
+
+    """
     change_to_container()
-    return run(["bash", "-l"])
+    if not extra:
+        return run(["bash", "-l"])
+    # Run the caller's arguments through a login shell so PATH and the ESP-IDF
+    # environment (sourced by the login profile) are available, and so shell
+    # syntax like pipes and globs works: `shell ls -1d / | wc -l`.
+    # `--` guards against leading-dash arguments being read as bash options.
+    return run(["bash", "-l", "-c", " ".join(_quote_args(extra))])
 
 
 def cmd_complete() -> int:
@@ -248,6 +262,11 @@ def cmd_complete() -> int:
         if name.startswith(prefix):
             print(name)
     return 0
+
+
+def _quote_args(args: list[str]) -> list[str]:
+    """Shell-quote each argument for safe interpolation into a `bash -c` line."""
+    return [shlex.quote(arg) for arg in args]
 
 
 def _staged_files() -> list[str]:
@@ -361,6 +380,17 @@ def _build_parser() -> argparse.ArgumentParser:
         )
         subparser.set_defaults(handler=handler)
 
+    # `shell` accepts arbitrary trailing arguments to run in the container
+    # shell. REMAINDER captures them verbatim (including flags and shell
+    # metacharacters) so `shell ls -1d /` and `shell "echo hi | wc -l"` work.
+    shell_parser = subparsers.choices["shell"]
+    shell_parser.add_argument(
+        "args",
+        nargs=argparse.REMAINDER,
+        metavar="ARG",
+        help="command (and arguments) to run in the container shell",
+    )
+
     return parser
 
 
@@ -379,6 +409,8 @@ def main(argv: list[str]) -> int:
 
     parser = _build_parser()
     args = parser.parse_args(argv[1:])
+    if args.command == "shell":
+        return cmd_shell(args.args)
     return args.handler()
 
 
