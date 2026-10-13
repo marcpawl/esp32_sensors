@@ -14,7 +14,9 @@
 #   scripts/dev.py --help        # full help, including per-command details
 #
 # Environment:
-#   ESP32_PORT   Serial device for flash/monitor (default: /dev/ttyUSB0)
+#   ESP32_PORT   Serial device for flash/monitor (optional)
+#                docker-compose.yml will pass into the container the value 
+#                on the host.
 #
 """Container task runner for the ESP32 thermometer logger."""
 
@@ -24,14 +26,13 @@ import argparse
 import os
 from pathlib import Path
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
 
 # Always operate from the repository root, regardless of the caller's cwd.
 REPO_ROOT = Path(__file__).resolve().parent.parent
-
-PORT = os.environ.get("ESP32_PORT", "/dev/ttyUSB0")
 
 # C/C++ sources checked/formatted by clang-format, discovered via git so the
 # list always matches the tracked files (no missing-glob errors). Keep the
@@ -90,8 +91,8 @@ def source_files():
         raise
     
 
-def run(cmd: list[str]) -> int:
-    """Run a command in the repo root, inheriting stdio; return exit code."""
+def run(cmd: list[str], cwd: Path | str = REPO_ROOT) -> int:
+    """Run a command in `cwd` (default: repo root), inheriting stdio."""
 
     # Add UID and GID to environment
     uid = os.geteuid()
@@ -101,7 +102,7 @@ def run(cmd: list[str]) -> int:
     env["GID"] = str(os.getgid())
 
     print(cmd)
-    return subprocess.run(cmd, env=env, cwd=REPO_ROOT).returncode
+    return subprocess.run(cmd, env=env, cwd=cwd).returncode
 
 
 def compose_run(args: list[str]) -> int:
@@ -156,13 +157,13 @@ def cmd_build() -> int:
 def cmd_flash() -> int:
     """Flash then attach the serial monitor; exit it with Ctrl+]."""
     change_to_container()
-    return run(["idf.py", "-B", FW_BUILD_DIR, "-p", PORT, "flash", "monitor"])
+    return run(["idf.py", "-B", FW_BUILD_DIR, "flash", "monitor"])
 
 
 def cmd_monitor() -> int:
     """Attach the serial monitor; exit it with Ctrl+]."""
     change_to_container()
-    return run(["idf.py", "-B", FW_BUILD_DIR, "-p", PORT, "monitor"])
+    return run(["idf.py", "-B", FW_BUILD_DIR, "monitor"])
 
 
 def cmd_menuconfig() -> int:
@@ -227,10 +228,45 @@ def cmd_install_hooks() -> int:
     return rc
 
 
-def cmd_shell() -> int:
-    """Interactive login shell with the ESP-IDF environment sourced."""
+def cmd_shell(extra: list[str]) -> int:
+    """Interactive shell with the ESP-IDF environment sourced.
+
+    With no extra arguments this starts an interactive login shell. Any
+    arguments after `shell` are executed in that shell instead, e.g.:
+
+        scripts/dev.py shell ls -1d /
+
+    """
     change_to_container()
-    return run(["bash", "-l"])
+    if not extra:
+        return run(["bash", "-l"])
+    # Run the caller's arguments through a login shell so PATH and the ESP-IDF
+    # environment (sourced by the login profile) are available, and so shell
+    # syntax like pipes and globs works: `shell ls -1d / | wc -l`.
+    # `--` guards against leading-dash arguments being read as bash options.
+    return run(["bash", "-l", "-c", " ".join(_quote_args(extra))])
+
+
+def cmd_complete() -> int:
+    """Print the command names matching a prefix (used by shell completion).
+
+    Internal helper: the bash completion script calls this to list the
+    subcommands that start with the word being completed. Returns 0 even when
+    nothing matches (an empty candidate list is not an error for completion).
+    """
+    prefix = sys.argv[2] if len(sys.argv) > 2 else ""
+    for name in COMMANDS:
+        # Don't advertise the internal completion helper itself.
+        if name == "complete":
+            continue
+        if name.startswith(prefix):
+            print(name)
+    return 0
+
+
+def _quote_args(args: list[str]) -> list[str]:
+    """Shell-quote each argument for safe interpolation into a `bash -c` line."""
+    return [shlex.quote(arg) for arg in args]
 
 
 def _staged_files() -> list[str]:
@@ -319,6 +355,7 @@ COMMANDS = {
     "format-check-staged": cmd_format_check_staged,
     "install-hooks": cmd_install_hooks,
     "shell": cmd_shell,
+    "complete": cmd_complete,
 }
 
 
@@ -332,6 +369,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # Preserve the historical one-line order in --help output.
     for name, handler in COMMANDS.items():
+        # `complete` is an internal helper invoked by the bash completion
+        # script; it is handled before argparse and hidden from --help.
+        if name == "complete":
+            continue
         subparser = subparsers.add_parser(
             name,
             help=(handler.__doc__ or "").strip().splitlines()[0],
@@ -339,10 +380,26 @@ def _build_parser() -> argparse.ArgumentParser:
         )
         subparser.set_defaults(handler=handler)
 
+    # `shell` accepts arbitrary trailing arguments to run in the container
+    # shell. REMAINDER captures them verbatim (including flags and shell
+    # metacharacters) so `shell ls -1d /` and `shell "echo hi | wc -l"` work.
+    shell_parser = subparsers.choices["shell"]
+    shell_parser.add_argument(
+        "args",
+        nargs=argparse.REMAINDER,
+        metavar="ARG",
+        help="command (and arguments) to run in the container shell",
+    )
+
     return parser
 
 
 def main(argv: list[str]) -> int:
+    # `complete` takes a trailing prefix argument (e.g. `dev.py complete form`)
+    # that argparse would reject, so handle it before building the parser.
+    if len(argv) > 1 and argv[1] == "complete":
+        return cmd_complete()
+
     # Convert the path relative to REPO_ROOT since the commands
     # are executed with cwd as REPO_ROOT.  Needed when we
     # re-execute dev.py inside the container.
@@ -352,6 +409,8 @@ def main(argv: list[str]) -> int:
 
     parser = _build_parser()
     args = parser.parse_args(argv[1:])
+    if args.command == "shell":
+        return cmd_shell(args.args)
     return args.handler()
 
 
