@@ -90,8 +90,8 @@ def source_files():
         raise
     
 
-def run(cmd: list[str]) -> int:
-    """Run a command in the repo root, inheriting stdio; return exit code."""
+def run(cmd: list[str], cwd: Path | str = REPO_ROOT) -> int:
+    """Run a command in `cwd` (default: repo root), inheriting stdio."""
 
     # Add UID and GID to environment
     uid = os.geteuid()
@@ -101,7 +101,7 @@ def run(cmd: list[str]) -> int:
     env["GID"] = str(os.getgid())
 
     print(cmd)
-    return subprocess.run(cmd, env=env, cwd=REPO_ROOT).returncode
+    return subprocess.run(cmd, env=env, cwd=cwd).returncode
 
 
 def compose_run(args: list[str]) -> int:
