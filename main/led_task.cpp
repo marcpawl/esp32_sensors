@@ -33,16 +33,6 @@ void init_led_pins() {
 
 }  // namespace
 
-LedRunner::LedRunner() noexcept {
-    // Single-slot queue: a new send overwrites any unread message.
-    QueueHandle_t queue = xQueueCreate(1, sizeof(LedState));
-    if (queue == nullptr) {
-        ESP_LOGE(kLedTag, "xQueueCreate failed");
-        abort();
-    }
-    queue_.reset(queue);
-}
-
 [[noreturn]] void LedRunner::run() noexcept {
     init_led_pins();
     LedState state = LedState::kBoot;

@@ -8,17 +8,18 @@
 #include <utility>
 #include <variant>
 
+#include "one_message_queue.hpp"
 #include "task.hpp"
 
 namespace thermo {
-
 // Operating states the LED task can display.
 enum class LedState : std::uint8_t {
-    kOff = 0,      // Power Off
-    kBoot,         // Booting
-    kConfig,       // Configure mode
-    kConfig_save,  // configuration being saved.
-    kRun,          // Run mode: sampling/uploading indication.
+    kOff = 0,       // Power Off
+    kBoot,          // Booting
+    kConfig,        // Configure mode
+    kConfig_save,   // configuration being saved.
+    kConfig_reset,  // Configuration is to be reset to empty.
+    kRun,           // Run mode: sampling/uploading indication.
     kRun_battery_low,
     kRun_uploading,
     kRun_upload_error,
@@ -28,11 +29,16 @@ enum class LedState : std::uint8_t {
  */
 class LedRunner {
   public:
-    LedRunner();
+    LedRunner() = default;
+
     LedRunner(LedRunner const&) = delete;
+
     LedRunner(LedRunner&&) = default;
+
     ~LedRunner() = default;
+
     LedRunner& operator=(LedRunner const&) = delete;
+
     LedRunner& operator=(LedRunner&&) = delete;
 
     // Publishes a new LED state. Safe to call from any task; overwrites any
@@ -45,6 +51,7 @@ class LedRunner {
 
   private:
     enum class RedLed : std::int8_t { Off = 0, On };
+
     enum class GreenLed : std::int8_t { Off = 0, On };
 
     struct Step {
@@ -82,7 +89,7 @@ class LedRunner {
     // differing step counts, so the element type is a variant of the concrete
     // step-count instantiations.
     using Cycle = std::variant<CycleSteps<1>, CycleSteps<2>>;
-    using Cycles = std::array<Cycle, 8>;
+    using Cycles = std::array<Cycle, 9>;
 
     // The table, built entirely at compile time. Returned by value (the
     // constructing function is `constexpr`), which avoids referencing the
@@ -105,9 +112,13 @@ class LedRunner {
                 Step{std::chrono::milliseconds{50}, RedLed::On, GreenLed::Off},
                 Step{std::chrono::milliseconds{50}, RedLed::On, GreenLed::On}},
 
+            CycleSteps{
+                LedState::kConfig_reset,
+                Step{std::chrono::milliseconds{10}, RedLed::On, GreenLed::Off},
+                Step{std::chrono::milliseconds{10}, RedLed::On, GreenLed::On}},
+
             CycleSteps{LedState::kRun,
                        Step{std::chrono::hours{1}, RedLed::Off, GreenLed::On}},
-
             CycleSteps{
                 LedState::kRun_battery_low,
                 Step{std::chrono::milliseconds{500}, RedLed::On, GreenLed::Off},
@@ -149,45 +160,44 @@ class LedRunner {
     // `Msg` is deduced and constrained to `Derived::Message`. This is a member
     // function template purely to defer naming the (incomplete, at class
     // definition time) `Derived::Message` until first use.
-    void send(LedState state) noexcept {
-        xQueueOverwrite(queue_.get(), &state);
-    }
+    void send(LedState state) noexcept { queue_.send(state); }
 
     // Receive, blocking up to `timeout` ticks. Returns the message when one was
     // dequeued, or `std::nullopt` on timeout.
     //
     std::optional<LedState> receive(TickType_t timeout) noexcept {
-        LedState out;
-        if (xQueueReceive(queue_.get(), &out, timeout) == pdTRUE) {
-            return std::optional<LedState>{out};
-        }
-        return std::nullopt;
+        return queue_.receive(timeout);
     }
 
     // Receive, blocking up to `timeout` milliseconds. Convenience overload for
     // callers that prefer a `std::chrono` duration over raw FreeRTOS ticks.
     std::optional<LedState> receive(
         std::chrono::milliseconds timeout) noexcept {
-        return receive(
-            pdMS_TO_TICKS(static_cast<std::uint32_t>(timeout.count())));
+        return queue_.receive(timeout);
     }
 
     LedState current_state_ = LedState::kOff;
-    UniqueQueueHandle queue_;
+
+    /** Queue that contains what the new state should be. */
+    OneMessageQueue<LedState> queue_;
 };
 
 class LedTask : protected Task<LedRunner> {
   public:
     LedTask();
+
     LedTask(LedTask const&) = delete;
+
     LedTask(LedTask&&) = delete;
+
     ~LedTask() = default;
+
     LedTask& operator=(LedTask const&) = delete;
+
     LedTask& operator=(LedTask&&) = delete;
 
     void set_state(LedState new_state) noexcept {
         runner_.set_state(new_state);
     }
 };
-
 }  // namespace thermo
