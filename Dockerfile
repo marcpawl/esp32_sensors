@@ -68,7 +68,8 @@ RUN apt-get update \
 # ---------------------------------------------------------------------------
 RUN cd $IDF_PATH && \
     . "$IDF_PATH/export.sh" && \
-     "$IDF_PATH/tools/idf_tools.py" install esp-clang qemu-xtensa qemu-riscv32
+     "$IDF_PATH/tools/idf_tools.py" --non-interactive install \
+          esp-clang qemu-xtensa qemu-riscv32
 
 
 # ---------------------------------------------------------------------------
@@ -139,9 +140,10 @@ USER ${USERNAME}
 # ---------------------------------------------------------------------------
 RUN cd $IDF_PATH && \
     $IDF_PATH/install.sh && \
-    /opt/esp/idf/tools/idf_tools.py install-python-env && \
+    /opt/esp/idf/tools/idf_tools.py --non-interactive  install-python-env && \
     . "$IDF_PATH/export.sh" && \
-    "$IDF_PATH/tools/idf_tools.py" install esp-clang qemu-xtensa qemu-riscv32
+    "$IDF_PATH/tools/idf_tools.py" --non-interactive install \
+        esp-clang qemu-xtensa qemu-riscv32
 
 WORKDIR /project
 ENV DOCKER_IMAGE=esp32_sensors
