@@ -79,13 +79,14 @@ esp32_sensors/
 ├── .devcontainer/       # CLion / VS Code Dev Container definition (reuses compose)
 ├── scripts/dev.py       # Container task runner (build/flash/test/format/shell)
 ├── scripts/dev.py-completion.bash  # Bash tab-completion for scripts/dev.py
-├── build_esp32s3/       # Firmware build output (git-ignored; per-target)
+├── build_esp32s3/       # Firmware build output from `idf.py` (git-ignored)
+├── cmake-build-esp32s3/ # CLion's own CMake build tree (git-ignored; see .idea/cmake.xml)
 ├── .dockerignore        # Build-context exclusions
-├── .gitignore           # Excludes build_esp32s3/, test/build_linux/, sdkconfig, local IDE state
+├── .gitignore           # Excludes build dirs, sdkconfig, local IDE state
 ├── AGENTS.md            # This file — guidance for AI agents and developers
 ├── LICENSE              # GNU General Public License v3.0
 ├── install.sh           # Unrelated Continue CLI installer (not firmware)
-└── .idea/               # CLion metadata (shared run configs tracked; workspace.xml local)
+└── .idea/               # CLion config (shared cmake.xml + run configs tracked; workspace.xml local)
 ```
 
 **Key files:**
@@ -96,7 +97,7 @@ esp32_sensors/
 - `.devcontainer/devcontainer.json` — the CLion / VS Code **Dev Container** definition. It **reuses the compose `dev` service** (it does not define its own image), so CLion builds/starts the same container the CLI uses. Edit `docker-compose.yml` for image/mount/user changes; edit `devcontainer.json` only for IDE-level wiring.
 - `scripts/dev.py` — the single container task runner (`build`, `flash`, `monitor`, `menuconfig`, `test`, `format`, `format-check`, `format-check-staged`, `install-hooks`, `shell`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. `shell` is the preferred way to run a container command from the host: with no arguments it opens an interactive login shell, and with arguments it runs them in the container (e.g. `./scripts/dev.py shell ls -1d /`). The pre-commit hook (`.githooks/pre-commit`) delegates its check to `scripts/dev.py format-check-staged`. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
 - `scripts/dev.py-completion.bash` — bash tab-completion for `scripts/dev.py`. Source it to complete subcommands (e.g. `./scripts/dev.py form<TAB>` → `format`, `format-check`, `format-check-staged`). It asks `dev.py complete <prefix>` for candidates, so the command list is defined in exactly one place.
-- `.idea/runConfigurations/*.xml` — **committed** shared CLion run configurations that invoke the container tasks via `python3 scripts/dev.py`. `.idea/workspace.xml` (local, git-ignored) holds the same configs for the current machine.
+- `.idea/cmake.xml` / `.idea/runConfigurations/*.xml` — **committed** shared CLion configuration. `cmake.xml` defines the CMake profile used inside the Dev Container; the run configurations drive the build, test, format, flash, and shell tasks (six via `python3 scripts/dev.py`, one native CMake config for build/refactor). `.idea/workspace.xml` (local, git-ignored) holds per-machine state.
 - `LICENSE` — GPL-3.0.
 - `RELEASE_NOTES.md` — human-readable release notes; keep the "Implemented" / "Not yet implemented" split honest as milestones land.
 
@@ -111,7 +112,7 @@ esp32_sensors/
 | Power / battery | `battery_monitor.cpp` |
 | Config | `app_config.cpp` (validation), `app_config_store.cpp` (NVS) |
 | Configure mode | `configure_mode.cpp`, `wifi_ap.cpp`, `https_server.cpp`, `config_page.cpp`, `certs/self_signed_cert.cpp` |
-| Run mode | `run_mode.cpp` (stubbed network path), `ntp_client.cpp` |
+| Run mode | `run_mode.cpp` (stubbed network path), `ntp_server.cpp` |
 | Payload | `payload.cpp`, `temp_format.cpp`, `rom_id.cpp` (ROM-ID hex) |
 
 **Host-testable modules.** `temp_format.cpp`, `payload.cpp`, `app_config.cpp`,
@@ -178,8 +179,10 @@ necessary") and the toolchain, CMake, Ninja, and the ESP-IDF Python venv all run
   *Remote Development → Dev Containers → docker-compose.yml → `dev`*. CLion
   (re)builds the image if the `Dockerfile` changed and starts the service on demand.
 - **Toolchain/CMake:** select the container as the remote host (SSH into the Dev
-  Container). CMake then configures and builds under `/project/build_esp32s3` in
-  the container, so the compiler cache lives on the container side, not the host.
+  Container). CLion configures and builds under its **own** CMake build
+  directory, `/project/cmake-build-esp32s3` (from `.idea/cmake.xml`), so the IDE
+  and `idf.py` never share a CMake cache. `build_esp32s3/` remains the canonical
+  `idf.py` build used by `scripts/dev.py build`/`flash`.
 
 > Editing the image, mounts, or user? Change `docker-compose.yml` (and `Dockerfile`),
 > **not** `devcontainer.json`. The Dev Container deliberately inherits everything
@@ -187,21 +190,45 @@ necessary") and the toolchain, CMake, Ninja, and the ESP-IDF Python venv all run
 
 #### Run configurations
 
-Six shared run configurations are committed under `.idea/runConfigurations/`
-(and mirrored in the local `.idea/workspace.xml`). They all call
-`scripts/dev.py`, so a single script is the source of truth for container
-commands — run them from the CLion Run/Debug toolbar:
+Seven shared run configurations are committed under `.idea/runConfigurations/`
+(and mirrored in the local `.idea/workspace.xml`). Six call `scripts/dev.py`,
+so a single script is the source of truth for container commands — run them
+from the CLion Run/Debug toolbar. The seventh is a native CLion **CMake** run
+configuration used for building and refactoring inside the IDE:
 
-| Run configuration | `scripts/dev.py` | What it does |
+| Run configuration | Kind | What it does |
 |---|---|---|
-| Build firmware (container) | `build` | `idf.py -B build_esp32s3 build` in the container |
-| Flash & monitor (container) | `flash` | `idf.py -B build_esp32s3 -p $ESP32_PORT flash monitor` (default `/dev/ttyUSB0`) |
-| Host unit tests (container) | `test` | builds + runs the `linux`-target Unity tests (`build_linux/`) |
-| clang-format check (container) | `format-check` | `clang-format --dry-run --Werror` |
-| menuconfig (container) | `menuconfig` | Kconfig UI |
-| Container shell (ESP-IDF) | `shell` | login shell with the IDF env sourced (accepts trailing args to run a command) |
+| esp32_sensors (container CMake) | CMake | Builds the `esp32_sensors` CMake target in the container; enables CLion Build/Compile and C++ **refactorings** |
+| Build firmware (container) | `scripts/dev.py build` | `idf.py -B build_esp32s3 build` in the container |
+| Flash & monitor (container) | `scripts/dev.py flash` | `idf.py -B build_esp32s3 -p $ESP32_PORT flash monitor` (default `/dev/ttyUSB0`) |
+| Host unit tests (container) | `scripts/dev.py test` | builds + runs the `linux`-target Unity tests (`build_linux/`) |
+| clang-format check (container) | `scripts/dev.py format-check` | `clang-format --dry-run --Werror` |
+| menuconfig (container) | `scripts/dev.py menuconfig` | Kconfig UI |
+| Container shell (ESP-IDF) | `scripts/dev.py shell` | login shell with the IDF env sourced (accepts trailing args to run a command) |
 
 Set `ESP32_PORT` (e.g. `/dev/ttyACM0`) to target a different serial device.
+
+> **Building is container-only.** The top-level `CMakeLists.txt` refuses to
+> configure unless `DOCKER_IMAGE=esp32_sensors` (set by the `Dockerfile`), so a
+> host invocation fails fast. The CMake profile in `.idea/cmake.xml` and the
+> "esp32_sensors (container CMake)" run configuration both use the Dev
+> Container toolchain, so CLion builds and refactors through the container.
+
+#### Shared vs. local `.idea` files
+
+The files needed to open, build, and refactor the project are **tracked** so a
+change to the shared configuration shows up in the change list:
+
+- Committed (shared): `.idea/cmake.xml` (CMake profiles), `.idea/runConfigurations/*`
+  (run/debug configurations), `.idea/codeStyles/*` (formatting used by
+  refactors), `.idea/misc.xml`, `.idea/modules.xml`, `.idea/esp32_sensors.iml`,
+  `.idea/vcs.xml`, `.idea/editor.xml`.
+- Local only (git-ignored): `.idea/workspace.xml` and `.idea/shelf/` — these
+  hold per-machine IDE state, not shared configuration.
+
+The root `.gitignore` ignores `.idea/*` and then un-ignores the shared files
+above; see the "IDE / editor" section there.
+
 
 
 ### python scripts/dev.py
@@ -325,6 +352,13 @@ The test case should fork and exec the "_assert" program with the name of the te
 
 ### Agent interaction
 
+- **Ignore the CLion configuration.** Unless explicitly told otherwise, do not
+  read, edit, stage, commit, or otherwise consider the CLion configuration files
+  (`.idea/*`, including `.idea/cmake.xml`, `.idea/runConfigurations/*`,
+  `.idea/misc.xml`, `.idea/workspace.xml`, etc.). CLion rewrites these on its own
+  and any changes it makes are noise unrelated to the task at hand. If such a
+  file shows up modified or deleted in `git status`, leave it alone — do not
+  "fix" or restore it — unless the user specifically asks about CLion config.
 - When the current work item is complete and no further input is expected,
   output `DONE!` as the final line of your response in the Continue (`cn`)
   CLI. Do **not** print `DONE!` if there are follow-up questions, pending
