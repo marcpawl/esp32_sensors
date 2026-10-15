@@ -7,7 +7,6 @@ idf_component_register(
         "power_manager.cpp"
         "power_source.cpp"
         "led_task.cpp"
-        "mode_controller.cpp"
         "onewire_bus.cpp"
         "rom_id.cpp"
         "ds18b20.cpp"
@@ -27,6 +26,7 @@ idf_component_register(
     INCLUDE_DIRS
         "include"
     REQUIRES
+        hal_board
         nvs_flash
         esp_wifi
         esp_netif

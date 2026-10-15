@@ -13,5 +13,12 @@ if(NOT "$ENV{DOCKER_IMAGE}" STREQUAL "esp32_sensors")
         "or:   docker compose run --rm dev idf.py -B build_esp32s3 build")
 endif()
 
+# `components/` holds two mutually exclusive HAL implementations that expose the
+# same headers (`hal_*`): `hal_board` (real GPIO) and `hal_stub` (pins declared
+# in software). The production firmware links `hal_board`; exclude `hal_stub` so
+# the two cannot be built together and define the same symbols. Must be set
+# before project().
+set(EXCLUDE_COMPONENTS hal_stub)
+
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(esp32_sensors)

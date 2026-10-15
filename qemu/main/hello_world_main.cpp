@@ -12,10 +12,57 @@
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "hal/switch.hpp"
 #include "sdkconfig.h"
+
+namespace {
+
+// Exercises the shared HAL switch interface via its QEMU stub (`hal_stub`).
+// The stub's pin states are settable in software, so this proves the interface
+// is linked and reports the raw pin states — including the bad-hardware cases
+// (both poles on, both poles off) the real 3-position switch cannot produce.
+void report_switch() {
+    static_assert(thermo::hal::SwitchLike<thermo::hal::Switch>);
+
+    thermo::hal::Switch sw = thermo::hal::Switch::create(/*first=*/1,
+                                                         /*third=*/2);
+    if (sw.init() != ESP_OK) {
+        std::printf("Switch init failed\n");
+        return;
+    }
+
+    const thermo::hal::Pins first{thermo::hal::PinState::kOn,
+                                  thermo::hal::PinState::kOff};
+    const thermo::hal::Pins center{thermo::hal::PinState::kOff,
+                                   thermo::hal::PinState::kOff};
+    const thermo::hal::Pins third{thermo::hal::PinState::kOff,
+                                  thermo::hal::PinState::kOn};
+
+    const struct {
+        const char* name;
+        thermo::hal::Pins pins;
+    } cases[] = {
+        {"First (Configure)", first},
+        {"Center (Off)", center},
+        {"Third (Run)", third},
+        {"Fault (both on)",
+         {thermo::hal::PinState::kOn, thermo::hal::PinState::kOn}},
+    };
+
+    for (auto const& c : cases) {
+        sw.set_pins(c.pins);
+        const thermo::hal::Pins got = sw.read();
+        std::printf("Switch %-18s -> first=%d third=%d\n", c.name,
+                    got.first_on() ? 1 : 0, got.third_on() ? 1 : 0);
+    }
+}
+
+}  // namespace
 
 extern "C" void app_main(void) {
     std::printf("Hello world!\n");
+
+    report_switch();
 
     /* Print chip information */
     esp_chip_info_t chip_info;
