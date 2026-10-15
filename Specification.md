@@ -30,7 +30,6 @@ A solar-powered, battery-backed ESP32-S3 that samples three DS18B20 thermometers
 | Item | Value |
 |---|---|
 | Host OS | Linux Mint |
-| IDE | CLion 2026.2 |
 | Container runtime | Docker |
 | Container image | `espressif/idf:release-v6.1` |
 | Source language | **C++26** (GNU extensions, `-std=gnu++26`) |

@@ -157,6 +157,9 @@ def cmd_build() -> int:
 def cmd_flash() -> int:
     """Flash then attach the serial monitor; exit it with Ctrl+]."""
     change_to_container()
+    # No need to pass in the port since it is either in the
+    # container environment of idf.py will hunt for the board
+    # across all the tty devices.
     return run(["idf.py", "-B", FW_BUILD_DIR, "flash", "monitor"])
 
 
@@ -169,7 +172,7 @@ def cmd_monitor() -> int:
 def cmd_menuconfig() -> int:
     """Interactive Kconfig UI; edits sdkconfig (generated from defaults)."""
     change_to_container()
-    return (["idf.py", "-B", FW_BUILD_DIR, "menuconfig"])
+    return run(["idf.py", "-B", FW_BUILD_DIR, "menuconfig"])
 
 
 def cmd_test() -> int:
@@ -228,7 +231,25 @@ def cmd_install_hooks() -> int:
     return rc
 
 
-def cmd_shell(extra: list[str]) -> int:
+# Root under which the project is mounted inside the dev container. The
+# `shell -C DIR` option resolves relative directories against this.
+CONTAINER_PROJECT_ROOT = "/project"
+
+
+def _resolve_container_directory(directory: str) -> str:
+    """Resolve a `shell -C DIR` value to an absolute in-container path.
+
+    The value is interpreted as a path *in the container*. A relative path is
+    taken relative to the project mount root (e.g. `qemu` -> `/project/qemu`);
+    an absolute path is used verbatim.
+    """
+    path = Path(directory)
+    if path.is_absolute():
+        return path.as_posix()
+    return (Path(CONTAINER_PROJECT_ROOT) / path).as_posix()
+
+
+def cmd_shell(extra: list[str], directory: str | None = None) -> int:
     """Interactive shell with the ESP-IDF environment sourced.
 
     With no extra arguments this starts an interactive login shell. Any
@@ -236,15 +257,35 @@ def cmd_shell(extra: list[str]) -> int:
 
         scripts/dev.py shell ls -1d /
 
+    Use `-C DIR` / `--directory DIR` to change into DIR before running the
+    command. DIR is a path in the container: a relative path is resolved under
+    the project mount (`qemu` -> /project/qemu), an absolute path is used as-is:
+
+        scripts/dev.py shell -C qemu ls -1
+        scripts/dev.py shell -C /project/test idf.py build
+
     """
     change_to_container()
+
+    # Build the inner command line, optionally prefixing a `cd` so the command
+    # (or the interactive shell) starts in the requested directory.
+    prefix = []
+    if directory is not None:
+        target = _resolve_container_directory(directory)
+        prefix = ["cd", shlex.quote(target), "&&"]
+
     if not extra:
-        return run(["bash", "-l"])
+        if not prefix:
+            return run(["bash", "-l"])
+        # `cd DIR && exec bash -l` keeps the login shell (and thus the sourced
+        # ESP-IDF environment) while honoring the requested working directory.
+        return run(["bash", "-l", "-c", " ".join([*prefix, "exec", "bash", "-l"])])
     # Run the caller's arguments through a login shell so PATH and the ESP-IDF
     # environment (sourced by the login profile) are available, and so shell
     # syntax like pipes and globs works: `shell ls -1d / | wc -l`.
     # `--` guards against leading-dash arguments being read as bash options.
-    return run(["bash", "-l", "-c", " ".join(_quote_args(extra))])
+    inner = " ".join([*prefix, *_quote_args(extra)])
+    return run(["bash", "-l", "-c", inner])
 
 
 def cmd_complete() -> int:
@@ -383,7 +424,17 @@ def _build_parser() -> argparse.ArgumentParser:
     # `shell` accepts arbitrary trailing arguments to run in the container
     # shell. REMAINDER captures them verbatim (including flags and shell
     # metacharacters) so `shell ls -1d /` and `shell "echo hi | wc -l"` work.
+    # The `-C/--directory` option must appear before the command (options are
+    # parsed up to the first positional token, which starts the REMAINDER).
     shell_parser = subparsers.choices["shell"]
+    shell_parser.add_argument(
+        "-C",
+        "--directory",
+        metavar="DIR",
+        default=None,
+        help="change into DIR (a path in the container) before running the "
+             "command; a relative DIR is resolved under /project",
+    )
     shell_parser.add_argument(
         "args",
         nargs=argparse.REMAINDER,
@@ -410,7 +461,7 @@ def main(argv: list[str]) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv[1:])
     if args.command == "shell":
-        return cmd_shell(args.args)
+        return cmd_shell(args.args, args.directory)
     return args.handler()
 
 

@@ -55,6 +55,11 @@ services:
       - .:/project
       # Expose host USB/serial device nodes (ttyUSB*, ttyACM*, etc.).
       - /dev:/dev
+      # Bind-mount the container's /tmp onto a host directory inside the project
+      # so scratch files (e.g. a reference hello_world build used by the QEMU
+      # smoke test) survive across `docker compose run` invocations, which
+      # otherwise use a fresh container each time.
+      - ./tmp:/tmp
       # Persist shell history and the IDF component cache between runs.
       - idf-bash-history:/home/dev/.commandhistory
       - idf-espressif-cache:/home/dev/.espressif
