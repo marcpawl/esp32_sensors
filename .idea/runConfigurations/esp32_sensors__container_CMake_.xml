@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Shared CLion run configuration: build the esp32_sensors CMake target.
+
+  This is a native CLion *CMake* run configuration (not a shell script), so
+  CLion drives the build through its own CMake project model. That is what
+  enables the Compile/Build actions and C++ refactorings (rename, change
+  signature, ...) for this project.
+
+  The CMake build itself runs inside the Dev Container via the CMake profile
+  defined in .idea/cmake.xml (reused `dev` compose service, ESP-IDF v6.1).
+  Building on the host is not supported; the top-level CMakeLists.txt enforces
+  that only the container build proceeds.
+
+  Build directory is build_esp32s3/, matching scripts/dev.py and .gitignore.
+-->
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="esp32_sensors (container CMake)" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="esp32_sensors" TARGET_NAME="esp32_sensors" CONFIG_NAME="Espressif ESP32-S3" RUN_PATH="$CTest$">
+    <method v="2">
+      <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+    </method>
+  </configuration>
+</component>

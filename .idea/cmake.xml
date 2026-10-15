@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  CLion CMake profiles for this ESP-IDF project.
+
+  IMPORTANT: building on the host is NOT supported. All builds run inside the
+  ESP-IDF dev container (ESP-IDF v6.1). The top-level CMakeLists.txt enforces
+  this by requiring DOCKER_IMAGE=esp32_sensors, which is set by the Dockerfile.
+
+  CLion reaches the container through the Dev Container defined in
+  .devcontainer/devcontainer.json, which reuses the `dev` service from
+  docker-compose.yml. CMake, Ninja, and the Xtensa toolchain therefore run in
+  the container.
+
+  BUILD DIRECTORY
+  ===============
+  CLion uses its OWN build directory, `cmake-build-esp32s3/`, which it
+  generates and owns. This is deliberately separate from `build_esp32s3/`,
+  which is written by `idf.py` via `scripts/dev.py build`. Sharing a single
+  directory does not work: idf.py and CLion overwrite each other's CMake cache
+  and Ninja state, and a cache written by idf.py is not one CLion can load
+  (that leaves CLion with no code model, so Go To Declaration fails).
+
+  With a private build dir, CLion can freely "Reload CMake Project" and produce
+  its own `compile_commands.json` under `cmake-build-esp32s3/`, which is what
+  powers code navigation and refactoring. `build_esp32s3/` stays the canonical
+  firmware build used by `scripts/dev.py build` / `flash`.
+
+  The profile name below ("Espressif ESP32-S3") is referenced by the shared
+  CMake run configuration (.idea/runConfigurations/esp32_sensors__container_CMake_.xml).
+  Select the Dev Container toolchain in CLion (Settings | Build, Execution,
+  Deployment | Toolchains) when opening the project.
+-->
+<project version="4">
+  <component name="CMakeSharedSettings">
+    <option name="configurations">
+      <list>
+        <configuration PROFILE_NAME="Espressif ESP32-S3" ENABLED="true"
+                       GENERATOR_NAME="Ninja" CONFIG_NAME="Debug"
+                       BUILD_DIR="$PROJECT_DIR$/cmake-build-esp32s3"
+                       CMAKE_OPTIONS="-DIDF_TARGET=esp32s3 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON" />
+      </list>
+    </option>
+  </component>
+</project>
