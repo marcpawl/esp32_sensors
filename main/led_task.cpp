@@ -99,3 +99,17 @@ template<std::size_t N>
 LedTask::LedTask() : Task<LedRunner>(LedRunner(), TaskParams()) {}
 
 }  // namespace thermo
+
+// Every `LedState` must have a cycle in the table, or `lookup_cycle` would
+// abort at runtime. Assert coverage at compile time for each enumerator.
+namespace thermo {
+static_assert(LedRunner::has_cycle(LedState::kOff));
+static_assert(LedRunner::has_cycle(LedState::kBoot));
+static_assert(LedRunner::has_cycle(LedState::kConfig));
+static_assert(LedRunner::has_cycle(LedState::kConfig_save));
+static_assert(LedRunner::has_cycle(LedState::kConfig_reset));
+static_assert(LedRunner::has_cycle(LedState::kRun));
+static_assert(LedRunner::has_cycle(LedState::kRun_battery_low));
+static_assert(LedRunner::has_cycle(LedState::kRun_uploading));
+static_assert(LedRunner::has_cycle(LedState::kRun_upload_error));
+}  // namespace thermo

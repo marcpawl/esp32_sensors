@@ -136,6 +136,28 @@ class LedRunner {
         };
     }
 
+  public:
+    // Whether the compile-time table contains a cycle for `state`. Defined
+    // after `cycles()` (which it calls in a constant expression) and exposed so
+    // that translation units can `static_assert` full `LedState` coverage ---
+    // see the checks at the end of led_task.cpp. A missing entry would
+    // otherwise abort at runtime in `lookup_cycle`.
+    [[nodiscard]] static constexpr bool has_cycle(LedState state) noexcept {
+        constexpr Cycles kTable = cycles();
+        for (const Cycle& cycle : kTable) {
+            const bool match = std::visit(
+                [state](const auto& steps) noexcept {
+                    return steps.state_ == state;
+                },
+                cycle);
+            if (match) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+  private:
     // Change the LEDs to the modes indicated.
     void change_leds(Step const& step) noexcept;
 
