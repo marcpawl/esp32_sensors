@@ -17,6 +17,36 @@
 
 using thermo::static_vector;
 
+// --- constexpr usability ----------------------------------------------------
+//
+// These evaluate the container at compile time, so they fail to build if any
+// of the exercised operations stops being constexpr.
+namespace {
+
+constexpr bool static_vector_constexpr_builds() {
+    static_vector<int, 4> v;
+    v.push_back(1);
+    v.push_back(2);
+    const bool used = v.size() == 2 && v[0] == 1 && v.back() == 2 &&
+                      !v.full() && !v.empty() && v.data()[1] == 2 &&
+                      *v.begin() == 1 && *(v.end() - 1) == 2;
+    v.clear();
+    const bool cleared = v.empty() && v.size() == 0;
+    v.resize(3);
+    const bool resized = v.size() == 3 && v[1] == 0;
+
+    static_vector<int, 2> full_v;
+    const bool first = full_v.try_push_back(7);
+    const bool second = full_v.try_push_back(8);
+    const bool rejected = !full_v.try_push_back(9);  // Now full.
+    return used && cleared && resized && first && second && rejected;
+}
+
+}  // namespace
+
+static_assert(static_vector_constexpr_builds(),
+              "static_vector must be usable in constant expressions");
+
 // --- Capacity and size ------------------------------------------------------
 
 TEST_CASE("static_vector: default is empty with full capacity",

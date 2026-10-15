@@ -18,6 +18,34 @@
 
 using thermo::static_string;
 
+// --- constexpr usability ----------------------------------------------------
+//
+// Evaluates the string at compile time, so it fails to build if any exercised
+// operation stops being constexpr.
+namespace {
+
+constexpr bool static_string_constexpr_builds() {
+    static_string<8> s("hello");
+    const bool built = s.size() == 5 && !s.empty() && s.capacity() == 8 &&
+                       s.remaining() == 3 && s.c_str()[0] == 'h' &&
+                       s[4] == 'o' && *s.begin() == 'h' && *s.cend() == '\0';
+
+    s.push_back('!');
+    const bool pushed = s.size() == 6 && s.c_str()[5] == '!';
+
+    s.assign("abc");
+    const bool assigned = s.size() == 3 && s.c_str()[0] == 'a';
+
+    s.clear();
+    const bool cleared = s.empty() && s.c_str()[0] == '\0';
+    return built && pushed && assigned && cleared;
+}
+
+}  // namespace
+
+static_assert(static_string_constexpr_builds(),
+              "static_string must be usable in constant expressions");
+
 // --- Construction and capacity ----------------------------------------------
 
 TEST_CASE("static_string: default is empty and NUL-terminated",
