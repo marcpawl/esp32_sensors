@@ -14,6 +14,7 @@
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "hal/chip_temperature.hpp"
 #include "hal/led.hpp"
 #include "hal/onewire.hpp"
 #include "hal/switch.hpp"
@@ -129,6 +130,30 @@ void report_onewire() {
     }
 }
 
+// Exercises the shared HAL chip-temperature interface via its QEMU stub
+// (`hal_stub`). The stub's reading is settable in software, so this proves the
+// interface is linked and reports the value the caller configured.
+void report_chip_temperature() {
+    static_assert(
+        thermo::hal::ChipTemperatureLike<thermo::hal::ChipTemperature>);
+
+    thermo::hal::ChipTemperature sensor =
+        thermo::hal::ChipTemperature::create();
+    if (sensor.init() != ESP_OK) {
+        std::printf("ChipTemperature init failed\n");
+        return;
+    }
+
+    // Report the default reading, then override it to prove set_celsius().
+    std::printf("ChipTemperature default %d.%02d C\n", sensor.read() / 100,
+                std::abs(sensor.read() % 100));
+
+    sensor.set_celsius(3150);  // 31.50 °C
+    const int reading = sensor.read();
+    std::printf("ChipTemperature %d.%02d C\n", reading / 100,
+                std::abs(reading % 100));
+}
+
 }  // namespace
 
 extern "C" void app_main(void) {
@@ -137,6 +162,7 @@ extern "C" void app_main(void) {
     report_switch();
     report_led();
     report_onewire();
+    report_chip_temperature();
 
     /* Print chip information */
     esp_chip_info_t chip_info;
