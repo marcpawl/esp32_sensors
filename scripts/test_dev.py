@@ -184,6 +184,41 @@ class GitHooksInstallationTests(unittest.TestCase):
         )
         return proc.stdout
 
+    def _get_hooks_path(self):
+        """Return `core.hooksPath`, or None when it is unset.
+
+        `git config --get` exits non-zero when the key is unset (e.g. on a
+        fresh CI checkout that never ran `install-hooks`), so we tolerate that
+        rather than letting `check=True` raise.
+        """
+        proc = subprocess.run(
+            ("git", "config", "--get", "core.hooksPath"),
+            cwd=dev.REPO_ROOT,
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            return None
+        return proc.stdout.strip()
+
+    def _set_hooks_path(self, value):
+        """Set or unset `core.hooksPath` (value=None unsets it)."""
+        if value is None:
+            subprocess.run(
+                ("git", "config", "--unset", "core.hooksPath"),
+                cwd=dev.REPO_ROOT,
+                capture_output=True,
+                text=True,
+            )
+        else:
+            subprocess.run(
+                ("git", "config", "core.hooksPath", value),
+                cwd=dev.REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
     def test_hook_file_exists_and_is_executable(self):
         # The working tree must contain the runnable hook, not just the config
         # pointing at an empty directory.
@@ -202,10 +237,17 @@ class GitHooksInstallationTests(unittest.TestCase):
             tracked.splitlines(),
         )
 
-    def test_hooks_path_points_at_githooks_dir(self):
-        # `core.hooksPath` must direct git at the version-controlled hooks.
-        hooks_path = self._git("config", "--get", "core.hooksPath").strip()
-        self.assertEqual(hooks_path, str(self.GITHOOKS_DIR))
+    def test_install_hooks_sets_core_hooks_path(self):
+        # `install-hooks` must point git at the version-controlled hooks dir.
+        # Run the real command and restore the prior config afterwards so the
+        # test does not depend on (or permanently change) the local clone.
+        original = self._get_hooks_path()
+        try:
+            rc = dev.cmd_install_hooks()
+            self.assertEqual(rc, 0)
+            self.assertEqual(self._get_hooks_path(), str(self.GITHOOKS_DIR))
+        finally:
+            self._set_hooks_path(original)
 
     def test_installed_hook_matches_the_tracked_content(self):
         # The file on disk must be the tracked content (the "latest changes"):
