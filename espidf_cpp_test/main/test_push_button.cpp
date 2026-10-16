@@ -14,8 +14,8 @@ using thermo::hal::ButtonState;
 using thermo::hal::PushButton;
 }  // namespace
 
-TEST_CASE("qemu push button: create/init and reads a press/release",
-          "[qemu][push_button]") {
+TEST_CASE("espidf_cpp_test push button: create/init and reads a press/release",
+          "[espidf_cpp_test][push_button]") {
     static_assert(thermo::hal::PushButtonLike<PushButton>);
 
     PushButton button = PushButton::create(/*gpio=*/0);

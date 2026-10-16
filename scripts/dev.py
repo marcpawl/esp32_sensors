@@ -39,7 +39,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # file list is discovered via git so it always matches the tracked files (no
 # missing-glob errors). Keep this in sync with the pre-commit hook
 # (.githooks/pre-commit).
-ROOTS = ("main", "components", "test", "qemu")
+ROOTS = ("main", "components", "test", "espidf_cpp_test")
 EXTENSIONS = (".cpp", ".hpp", ".h", ".cc", ".cxx")
 
 # Docker dev image that ships the pinned clang-format version.
@@ -197,14 +197,14 @@ def _run_host_tests() -> int:
     return 0
 
 
-def _run_qemu_test() -> int:
-    """Build and boot the QEMU smoke test. No container hop.
+def _run_espidf_cpp_test() -> int:
+    """Build and run the native (linux-target) espidf_cpp test suite.
 
-    Assumes it is already running inside the dev container. `qemu/test_qemu.py`
-    drives the whole flow itself (clean, build, boot under QEMU, verify output)
-    and is CI-friendly (non-zero exit on failure).
+    Assumes it is already running inside the dev container.
+    `espidf_cpp_test/test_qemu.py` drives the whole flow itself (build, run the
+    native ELF, verify output) and is CI-friendly (non-zero exit on failure).
     """
-    return run(["python3", "qemu/test_qemu.py"])
+    return run(["python3", "espidf_cpp_test/test_qemu.py"])
 
 
 def cmd_test_linux() -> int:
@@ -216,7 +216,7 @@ def cmd_test_linux() -> int:
 def cmd_test_qemu() -> int:
     """Native (linux-target) suite: build and run the FreeRTOS Task tests."""
     change_to_container()
-    return _run_qemu_test()
+    return _run_espidf_cpp_test()
 
 
 def cmd_test() -> int:
@@ -225,7 +225,7 @@ def cmd_test() -> int:
     rc = _run_host_tests()
     if rc != 0:
         return rc
-    return _run_qemu_test()
+    return _run_espidf_cpp_test()
 
 
 def cmd_self_check() -> int:
@@ -286,7 +286,7 @@ def _resolve_container_directory(directory: str) -> str:
     """Resolve a `shell -C DIR` value to an absolute in-container path.
 
     The value is interpreted as a path *in the container*. A relative path is
-    taken relative to the project mount root (e.g. `qemu` -> `/project/qemu`);
+    taken relative to the project mount root (e.g. `espidf_cpp_test` -> `/project/espidf_cpp_test`);
     an absolute path is used verbatim.
     """
     path = Path(directory)
@@ -342,9 +342,10 @@ def cmd_shell(extra: list[str], directory: str | None = None) -> int:
 
     Use `-C DIR` / `--directory DIR` to change into DIR before running the
     command. DIR is a path in the container: a relative path is resolved under
-    the project mount (`qemu` -> /project/qemu), an absolute path is used as-is:
+    the project mount (`espidf_cpp_test` -> /project/espidf_cpp_test), an
+    absolute path is used as-is:
 
-        scripts/dev.py shell -C qemu ls -1
+        scripts/dev.py shell -C espidf_cpp_test ls -1
         scripts/dev.py shell -C /project/test idf.py build
 
     """

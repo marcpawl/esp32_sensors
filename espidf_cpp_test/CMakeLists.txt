@@ -12,7 +12,7 @@ cmake_minimum_required(VERSION 3.16)
 # (pthread) port, so no chip or emulator is required.
 #
 # The ELF/app binary name derives from the project name, so this is what makes
-# the artifact end in `_qemu` (esp32_sensors_qemu.elf).
+# the artifact `esp32_sensors_espidf_cpp_test.elf`.
 #
 # Build and run with:
 #   scripts/dev.py test-qemu
@@ -35,4 +35,4 @@ idf_build_set_property(MINIMAL_BUILD ON)
 # Must be set before project().
 set(EXCLUDE_COMPONENTS hal_board)
 
-project(esp32_sensors_qemu)
+project(esp32_sensors_espidf_cpp_test)

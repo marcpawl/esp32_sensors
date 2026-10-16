@@ -1,4 +1,4 @@
-// Deterministic push-button stub for QEMU and host tests.
+// Deterministic push-button stub for a simulated environment.
 //
 // There is no input pin to read, so the reported state is held in software.
 // `init()` always succeeds and `read()` returns whatever `set()` last set

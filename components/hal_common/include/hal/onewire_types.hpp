@@ -4,7 +4,8 @@
 // `OneWireLike` concept — used by both bus implementations:
 //
 //   - `hal_board` — real, GPIO-backed bit-banged 1-Wire bus.
-//   - `hal_stub`  — deterministic stub used under QEMU and host tests.
+//   - `hal_stub`  — deterministic stub used under the simulated environment and
+//     host tests.
 //
 // Each implementation provides its own `hal/onewire.hpp` that includes this
 // header and adds the concrete `OneWire` class, so there is exactly one

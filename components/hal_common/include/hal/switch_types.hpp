@@ -6,7 +6,8 @@
 // both switch implementations:
 //
 //   - `hal_board` — real GPIO implementation for the development board.
-//   - `hal_stub`  — deterministic stub used under QEMU and host tests.
+//   - `hal_stub`  — deterministic stub used under the simulated environment and
+//     host tests.
 //
 // Each implementation provides its own `hal/switch.hpp` that includes this
 // header and adds the concrete `Switch` class, so there is exactly one

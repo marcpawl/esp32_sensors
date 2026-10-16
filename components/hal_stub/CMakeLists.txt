@@ -1,11 +1,11 @@
-# hal_stub: stub hardware abstractions for QEMU and host tests.
+# hal_stub: stub hardware abstractions for a simulated environment.
 #
 # Exposes the same `hal/switch.hpp`, `hal/led.hpp`, `hal/push_button.hpp`,
 # `hal/onewire.hpp`, `hal/chip_temperature.hpp`, and `hal/board.hpp` as
 # `hal_board` but with deterministic, side-effect-free implementations that need
-# no real hardware. The QEMU project (`qemu/`) and host tests depend on this
-# component instead of `hal_board`; a project must depend on exactly one of the
-# two.
+# no real hardware. Test projects run against this component instead of
+# `hal_board` so they can drive the devices from software in a simulated
+# environment; a project must depend on exactly one of the two.
 #
 # Like `hal_board`, it depends on the header-only `hal_common` component for the
 # shared device vocabulary (`PinState`, `Pins`, `SwitchLike`, `LedState`,

@@ -14,8 +14,8 @@ using thermo::hal::PinState;
 using thermo::hal::Switch;
 }  // namespace
 
-TEST_CASE("qemu switch: create/init and round-trips a pin state",
-          "[qemu][switch]") {
+TEST_CASE("espidf_cpp_test switch: create/init and round-trips a pin state",
+          "[espidf_cpp_test][switch]") {
     static_assert(thermo::hal::SwitchLike<Switch>);
 
     Switch sw = Switch::create(/*first=*/1, /*third=*/2);

@@ -31,7 +31,7 @@ extern "C" void app_main(void) {
     // Print a single unambiguous marker the test driver greps for. A non-zero
     // failure count means the driver must fail even though the process itself
     // exited cleanly.
-    std::printf("\nQEMU-TESTS-COMPLETE failures=%lu\n",
+    std::printf("\nESPIDF_CPP_TEST-COMPLETE failures=%lu\n",
                 static_cast<unsigned long>(Unity.TestFailures));
     std::fflush(stdout);
 }

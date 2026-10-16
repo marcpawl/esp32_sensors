@@ -18,8 +18,8 @@ using thermo::hal::RomId;
 const RomId kSensor{0x28, 0xFF, 0x64, 0xA1, 0xB2, 0x16, 0x03, 0xC4};
 }  // namespace
 
-TEST_CASE("qemu onewire: create/init and round-trips a sensor",
-          "[qemu][onewire]") {
+TEST_CASE("espidf_cpp_test onewire: create/init and round-trips a sensor",
+          "[espidf_cpp_test][onewire]") {
     static_assert(thermo::hal::OneWireLike<OneWire>);
 
     OneWire bus = OneWire::create(/*gpio=*/4);

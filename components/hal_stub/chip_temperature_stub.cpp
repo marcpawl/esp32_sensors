@@ -1,4 +1,4 @@
-// Deterministic chip-temperature stub for QEMU and host tests.
+// Deterministic chip-temperature stub for a simulated environment.
 //
 // There is no internal sensor to read, so the temperature is held in software.
 // `init()` always succeeds; `read()` returns whatever `set_celsius()` last set

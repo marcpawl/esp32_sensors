@@ -1,4 +1,4 @@
-// Deterministic 1-Wire bus stub for QEMU and host tests.
+// Deterministic 1-Wire bus stub for a simulated environment.
 //
 // There is no real bus, so the sensor collection is held in software.
 // `init()` always succeeds; `read()` returns whatever `set_sensors()` last set

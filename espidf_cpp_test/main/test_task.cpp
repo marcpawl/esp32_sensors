@@ -1,14 +1,14 @@
-// QEMU on-target tests for `thermo::Task` (`espidf_cpp`).
+// Native tests for `thermo::Task` (`espidf_cpp`).
 //
 // `Task<Runner>` creates a real FreeRTOS task and runs `Runner::run()` on it,
-// so it cannot be host-tested on the `linux` target: it needs the real
-// FreeRTOS scheduler, which the ESP32-S3 QEMU image provides. These tests
-// therefore live here rather than in `test/`.
+// so it cannot be host-tested: it needs the real FreeRTOS scheduler, which the
+// ESP-IDF `linux` target provides. These tests therefore live here rather than
+// in `test/`.
 //
 // Design notes:
 //   * `Runner::run()` must be `[[noreturn]]`, so each runner hands its result
 //     to the test and then blocks forever. A `Task` has no stop API, and the
-//     QEMU run is short-lived, so the task is simply left running.
+//     test run is short-lived, so the task is simply left running.
 //   * A `Task` is non-movable and non-copyable, so it is created in place in a
 //     file-scope `std::optional` (one per test, reset between cases).
 //   * The runner signals the test via a FreeRTOS task notification directed at
@@ -82,8 +82,8 @@ std::optional<thermo::Task<NotifyRunner>> g_notify_task;
 
 // --- Construction / handle / name -------------------------------------------
 
-TEST_CASE("qemu task: constructor creates a running task with a handle",
-          "[qemu][task]") {
+TEST_CASE("espidf_cpp_test task: ctor creates a running task with a handle",
+          "[espidf_cpp_test][task]") {
     g_signal = Signal{.observer = xTaskGetCurrentTaskHandle()};
     g_signalling_task.emplace(SignallingRunner{&g_signal},
                               thermo::TaskParams{.name = "sigtask"});
@@ -99,8 +99,8 @@ TEST_CASE("qemu task: constructor creates a running task with a handle",
     g_signalling_task.reset();
 }
 
-TEST_CASE("qemu task: the body runs on a different task than the caller",
-          "[qemu][task]") {
+TEST_CASE("espidf_cpp_test task: body runs on a different task than caller",
+          "[espidf_cpp_test][task]") {
     const TaskHandle_t caller = xTaskGetCurrentTaskHandle();
     g_signal = Signal{.observer = caller};
     g_signalling_task.emplace(SignallingRunner{&g_signal},
@@ -117,8 +117,8 @@ TEST_CASE("qemu task: the body runs on a different task than the caller",
     g_signalling_task.reset();
 }
 
-TEST_CASE("qemu task: default name is used when TaskParams is defaulted",
-          "[qemu][task]") {
+TEST_CASE("espidf_cpp_test task: default name used when TaskParams defaulted",
+          "[espidf_cpp_test][task]") {
     g_signal = Signal{.observer = xTaskGetCurrentTaskHandle()};
     g_signalling_task.emplace(SignallingRunner{&g_signal},
                               thermo::TaskParams{});
@@ -132,7 +132,8 @@ TEST_CASE("qemu task: default name is used when TaskParams is defaulted",
     g_signalling_task.reset();
 }
 
-TEST_CASE("qemu task: the task name is copied, not aliased", "[qemu][task]") {
+TEST_CASE("espidf_cpp_test task: the task name is copied, not aliased",
+          "[espidf_cpp_test][task]") {
     g_signal = Signal{.observer = xTaskGetCurrentTaskHandle()};
 
     // A stack buffer that goes out of scope after construction: the Task must
@@ -152,7 +153,8 @@ TEST_CASE("qemu task: the task name is copied, not aliased", "[qemu][task]") {
     g_signalling_task.reset();
 }
 
-TEST_CASE("qemu task: handle() addresses the running task", "[qemu][task]") {
+TEST_CASE("espidf_cpp_test task: handle() addresses the running task",
+          "[espidf_cpp_test][task]") {
     g_signal = Signal{.observer = xTaskGetCurrentTaskHandle()};
     g_notify_task.emplace(NotifyRunner{&g_signal},
                           thermo::TaskParams{.name = "notify"});

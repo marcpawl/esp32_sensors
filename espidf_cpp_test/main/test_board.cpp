@@ -25,8 +25,8 @@ using thermo::hal::RomId;
 const RomId kSensor{0x28, 0xFF, 0x3B, 0x2C, 0x77, 0x16, 0x04, 0x2F};
 }  // namespace
 
-TEST_CASE("qemu board: create/init_all and drives every accessor",
-          "[qemu][board]") {
+TEST_CASE("espidf_cpp_test board: create/init_all and drives every accessor",
+          "[espidf_cpp_test][board]") {
     static_assert(thermo::hal::BoardLike<Board>);
 
     // `BoardPins{}` uses the reference-board pin map (hal/pin_map.hpp); the

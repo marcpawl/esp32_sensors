@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Native (linux-target) test driver for the standalone `qemu/` project.
+"""Native (linux-target) test driver for the standalone `espidf_cpp_test/` project.
 
 This program builds the Unity test firmware for the ESP-IDF `linux` target,
 runs the resulting ELF directly on the host (inside the dev container), and
 verifies the Unity results. It exits non-zero on failure, so it is CI-friendly.
 
 Success is decided by the firmware's completion marker line
-(`QEMU-TESTS-COMPLETE failures=<n>`), which `test_main.cpp` prints once the
+(`ESPIDF_CPP_TEST-COMPLETE failures=<n>`), which `test_main.cpp` prints once the
 whole suite has run. The driver also scans for Unity `FAIL` lines as a
 belt-and-braces check.
 
@@ -15,7 +15,7 @@ This script must be run *inside* the ESP-IDF dev container (the image sets
 container it aborts. From the host, run it through the container task runner:
 
     scripts/dev.py test-qemu
-    scripts/dev.py shell python3 qemu/test_qemu.py
+    scripts/dev.py shell python3 espidf_cpp_test/test_qemu.py
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ import sys
 
 # --- Layout -----------------------------------------------------------------
 
-# This file lives in `qemu/`; the repo root is its parent.
+# This file lives in `espidf_cpp_test/`; the repo root is its parent.
 PROG_DIR = Path(__file__).resolve().parent
 
 # Build directory is named after the target (`linux`), matching the repo-wide
@@ -36,8 +36,8 @@ PROG_DIR = Path(__file__).resolve().parent
 BUILD_DIR = PROG_DIR / "build_linux"
 
 # The native test ELF. Its name derives from the project name
-# (`esp32_sensors_qemu`), so it ends in `_qemu`.
-TEST_ELF = BUILD_DIR / "esp32_sensors_qemu.elf"
+# (`esp32_sensors_espidf_cpp_test`).
+TEST_ELF = BUILD_DIR / "esp32_sensors_espidf_cpp_test.elf"
 
 # --- Container --------------------------------------------------------------
 
@@ -54,7 +54,7 @@ IDF_TARGET = "linux"
 
 # Completion marker printed by `test_main.cpp` after `unity_run_all_tests()`.
 # Captures the failure count so we can assert it is zero.
-COMPLETE_RE = re.compile(r"QEMU-TESTS-COMPLETE failures=(\d+)")
+COMPLETE_RE = re.compile(r"ESPIDF_CPP_TEST-COMPLETE failures=(\d+)")
 
 # Upper bound (seconds) for the test run before we stop it and inspect output.
 # The suite is short; this is a safety net, not a per-test budget.
@@ -194,7 +194,7 @@ def main() -> int:
             "       From the host, run it through the container task runner:\n"
             "           scripts/dev.py test-qemu\n"
             "       or:\n"
-            "           scripts/dev.py shell python3 qemu/test_qemu.py",
+            "           scripts/dev.py shell python3 espidf_cpp_test/test_qemu.py",
             file=sys.stderr,
         )
         return 2

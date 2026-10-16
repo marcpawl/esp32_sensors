@@ -25,8 +25,8 @@ The HAL is split into one shared vocabulary plus two **mutually exclusive**
 implementations:
 
 - `hal_board` — real, GPIO-backed drivers (linked by the production firmware).
-- `hal_stub` — pin-free, software-driven stubs (linked by the QEMU project and
-  the host tests).
+- `hal_stub` — pin-free, software-driven stubs (linked by the simulated
+  environment and the host tests).
 
 `hal_common` is **implementation-free**: it defines the vocabulary but no
 concrete device class, so both implementations can require it without

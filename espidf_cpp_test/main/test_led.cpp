@@ -13,7 +13,8 @@ using thermo::hal::Led;
 using thermo::hal::LedState;
 }  // namespace
 
-TEST_CASE("qemu led: create/init and round-trips a write", "[qemu][led]") {
+TEST_CASE("espidf_cpp_test led: create/init and round-trips a write",
+          "[espidf_cpp_test][led]") {
     static_assert(thermo::hal::LedLike<Led>);
 
     Led led = Led::create(/*gpio=*/17, /*name=*/"Green");

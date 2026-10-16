@@ -5,7 +5,7 @@
 // `RomId` device identity and a single `DS18B20Reading` — used by the sensor
 // layer, the configuration UI, and the sample buffer. It carries no hardware
 // or ESP-IDF dependency, so it can be shared by the firmware and by host
-// tests / QEMU.
+// tests / the simulated environment.
 //
 // `RomId`'s textual helpers (`to_hex` / `from_hex`) are declared here but
 // defined in `main/rom_id.cpp`, which stays free of ESP-IDF dependencies so

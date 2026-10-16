@@ -1,5 +1,5 @@
 // Hardware abstraction: the aggregate Board, deterministic, pin-free stub for
-// QEMU and host tests.
+// a simulated environment.
 //
 // The shared board vocabulary (`BoardPins`, `BoardLike`) lives in the
 // header-only `hal_common` component (`hal/board_types.hpp`); this header adds
@@ -10,7 +10,7 @@
 //
 // Because every device is a `hal_stub` device, their `set_*()` controls are
 // reachable through the board's accessors (e.g. `board().one_wire().
-// set_sensors(...)`), so a test or QEMU scenario can drive the whole board
+// set_sensors(...)`), so a test or simulated scenario can drive the whole board
 // deterministically without hardware.
 #pragma once
 

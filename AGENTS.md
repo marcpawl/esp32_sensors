@@ -34,7 +34,7 @@ This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its s
 > **Implementation status (current milestone):**
 > - **Configure mode — implemented.** SoftAP, HTTPS server, config UI, NVS persistence, LED semantics.
 > - **Run mode — scaffolded/stubbed.** Real: boot self-test LEDs, battery read + hysteresis, sensor read with cached ROM IDs (first-boot scan), sample append to the RTC buffer, deep sleep. **Stubbed:** Wi-Fi station connect + cached fast-reconnect (§3.9), batch upload + payload wire-out (§9, payload is formatted and logged but not sent), exponential backoff (§3.7).
-> - **Host unit tests + QEMU on-target tests.** `test/` builds for the ESP-IDF `linux` target (Unity) and `qemu/` boots an ESP32-S3 Unity suite under QEMU (covering the FreeRTOS-backed `thermo::Task` and HAL-stub link checks); both run via `scripts/dev.py test` (or `test-linux` / `test-qemu`). More on-target tests for hardware-dependent code are planned.
+> - **Host unit tests + native `espidf_cpp_test` suite.** `test/` builds for the ESP-IDF `linux` target (Unity) and `espidf_cpp_test/` runs a second native `linux` Unity suite (covering the FreeRTOS-backed `thermo::Task` and HAL-stub link checks); both run via `scripts/dev.py test` (or `test-linux` / `test-qemu`). More on-target tests for hardware-dependent code are planned.
 
 > **Toolchain note:** The host's locally installed ESP-IDF is **v6.1** with **Xtensa GCC 15.2.0** (`esp-15.2.0_20251204`), which matches the pinned Docker image `espressif/idf:release-v6.1` exactly. Keep both in sync: if you upgrade the host toolchain, update the pin in `Dockerfile`/`docker-compose.yml` and this document.
 
@@ -74,12 +74,12 @@ esp32_sensors/
 ├── sdkconfig.defaults   # Committed IDF defaults (sdkconfig itself is generated)
 ├── main/                # Firmware component (C++26) — see module map below
 ├── components/          # Reusable ESP-IDF components (each has a README.md)
-│   ├── espidf_cpp/      # Header-only C++ wrappers over ESP-IDF/FreeRTOS C APIs
+│   ├── espidf_cpp/      # C++ wrappers over ESP-IDF/FreeRTOS C APIs (+ HTTPS router)
 │   ├── hal_common/      # Shared, header-only HAL vocabulary (types/concepts)
 │   ├── hal_board/       # Real, GPIO-backed HAL (linked by the firmware)
-│   └── hal_stub/        # Pin-free HAL stub (linked by QEMU/host tests)
+│   └── hal_stub/        # Pin-free HAL stub (linked by the simulated environment/tests)
 ├── test/                # Host-based unit tests (IDF `linux` target, Unity)
-├── qemu/                # Standalone FreeRTOS/native Unity test project (linux target)
+├── espidf_cpp_test/     # Standalone native Unity test project (linux target)
 │   └── build_linux/     # Native test build output (git-ignored; target-named)
 ├── Dockerfile           # Dev container: ESP-IDF v6.1 + non-root host-mapped user
 ├── docker-compose.yml   # `dev` service with serial (/dev) passthrough
@@ -105,12 +105,12 @@ own:
 | Project | Directory | Target | Produces |
 |---|---|---|---|
 | firmware (top level) | `build_esp32s3/` | esp32s3 | `esp32_sensors.bin` (flashed to the board) |
-| native tests (`qemu/`) | `qemu/build_linux/` | linux | `esp32_sensors_qemu.elf` (run natively) |
+| native tests (`espidf_cpp_test/`) | `espidf_cpp_test/build_linux/` | linux | `esp32_sensors_espidf_cpp_test.elf` (run natively) |
 | host tests (`test/`) | `test/build_linux/` | linux | `esp32_sensors_tests.elf` (run natively) |
 
 The firmware and test builds are separate ESP-IDF *projects* (each with its own
 `project()` and `sdkconfig`), so they cannot share one directory. `main/`
-targets ESP32-S3; `test/` and `qemu/` both target `linux`. All are git-ignored.
+targets ESP32-S3; `test/` and `espidf_cpp_test/` both target `linux`. All are git-ignored.
 
 **Key files:**
 - `Specification.md` — the single source of truth for hardware, modes, RTC memory layout, payload format, and power budget. Any implementation must conform to it.
@@ -140,7 +140,7 @@ targets ESP32-S3; `test/` and `qemu/` both target `linux`. All are git-ignored.
 | Payload | `payload.cpp`, `temp_format.cpp`, `rom_id.cpp` (ROM-ID hex) |
 
 **Components (`components/`).** Reusable code lives in ESP-IDF components rather
-than in `main/`, so host tests and QEMU can swap hardware for deterministic
+than in `main/`, so host tests and the simulated environment can swap hardware for deterministic
 stubs. **Each component has a `README.md` documenting its purpose and contents —
 read it before working in that directory.** In brief:
 
@@ -154,15 +154,15 @@ read it before working in that directory.** In brief:
 - `hal_common` — shared, **implementation-free** HAL vocabulary (types and
   `*Like` concepts). Shared by both HAL implementations, never excluded.
 - `hal_board` — real, GPIO-backed HAL drivers; linked by the production firmware.
-- `hal_stub` — pin-free, software-driven HAL stubs; linked by QEMU and the host
-  tests.
+- `hal_stub` — pin-free, software-driven HAL stubs; linked by the simulated
+  environment and the host tests.
 
 `hal_board` and `hal_stub` expose the **same** headers and symbols and are
 **mutually exclusive**: a project links exactly one. Each project excludes the
 other via `EXCLUDE_COMPONENTS` in its top-level `CMakeLists.txt` (set **before**
 `project()`), because both live under the default `components/` search path. The
 native and host-test projects also add `components/` to `EXTRA_COMPONENT_DIRS`
-(their project roots are `qemu/` and `test/`, so the repo-root `components/` is
+(their project roots are `espidf_cpp_test/` and `test/`, so the repo-root `components/` is
 not on the default path).
 
 **Host-testable modules.** `temp_format.cpp`, `payload.cpp`, `app_config.cpp`,
@@ -305,9 +305,9 @@ enacted on the host.
 |platform|command|action|
 |===|===|===|
 |both|build|Compile the source code|
-|both|test|Run both test suites: the host unit tests then the QEMU on-target tests|
+|both|test|Run both test suites: the host unit tests then the native `espidf_cpp_test` suite|
 |both|test-linux|Build and run the host unit tests (ESP-IDF `linux` target)|
-|both|test-qemu|Build and boot the QEMU on-target Unity tests (ESP32-S3 image)|
+|both|test-qemu|Build and run the native `espidf_cpp_test` Unity suite (linux target)|
 |both|self-check|Run the host unit tests for dev.py itself (stdlib `unittest`)|
 |both|flash|idf.py flash monitor|
 |both|monitor|idf.py monitor|
@@ -362,12 +362,12 @@ There are two test suites, both runnable from the host via `scripts/dev.py`:
   (`temp_format`, `payload`, `app_config` validation, `rom_id`, `rtc_buffer`),
   the fixed-capacity containers (`static_vector`, `static_string`), and the
   `hal_stub` devices.
-- **QEMU on-target tests** (`qemu/`) build an ESP32-S3 Unity image and boot it
-  under QEMU, then check for a zero-failure completion marker — no hardware
-  needed. They cover code that needs the real FreeRTOS scheduler
-  (`thermo::Task`) plus linkage checks for the `hal_stub` devices (each case
-  just constructs the stub to prove it links on-target; deeper behaviour lives
-  in the host suite).
+- **Native `espidf_cpp_test` suite** (`espidf_cpp_test/`) builds a second Unity
+  suite for the ESP-IDF `linux` target and runs it natively, then checks for a
+  zero-failure completion marker — no hardware needed. It covers code that needs
+  the real FreeRTOS scheduler (`thermo::Task`) plus linkage checks for the
+  `hal_stub` devices (each case just constructs the stub to prove it links;
+  deeper behaviour lives in the host suite).
 - **On-target tests** are planned for more hardware-dependent code (1-Wire
   GPIO, deep-sleep wake, Wi-Fi upload).
 - Keep hardware interactions behind thin interfaces so business logic remains
@@ -375,12 +375,12 @@ There are two test suites, both runnable from the host via `scripts/dev.py`:
   unit and add it to both `main/CMakeLists.txt` and `test/main/CMakeLists.txt`.
 
 ```bash
-# Run both suites (host unit tests, then the QEMU on-target tests).
+# Run both suites (host unit tests, then the native `espidf_cpp_test` suite).
 ./scripts/dev.py test
 
 # Run just one suite.
 ./scripts/dev.py test-linux    # host Unity tests (linux target, build_linux/)
-./scripts/dev.py test-qemu     # build + boot the ESP32-S3 Unity image under QEMU
+./scripts/dev.py test-qemu     # build + run the native `espidf_cpp_test` suite
 
 # Run the host-side unit tests for dev.py itself (no container/hardware).
 ./scripts/dev.py self-check
@@ -404,7 +404,7 @@ no-op on clean code — keep it that way and format before committing.
 
 **Always run clang-format via the container task runner**, which formats all
 `.hpp` and `.cpp` source files under `main/`, `components/`, `test/`, and
-`qemu/`:
+`espidf_cpp_test/`:
 
 ```bash
 # Apply clang-format to every .hpp and .cpp source file.

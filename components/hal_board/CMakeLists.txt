@@ -3,8 +3,8 @@
 # Provides the real, GPIO-backed hardware drivers (the 3-position mode switch,
 # the LEDs, the push button, and the DS18B20 1-Wire bus) plus the driver-backed
 # internal chip-temperature sensor, aggregated into `hal/board.hpp`. The
-# production firmware (`main/`) depends on this component; the QEMU/test
-# projects depend on `hal_stub` instead, which exposes the same
+# production firmware (`main/`) depends on this component; the simulated
+# environment/test projects depend on `hal_stub` instead, which exposes the same
 # `hal/switch.hpp`, `hal/led.hpp`, `hal/push_button.hpp`, `hal/onewire.hpp`,
 # `hal/chip_temperature.hpp`, and `hal/board.hpp`. A project must depend on
 # exactly one of the two.

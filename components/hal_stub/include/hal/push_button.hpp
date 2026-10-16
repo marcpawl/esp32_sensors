@@ -1,5 +1,5 @@
-// Hardware abstraction: push button input, deterministic stub for QEMU and
-// host tests.
+// Hardware abstraction: push button input, deterministic stub for a simulated
+// environment.
 //
 // The shared push-button vocabulary (`ButtonState`, `PushButtonLike`) lives in
 // the header-only `hal_common` component (`hal/push_button_types.hpp`); this
@@ -46,8 +46,8 @@ class PushButton {
     // Returns the state set by `set()`, defaulting to released (`kOff`).
     [[nodiscard]] ButtonState read() const noexcept;
 
-    // Sets the state reported by subsequent `read()` calls. Intended for tests
-    // and QEMU scenarios. If the state actually changes and a callback is
+    // Sets the state reported by subsequent `read()` calls. Intended for a
+    // simulated environment. If the state actually changes and a callback is
     // registered (see `set_interrupt()`), the callback is invoked synchronously
     // with the new state (simulating the hardware interrupt).
     void set(ButtonState state) noexcept;

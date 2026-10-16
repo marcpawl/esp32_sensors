@@ -1,4 +1,5 @@
-// Deterministic stub of the 3-position mode switch for QEMU and host tests.
+// Deterministic stub of the 3-position mode switch for a simulated
+// environment.
 //
 // There are no sense pins to read, so the reported pin states are held in
 // software. `init()` always succeeds and `read()` returns whatever

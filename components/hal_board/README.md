@@ -31,8 +31,8 @@ assignments themselves come from `hal_common`'s `pin_map.hpp`.
 
 `hal_board` and `hal_stub` expose the **same** headers and define the same
 symbols. Projects keep exactly one in view via `EXCLUDE_COMPONENTS` (set before
-`project()`): the firmware excludes `hal_stub`; the QEMU and host-test projects
-exclude `hal_board`.
+`project()`): the firmware excludes `hal_stub`; the simulated-environment and
+host-test projects exclude `hal_board`.
 
 When adding firmware that is *not* hardware-facing, keep it host-testable rather
 than putting it here.

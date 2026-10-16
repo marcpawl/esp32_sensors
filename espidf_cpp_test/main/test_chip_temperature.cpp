@@ -12,8 +12,8 @@ namespace {
 using thermo::hal::ChipTemperature;
 }  // namespace
 
-TEST_CASE("qemu chip temperature: create/init and round-trips a reading",
-          "[qemu][chip_temperature]") {
+TEST_CASE("espidf_cpp_test chip temp: create/init and round-trips a reading",
+          "[espidf_cpp_test][chip_temperature]") {
     static_assert(thermo::hal::ChipTemperatureLike<ChipTemperature>);
 
     ChipTemperature sensor = ChipTemperature::create();
