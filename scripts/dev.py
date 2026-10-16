@@ -10,8 +10,8 @@
 #
 # Usage:
 #   scripts/dev.py [image|build|flash|monitor|menuconfig|test|test-linux|\
-#                   test-qemu|format|format-check|format-check-staged|\
-#                   install-hooks|shell]
+#                   test-qemu|self-check|format|format-check|\
+#                   format-check-staged|install-hooks|shell]
 #   scripts/dev.py --help        # full help, including per-command details
 #
 # Environment:
@@ -51,6 +51,10 @@ FORMAT_ARGS = ("--dry-run", "--Werror")
 # (esp32s3) and host-test (linux) builds never clobber each other.
 FW_BUILD_DIR = "build_esp32s3"
 TEST_BUILD_DIR = "build_linux"
+
+# Host-side unit tests for this script itself (stdlib `unittest`), run by
+# `scripts/dev.py self-check`.
+SELF_CHECK_MODULE = "scripts.test_dev"
 
 
 def is_in_container():
@@ -222,6 +226,17 @@ def cmd_test() -> int:
     return _run_qemu_test()
 
 
+def cmd_self_check() -> int:
+    """Run the host-side unit tests for this script (stdlib `unittest`).
+
+    Exercises `dev.py`'s own pure helpers (e.g. the command line `shell`
+    builds) with the standard-library test runner, so no Docker hop, container,
+    or third-party dependency is needed. Works on the host and inside the
+    container alike.
+    """
+    return run(["python3", "-m", "unittest", "-v", SELF_CHECK_MODULE])
+
+
 def cmd_format() -> int:
     """Apply the committed .clang-format (Google base, 4-space, 80 cols)."""
     change_to_container()
@@ -278,6 +293,43 @@ def _resolve_container_directory(directory: str) -> str:
     return (Path(CONTAINER_PROJECT_ROOT) / path).as_posix()
 
 
+def _build_shell_command(
+    extra: list[str], directory: str | None = None
+) -> list[str]:
+    """Build the `bash` argv that `cmd_shell` runs.
+
+    Pure (no I/O), so it is unit-testable without a container hop. Returns the
+    full argv to hand to `run()`.
+
+    With no `extra`, an interactive login shell is started (optionally after a
+    `cd`). Otherwise the caller's arguments form a shell command line that is
+    run through a login shell so PATH and the ESP-IDF environment (sourced by
+    the login profile) are available and shell syntax like pipes and globs
+    works: `shell ls -1d / | wc -l`.
+
+    The arguments are joined *verbatim* (no extra quoting): `shell "echo hi |
+    wc -l"` must reach bash as `echo hi | wc -l`, not as a single quoted token.
+    Everything after the `-c` string is `$0`/positional, so leading-dash
+    arguments are never mistaken for bash options — no `--` is needed.
+    """
+    # Optionally prefix a `cd` so the command (or the interactive shell) starts
+    # in the requested directory.
+    prefix = []
+    if directory is not None:
+        target = _resolve_container_directory(directory)
+        prefix = ["cd", shlex.quote(target), "&&"]
+
+    if not extra:
+        if not prefix:
+            return ["bash", "-l"]
+        # `cd DIR && exec bash -l` keeps the login shell (and thus the sourced
+        # ESP-IDF environment) while honoring the requested working directory.
+        return ["bash", "-l", "-c", " ".join([*prefix, "exec", "bash", "-l"])]
+
+    inner = " ".join([*prefix, *extra])
+    return ["bash", "-l", "-c", inner]
+
+
 def cmd_shell(extra: list[str], directory: str | None = None) -> int:
     """Interactive shell with the ESP-IDF environment sourced.
 
@@ -295,26 +347,7 @@ def cmd_shell(extra: list[str], directory: str | None = None) -> int:
 
     """
     change_to_container()
-
-    # Build the inner command line, optionally prefixing a `cd` so the command
-    # (or the interactive shell) starts in the requested directory.
-    prefix = []
-    if directory is not None:
-        target = _resolve_container_directory(directory)
-        prefix = ["cd", shlex.quote(target), "&&"]
-
-    if not extra:
-        if not prefix:
-            return run(["bash", "-l"])
-        # `cd DIR && exec bash -l` keeps the login shell (and thus the sourced
-        # ESP-IDF environment) while honoring the requested working directory.
-        return run(["bash", "-l", "-c", " ".join([*prefix, "exec", "bash", "-l"])])
-    # Run the caller's arguments through a login shell so PATH and the ESP-IDF
-    # environment (sourced by the login profile) are available, and so shell
-    # syntax like pipes and globs works: `shell ls -1d / | wc -l`.
-    # `--` guards against leading-dash arguments being read as bash options.
-    inner = " ".join([*prefix, *_quote_args(extra)])
-    return run(["bash", "-l", "-c", inner])
+    return run(_build_shell_command(extra, directory))
 
 
 def cmd_complete() -> int:
@@ -332,11 +365,6 @@ def cmd_complete() -> int:
         if name.startswith(prefix):
             print(name)
     return 0
-
-
-def _quote_args(args: list[str]) -> list[str]:
-    """Shell-quote each argument for safe interpolation into a `bash -c` line."""
-    return [shlex.quote(arg) for arg in args]
 
 
 def _staged_files() -> list[str]:
@@ -422,6 +450,7 @@ COMMANDS = {
     "test": cmd_test,
     "test-linux": cmd_test_linux,
     "test-qemu": cmd_test_qemu,
+    "self-check": cmd_self_check,
     "format": cmd_format,
     "format-check": cmd_format_check,
     "format-check-staged": cmd_format_check_staged,
