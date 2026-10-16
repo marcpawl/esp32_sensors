@@ -114,7 +114,7 @@ targets ESP32-S3; `test/` and `qemu/` both target `linux`. All are git-ignored.
 
 **Key files:**
 - `Specification.md` — the single source of truth for hardware, modes, RTC memory layout, payload format, and power budget. Any implementation must conform to it.
-- `main/CMakeLists.txt` — lists all sources and the IDF component `REQUIRES` (nvs_flash, esp_wifi, esp_https_server, esp_http_client, esp_adc, esp_driver_gpio, mbedtls, …). **Add new sources here** or they will not compile.
+- `main/CMakeLists.txt` — lists all sources and the IDF component `REQUIRES` (nvs_flash, esp_wifi, esp_http_client, esp_adc, esp_driver_gpio, mbedtls, …). **Add new sources here** or they will not compile. (The HTTPS listener lives in `espidf_cpp`, which requires `esp_https_server`.)
 - `sdkconfig.defaults` — the committed configuration intent (target, C++ exceptions/RTTI off, partition table, `-Os`). `sdkconfig` is generated from this and is **not** tracked.
 - `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash environment. Extend these (not ad-hoc `docker run`) when adding tooling. The compose `dev` service is also the target of the Dev Container (see below).
 - `.devcontainer/devcontainer.json` — the CLion / VS Code **Dev Container** definition. It **reuses the compose `dev` service** (it does not define its own image), so CLion builds/starts the same container the CLI uses. Edit `docker-compose.yml` for image/mount/user changes; edit `devcontainer.json` only for IDE-level wiring.
@@ -145,10 +145,12 @@ stubs. **Each component has a `README.md` documenting its purpose and contents �
 read it before working in that directory.** In brief:
 
 - `espidf_cpp` — C++ wrappers over ESP-IDF/FreeRTOS C APIs (`Task`,
-  `OneMessageQueue`, handle deleters, fixed-capacity containers). Mostly
-  header-only, but it also **compiles** `certs/self_signed_cert.cpp` (the
+  `OneMessageQueue`, handle deleters, fixed-capacity containers, and the
+  `HttpsServer` TLS router). Mostly header-only, but it also **compiles**
+  `https_server.cpp` (the TLS router) and `certs/self_signed_cert.cpp` (the
   bundled development certificate used by the Configure-mode HTTPS server) into
-  its archive. Not HAL; abstracts the RTOS, not hardware.
+  its archive; requiring it transitively pulls in `esp_https_server`. Not HAL;
+  abstracts the RTOS, not hardware.
 - `hal_common` — shared, **implementation-free** HAL vocabulary (types and
   `*Like` concepts). Shared by both HAL implementations, never excluded.
 - `hal_board` — real, GPIO-backed HAL drivers; linked by the production firmware.
@@ -171,11 +173,12 @@ ESP-IDF dependencies so they build for the `linux` target and are covered by
 covered by `test/`. **Keep it that way** — put pure logic in these files and
 hardware/IDF calls behind them.
 
-> **HTTPS server is a router.** `HttpsServer` (`https_server.cpp`) owns only
-> the TLS listener and a small URI-handler table; the Configure-mode pages are
-> registered by the client via `register_handler` / `deregister_handler` and
-> live in `configure_mode.cpp`. Handlers receive an `HttpRequest` and return an
-> `HttpResponse`, so request parsing and page rendering stay host-testable.
+> **HTTPS server is a router.** `HttpsServer` (`https_server.cpp`, in the
+> `espidf_cpp` component) owns only the TLS listener and a small URI-handler
+> table; the Configure-mode pages are registered by the client via
+> `register_handler` / `deregister_handler` and live in `configure_mode.cpp`.
+> Handlers receive an `HttpRequest` and return an `HttpResponse`, so request
+> parsing and page rendering stay host-testable.
 
 **Not yet present (expected next):**
 - On-target tests for hardware-dependent code (1-Wire, deep-sleep, Wi-Fi).

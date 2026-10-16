@@ -1,7 +1,6 @@
 # espidf_cpp: small C++ wrappers around ESP-IDF / FreeRTOS C APIs.
 #
-# Header-only component collecting the thin, RAII-flavoured C++ shims used
-# across the firmware:
+# Collects the thin, RAII-flavoured C++ shims used across the firmware:
 #
 #   * `handle_deleter.hpp`       - `std::unique_ptr` deleters for FreeRTOS
 #                                  handles (`UniqueTaskHandle`,
@@ -17,16 +16,17 @@
 #                                  fixed-capacity, always-NUL-terminated string
 #                                  built on `static_vector` (used by `task.hpp`
 #                                  for the copied task name).
+#   * `https_server.hpp`         - `thermo::HttpsServer`, a thin TLS router over
+#                                  `esp_https_server` (compiled: see
+#                                  `https_server.cpp`).
 #   * `self_signed_cert.hpp`     - declares the bundled development certificate
-#                                  used by the Configure-mode HTTPS server. This
-#                                  one is *compiled* (`certs/self_signed_cert.cpp`),
-#                                  not header-only, so the certificate bytes
-#                                  live in this component rather than in `main`.
+#                                  used by the Configure-mode HTTPS server
+#                                  (compiled: see `certs/self_signed_cert.cpp`).
 #
 # Most headers are header-only; callers compile those implementations inline.
-# `self_signed_cert.cpp` is the exception: it is built into this component's
-# archive, so the certificate is available even though it is referenced only by
-# the transport layer.
+# `https_server.cpp` and `certs/self_signed_cert.cpp` are the exceptions: they
+# are built into this component's archive, so the router and the certificate it
+# uses are available to whoever requires `espidf_cpp`.
 #
 # The RTOS/IDF wrappers are independent of the HAL (`hal_common` / `hal_board`
 # / `hal_stub`) and do not reference it. The two static containers carry no
@@ -35,6 +35,7 @@
 
 idf_component_register(
     SRCS
+        "https_server.cpp"
         "certs/self_signed_cert.cpp"
     INCLUDE_DIRS
         "include"
@@ -42,4 +43,5 @@ idf_component_register(
         freertos
         esp_common
         log
+        esp_https_server
 )

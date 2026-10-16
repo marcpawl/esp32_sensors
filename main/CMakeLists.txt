@@ -16,7 +16,6 @@ idf_component_register(
         "temp_format.cpp"
         "payload.cpp"
         "configure_mode.cpp"
-        "https_server.cpp"
         "config_page.cpp"
         "config_form.cpp"
         "wifi_ap.cpp"
@@ -32,7 +31,6 @@ idf_component_register(
         esp_wifi
         esp_netif
         esp_event
-        esp_https_server
         esp_http_client
         esp_adc
         esp_driver_gpio
