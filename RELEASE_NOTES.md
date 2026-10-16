@@ -17,11 +17,17 @@ Implemented
 - Unit tests for the pin-free `hal_stub` mode switch (`test_hal_switch.cpp`):
   construction/`init()`, the default reading, `set_pins()` round-trips, bad
   hardware simulation, and the `SwitchLike` contract.
-- A QEMU smoke test that builds the ESP32-S3 image and boots it headless,
-  checking the boot log for expected output.
+- QEMU on-target Unity tests (`qemu/`) that build an ESP32-S3 image and boot it
+  headless: FreeRTOS-backed `thermo::Task` tests (`test_task.cpp`) plus
+  HAL-stub linkage checks (`test_switch.cpp`, `test_led.cpp`,
+  `test_push_button.cpp`, `test_onewire.cpp`, `test_chip_temperature.cpp`,
+  `test_board.cpp`).
 - A swappable hardware abstraction layer (`components/`): `hal_common` (shared
   types/concepts), `hal_board` (real GPIO drivers, linked by the firmware), and
   `hal_stub` (pin-free stubs, linked by the QEMU project and the host tests).
+- An `espidf_cpp` component (`components/espidf_cpp`) of header-only C++
+  wrappers over ESP-IDF/FreeRTOS C APIs (`Task`, `OneMessageQueue`, handle
+  deleters, and the fixed-capacity `static_vector`/`static_string` containers).
 
 Not yet implemented
 -------------------

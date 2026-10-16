@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""QEMU smoke test for the standalone `qemu/` project (ESP32-S3).
+"""QEMU on-target test driver for the standalone `qemu/` project (ESP32-S3).
 
-This program cleans the build directory, builds the QEMU smoke-test firmware
-for the ESP32-S3 target, boots it under the ESP-IDF QEMU fork
-(`idf.py qemu` -> `qemu-system-xtensa -M esp32s3`), and verifies that the
-hello_world output is printed. It exits non-zero on failure, so it is
-CI-friendly.
+This program cleans the build directory, builds the Unity test firmware for the
+ESP32-S3 target, boots it under the ESP-IDF QEMU fork (`idf.py qemu` ->
+`qemu-system-xtensa -M esp32s3`), and verifies the Unity results. It exits
+non-zero on failure, so it is CI-friendly.
+
+Success is decided by the firmware's completion marker line
+(`QEMU-TESTS-COMPLETE failures=<n>`), which `test_main.cpp` prints once the
+whole suite has run. The driver also scans for Unity `FAIL` lines as a
+belt-and-braces check.
 
 This script must be run *inside* the ESP-IDF dev container (the image sets
 `DOCKER_IMAGE=esp32_sensors`), which installs the ESP-IDF QEMU fork via
@@ -23,6 +27,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -46,11 +51,13 @@ CONTAINER_ENV_VALUE = "esp32_sensors"
 # ESP32-S3 target. The ESP-IDF QEMU fork models it as `-M esp32s3`.
 IDF_TARGET = "esp32s3"
 
-# Message that proves the firmware booted and ran `app_main`.
-EXPECTED_OUTPUT = "Hello world!"
+# Completion marker printed by `test_main.cpp` after `unity_run_all_tests()`.
+# Captures the failure count so we can assert it is zero.
+COMPLETE_RE = re.compile(r"QEMU-TESTS-COMPLETE failures=(\d+)")
 
 # Upper bound (seconds) for the QEMU run before we stop it and inspect output.
-QEMU_TIMEOUT_S = 30
+# The suite is short; this is a safety net, not a per-test budget.
+QEMU_TIMEOUT_S = 60
 
 
 def info(msg: str) -> None:
@@ -80,8 +87,8 @@ def clean_build() -> None:
 
 
 def build_firmware() -> None:
-    """Build the firmware for the ESP32-S3 target."""
-    info(f"Building {IDF_TARGET} firmware")
+    """Build the test firmware for the ESP32-S3 target."""
+    info(f"Building {IDF_TARGET} test firmware")
     rc = run(["idf.py", "build"], cwd=PROG_DIR)
     if rc.returncode != 0:
         print("ERROR: firmware build failed", file=sys.stderr)
@@ -94,9 +101,9 @@ def run_qemu() -> subprocess.CompletedProcess:
     `idf.py qemu` builds `qemu_flash.bin` from `flash_args` (sized to match
     CONFIG_ESPTOOLPY_FLASHSIZE) and starts `qemu-system-xtensa -M esp32s3`.
 
-    QEMU does not exit on its own (the firmware restarts in a loop), so wrap it
-    in `timeout -k 5 N` (SIGTERM at N seconds, SIGKILL 5 seconds later) and
-    inspect whatever it printed.
+    The firmware finishes the suite then idles, so QEMU does not exit on its
+    own; wrap it in `timeout -k 5 N` (SIGTERM at N seconds, SIGKILL 5 seconds
+    later) and inspect whatever it printed.
     """
     info("Running QEMU")
     cmd = [
@@ -112,8 +119,8 @@ def run_qemu() -> subprocess.CompletedProcess:
             timeout=QEMU_TIMEOUT_S + 10,
         )
     except subprocess.TimeoutExpired as exc:
-        # A timeout is expected: the firmware never exits. Reconstruct a
-        # CompletedProcess-like result from whatever output was captured.
+        # A timeout is expected: the firmware never exits on its own.
+        # Reconstruct a CompletedProcess-like result from captured output.
         out = exc.stdout or ""
         err = exc.stderr or ""
         if isinstance(out, bytes):
@@ -124,14 +131,31 @@ def run_qemu() -> subprocess.CompletedProcess:
 
 
 def check_output(result: subprocess.CompletedProcess) -> bool:
-    """Verify EXPECTED_OUTPUT appeared in QEMU's output."""
+    """Verify the Unity suite completed with zero failures."""
     output = (result.stdout or "") + (result.stderr or "")
     print(output)
-    if EXPECTED_OUTPUT in output:
-        return True
-    print(f"\nERROR: expected output not found: {EXPECTED_OUTPUT!r}",
-          file=sys.stderr)
-    return False
+
+    match = COMPLETE_RE.search(output)
+    if match is None:
+        print(
+            "\nERROR: completion marker not found; the suite did not finish "
+            "(build/run failure, crash, or timeout).",
+            file=sys.stderr,
+        )
+        return False
+
+    failures = int(match.group(1))
+    if failures != 0:
+        print(f"\nERROR: Unity reported {failures} failure(s).", file=sys.stderr)
+        return False
+
+    # Secondary check: reject any Unity FAIL line even if the count looked OK.
+    for line in output.splitlines():
+        if line.strip().startswith("FAIL"):
+            print(f"\nERROR: Unity failure line: {line!r}", file=sys.stderr)
+            return False
+
+    return True
 
 
 def main() -> int:
@@ -157,9 +181,9 @@ def main() -> int:
 
     result = run_qemu()
 
-    info("Checking QEMU output")
+    info("Checking Unity results")
     if check_output(result):
-        info(f"PASS: saw {EXPECTED_OUTPUT!r}")
+        info("PASS: QEMU Unity suite completed with 0 failures")
         return 0
     print("FAIL", file=sys.stderr)
     return 1

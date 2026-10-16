@@ -1,8 +1,9 @@
-# ESP-IDF defaults for the QEMU smoke-test project.
+# ESP-IDF defaults for the QEMU on-target test project.
 #
-# Kept minimal on purpose: this project only prints hello_world output, so it
-# needs no Wi-Fi, HTTPS, ADC, or other peripherals. See the top-level
-# sdkconfig.defaults for the production firmware configuration.
+# Kept minimal on purpose: this project only runs the Unity suite (the FreeRTOS
+# `Task` tests and HAL-stub linkage checks), so it needs no Wi-Fi, HTTPS, ADC,
+# or other peripherals. See the top-level sdkconfig.defaults for the production
+# firmware configuration.
 
 # Target chip. The ESP-IDF QEMU fork models the ESP32-S3, and the dev container
 # installs that fork via `idf_tools.py install qemu-xtensa` (see Dockerfile),

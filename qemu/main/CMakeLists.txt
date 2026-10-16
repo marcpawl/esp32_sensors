@@ -1,20 +1,33 @@
-# QEMU smoke-test component.
+# QEMU on-target Unity tests.
 #
 # The project's `main` component (`app_main`). This project is standalone and
-# intentionally does not compile the production `main/` sources. The source is
-# the ESP-IDF `hello_world` example, used to verify the QEMU build/boot workflow
-# (`idf.py qemu` -> `qemu-system-xtensa -M esp32s3`) on the ESP32-S3 target.
+# intentionally does not compile the production `main/` sources. It runs the
+# Unity suite on the real ESP32-S3 target (under the ESP-IDF QEMU fork), so it
+# covers code that cannot be host-tested: the FreeRTOS-backed `thermo::Task`
+# (`test_task.cpp`).
 #
-# `spi_flash` is a private requirement of the hello_world source, which reads
-# the flash chip size via esp_flash_get_size(). `hal_stub` provides the
-# pin-free switch implementation shared with the firmware via `hal/switch.hpp`.
-
+# The HAL cases in `test_switch.cpp`, `test_led.cpp`, `test_push_button.cpp`,
+# `test_onewire.cpp`, `test_chip_temperature.cpp`, and `test_board.cpp` are
+# **linkage checks**: they construct the pin-free `hal_stub` devices to prove
+# the stub HAL links and works on-target. Deeper device behaviour is covered by
+# the host suite (`test/`).
+#
+# `unity` provides the test runner; `espidf_cpp` provides `Task`; `hal_stub`
+# provides the stubbed HAL devices. WHOLE_ARCHIVE is required so the TEST_CASE
+# registrations link into the executable even though nothing references them.
 idf_component_register(
     SRCS
-        "hello_world_main.cpp"
+        "test_main.cpp"
+        "test_task.cpp"
+        "test_switch.cpp"
+        "test_led.cpp"
+        "test_push_button.cpp"
+        "test_onewire.cpp"
+        "test_chip_temperature.cpp"
+        "test_board.cpp"
     PRIV_REQUIRES
-        spi_flash
+        unity
+        espidf_cpp
         hal_stub
-    INCLUDE_DIRS
-        "."
+    WHOLE_ARCHIVE
 )

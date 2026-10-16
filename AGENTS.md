@@ -34,7 +34,7 @@ This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its s
 > **Implementation status (current milestone):**
 > - **Configure mode — implemented.** SoftAP, HTTPS server, config UI, NVS persistence, LED semantics.
 > - **Run mode — scaffolded/stubbed.** Real: boot self-test LEDs, battery read + hysteresis, sensor read with cached ROM IDs (first-boot scan), sample append to the RTC buffer, deep sleep. **Stubbed:** Wi-Fi station connect + cached fast-reconnect (§3.9), batch upload + payload wire-out (§9, payload is formatted and logged but not sent), exponential backoff (§3.7).
-> - **Host unit tests + QEMU smoke test.** `test/` builds for the ESP-IDF `linux` target (Unity) and `qemu/` boots an ESP32-S3 image under QEMU; both run via `scripts/dev.py test` (or `test-linux` / `test-qemu`). On-target tests for hardware-dependent code are planned.
+> - **Host unit tests + QEMU on-target tests.** `test/` builds for the ESP-IDF `linux` target (Unity) and `qemu/` boots an ESP32-S3 Unity suite under QEMU (covering the FreeRTOS-backed `thermo::Task` and HAL-stub link checks); both run via `scripts/dev.py test` (or `test-linux` / `test-qemu`). More on-target tests for hardware-dependent code are planned.
 
 > **Toolchain note:** The host's locally installed ESP-IDF is **v6.1** with **Xtensa GCC 15.2.0** (`esp-15.2.0_20251204`), which matches the pinned Docker image `espressif/idf:release-v6.1` exactly. Keep both in sync: if you upgrade the host toolchain, update the pin in `Dockerfile`/`docker-compose.yml` and this document.
 
@@ -79,7 +79,7 @@ esp32_sensors/
 │   ├── hal_board/       # Real, GPIO-backed HAL (linked by the firmware)
 │   └── hal_stub/        # Pin-free HAL stub (linked by QEMU/host tests)
 ├── test/                # Host-based unit tests (IDF `linux` target, Unity)
-├── qemu/                # Standalone QEMU smoke-test project (ESP32-S3)
+├── qemu/                # Standalone QEMU on-target Unity test project (ESP32-S3)
 │   └── build_esp32s3/   # QEMU build output (git-ignored; target-named)
 ├── Dockerfile           # Dev container: ESP-IDF v6.1 + non-root host-mapped user
 ├── docker-compose.yml   # `dev` service with serial (/dev) passthrough
@@ -105,7 +105,7 @@ own:
 | Project | Directory | Target | Produces |
 |---|---|---|---|
 | firmware (top level) | `build_esp32s3/` | esp32s3 | `esp32_sensors.bin` (flashed to the board) |
-| QEMU smoke test (`qemu/`) | `qemu/build_esp32s3/` | esp32s3 | `esp32_sensors_qemu.bin` (booted under QEMU) |
+| QEMU on-target tests (`qemu/`) | `qemu/build_esp32s3/` | esp32s3 | `esp32_sensors_qemu.bin` (booted under QEMU) |
 | host tests (`test/`) | `test/build_linux/` | linux | `esp32_sensors_tests.elf` (run on the host) |
 
 The firmware and QEMU builds are separate ESP-IDF *projects* (each with its own
@@ -294,9 +294,9 @@ enacted on the host.
 |platform|command|action|
 |===|===|===|
 |both|build|Compile the source code|
-|both|test|Run both test suites: the host unit tests then the QEMU smoke test|
+|both|test|Run both test suites: the host unit tests then the QEMU on-target tests|
 |both|test-linux|Build and run the host unit tests (ESP-IDF `linux` target)|
-|both|test-qemu|Build and boot the QEMU smoke test (ESP32-S3 image)|
+|both|test-qemu|Build and boot the QEMU on-target Unity tests (ESP32-S3 image)|
 |both|self-check|Run the host unit tests for dev.py itself (stdlib `unittest`)|
 |both|flash|idf.py flash monitor|
 |both|monitor|idf.py monitor|
@@ -351,21 +351,25 @@ There are two test suites, both runnable from the host via `scripts/dev.py`:
   (`temp_format`, `payload`, `app_config` validation, `rom_id`, `rtc_buffer`),
   the fixed-capacity containers (`static_vector`, `static_string`), and the
   `hal_stub` devices.
-- **QEMU smoke test** (`qemu/`) builds the ESP32-S3 image and boots it under
-  QEMU, then checks the boot log for expected output — no hardware needed.
-- **On-target tests** are planned for hardware-dependent code (1-Wire/DS18B20
-  reads, deep-sleep wake, Wi-Fi upload).
+- **QEMU on-target tests** (`qemu/`) build an ESP32-S3 Unity image and boot it
+  under QEMU, then check for a zero-failure completion marker — no hardware
+  needed. They cover code that needs the real FreeRTOS scheduler
+  (`thermo::Task`) plus linkage checks for the `hal_stub` devices (each case
+  just constructs the stub to prove it links on-target; deeper behaviour lives
+  in the host suite).
+- **On-target tests** are planned for more hardware-dependent code (1-Wire
+  GPIO, deep-sleep wake, Wi-Fi upload).
 - Keep hardware interactions behind thin interfaces so business logic remains
   host-testable. When adding pure logic, put it in a host-testable translation
   unit and add it to both `main/CMakeLists.txt` and `test/main/CMakeLists.txt`.
 
 ```bash
-# Run both suites (host unit tests, then the QEMU smoke test).
+# Run both suites (host unit tests, then the QEMU on-target tests).
 ./scripts/dev.py test
 
 # Run just one suite.
 ./scripts/dev.py test-linux    # host Unity tests (linux target, build_linux/)
-./scripts/dev.py test-qemu     # build + boot the ESP32-S3 image under QEMU
+./scripts/dev.py test-qemu     # build + boot the ESP32-S3 Unity image under QEMU
 
 # Run the host-side unit tests for dev.py itself (no container/hardware).
 ./scripts/dev.py self-check
