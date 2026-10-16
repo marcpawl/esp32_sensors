@@ -15,6 +15,7 @@ idf_component_register(
     SRCS
         "switch.cpp"
         "led.cpp"
+        "push_button.cpp"
         "onewire.cpp"
         "chip_temperature.cpp"
     INCLUDE_DIRS

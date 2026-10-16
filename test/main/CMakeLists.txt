@@ -25,6 +25,7 @@ set(test_srcs
     "test_static_string.cpp"
     "test_hal_switch.cpp"
     "test_hal_led.cpp"
+    "test_hal_push_button.cpp"
     "test_hal_onewire.cpp"
     "test_hal_chip_temperature.cpp"
 )

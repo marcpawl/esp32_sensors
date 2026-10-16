@@ -17,6 +17,7 @@
 #include "hal/chip_temperature.hpp"
 #include "hal/led.hpp"
 #include "hal/onewire.hpp"
+#include "hal/push_button.hpp"
 #include "hal/switch.hpp"
 #include "sdkconfig.h"
 
@@ -154,6 +155,68 @@ void report_chip_temperature() {
                 std::abs(reading % 100));
 }
 
+// Records how many times the push-button callback fired (and the last state),
+// so the QEMU run can prove `set_interrupt()` delivers state changes.
+struct ButtonEventLog {
+    int count = 0;
+    thermo::hal::ButtonState last = thermo::hal::ButtonState::kOff;
+};
+
+ButtonEventLog g_button_events;
+
+void on_button_change(thermo::hal::ButtonState state) noexcept {
+    ++g_button_events.count;
+    g_button_events.last = state;
+}
+
+// Exercises the shared HAL push-button interface via its QEMU stub
+// (`hal_stub`). The stub's state is settable in software, so this proves the
+// interface is linked and reports the pressed/released states the caller
+// configured, and that `set_interrupt()` invokes a registered callback on each
+// state change (and nothing once cleared).
+void report_push_button() {
+    static_assert(thermo::hal::PushButtonLike<thermo::hal::PushButton>);
+
+    thermo::hal::PushButton button =
+        thermo::hal::PushButton::create(/*gpio=*/0);
+    if (button.init() != ESP_OK) {
+        std::printf("PushButton init failed\n");
+        return;
+    }
+
+    // Report the default reading, then override it to prove set().
+    std::printf("PushButton default %s\n",
+                button.read() == thermo::hal::ButtonState::kOn ? "On" : "Off");
+
+    const struct {
+        const char* name;
+        thermo::hal::ButtonState state;
+    } cases[] = {
+        {"Pressed", thermo::hal::ButtonState::kOn},
+        {"Released", thermo::hal::ButtonState::kOff},
+    };
+
+    for (auto const& c : cases) {
+        button.set(c.state);
+        std::printf(
+            "PushButton %-8s -> %s\n", c.name,
+            button.read() == thermo::hal::ButtonState::kOn ? "On" : "Off");
+    }
+
+    // Register the callback, toggle twice (press, release), then clear it and
+    // toggle again to show the cleared handler is silent.
+    g_button_events = {};
+    button.set_interrupt(on_button_change);
+    button.set(thermo::hal::ButtonState::kOn);
+    button.set(thermo::hal::ButtonState::kOff);
+    button.set_interrupt(std::nullopt);
+    button.set(thermo::hal::ButtonState::kOn);
+    std::printf(
+        "PushButton callback fired %d time(s), last %s (expect 2)\n",
+        g_button_events.count,
+        g_button_events.last == thermo::hal::ButtonState::kOn ? "On" : "Off");
+}
+
 }  // namespace
 
 extern "C" void app_main(void) {
@@ -161,6 +224,7 @@ extern "C" void app_main(void) {
 
     report_switch();
     report_led();
+    report_push_button();
     report_onewire();
     report_chip_temperature();
 
