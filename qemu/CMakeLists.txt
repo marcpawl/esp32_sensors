@@ -13,8 +13,8 @@ cmake_minimum_required(VERSION 3.16)
 #
 # Build and run with:
 #   scripts/dev.py shell -C qemu idf.py qemu
-# or run the smoke test:
-#   python3 qemu/test_qemu.py
+# or run the smoke test (from inside the dev container; aborts on the host):
+#   scripts/dev.py test-qemu
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 # Trim the build to the minimal component set (main and its dependencies).

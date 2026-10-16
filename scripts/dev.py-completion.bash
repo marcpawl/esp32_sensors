@@ -8,6 +8,7 @@
 #
 # Then tab-complete subcommands, e.g.:
 #     ./scripts/dev.py form<TAB>   ->  format  format-check  format-check-staged
+#     ./scripts/dev.py self<TAB>   ->  self-check
 
 _dev_py() {
     local cur prev commands

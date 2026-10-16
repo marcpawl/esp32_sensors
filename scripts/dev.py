@@ -9,7 +9,8 @@
 # specifics live in one place.
 #
 # Usage:
-#   scripts/dev.py [image|build|flash|monitor|menuconfig|test|format|format-check|\
+#   scripts/dev.py [image|build|flash|monitor|menuconfig|test|test-linux|\
+#                   test-qemu|self-check|format|format-check|\
 #                   format-check-staged|install-hooks|shell]
 #   scripts/dev.py --help        # full help, including per-command details
 #
@@ -34,16 +35,11 @@ import tempfile
 # Always operate from the repository root, regardless of the caller's cwd.
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# C/C++ sources checked/formatted by clang-format, discovered via git so the
-# list always matches the tracked files (no missing-glob errors). Keep the
-# directory filter in sync with the pre-commit hook (.githooks/pre-commit).
-GIT_LS_FILES = (
-    'git ls-files "main/*" "test/*" | grep -E "\\.(cpp|hpp|h|cc|cxx)$"'
-)
-
-# Directories whose staged C/C++ files format-check-staged inspects. Keep in
-# sync with scripts against .clang-format and the pre-commit hook.
-ROOTS = ("main", "test")
+# Directories whose C/C++ sources are checked/formatted by clang-format. The
+# file list is discovered via git so it always matches the tracked files (no
+# missing-glob errors). Keep this in sync with the pre-commit hook
+# (.githooks/pre-commit).
+ROOTS = ("main", "components", "test", "qemu")
 EXTENSIONS = (".cpp", ".hpp", ".h", ".cc", ".cxx")
 
 # Docker dev image that ships the pinned clang-format version.
@@ -56,6 +52,10 @@ FORMAT_ARGS = ("--dry-run", "--Werror")
 FW_BUILD_DIR = "build_esp32s3"
 TEST_BUILD_DIR = "build_linux"
 
+# Host-side unit tests for this script itself (stdlib `unittest`), run by
+# `scripts/dev.py self-check`.
+SELF_CHECK_MODULE = "scripts.test_dev"
+
 
 def is_in_container():
     return os.environ.get("DOCKER_IMAGE") == "esp32_sensors"
@@ -67,9 +67,9 @@ def split_list(items, max_size):
 def source_files():
     try:
         # Run the git command safely
-        # This matches tracked files in the main/ and test/ directories
+        # This matches tracked files in the directories listed in ROOTS.
         result = subprocess.run(
-            ["git", "ls-files", "main/*", "test/*"],
+            ["git", "ls-files", *[f"{root}/*" for root in ROOTS]],
             capture_output=True,
             text=True,
             check=True
@@ -80,7 +80,8 @@ def source_files():
     
         # Filter the files using the EXTENSIONS tuple
         filtered_files = [file for file in all_files if file.endswith(EXTENSIONS)]
-        return filtered_files
+        # Skip tracked-but-deleted files: formatting cannot read them.
+        return [file for file in filtered_files if (REPO_ROOT / file).is_file()]
     
     except subprocess.CalledProcessError as e:
         print(f"Git command failed with exit code {e.returncode}", file=sys.stderr)
@@ -175,10 +176,11 @@ def cmd_menuconfig() -> int:
     return run(["idf.py", "-B", FW_BUILD_DIR, "menuconfig"])
 
 
-def cmd_test() -> int:
-    """Host-based Unity tests on the ESP-IDF `linux` target."""
-    change_to_container()
+def _run_host_tests() -> int:
+    """Build and run the host tests (ESP-IDF `linux` target). No container hop.
 
+    Assumes it is already running inside the dev container.
+    """
     cmds = [
             [ "idf.py", "--preview", "-B",  TEST_BUILD_DIR,
               "set-target", "linux" ],
@@ -190,7 +192,51 @@ def cmd_test() -> int:
         rc = run( cmd, cwd="test")
         if rc != 0:
             return 1
+
+    print("SUCCESS: host tests passed")
     return 0
+
+
+def _run_qemu_test() -> int:
+    """Build and boot the QEMU smoke test. No container hop.
+
+    Assumes it is already running inside the dev container. `qemu/test_qemu.py`
+    drives the whole flow itself (clean, build, boot under QEMU, verify output)
+    and is CI-friendly (non-zero exit on failure).
+    """
+    return run(["python3", "qemu/test_qemu.py"])
+
+
+def cmd_test_linux() -> int:
+    """Host-based Unity tests on the ESP-IDF `linux` target."""
+    change_to_container()
+    return _run_host_tests()
+
+
+def cmd_test_qemu() -> int:
+    """QEMU smoke test: build and boot the ESP32-S3 image under QEMU."""
+    change_to_container()
+    return _run_qemu_test()
+
+
+def cmd_test() -> int:
+    """Run both test suites: the host Unity tests and the QEMU smoke test."""
+    change_to_container()
+    rc = _run_host_tests()
+    if rc != 0:
+        return rc
+    return _run_qemu_test()
+
+
+def cmd_self_check() -> int:
+    """Run the host-side unit tests for this script (stdlib `unittest`).
+
+    Exercises `dev.py`'s own pure helpers (e.g. the command line `shell`
+    builds) with the standard-library test runner, so no Docker hop, container,
+    or third-party dependency is needed. Works on the host and inside the
+    container alike.
+    """
+    return run(["python3", "-m", "unittest", "-v", SELF_CHECK_MODULE])
 
 
 def cmd_format() -> int:
@@ -225,7 +271,7 @@ def cmd_install_hooks() -> int:
     The hook rejects commits whose staged C/C++ files are not
     clang-formatted.
     """
-    rc = run("git", "-C", str(REPO_ROOT), "config", "core.hooksPath", ".githooks")
+    rc = run(["git", "-C", str(REPO_ROOT), "config", "core.hooksPath", ".githooks"])
     if rc == 0:
         print("Installed git hooks: core.hooksPath -> .githooks")
     return rc
@@ -249,6 +295,43 @@ def _resolve_container_directory(directory: str) -> str:
     return (Path(CONTAINER_PROJECT_ROOT) / path).as_posix()
 
 
+def _build_shell_command(
+    extra: list[str], directory: str | None = None
+) -> list[str]:
+    """Build the `bash` argv that `cmd_shell` runs.
+
+    Pure (no I/O), so it is unit-testable without a container hop. Returns the
+    full argv to hand to `run()`.
+
+    With no `extra`, an interactive login shell is started (optionally after a
+    `cd`). Otherwise the caller's arguments form a shell command line that is
+    run through a login shell so PATH and the ESP-IDF environment (sourced by
+    the login profile) are available and shell syntax like pipes and globs
+    works: `shell ls -1d / | wc -l`.
+
+    The arguments are joined *verbatim* (no extra quoting): `shell "echo hi |
+    wc -l"` must reach bash as `echo hi | wc -l`, not as a single quoted token.
+    Everything after the `-c` string is `$0`/positional, so leading-dash
+    arguments are never mistaken for bash options — no `--` is needed.
+    """
+    # Optionally prefix a `cd` so the command (or the interactive shell) starts
+    # in the requested directory.
+    prefix = []
+    if directory is not None:
+        target = _resolve_container_directory(directory)
+        prefix = ["cd", shlex.quote(target), "&&"]
+
+    if not extra:
+        if not prefix:
+            return ["bash", "-l"]
+        # `cd DIR && exec bash -l` keeps the login shell (and thus the sourced
+        # ESP-IDF environment) while honoring the requested working directory.
+        return ["bash", "-l", "-c", " ".join([*prefix, "exec", "bash", "-l"])]
+
+    inner = " ".join([*prefix, *extra])
+    return ["bash", "-l", "-c", inner]
+
+
 def cmd_shell(extra: list[str], directory: str | None = None) -> int:
     """Interactive shell with the ESP-IDF environment sourced.
 
@@ -266,26 +349,7 @@ def cmd_shell(extra: list[str], directory: str | None = None) -> int:
 
     """
     change_to_container()
-
-    # Build the inner command line, optionally prefixing a `cd` so the command
-    # (or the interactive shell) starts in the requested directory.
-    prefix = []
-    if directory is not None:
-        target = _resolve_container_directory(directory)
-        prefix = ["cd", shlex.quote(target), "&&"]
-
-    if not extra:
-        if not prefix:
-            return run(["bash", "-l"])
-        # `cd DIR && exec bash -l` keeps the login shell (and thus the sourced
-        # ESP-IDF environment) while honoring the requested working directory.
-        return run(["bash", "-l", "-c", " ".join([*prefix, "exec", "bash", "-l"])])
-    # Run the caller's arguments through a login shell so PATH and the ESP-IDF
-    # environment (sourced by the login profile) are available, and so shell
-    # syntax like pipes and globs works: `shell ls -1d / | wc -l`.
-    # `--` guards against leading-dash arguments being read as bash options.
-    inner = " ".join([*prefix, *_quote_args(extra)])
-    return run(["bash", "-l", "-c", inner])
+    return run(_build_shell_command(extra, directory))
 
 
 def cmd_complete() -> int:
@@ -303,11 +367,6 @@ def cmd_complete() -> int:
         if name.startswith(prefix):
             print(name)
     return 0
-
-
-def _quote_args(args: list[str]) -> list[str]:
-    """Shell-quote each argument for safe interpolation into a `bash -c` line."""
-    return [shlex.quote(arg) for arg in args]
 
 
 def _staged_files() -> list[str]:
@@ -391,6 +450,9 @@ COMMANDS = {
     "monitor": cmd_monitor,
     "menuconfig": cmd_menuconfig,
     "test": cmd_test,
+    "test-linux": cmd_test_linux,
+    "test-qemu": cmd_test_qemu,
+    "self-check": cmd_self_check,
     "format": cmd_format,
     "format-check": cmd_format_check,
     "format-check-staged": cmd_format_check_staged,

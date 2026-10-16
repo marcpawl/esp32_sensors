@@ -2,24 +2,26 @@
 """QEMU smoke test for the standalone `qemu/` project (ESP32-S3).
 
 This program cleans the build directory, builds the QEMU smoke-test firmware
-for the ESP32-S3 target inside the ESP-IDF dev container, boots it under the
-ESP-IDF QEMU fork (`idf.py qemu` -> `qemu-system-xtensa -M esp32s3`), and
-verifies that the hello_world output is printed. It exits non-zero on failure,
-so it is CI-friendly.
+for the ESP32-S3 target, boots it under the ESP-IDF QEMU fork
+(`idf.py qemu` -> `qemu-system-xtensa -M esp32s3`), and verifies that the
+hello_world output is printed. It exits non-zero on failure, so it is
+CI-friendly.
 
-Everything runs inside the dev container defined by `docker-compose.yml`
-(`esp32-sensors-dev:latest`), which installs the ESP-IDF QEMU fork via
-`idf_tools.py install qemu-xtensa` (see the Dockerfile). The host needs no
-ESP-IDF or QEMU.
+This script must be run *inside* the ESP-IDF dev container (the image sets
+`DOCKER_IMAGE=esp32_sensors`), which installs the ESP-IDF QEMU fork via
+`idf_tools.py install qemu-xtensa` (see the Dockerfile). It does not invoke
+`docker`; if it is not in the container it aborts. From the host, run it
+through the container task runner:
 
-Usage:
-    python3 test_qemu.py
+    scripts/dev.py test-qemu
+    scripts/dev.py shell python3 qemu/test_qemu.py
 
 See https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-guides/tools/qemu.html
 """
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -29,18 +31,15 @@ import sys
 
 # This file lives in `qemu/`; the repo root is its parent.
 PROG_DIR = Path(__file__).resolve().parent
-REPO_ROOT = PROG_DIR.parent
 BUILD_DIR = PROG_DIR / "build"
-
-# Directory (relative to REPO_ROOT) that is bind-mounted into the container.
-PROJECT_MOUNT = "/project"
-QEMU_DIR_IN_CONTAINER = f"{PROJECT_MOUNT}/qemu"
-BUILD_DIR_IN_CONTAINER = f"{QEMU_DIR_IN_CONTAINER}/build"
 
 # --- Container --------------------------------------------------------------
 
-# Toolchain container (has idf.py + esptool + the ESP-IDF QEMU fork).
-DEV_SERVICE = "dev"
+# Environment variable set by the dev image (see the Dockerfile). Its presence
+# tells us we are already inside the container, where idf.py, esptool, and the
+# ESP-IDF QEMU fork are installed.
+CONTAINER_ENV = "DOCKER_IMAGE"
+CONTAINER_ENV_VALUE = "esp32_sensors"
 
 # --- Test parameters --------------------------------------------------------
 
@@ -58,6 +57,11 @@ def info(msg: str) -> None:
     print(f"\n==> {msg}", flush=True)
 
 
+def in_container() -> bool:
+    """Whether we are running inside the ESP-IDF dev container."""
+    return os.environ.get(CONTAINER_ENV) == CONTAINER_ENV_VALUE
+
+
 def run(cmd: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess:
     """Run a command, inheriting stdio.
 
@@ -68,49 +72,24 @@ def run(cmd: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess:
 
 
 def clean_build() -> None:
-    """Remove the build directory.
-
-    The build tree may have been created by a container running as a different
-    user (e.g. root), so a plain host-side rmtree can fail with EPERM. When
-    that happens, remove it from inside the dev container as root.
-    """
+    """Remove the build directory."""
     info(f"Cleaning build directory: {BUILD_DIR}")
     if not BUILD_DIR.exists():
         return
-    try:
-        shutil.rmtree(BUILD_DIR)
-    except PermissionError:
-        print("Host rmtree failed (permissions); removing via container root")
-        rc = run(
-            [
-                "docker", "compose", "run", "--rm", "--user", "root",
-                DEV_SERVICE, "bash", "-c",
-                f"rm -rf {BUILD_DIR_IN_CONTAINER}",
-            ],
-            cwd=REPO_ROOT,
-        )
-        if rc.returncode != 0 or BUILD_DIR.exists():
-            print("ERROR: could not remove the build directory", file=sys.stderr)
-            sys.exit(1)
+    shutil.rmtree(BUILD_DIR)
 
 
-def build_in_dev_container() -> None:
-    """Build the firmware for the ESP32-S3 target inside the dev container."""
-    info(f"Building {IDF_TARGET} firmware in the dev container")
-    rc = run(
-        [
-            "docker", "compose", "run", "--rm", DEV_SERVICE, "bash", "-c",
-            f"cd {QEMU_DIR_IN_CONTAINER} && idf.py build",
-        ],
-        cwd=REPO_ROOT,
-    )
+def build_firmware() -> None:
+    """Build the firmware for the ESP32-S3 target."""
+    info(f"Building {IDF_TARGET} firmware")
+    rc = run(["idf.py", "build"], cwd=PROG_DIR)
     if rc.returncode != 0:
         print("ERROR: firmware build failed", file=sys.stderr)
         sys.exit(1)
 
 
-def run_qemu_in_dev() -> subprocess.CompletedProcess:
-    """Boot the image with the ESP-IDF QEMU fork inside the dev container.
+def run_qemu() -> subprocess.CompletedProcess:
+    """Boot the image with the ESP-IDF QEMU fork.
 
     `idf.py qemu` builds `qemu_flash.bin` from `flash_args` (sized to match
     CONFIG_ESPTOOLPY_FLASHSIZE) and starts `qemu-system-xtensa -M esp32s3`.
@@ -119,19 +98,18 @@ def run_qemu_in_dev() -> subprocess.CompletedProcess:
     in `timeout -k 5 N` (SIGTERM at N seconds, SIGKILL 5 seconds later) and
     inspect whatever it printed.
     """
-    info("Running QEMU in the dev container")
+    info("Running QEMU")
     cmd = [
-        "docker", "compose", "run", "--rm", DEV_SERVICE, "bash", "-c",
-        f"cd {QEMU_DIR_IN_CONTAINER} && "
-        f"timeout -k 5 {QEMU_TIMEOUT_S} idf.py qemu",
+        "timeout", "-k", "5", str(QEMU_TIMEOUT_S),
+        "idf.py", "qemu",
     ]
     try:
         return subprocess.run(
             cmd,
-            cwd=REPO_ROOT,
+            cwd=PROG_DIR,
             capture_output=True,
             text=True,
-            timeout=QEMU_TIMEOUT_S,
+            timeout=QEMU_TIMEOUT_S + 10,
         )
     except subprocess.TimeoutExpired as exc:
         # A timeout is expected: the firmware never exits. Reconstruct a
@@ -162,10 +140,22 @@ def main() -> int:
               file=sys.stderr)
         return 2
 
-    clean_build()
-    build_in_dev_container()
+    if not in_container():
+        print(
+            "ERROR: this script must run inside the ESP-IDF dev container "
+            f"({CONTAINER_ENV}={CONTAINER_ENV_VALUE} is not set).\n"
+            "       From the host, run it through the container task runner:\n"
+            "           scripts/dev.py test-qemu\n"
+            "       or:\n"
+            "           scripts/dev.py shell python3 qemu/test_qemu.py",
+            file=sys.stderr,
+        )
+        return 2
 
-    result = run_qemu_in_dev()
+    clean_build()
+    build_firmware()
+
+    result = run_qemu()
 
     info("Checking QEMU output")
     if check_output(result):

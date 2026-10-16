@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 #
-# pre-commit hook: reject a commit if any staged C/C++ source is not
-# clang-format clean (style governed by the committed .clang-format).
+# pre-commit hook. Two gates, both delegated to scripts/dev.py (the single
+# source of truth for container/lint/test tasks):
+#
+#   1. `format-check-staged` — reject the commit if any staged C/C++ source is
+#      not clang-format clean (style governed by the committed .clang-format).
+#      That command runs clang-format on the *staged* content of each changed
+#      file, so it never complains about unrelated working-tree edits.
+#   2. `test` — reject the commit unless the full test suite passes
+#      (`./scripts/dev.py test`). A red test run is a broken build; never commit.
 #
 # Install once per clone (activates the version-controlled hooks dir):
 #     git config core.hooksPath .githooks
 #
-# The check itself lives in scripts/dev.py (`format-check-staged`), the single
-# source of truth for container/lint tasks. That command runs clang-format on
-# the *staged* content of each changed file, so it never complains about
-# unrelated working-tree edits.
-#
 # Bypass for a single commit (use sparingly):
 #     git commit --no-verify
 #
-"""Delegate the staged clang-format check to scripts/dev.py."""
+"""Delegate the staged clang-format check and the test run to scripts/dev.py."""
 
 from __future__ import annotations
 
@@ -25,28 +27,38 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
+def run_check(dev: Path, subcommand: str) -> int:
+    """Run `scripts/dev.py <subcommand>` from the repo root."""
+    command = (sys.executable, str(dev), subcommand)
+    print(f"command={command}")
+    return subprocess.run(command, cwd=REPO_ROOT).returncode
+
+
 def main() -> int:
     dev = REPO_ROOT / "scripts" / "dev.py"
     if not dev.exists():
         print(
-            f"pre-commit: {dev} not found; skipping clang-format check.",
+            f"pre-commit: {dev} not found; skipping format and test checks.",
             file=sys.stderr,
         )
         return 0
 
-    command = (sys.executable, str(dev), "format-check-staged")
-    print(f"command={command}")
-    return subprocess.run(
-        command,
-        cwd=REPO_ROOT,
-    ).returncode
+    # 1. Staged clang-format check (fast; runs before the test suite).
+    rc = run_check(dev, "format-check-staged")
+    if rc != 0:
+        return rc
 
-    command = (sys.executable, str(dev), "test")
-    print(f"command={command}")
-    return subprocess.run(
-        command,
-        cwd=REPO_ROOT,
-    ).returncode
+    # 2. Full test suite: `./scripts/dev.py test` must pass before committing.
+    rc = run_check(dev, "test")
+    if rc != 0:
+        print(
+            "pre-commit: `./scripts/dev.py test` failed — commit rejected.\n"
+            "            (bypass with `git commit --no-verify` if you must)",
+            file=sys.stderr,
+        )
+        return rc
+
+    return 0
 
 
 if __name__ == "__main__":
