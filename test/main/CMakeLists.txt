@@ -5,8 +5,9 @@
 # not depend on chip-specific IDF drivers are listed here; hardware-facing code
 # (1-Wire GPIO, Wi-Fi, HTTPS) is covered by on-target tests instead.
 #
-# The pin-free HAL stub (hal_stub's switch) is host-testable too and is pulled
-# in via PRIV_REQUIRES below; test_hal_switch.cpp exercises it.
+# The pin-free HAL stubs (hal_stub's switch and led) are host-testable too and
+# are pulled in via PRIV_REQUIRES below; test_hal_switch.cpp and
+# test_hal_led.cpp exercise them.
 #
 # WHOLE_ARCHIVE is required so the TEST_CASE registrations in the test sources
 # are linked into the final executable even though nothing references them.
@@ -22,6 +23,7 @@ set(test_srcs
     "test_static_vector.cpp"
     "test_static_string.cpp"
     "test_hal_switch.cpp"
+    "test_hal_led.cpp"
 )
 
 # Production sources under test (paths are relative to this component dir).

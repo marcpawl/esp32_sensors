@@ -12,6 +12,7 @@
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "hal/led.hpp"
 #include "hal/switch.hpp"
 #include "sdkconfig.h"
 
@@ -57,12 +58,30 @@ void report_switch() {
     }
 }
 
+// Exercises the shared HAL LED interface via its QEMU stub (`hal_stub`). The
+// stub logs every write as "<name>: On" / "<name>: Off", so this proves the
+// interface is linked and that named LEDs drive the expected log lines.
+void report_led() {
+    static_assert(thermo::hal::LedLike<thermo::hal::Led>);
+
+    thermo::hal::Led led =
+        thermo::hal::Led::create(/*gpio=*/17, /*name=*/"Green");
+    if (led.init() != ESP_OK) {
+        std::printf("Led init failed\n");
+        return;
+    }
+
+    led.write(thermo::hal::LedState::kOn);
+    led.write(thermo::hal::LedState::kOff);
+}
+
 }  // namespace
 
 extern "C" void app_main(void) {
     std::printf("Hello world!\n");
 
     report_switch();
+    report_led();
 
     /* Print chip information */
     esp_chip_info_t chip_info;
