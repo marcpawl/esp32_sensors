@@ -9,8 +9,9 @@
 # specifics live in one place.
 #
 # Usage:
-#   scripts/dev.py [image|build|flash|monitor|menuconfig|test|format|format-check|\
-#                   format-check-staged|install-hooks|shell]
+#   scripts/dev.py [image|build|flash|monitor|menuconfig|test|test-linux|\
+#                   test-qemu|format|format-check|format-check-staged|\
+#                   install-hooks|shell]
 #   scripts/dev.py --help        # full help, including per-command details
 #
 # Environment:
@@ -171,10 +172,11 @@ def cmd_menuconfig() -> int:
     return run(["idf.py", "-B", FW_BUILD_DIR, "menuconfig"])
 
 
-def cmd_test() -> int:
-    """Host-based Unity tests on the ESP-IDF `linux` target."""
-    change_to_container()
+def _run_host_tests() -> int:
+    """Build and run the host tests (ESP-IDF `linux` target). No container hop.
 
+    Assumes it is already running inside the dev container.
+    """
     cmds = [
             [ "idf.py", "--preview", "-B",  TEST_BUILD_DIR,
               "set-target", "linux" ],
@@ -187,6 +189,37 @@ def cmd_test() -> int:
         if rc != 0:
             return 1
     return 0
+
+
+def _run_qemu_test() -> int:
+    """Build and boot the QEMU smoke test. No container hop.
+
+    Assumes it is already running inside the dev container. `qemu/test_qemu.py`
+    drives the whole flow itself (clean, build, boot under QEMU, verify output)
+    and is CI-friendly (non-zero exit on failure).
+    """
+    return run(["python3", "qemu/test_qemu.py"])
+
+
+def cmd_test_linux() -> int:
+    """Host-based Unity tests on the ESP-IDF `linux` target."""
+    change_to_container()
+    return _run_host_tests()
+
+
+def cmd_test_qemu() -> int:
+    """QEMU smoke test: build and boot the ESP32-S3 image under QEMU."""
+    change_to_container()
+    return _run_qemu_test()
+
+
+def cmd_test() -> int:
+    """Run both test suites: the host Unity tests and the QEMU smoke test."""
+    change_to_container()
+    rc = _run_host_tests()
+    if rc != 0:
+        return rc
+    return _run_qemu_test()
 
 
 def cmd_format() -> int:
@@ -387,6 +420,8 @@ COMMANDS = {
     "monitor": cmd_monitor,
     "menuconfig": cmd_menuconfig,
     "test": cmd_test,
+    "test-linux": cmd_test_linux,
+    "test-qemu": cmd_test_qemu,
     "format": cmd_format,
     "format-check": cmd_format_check,
     "format-check-staged": cmd_format_check_staged,
