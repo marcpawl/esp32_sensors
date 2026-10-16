@@ -1,8 +1,8 @@
-// QEMU link check for the LED HAL (`hal_stub`).
+// Native link check for the LED HAL (`hal_stub`).
 //
-// Proves the stub LED links and works under real FreeRTOS on the ESP32-S3
-// target. Behaviour is a single write/read round-trip; the host suite in
-// `test/` covers the stub's logging and the `LedLike` concept in depth.
+// Proves the stub LED links and works under real FreeRTOS on the linux target.
+// Behaviour is a single write/read round-trip; the host suite in `test/` covers
+// the stub's logging and the `LedLike` concept in depth.
 #include "unity.h"
 
 #include "hal/led.hpp"

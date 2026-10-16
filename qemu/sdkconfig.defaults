@@ -1,15 +1,13 @@
-# ESP-IDF defaults for the QEMU on-target test project.
+# ESP-IDF defaults for the "native" (linux-target) test project.
 #
 # Kept minimal on purpose: this project only runs the Unity suite (the FreeRTOS
 # `Task` tests and HAL-stub linkage checks), so it needs no Wi-Fi, HTTPS, ADC,
 # or other peripherals. See the top-level sdkconfig.defaults for the production
 # firmware configuration.
 
-# Target chip. The ESP-IDF QEMU fork models the ESP32-S3, and the dev container
-# installs that fork via `idf_tools.py install qemu-xtensa` (see Dockerfile),
-# so build for esp32s3 (`qemu-system-xtensa -M esp32s3`).
-CONFIG_IDF_TARGET="esp32s3"
-CONFIG_IDF_TARGET_ESP32S3=y
+# Host (linux) target: the suite builds as a native ELF and runs directly,
+# against ESP-IDF's FreeRTOS (pthread) port — no chip or emulator needed.
+CONFIG_IDF_TARGET="linux"
 
 # --- Logging ---
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y

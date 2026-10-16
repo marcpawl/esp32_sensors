@@ -25,8 +25,8 @@
 
 namespace {
 
-// How long a test waits for its runner before failing. Generous: QEMU runs
-// much slower than hardware.
+// How long a test waits for its runner before failing. Generous: the suite
+// runs natively but scheduling is not instantaneous.
 constexpr TickType_t kWaitTicks = pdMS_TO_TICKS(2000);
 
 // Shared hand-off between a runner (on the new task) and the test (on the

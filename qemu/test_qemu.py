@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""QEMU on-target test driver for the standalone `qemu/` project (ESP32-S3).
+"""Native (linux-target) test driver for the standalone `qemu/` project.
 
 This program cleans the build directory, builds the Unity test firmware for the
-ESP32-S3 target, boots it under the ESP-IDF QEMU fork (`idf.py qemu` ->
-`qemu-system-xtensa -M esp32s3`), and verifies the Unity results. It exits
-non-zero on failure, so it is CI-friendly.
+ESP-IDF `linux` target, runs the resulting ELF directly on the host (inside the
+dev container), and verifies the Unity results. It exits non-zero on failure,
+so it is CI-friendly.
 
 Success is decided by the firmware's completion marker line
 (`QEMU-TESTS-COMPLETE failures=<n>`), which `test_main.cpp` prints once the
@@ -12,15 +12,11 @@ whole suite has run. The driver also scans for Unity `FAIL` lines as a
 belt-and-braces check.
 
 This script must be run *inside* the ESP-IDF dev container (the image sets
-`DOCKER_IMAGE=esp32_sensors`), which installs the ESP-IDF QEMU fork via
-`idf_tools.py install qemu-xtensa` (see the Dockerfile). It does not invoke
-`docker`; if it is not in the container it aborts. From the host, run it
-through the container task runner:
+`DOCKER_IMAGE=esp32_sensors`). It does not invoke `docker`; if it is not in the
+container it aborts. From the host, run it through the container task runner:
 
     scripts/dev.py test-qemu
     scripts/dev.py shell python3 qemu/test_qemu.py
-
-See https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-guides/tools/qemu.html
 """
 
 from __future__ import annotations
@@ -36,28 +32,35 @@ import sys
 
 # This file lives in `qemu/`; the repo root is its parent.
 PROG_DIR = Path(__file__).resolve().parent
-BUILD_DIR = PROG_DIR / "build"
+
+# Build directory is named after the target (`linux`), matching the repo-wide
+# convention (firmware -> build_esp32s3, host tests -> build_linux).
+BUILD_DIR = PROG_DIR / "build_linux"
+
+# The native test ELF. Its name derives from the project name
+# (`esp32_sensors_qemu`), so it ends in `_qemu`.
+TEST_ELF = BUILD_DIR / "esp32_sensors_qemu.elf"
 
 # --- Container --------------------------------------------------------------
 
 # Environment variable set by the dev image (see the Dockerfile). Its presence
-# tells us we are already inside the container, where idf.py, esptool, and the
-# ESP-IDF QEMU fork are installed.
+# tells us we are already inside the container, where idf.py and the ESP-IDF
+# toolchain are installed.
 CONTAINER_ENV = "DOCKER_IMAGE"
 CONTAINER_ENV_VALUE = "esp32_sensors"
 
 # --- Test parameters --------------------------------------------------------
 
-# ESP32-S3 target. The ESP-IDF QEMU fork models it as `-M esp32s3`.
-IDF_TARGET = "esp32s3"
+# The project builds for the ESP-IDF `linux` target.
+IDF_TARGET = "linux"
 
 # Completion marker printed by `test_main.cpp` after `unity_run_all_tests()`.
 # Captures the failure count so we can assert it is zero.
 COMPLETE_RE = re.compile(r"QEMU-TESTS-COMPLETE failures=(\d+)")
 
-# Upper bound (seconds) for the QEMU run before we stop it and inspect output.
+# Upper bound (seconds) for the test run before we stop it and inspect output.
 # The suite is short; this is a safety net, not a per-test budget.
-QEMU_TIMEOUT_S = 60
+RUN_TIMEOUT_S = 60
 
 
 def info(msg: str) -> None:
@@ -86,29 +89,41 @@ def clean_build() -> None:
     shutil.rmtree(BUILD_DIR)
 
 
-def build_firmware() -> None:
-    """Build the test firmware for the ESP32-S3 target."""
-    info(f"Building {IDF_TARGET} test firmware")
-    rc = run(["idf.py", "build"], cwd=PROG_DIR)
+def configure_target() -> None:
+    """Pin the project to the `linux` target.
+
+    `set-target` writes `sdkconfig` from `sdkconfig.defaults`; it is a no-op
+    once the target is already `linux`, so this is safe to run every time and
+    keeps a stale chip-target `sdkconfig` from leaking in.
+    """
+    info(f"Setting target to {IDF_TARGET}")
+    rc = run(["idf.py", "--preview", "-B", BUILD_DIR.name,
+              "set-target", IDF_TARGET], cwd=PROG_DIR)
     if rc.returncode != 0:
-        print("ERROR: firmware build failed", file=sys.stderr)
+        print("ERROR: set-target failed", file=sys.stderr)
         sys.exit(1)
 
 
-def run_qemu() -> subprocess.CompletedProcess:
-    """Boot the image with the ESP-IDF QEMU fork.
+def build_firmware() -> None:
+    """Build the test ELF for the linux target."""
+    info(f"Building {IDF_TARGET} test ELF")
+    rc = run(["idf.py", "-B", BUILD_DIR.name, "build"], cwd=PROG_DIR)
+    if rc.returncode != 0:
+        print("ERROR: build failed", file=sys.stderr)
+        sys.exit(1)
 
-    `idf.py qemu` builds `qemu_flash.bin` from `flash_args` (sized to match
-    CONFIG_ESPTOOLPY_FLASHSIZE) and starts `qemu-system-xtensa -M esp32s3`.
 
-    The firmware finishes the suite then idles, so QEMU does not exit on its
-    own; wrap it in `timeout -k 5 N` (SIGTERM at N seconds, SIGKILL 5 seconds
-    later) and inspect whatever it printed.
+def run_tests() -> subprocess.CompletedProcess:
+    """Run the native test ELF and capture its output.
+
+    The firmware finishes the suite and returns from `app_main`, so the process
+    exits on its own. `timeout` is still wrapped around it as a safety net in
+    case a test hangs.
     """
-    info("Running QEMU")
+    info("Running native test ELF")
     cmd = [
-        "timeout", "-k", "5", str(QEMU_TIMEOUT_S),
-        "idf.py", "qemu",
+        "timeout", "-k", "5", str(RUN_TIMEOUT_S),
+        str(TEST_ELF),
     ]
     try:
         return subprocess.run(
@@ -116,11 +131,10 @@ def run_qemu() -> subprocess.CompletedProcess:
             cwd=PROG_DIR,
             capture_output=True,
             text=True,
-            timeout=QEMU_TIMEOUT_S + 10,
+            timeout=RUN_TIMEOUT_S + 10,
         )
     except subprocess.TimeoutExpired as exc:
-        # A timeout is expected: the firmware never exits on its own.
-        # Reconstruct a CompletedProcess-like result from captured output.
+        # A timeout means the suite did not finish; still inspect what printed.
         out = exc.stdout or ""
         err = exc.stderr or ""
         if isinstance(out, bytes):
@@ -177,13 +191,14 @@ def main() -> int:
         return 2
 
     clean_build()
+    configure_target()
     build_firmware()
 
-    result = run_qemu()
+    result = run_tests()
 
     info("Checking Unity results")
     if check_output(result):
-        info("PASS: QEMU Unity suite completed with 0 failures")
+        info("PASS: native Unity suite completed with 0 failures")
         return 0
     print("FAIL", file=sys.stderr)
     return 1

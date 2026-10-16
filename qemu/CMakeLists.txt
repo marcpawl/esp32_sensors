@@ -1,25 +1,25 @@
 cmake_minimum_required(VERSION 3.16)
 
-# QEMU on-target test project for the ESP32 Solar-Powered Thermometer Logger.
+# Native (linux-target) test project for the ESP32 Solar-Powered Thermometer
+# Logger.
 #
 # This is a standalone ESP-IDF project (independent of the top-level firmware
-# project) whose `app_main` runs a Unity suite. It boots the ESP32-S3 image
-# under the ESP-IDF QEMU fork (`idf.py qemu` -> `qemu-system-xtensa -M
-# esp32s3`), so it exercises code that needs the real FreeRTOS scheduler and
-# cannot run on the host `linux` target — chiefly `thermo::Task` — plus linkage
-# checks for the pin-free `hal_stub` HAL devices.
+# project) whose `app_main` runs a Unity suite. It builds for the ESP-IDF
+# `linux` target and runs as a native ELF, so it exercises code that needs a
+# real FreeRTOS scheduler (not just stubs) — chiefly `thermo::Task` — plus
+# linkage checks for the pin-free `hal_stub` HAL devices. Running on the linux
+# target keeps it hardware-independent while still using ESP-IDF's FreeRTOS
+# (pthread) port, so no chip or emulator is required.
 #
 # The ELF/app binary name derives from the project name, so this is what makes
-# the QEMU artifact end in `_qemu` (esp32_sensors_qemu.bin).
+# the artifact end in `_qemu` (esp32_sensors_qemu.elf).
 #
 # Build and run with:
-#   scripts/dev.py shell -C qemu idf.py qemu
-# or run the test (from inside the dev container; aborts on the host):
 #   scripts/dev.py test-qemu
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
-# Make the shared components visible to this standalone project. The QEMU build
+# Make the shared components visible to this standalone project. This project
 # links `hal_stub` (the deterministic, pin-free HAL) and `espidf_cpp` (the
 # FreeRTOS `Task`/queue wrappers); the production firmware links `hal_board`
 # instead of `hal_stub`. Both HAL components expose the same `hal/*.hpp`

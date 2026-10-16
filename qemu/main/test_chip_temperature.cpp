@@ -1,7 +1,7 @@
-// QEMU link check for the chip-temperature HAL (`hal_stub`).
+// Native link check for the chip-temperature HAL (`hal_stub`).
 //
 // Proves the stub chip-temperature sensor links and works under real FreeRTOS
-// on the ESP32-S3 target: create/init and one `set_celsius()` / `read()`
+// on the linux target: create/init and one `set_celsius()` / `read()`
 // round-trip. The host suite in `test/` covers the stub in depth.
 #include "unity.h"
 

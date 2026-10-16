@@ -1,8 +1,8 @@
-// QEMU link check for the 1-Wire HAL (`hal_stub`).
+// Native link check for the 1-Wire HAL (`hal_stub`).
 //
-// Proves the stub 1-Wire bus links and works under real FreeRTOS on the
-// ESP32-S3 target: create/init, `set_sensors()`, and one `discover_sensors()` /
-// `read()` round-trip. The host suite in `test/` covers the stub in depth.
+// Proves the stub 1-Wire bus links and works under real FreeRTOS on the linux
+// target: create/init, `set_sensors()`, and one `discover_sensors()` / `read()`
+// round-trip. The host suite in `test/` covers the stub in depth.
 #include "unity.h"
 
 #include <vector>

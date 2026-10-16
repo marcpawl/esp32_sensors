@@ -1,9 +1,9 @@
-// QEMU link check for the push-button HAL (`hal_stub`).
+// Native link check for the push-button HAL (`hal_stub`).
 //
-// Proves the stub push button links and works under real FreeRTOS on the
-// ESP32-S3 target: create/init plus one press/release round-trip. The host
-// suite in `test/` covers the interrupt callback and the `PushButtonLike`
-// concept in depth.
+// Proves the stub push button links and works under real FreeRTOS on the linux
+// target: create/init plus one press/release round-trip. The host suite in
+// `test/` covers the interrupt callback and the `PushButtonLike` concept in
+// depth.
 #include "unity.h"
 
 #include "hal/push_button.hpp"

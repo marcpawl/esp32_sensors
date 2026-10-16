@@ -1,8 +1,8 @@
-// QEMU link check for the mode-switch HAL (`hal_stub`).
+// Native link check for the mode-switch HAL (`hal_stub`).
 //
-// The QEMU project links the pin-free `hal_stub` HAL, not the GPIO-backed
-// `hal_board`. On the ESP32-S3 target this proves the stub switch links and
-// works under real FreeRTOS; the deeper behaviour (every pin combination,
+// This project links the pin-free `hal_stub` HAL, not the GPIO-backed
+// `hal_board`. On the linux target this proves the stub switch links and works
+// under real FreeRTOS; the deeper behaviour (every pin combination,
 // bad-hardware cases) is covered by the host suite in `test/`.
 #include "unity.h"
 

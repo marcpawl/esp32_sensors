@@ -214,13 +214,13 @@ def cmd_test_linux() -> int:
 
 
 def cmd_test_qemu() -> int:
-    """QEMU smoke test: build and boot the ESP32-S3 image under QEMU."""
+    """Native (linux-target) suite: build and run the FreeRTOS Task tests."""
     change_to_container()
     return _run_qemu_test()
 
 
 def cmd_test() -> int:
-    """Run both test suites: the host Unity tests and the QEMU smoke test."""
+    """Run both test suites: the host Unity tests and the native suite."""
     change_to_container()
     rc = _run_host_tests()
     if rc != 0:

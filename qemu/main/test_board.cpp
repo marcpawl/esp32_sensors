@@ -1,6 +1,6 @@
-// QEMU link check for the aggregate Board HAL (`hal_stub`).
+// Native link check for the aggregate Board HAL (`hal_stub`).
 //
-// Proves the stub Board links and works under real FreeRTOS on the ESP32-S3
+// Proves the stub Board links and works under real FreeRTOS on the linux
 // target: `create()` with the default pin map, `init_all()`, and each accessor
 // returning a live device. The host suite in `test/` covers the aggregate
 // wiring in depth.

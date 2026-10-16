@@ -79,8 +79,8 @@ esp32_sensors/
 │   ├── hal_board/       # Real, GPIO-backed HAL (linked by the firmware)
 │   └── hal_stub/        # Pin-free HAL stub (linked by QEMU/host tests)
 ├── test/                # Host-based unit tests (IDF `linux` target, Unity)
-├── qemu/                # Standalone QEMU on-target Unity test project (ESP32-S3)
-│   └── build_esp32s3/   # QEMU build output (git-ignored; target-named)
+├── qemu/                # Standalone FreeRTOS/native Unity test project (linux target)
+│   └── build_linux/     # Native test build output (git-ignored; target-named)
 ├── Dockerfile           # Dev container: ESP-IDF v6.1 + non-root host-mapped user
 ├── docker-compose.yml   # `dev` service with serial (/dev) passthrough
 ├── .devcontainer/       # CLion / VS Code Dev Container definition (reuses compose)
@@ -105,13 +105,12 @@ own:
 | Project | Directory | Target | Produces |
 |---|---|---|---|
 | firmware (top level) | `build_esp32s3/` | esp32s3 | `esp32_sensors.bin` (flashed to the board) |
-| QEMU on-target tests (`qemu/`) | `qemu/build_esp32s3/` | esp32s3 | `esp32_sensors_qemu.bin` (booted under QEMU) |
-| host tests (`test/`) | `test/build_linux/` | linux | `esp32_sensors_tests.elf` (run on the host) |
+| native tests (`qemu/`) | `qemu/build_linux/` | linux | `esp32_sensors_qemu.elf` (run natively) |
+| host tests (`test/`) | `test/build_linux/` | linux | `esp32_sensors_tests.elf` (run natively) |
 
-The firmware and QEMU builds are separate ESP-IDF *projects* (each with its own
-`project()` and `sdkconfig`), so they cannot share one directory; naming both
-`build_esp32s3` keeps the convention uniform. `main/` and `qemu/` both target
-ESP32-S3 for QEMU/main use; `test/` targets `linux`. All are git-ignored.
+The firmware and test builds are separate ESP-IDF *projects* (each with its own
+`project()` and `sdkconfig`), so they cannot share one directory. `main/`
+targets ESP32-S3; `test/` and `qemu/` both target `linux`. All are git-ignored.
 
 **Key files:**
 - `Specification.md` — the single source of truth for hardware, modes, RTC memory layout, payload format, and power budget. Any implementation must conform to it.
@@ -160,7 +159,7 @@ read it before working in that directory.** In brief:
 **mutually exclusive**: a project links exactly one. Each project excludes the
 other via `EXCLUDE_COMPONENTS` in its top-level `CMakeLists.txt` (set **before**
 `project()`), because both live under the default `components/` search path. The
-QEMU and host-test projects also add `components/` to `EXTRA_COMPONENT_DIRS`
+native and host-test projects also add `components/` to `EXTRA_COMPONENT_DIRS`
 (their project roots are `qemu/` and `test/`, so the repo-root `components/` is
 not on the default path).
 
@@ -385,8 +384,8 @@ There are two test suites, both runnable from the host via `scripts/dev.py`:
 ```
 
 Every command exits non-zero if its suite fails, so all three are CI-friendly.
-The host test binary prints Unity `PASS`/`FAIL` lines; the QEMU driver prints a
-`==> PASS`/`==> FAIL` summary line.
+The host test binary prints Unity `PASS`/`FAIL` lines; the native driver prints
+a `==> PASS`/`==> FAIL` summary line.
 
 **`self-check`** runs `scripts/test_dev.py` — host-side `unittest` tests for
 `dev.py`'s own pure helpers (notably the `shell` command line it builds, so
