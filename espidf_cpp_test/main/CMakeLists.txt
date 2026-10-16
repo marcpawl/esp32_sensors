@@ -28,6 +28,7 @@ idf_component_register(
         "test_push_button.cpp"
         "test_onewire.cpp"
         "test_chip_temperature.cpp"
+        "test_network_time_protocol.cpp"
         "test_board.cpp"
         "test_https_server.cpp"
     PRIV_REQUIRES

@@ -16,6 +16,7 @@ place and the concrete implementations cannot drift apart.
 | `push_button_types.hpp` | `ButtonState`, `ButtonCallback`, `ButtonHandler`, and the `PushButtonLike` concept |
 | `onewire_types.hpp` | the `OneWireLike` concept (1-Wire bus) |
 | `chip_temperature_types.hpp` | the `ChipTemperatureLike` concept (internal temperature sensor) |
+| `network_time_protocol_types.hpp` | the `NetworkTimeProtocolLike` concept and the default retry/timeout policy (NTP client) |
 | `ds18b20_types.hpp` | DS18B20 types shared with the sensor layer |
 | `pin_map.hpp` | `thermo::pins::*` — the single source of truth for the reference-board GPIO pinout |
 

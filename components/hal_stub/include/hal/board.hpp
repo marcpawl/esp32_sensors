@@ -86,6 +86,17 @@ class Board {
         return mode_switch_;
     }
 
+    // The network time protocol (NTP) client (stub; time via set_utc_epoch(),
+    // failure via set_sync_fails()).
+    [[nodiscard]] NetworkTimeProtocol& network_time_protocol() noexcept {
+        return network_time_protocol_;
+    }
+
+    [[nodiscard]] NetworkTimeProtocol const& network_time_protocol()
+        const noexcept {
+        return network_time_protocol_;
+    }
+
   private:
     ChipTemperature chip_temperature_;
     OneWire one_wire_;
@@ -93,6 +104,7 @@ class Board {
     Led red_;
     PushButton button_;
     Switch mode_switch_;
+    NetworkTimeProtocol network_time_protocol_;
 };
 
 static_assert(BoardLike<Board>, "Board must satisfy the BoardLike concept");

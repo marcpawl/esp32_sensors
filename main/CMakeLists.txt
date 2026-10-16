@@ -19,7 +19,6 @@ idf_component_register(
         "config_page.cpp"
         "config_form.cpp"
         "wifi_ap.cpp"
-        "ntp_client.cpp"
         "run_mode.cpp"
 	"reboot.cpp"
     INCLUDE_DIRS

@@ -52,4 +52,10 @@ TEST_CASE("espidf_cpp_test board: create/init_all and drives every accessor",
     const thermo::hal::Pins run{PinState::kOff, PinState::kOn};
     board.mode_switch().set_pins(run);
     TEST_ASSERT_TRUE(board.mode_switch().read() == run);
+
+    board.network_time_protocol().set_utc_epoch(1700000000u);
+    const auto epoch =
+        board.network_time_protocol().get_utc_epoch("time.nrc.ca");
+    TEST_ASSERT_TRUE(epoch.has_value());
+    TEST_ASSERT_EQUAL_UINT32(1700000000u, *epoch);
 }

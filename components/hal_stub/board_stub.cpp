@@ -31,7 +31,10 @@ esp_err_t Board::init_all() noexcept {
     if (esp_err_t err = button_.init(); err != ESP_OK) {
         return err;
     }
-    return mode_switch_.init();
+    if (esp_err_t err = mode_switch_.init(); err != ESP_OK) {
+        return err;
+    }
+    return network_time_protocol_.init();
 }
 
 }  // namespace thermo::hal

@@ -23,6 +23,7 @@
 #include "hal/board_types.hpp"
 #include "hal/chip_temperature.hpp"
 #include "hal/led.hpp"
+#include "hal/network_time_protocol.hpp"
 #include "hal/onewire.hpp"
 #include "hal/pin_map.hpp"
 #include "hal/push_button.hpp"
@@ -179,6 +180,10 @@ TEST_CASE("hal board: const accessors yield const device references",
                       static_cast<int>(b.red().state()));
     const Pins p = b.mode_switch().read();
     TEST_ASSERT_FALSE(p.first_on());
+    // The const accessor yields a const NTP reference (the const overload
+    // exists); the query itself is non-const and is covered above.
+    static_assert(std::same_as<decltype(b.network_time_protocol()),
+                               thermo::hal::NetworkTimeProtocol const&>);
 }
 
 // --- The stub satisfies the shared concept ---------------------------------

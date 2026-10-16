@@ -11,21 +11,23 @@ exclusive HAL implementations; a project must depend on exactly one of
 
 | Header | Provides |
 |---|---|
-| `board.hpp` | `Board` — the aggregate owning every HAL device (chip temperature, 1-Wire bus, green/red LEDs, push button, mode switch) |
+| `board.hpp` | `Board` — the aggregate owning every HAL device (chip temperature, 1-Wire bus, green/red LEDs, push button, mode switch, NTP client) |
 | `switch.hpp` | `Switch` — the 3-position ON-OFF-ON mode switch |
 | `led.hpp` | `Led` — a single LED |
 | `push_button.hpp` | `PushButton` — a GPIO button with an interrupt callback |
 | `onewire.hpp` | `OneWire` — the 1-Wire bus |
 | `chip_temperature.hpp` | `ChipTemperature` — the internal temperature sensor |
+| `network_time_protocol.hpp` | `NetworkTimeProtocol` — the SNTP-backed NTP client (queries a server for the current UTC time) |
 
 Each device is implemented on top of the ESP-IDF GPIO / temperature-sensor
-drivers, and `board.cpp` aggregates them (`init_all()` initialises every device,
-returning the first error).
+drivers (and `esp_sntp` for the NTP client), and `board.cpp` aggregates them
+(`init_all()` initialises every device, returning the first error).
 
 The shared device vocabulary (`PinState`, `Pins`, `SwitchLike`, `LedState`,
-`LedLike`, `PushButtonLike`, `OneWireLike`, `ChipTemperatureLike`, `BoardPins`,
-`BoardLike`) comes from the header-only `hal_common` component; the pin
-assignments themselves come from `hal_common`'s `pin_map.hpp`.
+`LedLike`, `PushButtonLike`, `OneWireLike`, `ChipTemperatureLike`,
+`NetworkTimeProtocolLike`, `BoardPins`, `BoardLike`) comes from the header-only
+`hal_common` component; the pin assignments themselves come from `hal_common`'s
+`pin_map.hpp`.
 
 ## Mutually exclusive with `hal_stub`
 

@@ -27,6 +27,7 @@
 #include "esp_err.h"
 #include "hal/chip_temperature.hpp"
 #include "hal/led.hpp"
+#include "hal/network_time_protocol.hpp"
 #include "hal/onewire.hpp"
 #include "hal/pin_map.hpp"
 #include "hal/push_button.hpp"
@@ -87,6 +88,10 @@ concept BoardLike =
         { const_board.button() } -> std::same_as<PushButton const&>;
         { board.mode_switch() } -> std::same_as<Switch&>;
         { const_board.mode_switch() } -> std::same_as<Switch const&>;
+        { board.network_time_protocol() } -> std::same_as<NetworkTimeProtocol&>;
+        {
+            const_board.network_time_protocol()
+        } -> std::same_as<NetworkTimeProtocol const&>;
     };
 
 }  // namespace thermo::hal

@@ -9,14 +9,16 @@
 // `<hal/board.hpp>` unchanged.
 //
 // The board owns one instance of each HAL device (chip temperature, 1-Wire bus,
-// green/red LEDs, push button, mode switch) and exposes them. It carries no
-// behaviour of its own beyond delegating `init_all()` to the devices.
+// green/red LEDs, push button, mode switch, NTP client) and exposes them. It
+// carries no behaviour of its own beyond delegating `init_all()` to the
+// devices.
 #pragma once
 
 #include "esp_err.h"
 #include "hal/board_types.hpp"
 #include "hal/chip_temperature.hpp"
 #include "hal/led.hpp"
+#include "hal/network_time_protocol.hpp"
 #include "hal/onewire.hpp"
 #include "hal/push_button.hpp"
 #include "hal/switch.hpp"
@@ -84,6 +86,16 @@ class Board {
         return mode_switch_;
     }
 
+    // The network time protocol (NTP) client.
+    [[nodiscard]] NetworkTimeProtocol& network_time_protocol() noexcept {
+        return network_time_protocol_;
+    }
+
+    [[nodiscard]] NetworkTimeProtocol const& network_time_protocol()
+        const noexcept {
+        return network_time_protocol_;
+    }
+
   private:
     ChipTemperature chip_temperature_;
     OneWire one_wire_;
@@ -91,6 +103,7 @@ class Board {
     Led red_;
     PushButton button_;
     Switch mode_switch_;
+    NetworkTimeProtocol network_time_protocol_;
 };
 
 static_assert(BoardLike<Board>, "Board must satisfy the BoardLike concept");

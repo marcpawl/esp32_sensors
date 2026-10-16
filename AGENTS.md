@@ -152,10 +152,13 @@ read it before working in that directory.** In brief:
   its archive; requiring it transitively pulls in `esp_https_server`. Not HAL;
   abstracts the RTOS, not hardware.
 - `hal_common` — shared, **implementation-free** HAL vocabulary (types and
-  `*Like` concepts). Shared by both HAL implementations, never excluded.
-- `hal_board` — real, GPIO-backed HAL drivers; linked by the production firmware.
-- `hal_stub` — pin-free, software-driven HAL stubs; linked by the simulated
-  environment and the host tests.
+  `*Like` concepts, including `NetworkTimeProtocolLike`). Shared by both HAL
+  implementations, never excluded.
+- `hal_board` — real, GPIO-backed HAL drivers plus the driver-backed chip
+  temperature sensor and the SNTP-backed `NetworkTimeProtocol` client; linked by
+  the production firmware.
+- `hal_stub` — pin-free, software-driven HAL stubs (including the settable
+  `NetworkTimeProtocol`); linked by the simulated environment and the host tests.
 
 `hal_board` and `hal_stub` expose the **same** headers and symbols and are
 **mutually exclusive**: a project links exactly one. Each project excludes the
@@ -364,7 +367,8 @@ There are two test suites, both runnable from the host via `scripts/dev.py`:
   target with Unity — no hardware needed. They cover the pure-logic modules
   (`temp_format`, `payload`, `app_config` validation, `rom_id`, `rtc_buffer`),
   the fixed-capacity containers (`static_vector`, `static_string`), and the
-  `hal_stub` devices.
+  `hal_stub` devices (switch, LED, push button, 1-Wire bus, chip temperature,
+  NTP client, aggregate board).
 - **Native `espidf_cpp_test` suite** (`espidf_cpp_test/`) builds a second Unity
   suite for the ESP-IDF `linux` target and runs it natively, then checks for a
   zero-failure completion marker — no hardware needed. It covers code that needs

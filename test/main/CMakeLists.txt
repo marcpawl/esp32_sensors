@@ -34,6 +34,7 @@ set(test_srcs
     "test_hal_push_button.cpp"
     "test_hal_onewire.cpp"
     "test_hal_chip_temperature.cpp"
+    "test_hal_network_time_protocol.cpp"
     "test_hal_board.cpp"
 )
 

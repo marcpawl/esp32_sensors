@@ -13,8 +13,8 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "hal/network_time_protocol.hpp"
 #include "https_server.hpp"
-#include "ntp_client.hpp"
 #include "power_manager.hpp"
 #include "sensor.hpp"
 #include "wifi_ap.hpp"
@@ -29,12 +29,19 @@ constexpr const char* kTag = "configure";
 // it because Configure mode never returns.
 struct ConfigureContext {
     ConfigureContext(Config& cfg_in, SensorManager& sensors_in,
-                     PowerManager& power_manager_in)
-        : cfg(cfg_in), sensors(sensors_in), power_manager(power_manager_in) {}
+                     PowerManager& power_manager_in,
+                     hal::NetworkTimeProtocol& ntp_in)
+        : cfg(cfg_in),
+          sensors(sensors_in),
+          power_manager(power_manager_in),
+          ntp(ntp_in) {}
 
     Config& cfg;
     SensorManager& sensors;
     PowerManager& power_manager;
+    // The NTP client used for the save-time sync (§5.3). Owned by the caller
+    // and outlives this context.
+    hal::NetworkTimeProtocol& ntp;
     // Warning from the most recent save (e.g. NTP failure), shown on the
     // following GET /saved. Empty when there is nothing to report.
     std::string last_warning;
@@ -87,7 +94,8 @@ ScanSnapshot make_snapshot(ConfigureContext& ctx) {
 // Runs the NTP sync for saved_time (§5.3 step 4-6) and records any warning.
 void sync_saved_time(ConfigureContext& ctx) {
     ctx.last_warning.clear();
-    const auto epoch = ntp_get_utc_epoch(ctx.cfg.ntp_server);
+    const auto epoch = ctx.ntp.get_utc_epoch(
+        ctx.cfg.ntp_server, timing::kNtpRetryCount, timing::kNtpTimeoutMs);
     if (!epoch) {
         ctx.last_warning =
             "NTP sync failed; 'Last Configuration Saved' was "
@@ -208,7 +216,15 @@ void run_configure_mode(LedTask& led_task) {
 
     PowerManager power_manager(cfg);
 
-    ConfigureContext ctx{cfg, sensors, power_manager};
+    // NTP client for the save-time sync (§5.3). Constructed standalone rather
+    // than through a full Board: Configure mode brings up the sensor/AP path
+    // itself, so only the one HAL device it needs is instantiated here.
+    hal::NetworkTimeProtocol ntp = hal::NetworkTimeProtocol::create();
+    if (esp_err_t ntp_err = ntp.init(); ntp_err != ESP_OK) {
+        ESP_LOGW(kTag, "NTP client init failed: %s", esp_err_to_name(ntp_err));
+    }
+
+    ConfigureContext ctx{cfg, sensors, power_manager, ntp};
 
     // The server is an empty router; the pages are registered here and their
     // handlers capture `ctx`, which outlives the server for the duration of
