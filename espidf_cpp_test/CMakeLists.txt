@@ -6,7 +6,8 @@ cmake_minimum_required(VERSION 3.16)
 # This is a standalone ESP-IDF project (independent of the top-level firmware
 # project) whose `app_main` runs a Unity suite. It builds for the ESP-IDF
 # `linux` target and runs as a native ELF, so it exercises code that needs a
-# real FreeRTOS scheduler (not just stubs) — chiefly `thermo::Task` — plus
+# real FreeRTOS scheduler (not just stubs) — chiefly `thermo::Task` and the
+# `thermo::HttpsServer` router (driven over a real plain-HTTP listener) — plus
 # linkage checks for the pin-free `hal_stub` HAL devices. Running on the linux
 # target keeps it hardware-independent while still using ESP-IDF's FreeRTOS
 # (pthread) port, so no chip or emulator is required.

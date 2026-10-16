@@ -109,7 +109,13 @@ std::optional<std::string> HttpRequest::body() {
     return body_;
 }
 
-HttpsServer::HttpsServer() : routes_(std::make_unique<RouteTable>()) {}
+HttpsServer::HttpsServer() : HttpsServer(Scheme::kHttps, 443) {}
+
+HttpsServer::HttpsServer(Scheme scheme, std::uint16_t port)
+    : routes_(std::make_unique<RouteTable>()), scheme_(scheme) {
+    // HTTPS is fixed to 443; HTTP honours the requested port.
+    port_ = (scheme == Scheme::kHttps) ? 443 : port;
+}
 
 HttpsServer::~HttpsServer() {
     stop();
@@ -184,25 +190,35 @@ esp_err_t HttpsServer::start() {
         return ESP_OK;  // Already running.
     }
 
-    httpd_ssl_config_t conf = HTTPD_SSL_CONFIG_DEFAULT();
-    conf.port_secure = 443;
-    // mbedTLS 4.x (shipped with ESP-IDF v6.1) requires the PEM buffer length
-    // to include the terminating NUL byte; the `*_len()` helpers return the
-    // length excluding it (i.e. strlen), so add 1 for each PEM buffer.
-    // Passing the NUL-less length makes the parser fail with
-    // MBEDTLS_ERR_X509_INVALID_FORMAT (-0x2180), which surfaces as a HTTPD
-    // connection-accept error.
-    conf.servercert =
-        reinterpret_cast<const std::uint8_t*>(certs::kServerCertPem);
-    conf.servercert_len = certs::server_cert_len() + 1;
-    conf.prvtkey_pem =
-        reinterpret_cast<const std::uint8_t*>(certs::kServerKeyPem);
-    conf.prvtkey_len = certs::server_key_len() + 1;
-
     httpd_handle_t server = nullptr;
-    esp_err_t err = httpd_ssl_start(&server, &conf);
+    esp_err_t err = ESP_OK;
+
+    if (scheme_ == Scheme::kHttps) {
+        httpd_ssl_config_t conf = HTTPD_SSL_CONFIG_DEFAULT();
+        conf.port_secure = port_;
+        // mbedTLS 4.x (shipped with ESP-IDF v6.1) requires the PEM buffer
+        // length to include the terminating NUL byte; the `*_len()` helpers
+        // return the length excluding it (i.e. strlen), so add 1 for each PEM
+        // buffer. Passing the NUL-less length makes the parser fail with
+        // MBEDTLS_ERR_X509_INVALID_FORMAT (-0x2180), which surfaces as a HTTPD
+        // connection-accept error.
+        conf.servercert =
+            reinterpret_cast<const std::uint8_t*>(certs::kServerCertPem);
+        conf.servercert_len = certs::server_cert_len() + 1;
+        conf.prvtkey_pem =
+            reinterpret_cast<const std::uint8_t*>(certs::kServerKeyPem);
+        conf.prvtkey_len = certs::server_key_len() + 1;
+        err = httpd_ssl_start(&server, &conf);
+    } else {
+        httpd_config_t conf = HTTPD_DEFAULT_CONFIG();
+        conf.server_port = port_;
+        err = httpd_start(&server, &conf);
+    }
+
     if (err != ESP_OK) {
-        ESP_LOGE(kTag, "httpd_ssl_start failed: %s", esp_err_to_name(err));
+        ESP_LOGE(kTag, "%s start failed: %s",
+                 scheme_ == Scheme::kHttps ? "httpd_ssl_start" : "httpd_start",
+                 esp_err_to_name(err));
         return err;
     }
     handle_ = server;
@@ -216,13 +232,13 @@ esp_err_t HttpsServer::start() {
         if (err != ESP_OK) {
             ESP_LOGE(kTag, "failed to register %s: %s", slot->fragment.c_str(),
                      esp_err_to_name(err));
-            httpd_ssl_stop(server);
-            handle_ = nullptr;
+            stop();
             return err;
         }
     }
 
-    ESP_LOGI(kTag, "HTTPS server listening on port 443");
+    ESP_LOGI(kTag, "%s server listening on port %u",
+             scheme_ == Scheme::kHttps ? "HTTPS" : "HTTP", port_);
     return ESP_OK;
 }
 
@@ -230,7 +246,9 @@ esp_err_t HttpsServer::stop() {
     if (handle_ == nullptr) {
         return ESP_OK;
     }
-    esp_err_t err = httpd_ssl_stop(static_cast<httpd_handle_t>(handle_));
+    esp_err_t err = (scheme_ == Scheme::kHttps)
+                        ? httpd_ssl_stop(static_cast<httpd_handle_t>(handle_))
+                        : httpd_stop(static_cast<httpd_handle_t>(handle_));
     handle_ = nullptr;
     return err;
 }

@@ -5,8 +5,14 @@
 // page (GET /, GET /scan, POST /save, GET /saved) is contributed by the client
 // via `register_handler`, so the routing table is assembled by the caller and
 // the pages can live with the rest of the Configure-mode logic.
+//
+// The listener scheme is selectable via `Scheme`: the firmware uses `kHttps`
+// (TLS on port 443, the only scheme the ESP32 exposes for Configure mode),
+// while tests use `kHttp` to run a real plain-HTTP server on the ESP-IDF
+// `linux` target without the TLS stack.
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -27,6 +33,16 @@ namespace thermo {
 // HTTP methods the router understands. Values are opaque; they are mapped to
 // the ESP-IDF `httpd_method_t` internally.
 enum class HttpMethod { kGet, kPost };
+
+// Transport the listener uses when `HttpsServer::start()` brings it up.
+//
+//   * `kHttps` (default): TLS via `httpd_ssl_start`, the Configure-mode scheme
+//     (§6). On the chip this listens on the fixed port 443.
+//   * `kHttp`: plain HTTP via `httpd_start`, on the port given to the
+//     constructor. The ESP32 firmware never uses this; it exists so tests can
+//     stand up a real server on the ESP-IDF `linux` target, where the TLS
+//     listener is unavailable, and exercise the router end-to-end.
+enum class Scheme { kHttps, kHttp };
 
 // A response the router should send back to the client.
 struct HttpResponse {
@@ -67,25 +83,39 @@ class HttpRequest {
 // keeps handlers host-testable.
 using HttpHandler = std::function<HttpResponse(HttpRequest&)>;
 
-// Serves the Configure-mode UI over TLS on port 443 (§6).
+// Serves the Configure-mode UI over the scheme chosen at construction (§6).
+//
+// The default constructor serves the firmware's TLS endpoint (port 443). The
+// `kHttp` constructor serves plain HTTP on `port`, which the tests use to run
+// a real server on the ESP-IDF `linux` target.
 //
 // Handlers are registered with `register_handler` before (or after) `start()`;
 // a route registered before start is applied to the listener when it comes up.
 class HttpsServer {
   public:
+    // Firmware constructor: serves HTTPS (TLS) on the fixed port 443.
     HttpsServer();
+
+    // Explicit-scheme constructor. For `Scheme::kHttp`, `port` is the TCP port
+    // the listener binds; it is ignored for `Scheme::kHttps` (which always
+    // uses 443).
+    explicit HttpsServer(Scheme scheme, std::uint16_t port = 80);
+
     ~HttpsServer();
 
     HttpsServer(const HttpsServer&) = delete;
     HttpsServer& operator=(const HttpsServer&) = delete;
 
-    // Starts the TLS listener. Routes registered before this call are applied
-    // as part of the start.
+    // Starts the listener (TLS or plain HTTP, per the constructor). Routes
+    // registered before this call are applied as part of the start.
     esp_err_t start();
 
     // Stops the listener. Registered routes are retained and are re-applied by
     // a subsequent `start()`.
     esp_err_t stop();
+
+    // The TCP port the listener binds (443 for HTTPS).
+    std::uint16_t port() const noexcept { return port_; }
 
     // Registers the handler for `method` + `fragment`. Returns an error if the
     // route table is full or the fragment is already registered. When the
@@ -106,7 +136,9 @@ class HttpsServer {
     struct RouteTable;
 
     std::unique_ptr<RouteTable> routes_;
-    void* handle_ = nullptr;  // httpd_handle_t; null until started.
+    Scheme scheme_ = Scheme::kHttps;  // Transport used by start().
+    std::uint16_t port_ = 443;        // Listener port (443 for HTTPS).
+    void* handle_ = nullptr;          // httpd_handle_t; null until started.
 };
 
 }  // namespace thermo

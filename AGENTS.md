@@ -34,7 +34,7 @@ This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its s
 > **Implementation status (current milestone):**
 > - **Configure mode — implemented.** SoftAP, HTTPS server, config UI, NVS persistence, LED semantics.
 > - **Run mode — scaffolded/stubbed.** Real: boot self-test LEDs, battery read + hysteresis, sensor read with cached ROM IDs (first-boot scan), sample append to the RTC buffer, deep sleep. **Stubbed:** Wi-Fi station connect + cached fast-reconnect (§3.9), batch upload + payload wire-out (§9, payload is formatted and logged but not sent), exponential backoff (§3.7).
-> - **Host unit tests + native `espidf_cpp_test` suite.** `test/` builds for the ESP-IDF `linux` target (Unity) and `espidf_cpp_test/` runs a second native `linux` Unity suite (covering the FreeRTOS-backed `thermo::Task` and HAL-stub link checks); both run via `scripts/dev.py test` (or `test-linux` / `test-espidf-cpp`). More on-target tests for hardware-dependent code are planned.
+> - **Host unit tests + native `espidf_cpp_test` suite.** `test/` builds for the ESP-IDF `linux` target (Unity) and `espidf_cpp_test/` runs a second native `linux` Unity suite (covering the FreeRTOS-backed `thermo::Task`, the `thermo::HttpsServer` router driven over a real plain-HTTP listener, and HAL-stub link checks); both run via `scripts/dev.py test` (or `test-linux` / `test-espidf-cpp`). More on-target tests for hardware-dependent code are planned.
 
 > **Toolchain note:** The host's locally installed ESP-IDF is **v6.1** with **Xtensa GCC 15.2.0** (`esp-15.2.0_20251204`), which matches the pinned Docker image `espressif/idf:release-v6.1` exactly. Keep both in sync: if you upgrade the host toolchain, update the pin in `Dockerfile`/`docker-compose.yml` and this document.
 
@@ -174,11 +174,14 @@ covered by `test/`. **Keep it that way** — put pure logic in these files and
 hardware/IDF calls behind them.
 
 > **HTTPS server is a router.** `HttpsServer` (`https_server.cpp`, in the
-> `espidf_cpp` component) owns only the TLS listener and a small URI-handler
+> `espidf_cpp` component) owns only the listener and a small URI-handler
 > table; the Configure-mode pages are registered by the client via
 > `register_handler` / `deregister_handler` and live in `configure_mode.cpp`.
 > Handlers receive an `HttpRequest` and return an `HttpResponse`, so request
-> parsing and page rendering stay host-testable.
+> parsing and page rendering stay host-testable. The listener scheme is chosen
+> at construction (`Scheme::kHttps` for the firmware's TLS endpoint on port 443;
+> `Scheme::kHttp` serves plain HTTP on a chosen port, which the native
+> `espidf_cpp_test` suite uses to drive the router over loopback).
 
 **Not yet present (expected next):**
 - On-target tests for hardware-dependent code (1-Wire, deep-sleep, Wi-Fi).
@@ -365,9 +368,12 @@ There are two test suites, both runnable from the host via `scripts/dev.py`:
 - **Native `espidf_cpp_test` suite** (`espidf_cpp_test/`) builds a second Unity
   suite for the ESP-IDF `linux` target and runs it natively, then checks for a
   zero-failure completion marker — no hardware needed. It covers code that needs
-  the real FreeRTOS scheduler (`thermo::Task`) plus linkage checks for the
-  `hal_stub` devices (each case just constructs the stub to prove it links;
-  deeper behaviour lives in the host suite).
+  the real FreeRTOS scheduler (`thermo::Task`), the `thermo::HttpsServer` router
+  (stood up as a real plain-HTTP listener on the linux target and driven over
+  loopback, so registration semantics and the request-body → response path are
+  exercised end-to-end), plus linkage checks for the `hal_stub` devices (each
+  case just constructs the stub to prove it links; deeper behaviour lives in the
+  host suite).
 - **On-target tests** are planned for more hardware-dependent code (1-Wire
   GPIO, deep-sleep wake, Wi-Fi upload).
 - Keep hardware interactions behind thin interfaces so business logic remains

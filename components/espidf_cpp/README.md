@@ -22,7 +22,7 @@ rather than in `main`.
 | `task.hpp` | `TaskParams` and `Task<Runner>` — runs `Runner::run()` (`[[noreturn]]`) on a freshly created FreeRTOS task, owning the handle | `freertos/task.h` |
 | `thermo_static_vector.hpp` | `static_vector<T, N>` — fixed-capacity, inline-storage sequence container standing in for C++26 `std::static_vector` | *(none)* |
 | `thermo_static_string.hpp` | `static_string<N>` — fixed-capacity, always-NUL-terminated string built on `static_vector` | *(none)* |
-| `https_server.hpp` + `https_server.cpp` | `HttpsServer`, `HttpRequest`, `HttpResponse`, `HttpMethod`, `HttpHandler` — a thin, page-agnostic TLS router over `esp_https_server` | `esp_https_server` |
+| `https_server.hpp` + `https_server.cpp` | `HttpsServer`, `HttpRequest`, `HttpResponse`, `HttpMethod`, `HttpHandler` — a thin, page-agnostic router over `esp_https_server`. `HttpsServer` takes a `Scheme` (`kHttps` by default; `kHttp` serves plain HTTP on a chosen port, used by the native tests) | `esp_https_server` |
 | `self_signed_cert.hpp` + `certs/self_signed_cert.cpp` | the bundled, self-signed development certificate (key + cert bytes) used by the Configure-mode HTTPS server | *(none — data only)* |
 
 The two `thermo_static_*` containers carry no ESP-IDF dependency; they live here
@@ -33,9 +33,12 @@ keeping them in this component avoids a dependency back on the application's
 `https_server` and `self_signed_cert` are the exceptions to the header-only
 rule: their definitions are compiled into this component's archive
 (`https_server.cpp`, `certs/self_signed_cert.cpp`), so the headers only declare
-them. The router owns a TLS listener and a small URI-handler table, but knows
+them. The router owns a listener and a small URI-handler table, but knows
 nothing about the Configure-mode pages — those are registered by the client via
 `register_handler`/`deregister_handler` and live in `main/configure_mode.cpp`.
+The firmware serves over TLS (`Scheme::kHttps`, port 443); `Scheme::kHttp` runs
+a plain-HTTP listener instead, which is how the native `espidf_cpp_test` suite
+drives the router over loopback (the TLS listener has no `linux` port).
 The certificate is not security-sensitive for a development build, but it is
 shipped as code so the server always has a usable identity.
 

@@ -18,12 +18,20 @@
 
 #include <cstdio>
 
+#include "esp_err.h"
+#include "esp_event.h"
+
 // Unity requires these, even when empty.
 void setUp(void) {}
 
 void tearDown(void) {}
 
 extern "C" void app_main(void) {
+    // Create the default event loop before the suite runs: the ESP-IDF HTTP
+    // server (used by the `HttpsServer` cases to stand up a real plain-HTTP
+    // listener on the linux target) posts its lifecycle events to it.
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+
     // `unity_run_all_tests()` runs every registered case (printing PASS/FAIL)
     // and returns; it does not terminate the process.
     unity_run_all_tests();
