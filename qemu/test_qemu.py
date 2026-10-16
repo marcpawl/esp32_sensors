@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Native (linux-target) test driver for the standalone `qemu/` project.
 
-This program cleans the build directory, builds the Unity test firmware for the
-ESP-IDF `linux` target, runs the resulting ELF directly on the host (inside the
-dev container), and verifies the Unity results. It exits non-zero on failure,
-so it is CI-friendly.
+This program builds the Unity test firmware for the ESP-IDF `linux` target,
+runs the resulting ELF directly on the host (inside the dev container), and
+verifies the Unity results. It exits non-zero on failure, so it is CI-friendly.
 
 Success is decided by the firmware's completion marker line
 (`QEMU-TESTS-COMPLETE failures=<n>`), which `test_main.cpp` prints once the
@@ -24,7 +23,6 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import re
-import shutil
 import subprocess
 import sys
 
@@ -81,22 +79,33 @@ def run(cmd: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, cwd=cwd, text=True)
 
 
-def clean_build() -> None:
-    """Remove the build directory."""
-    info(f"Cleaning build directory: {BUILD_DIR}")
-    if not BUILD_DIR.exists():
-        return
-    shutil.rmtree(BUILD_DIR)
+def configured_target() -> str | None:
+    """Return the target recorded in `sdkconfig`, or None if unset.
+
+    ESP-IDF writes `CONFIG_IDF_TARGET="<target>"` into `sdkconfig` when a target
+    is selected, so reading it tells us whether `set-target` is still needed.
+    """
+    try:
+        text = (PROG_DIR / "sdkconfig").read_text()
+    except FileNotFoundError:
+        return None
+    match = re.search(r'^CONFIG_IDF_TARGET="([^"]+)"', text, re.MULTILINE)
+    return match.group(1) if match else None
 
 
 def configure_target() -> None:
     """Pin the project to the `linux` target.
 
-    `set-target` writes `sdkconfig` from `sdkconfig.defaults`; it is a no-op
-    once the target is already `linux`, so this is safe to run every time and
-    keeps a stale chip-target `sdkconfig` from leaking in.
+    `set-target` rewrites `sdkconfig` (and forces a full rebuild), so only run
+    it when the recorded target differs from `IDF_TARGET`. When it already
+    matches we are a no-op, leaving every file untouched and the build
+    incremental.
     """
-    info(f"Setting target to {IDF_TARGET}")
+    current = configured_target()
+    if current == IDF_TARGET:
+        info(f"Target already set to {IDF_TARGET}; skipping set-target")
+        return
+    info(f"Setting target to {IDF_TARGET} (was {current or 'unset'})")
     rc = run(["idf.py", "--preview", "-B", BUILD_DIR.name,
               "set-target", IDF_TARGET], cwd=PROG_DIR)
     if rc.returncode != 0:
@@ -190,7 +199,6 @@ def main() -> int:
         )
         return 2
 
-    clean_build()
     configure_target()
     build_firmware()
 
