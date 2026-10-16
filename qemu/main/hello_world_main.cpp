@@ -6,6 +6,8 @@
 
 #include <cinttypes>
 #include <cstdio>
+#include <cstdlib>
+#include <vector>
 
 #include "esp_chip_info.h"
 #include "esp_flash.h"
@@ -13,6 +15,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "hal/led.hpp"
+#include "hal/onewire.hpp"
 #include "hal/switch.hpp"
 #include "sdkconfig.h"
 
@@ -75,6 +78,57 @@ void report_led() {
     led.write(thermo::hal::LedState::kOff);
 }
 
+// Prints a DS18B20 reading as "<rom hex> <temp>" when the temperature is
+// present, or "<rom hex> --" when it is missing (nullopt).
+void print_reading(const thermo::hal::DS18B20Reading& reading) {
+    const thermo::hal::RomId& rom = reading.rom;
+    std::printf("OneWire sensor %02X%02X%02X%02X%02X%02X%02X%02X ",
+                rom.bytes[0], rom.bytes[1], rom.bytes[2], rom.bytes[3],
+                rom.bytes[4], rom.bytes[5], rom.bytes[6], rom.bytes[7]);
+    if (reading.temp_c_x100.has_value()) {
+        std::printf("%d.%02d C\n", reading.temp_c_x100.value() / 100,
+                    std::abs(reading.temp_c_x100.value() % 100));
+    } else {
+        std::printf("--\n");
+    }
+}
+
+// Exercises the shared HAL 1-Wire bus interface via its QEMU stub (`hal_stub`).
+// The stub's sensors are settable in software, so this proves the interface is
+// linked and reports the DS18B20 ROM IDs and readings the caller configured.
+void report_onewire() {
+    static_assert(thermo::hal::OneWireLike<thermo::hal::OneWire>);
+
+    thermo::hal::OneWire bus = thermo::hal::OneWire::create(/*gpio=*/4);
+    if (bus.init() != ESP_OK) {
+        std::printf("OneWire init failed\n");
+        return;
+    }
+
+    // Report the default collection, then override it to prove set_sensors().
+    std::printf("OneWire discovered %u default sensor(s)\n",
+                static_cast<unsigned>(bus.discover_sensors().size()));
+
+    const std::vector<thermo::hal::DS18B20Reading> readings = {
+        {{0x28, 0xFF, 0x64, 0xA1, 0xB2, 0x16, 0x03, 0xC4}, 2150},
+        {{0x28, 0xFF, 0x3B, 0x2C, 0x77, 0x16, 0x04, 0x2F}, -750},
+    };
+    bus.set_sensors(readings);
+
+    const std::vector<thermo::hal::RomId> found = bus.discover_sensors();
+    std::printf("OneWire discovered %u sensor(s)\n",
+                static_cast<unsigned>(found.size()));
+    for (const thermo::hal::RomId& rom : found) {
+        std::printf("OneWire sensor %02X%02X%02X%02X%02X%02X%02X%02X\n",
+                    rom.bytes[0], rom.bytes[1], rom.bytes[2], rom.bytes[3],
+                    rom.bytes[4], rom.bytes[5], rom.bytes[6], rom.bytes[7]);
+    }
+
+    for (const thermo::hal::DS18B20Reading& reading : bus.read()) {
+        print_reading(reading);
+    }
+}
+
 }  // namespace
 
 extern "C" void app_main(void) {
@@ -82,6 +136,7 @@ extern "C" void app_main(void) {
 
     report_switch();
     report_led();
+    report_onewire();
 
     /* Print chip information */
     esp_chip_info_t chip_info;
