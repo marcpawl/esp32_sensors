@@ -27,6 +27,7 @@ idf_component_register(
         "include"
     REQUIRES
         hal_board
+        espidf_cpp
         nvs_flash
         esp_wifi
         esp_netif

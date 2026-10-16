@@ -11,6 +11,10 @@
 # test_hal_push_button.cpp, test_hal_onewire.cpp, test_hal_chip_temperature.cpp,
 # and test_hal_board.cpp exercise them.
 #
+# The `espidf_cpp` component (Task, OneMessageQueue, and the fixed-capacity
+# static_vector/static_string containers) is required below; test_static_vector.cpp
+# and test_static_string.cpp exercise the containers.
+#
 # WHOLE_ARCHIVE is required so the TEST_CASE registrations in the test sources
 # are linked into the final executable even though nothing references them.
 
@@ -51,6 +55,7 @@ idf_component_register(
     PRIV_REQUIRES
         unity
         hal_stub
+        espidf_cpp
     WHOLE_ARCHIVE
 )
 
@@ -65,6 +70,7 @@ function(add_assert_program name)
     target_include_directories(${name} PRIVATE
         "${CMAKE_CURRENT_LIST_DIR}"
         "${CMAKE_CURRENT_LIST_DIR}/../../main/include"
+        "${CMAKE_CURRENT_LIST_DIR}/../../components/espidf_cpp/include"
     )
     set_target_properties(${name} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
