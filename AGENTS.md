@@ -136,7 +136,7 @@ ESP32-S3 for QEMU/main use; `test/` targets `linux`. All are git-ignored.
 | RTC state / buffer | `rtc_state.cpp` (`RTC_DATA_ATTR` state block), `rtc_buffer.cpp` (FIFO) |
 | Power / battery | `battery_monitor.cpp` |
 | Config | `app_config.cpp` (validation), `app_config_store.cpp` (NVS) |
-| Configure mode | `configure_mode.cpp`, `wifi_ap.cpp`, `https_server.cpp`, `config_page.cpp`, `certs/self_signed_cert.cpp` |
+| Configure mode | `configure_mode.cpp`, `wifi_ap.cpp`, `https_server.cpp` (TLS router), `config_page.cpp` (HTML), `config_form.cpp` (form parsing), `certs/self_signed_cert.cpp` |
 | Run mode | `run_mode.cpp` (stubbed network path), `ntp_server.cpp` |
 | Payload | `payload.cpp`, `temp_format.cpp`, `rom_id.cpp` (ROM-ID hex) |
 
@@ -163,11 +163,18 @@ QEMU and host-test projects also add `components/` to `EXTRA_COMPONENT_DIRS`
 not on the default path).
 
 **Host-testable modules.** `temp_format.cpp`, `payload.cpp`, `app_config.cpp`,
-`rom_id.cpp`, and `rtc_buffer.cpp` are deliberately free of chip-specific
+`config_page.cpp`, `config_form.cpp`, `rom_id.cpp`, and `rtc_buffer.cpp` are
+deliberately free of chip-specific
 ESP-IDF dependencies so they build for the `linux` target and are covered by
 `test/`. The `hal_stub` component is likewise built for the `linux` target and
 covered by `test/`. **Keep it that way** — put pure logic in these files and
 hardware/IDF calls behind them.
+
+> **HTTPS server is a router.** `HttpsServer` (`https_server.cpp`) owns only
+> the TLS listener and a small URI-handler table; the Configure-mode pages are
+> registered by the client via `register_handler` / `deregister_handler` and
+> live in `configure_mode.cpp`. Handlers receive an `HttpRequest` and return an
+> `HttpResponse`, so request parsing and page rendering stay host-testable.
 
 **Not yet present (expected next):**
 - On-target tests for hardware-dependent code (1-Wire, deep-sleep, Wi-Fi).

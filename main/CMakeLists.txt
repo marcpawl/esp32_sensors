@@ -18,6 +18,7 @@ idf_component_register(
         "configure_mode.cpp"
         "https_server.cpp"
         "config_page.cpp"
+        "config_form.cpp"
         "wifi_ap.cpp"
         "ntp_client.cpp"
         "run_mode.cpp"

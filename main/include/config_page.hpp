@@ -4,13 +4,26 @@
 // host without any hardware or network dependencies.
 #pragma once
 
+#include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "app_config.hpp"
-#include "https_server.hpp"  // ScanSnapshot
+#include "power_source.hpp"
+#include "sensor.hpp"
 
-namespace thermo::config_page {
+namespace thermo {
+
+// Snapshot of live sensor/battery data exposed via GET /scan (§6.1).
+struct ScanSnapshot {
+    PowerSource power_source;
+    /** Battery strength, absent when running without a battery (on USB). */
+    std::optional<std::uint32_t> battery_mv = std::nullopt;
+    std::vector<DS18B20Reading> sensors;
+};
+
+namespace config_page {
 
 // Renders the configuration form (GET /). `errors` is populated after a failed
 // POST /save so the user sees per-field messages inline.
@@ -30,4 +43,5 @@ std::string format_saved_time(std::uint32_t epoch_utc);
 // Minimal HTML escaping for values interpolated into the page.
 std::string html_escape(const std::string& in);
 
-}  // namespace thermo::config_page
+}  // namespace config_page
+}  // namespace thermo

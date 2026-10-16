@@ -14,7 +14,6 @@
 
 #include "app_config.hpp"
 #include "config_page.hpp"
-#include "https_server.hpp"
 #include "power_source.hpp"
 #include "sensor.hpp"
 
