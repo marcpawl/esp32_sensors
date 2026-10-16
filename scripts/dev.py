@@ -34,17 +34,17 @@ import tempfile
 # Always operate from the repository root, regardless of the caller's cwd.
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# C/C++ sources checked/formatted by clang-format, discovered via git so the
-# list always matches the tracked files (no missing-glob errors). Keep the
-# directory filter in sync with the pre-commit hook (.githooks/pre-commit).
-GIT_LS_FILES = (
-    'git ls-files "main/*" "test/*" | grep -E "\\.(cpp|hpp|h|cc|cxx)$"'
-)
-
-# Directories whose staged C/C++ files format-check-staged inspects. Keep in
-# sync with scripts against .clang-format and the pre-commit hook.
-ROOTS = ("main", "test")
+# Directories whose C/C++ sources are checked/formatted by clang-format. The
+# file list is discovered via git so it always matches the tracked files (no
+# missing-glob errors). Keep this in sync with the pre-commit hook
+# (.githooks/pre-commit).
+ROOTS = ("main", "test", "qemu")
 EXTENSIONS = (".cpp", ".hpp", ".h", ".cc", ".cxx")
+
+# C/C++ sources checked/formatted by clang-format, discovered via git.
+GIT_LS_FILES = (
+    'git ls-files "main/*" "test/*" "qemu/*" | grep -E "\\.(cpp|hpp|h|cc|cxx)$"'
+)
 
 # Docker dev image that ships the pinned clang-format version.
 DEV_IMAGE = "esp32-sensors-dev:latest"
@@ -67,9 +67,9 @@ def split_list(items, max_size):
 def source_files():
     try:
         # Run the git command safely
-        # This matches tracked files in the main/ and test/ directories
+        # This matches tracked files in the directories listed in ROOTS.
         result = subprocess.run(
-            ["git", "ls-files", "main/*", "test/*"],
+            ["git", "ls-files", *[f"{root}/*" for root in ROOTS]],
             capture_output=True,
             text=True,
             check=True
