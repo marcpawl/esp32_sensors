@@ -269,7 +269,7 @@ def cmd_install_hooks() -> int:
     The hook rejects commits whose staged C/C++ files are not
     clang-formatted.
     """
-    rc = run("git", "-C", str(REPO_ROOT), "config", "core.hooksPath", ".githooks")
+    rc = run(["git", "-C", str(REPO_ROOT), "config", "core.hooksPath", ".githooks"])
     if rc == 0:
         print("Installed git hooks: core.hooksPath -> .githooks")
     return rc

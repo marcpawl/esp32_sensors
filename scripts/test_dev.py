@@ -18,6 +18,7 @@ from contextlib import redirect_stdout
 import io
 import os
 from pathlib import Path
+import subprocess
 import sys
 import unittest
 
@@ -159,6 +160,74 @@ class CommandRegistryTests(unittest.TestCase):
                 (handler.__doc__ or "").strip(),
                 f"command {name!r} has no docstring",
             )
+
+
+class GitHooksInstallationTests(unittest.TestCase):
+    """`install-hooks` invariants: the tracked hook is present and active.
+
+    These guard the bug where `install-hooks` reported success (because it only
+    set `core.hooksPath`) while the hook file itself was missing, so commit-time
+    checks were silently skipped.
+    """
+
+    GITHOOKS_DIR = Path(".githooks")
+    HOOK_NAME = "pre-commit"
+
+    def _git(self, *args):
+        """Run git in the repo root and return stdout (text)."""
+        proc = subprocess.run(
+            ("git", *args),
+            cwd=dev.REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return proc.stdout
+
+    def test_hook_file_exists_and_is_executable(self):
+        # The working tree must contain the runnable hook, not just the config
+        # pointing at an empty directory.
+        hook = dev.REPO_ROOT / self.GITHOOKS_DIR / self.HOOK_NAME
+        self.assertTrue(hook.is_file(), f"missing hook file: {hook}")
+        self.assertTrue(
+            os.access(hook, os.X_OK),
+            f"hook file is not executable: {hook}",
+        )
+
+    def test_hook_file_is_tracked_by_git(self):
+        # The hook is version-controlled, so a fresh clone can restore it.
+        tracked = self._git("ls-files", "--", str(self.GITHOOKS_DIR))
+        self.assertIn(
+            f"{self.GITHOOKS_DIR}/{self.HOOK_NAME}",
+            tracked.splitlines(),
+        )
+
+    def test_hooks_path_points_at_githooks_dir(self):
+        # `core.hooksPath` must direct git at the version-controlled hooks.
+        hooks_path = self._git("config", "--get", "core.hooksPath").strip()
+        self.assertEqual(hooks_path, str(self.GITHOOKS_DIR))
+
+    def test_installed_hook_matches_the_tracked_content(self):
+        # The file on disk must be the tracked content (the "latest changes"):
+        # a deleted-then-restored hook must be byte-identical to the version
+        # git tracks, which is what `install-hooks` restores. Compare against
+        # the index (staged) version, falling back to HEAD when the hook is
+        # not staged — mirroring the restore logic.
+        rel = f"{self.GITHOOKS_DIR}/{self.HOOK_NAME}"
+        tracked = None
+        for source in (f":{rel}", f"HEAD:{rel}"):
+            proc = subprocess.run(
+                ("git", "show", source),
+                cwd=dev.REPO_ROOT,
+                capture_output=True,
+                text=True,
+            )
+            if proc.returncode == 0:
+                tracked = proc.stdout
+                break
+        self.assertIsNotNone(tracked, f"{rel} is not tracked by git")
+        on_disk = (dev.REPO_ROOT / self.GITHOOKS_DIR / self.HOOK_NAME).read_text()
+        self.assertEqual(on_disk, tracked)
 
 
 class SelfCheckModuleTests(unittest.TestCase):

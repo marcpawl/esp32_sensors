@@ -34,7 +34,6 @@ This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its s
 > **Implementation status (current milestone):**
 > - **Configure mode — implemented.** SoftAP, HTTPS server, config UI, NVS persistence, LED semantics.
 > - **Run mode — scaffolded/stubbed.** Real: boot self-test LEDs, battery read + hysteresis, sensor read with cached ROM IDs (first-boot scan), sample append to the RTC buffer, deep sleep. **Stubbed:** Wi-Fi station connect + cached fast-reconnect (§3.9), batch upload + payload wire-out (§9, payload is formatted and logged but not sent), exponential backoff (§3.7).
-> - **No tests yet.** There is no `test/` directory; host-based tests are planned.
 
 > **Toolchain note:** The host's locally installed ESP-IDF is **v6.1** with **Xtensa GCC 15.2.0** (`esp-15.2.0_20251204`), which matches the pinned Docker image `espressif/idf:release-v6.1` exactly. Keep both in sync: if you upgrade the host toolchain, update the pin in `Dockerfile`/`docker-compose.yml` and this document.
 
@@ -294,6 +293,10 @@ the container.
 
 ### Testing approach
 
+> **Requirement:** `./scripts/dev.py test` **must pass** before any change is
+> considered complete. Do not commit or hand off work while this command fails
+> (non-zero exit). Treat a red `test` run as a broken build.
+
 - **Host-based unit tests** live in `test/` and run on the ESP-IDF `linux`
   target with Unity — no hardware needed. They cover the pure-logic modules
   (`temp_format`, `payload`, `app_config` validation, `rom_id`, `rtc_buffer`).
@@ -336,6 +339,8 @@ C++26 token set, and the codebase uses no C++23+ *syntax* that would confuse it.
 
 ### Conventions to follow
 
+- **`./scripts/dev.py test` must pass** before you consider a task done. Never
+  commit or hand off work while this command exits non-zero.
 - Target **ESP-IDF v6.1** APIs only.
 - Use **C++26** with GNU extensions; do not introduce the C-only style where C++ is appropriate.
 - Declare `app_main` with `extern "C"` linkage.
