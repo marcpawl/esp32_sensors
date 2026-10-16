@@ -17,18 +17,25 @@
 #                                  fixed-capacity, always-NUL-terminated string
 #                                  built on `static_vector` (used by `task.hpp`
 #                                  for the copied task name).
+#   * `self_signed_cert.hpp`     - declares the bundled development certificate
+#                                  used by the Configure-mode HTTPS server. This
+#                                  one is *compiled* (`certs/self_signed_cert.cpp`),
+#                                  not header-only, so the certificate bytes
+#                                  live in this component rather than in `main`.
 #
-# The first three wrap ESP-IDF/FreeRTOS rather than the hardware, so they are
-# independent of the HAL (`hal_common` / `hal_board` / `hal_stub`) and do not
-# reference it. The two static containers carry no ESP-IDF dependency at all
-# and live here so `task.hpp` can use `static_string` without this component
-# depending on `main`.
+# Most headers are header-only; callers compile those implementations inline.
+# `self_signed_cert.cpp` is the exception: it is built into this component's
+# archive, so the certificate is available even though it is referenced only by
+# the transport layer.
 #
-# Like the HAL headers, this component is header-only; callers compile the
-# implementations inline. Requiring the underlying IDF components keeps the
-# FreeRTOS and `esp_log` symbols visible to whoever includes the headers.
+# The RTOS/IDF wrappers are independent of the HAL (`hal_common` / `hal_board`
+# / `hal_stub`) and do not reference it. The two static containers carry no
+# ESP-IDF dependency at all and live here so `task.hpp` can use `static_string`
+# without this component depending on `main`.
 
 idf_component_register(
+    SRCS
+        "certs/self_signed_cert.cpp"
     INCLUDE_DIRS
         "include"
     REQUIRES

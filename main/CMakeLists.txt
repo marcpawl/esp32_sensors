@@ -23,7 +23,6 @@ idf_component_register(
         "ntp_client.cpp"
         "run_mode.cpp"
 	"reboot.cpp"
-        "certs/self_signed_cert.cpp"
     INCLUDE_DIRS
         "include"
     REQUIRES

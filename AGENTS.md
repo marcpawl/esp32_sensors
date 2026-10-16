@@ -136,7 +136,7 @@ ESP32-S3 for QEMU/main use; `test/` targets `linux`. All are git-ignored.
 | RTC state / buffer | `rtc_state.cpp` (`RTC_DATA_ATTR` state block), `rtc_buffer.cpp` (FIFO) |
 | Power / battery | `battery_monitor.cpp` |
 | Config | `app_config.cpp` (validation), `app_config_store.cpp` (NVS) |
-| Configure mode | `configure_mode.cpp`, `wifi_ap.cpp`, `https_server.cpp` (TLS router), `config_page.cpp` (HTML), `config_form.cpp` (form parsing), `certs/self_signed_cert.cpp` |
+| Configure mode | `configure_mode.cpp`, `wifi_ap.cpp`, `https_server.cpp` (TLS router), `config_page.cpp` (HTML), `config_form.cpp` (form parsing); the self-signed cert (`certs/self_signed_cert.cpp`) lives in `espidf_cpp` |
 | Run mode | `run_mode.cpp` (stubbed network path), `ntp_server.cpp` |
 | Payload | `payload.cpp`, `temp_format.cpp`, `rom_id.cpp` (ROM-ID hex) |
 
@@ -145,9 +145,11 @@ than in `main/`, so host tests and QEMU can swap hardware for deterministic
 stubs. **Each component has a `README.md` documenting its purpose and contents —
 read it before working in that directory.** In brief:
 
-- `espidf_cpp` — header-only C++ wrappers over ESP-IDF/FreeRTOS C APIs (`Task`,
-  `OneMessageQueue`, handle deleters, fixed-capacity containers). Not HAL;
-  abstracts the RTOS, not hardware.
+- `espidf_cpp` — C++ wrappers over ESP-IDF/FreeRTOS C APIs (`Task`,
+  `OneMessageQueue`, handle deleters, fixed-capacity containers). Mostly
+  header-only, but it also **compiles** `certs/self_signed_cert.cpp` (the
+  bundled development certificate used by the Configure-mode HTTPS server) into
+  its archive. Not HAL; abstracts the RTOS, not hardware.
 - `hal_common` — shared, **implementation-free** HAL vocabulary (types and
   `*Like` concepts). Shared by both HAL implementations, never excluded.
 - `hal_board` — real, GPIO-backed HAL drivers; linked by the production firmware.
