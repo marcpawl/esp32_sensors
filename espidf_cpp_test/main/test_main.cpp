@@ -12,7 +12,7 @@
 // lives in the host suite.
 //
 // Run with:
-//   scripts/dev.py test-qemu
+//   scripts/dev.py test-espidf-cpp
 #include "unity.h"
 #include "unity_test_runner.h"
 

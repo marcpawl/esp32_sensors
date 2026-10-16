@@ -14,8 +14,8 @@ This script must be run *inside* the ESP-IDF dev container (the image sets
 `DOCKER_IMAGE=esp32_sensors`). It does not invoke `docker`; if it is not in the
 container it aborts. From the host, run it through the container task runner:
 
-    scripts/dev.py test-qemu
-    scripts/dev.py shell python3 espidf_cpp_test/test_qemu.py
+    scripts/dev.py test-espidf-cpp
+    scripts/dev.py shell python3 espidf_cpp_test/test_espidf_cpp.py
 """
 
 from __future__ import annotations
@@ -192,9 +192,9 @@ def main() -> int:
             "ERROR: this script must run inside the ESP-IDF dev container "
             f"({CONTAINER_ENV}={CONTAINER_ENV_VALUE} is not set).\n"
             "       From the host, run it through the container task runner:\n"
-            "           scripts/dev.py test-qemu\n"
+            "           scripts/dev.py test-espidf-cpp\n"
             "       or:\n"
-            "           scripts/dev.py shell python3 espidf_cpp_test/test_qemu.py",
+            "           scripts/dev.py shell python3 espidf_cpp_test/test_espidf_cpp.py",
             file=sys.stderr,
         )
         return 2

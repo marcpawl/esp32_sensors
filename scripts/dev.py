@@ -10,7 +10,7 @@
 #
 # Usage:
 #   scripts/dev.py [image|build|flash|monitor|menuconfig|test|test-linux|\
-#                   test-qemu|self-check|format|format-check|\
+#                   test-espidf-cpp|self-check|format|format-check|\
 #                   format-check-staged|install-hooks|shell]
 #   scripts/dev.py --help        # full help, including per-command details
 #
@@ -201,10 +201,11 @@ def _run_espidf_cpp_test() -> int:
     """Build and run the native (linux-target) espidf_cpp test suite.
 
     Assumes it is already running inside the dev container.
-    `espidf_cpp_test/test_qemu.py` drives the whole flow itself (build, run the
-    native ELF, verify output) and is CI-friendly (non-zero exit on failure).
+    `espidf_cpp_test/test_espidf_cpp.py` drives the whole flow itself (build,
+    run the native ELF, verify output) and is CI-friendly (non-zero exit on
+    failure).
     """
-    return run(["python3", "espidf_cpp_test/test_qemu.py"])
+    return run(["python3", "espidf_cpp_test/test_espidf_cpp.py"])
 
 
 def cmd_test_linux() -> int:
@@ -213,7 +214,7 @@ def cmd_test_linux() -> int:
     return _run_host_tests()
 
 
-def cmd_test_qemu() -> int:
+def cmd_test_espidf_cpp() -> int:
     """Native (linux-target) suite: build and run the FreeRTOS Task tests."""
     change_to_container()
     return _run_espidf_cpp_test()
@@ -452,7 +453,7 @@ COMMANDS = {
     "menuconfig": cmd_menuconfig,
     "test": cmd_test,
     "test-linux": cmd_test_linux,
-    "test-qemu": cmd_test_qemu,
+    "test-espidf-cpp": cmd_test_espidf_cpp,
     "self-check": cmd_self_check,
     "format": cmd_format,
     "format-check": cmd_format_check,

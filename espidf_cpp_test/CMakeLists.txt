@@ -15,7 +15,7 @@ cmake_minimum_required(VERSION 3.16)
 # the artifact `esp32_sensors_espidf_cpp_test.elf`.
 #
 # Build and run with:
-#   scripts/dev.py test-qemu
+#   scripts/dev.py test-espidf-cpp
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 

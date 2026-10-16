@@ -34,7 +34,7 @@ This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its s
 > **Implementation status (current milestone):**
 > - **Configure mode — implemented.** SoftAP, HTTPS server, config UI, NVS persistence, LED semantics.
 > - **Run mode — scaffolded/stubbed.** Real: boot self-test LEDs, battery read + hysteresis, sensor read with cached ROM IDs (first-boot scan), sample append to the RTC buffer, deep sleep. **Stubbed:** Wi-Fi station connect + cached fast-reconnect (§3.9), batch upload + payload wire-out (§9, payload is formatted and logged but not sent), exponential backoff (§3.7).
-> - **Host unit tests + native `espidf_cpp_test` suite.** `test/` builds for the ESP-IDF `linux` target (Unity) and `espidf_cpp_test/` runs a second native `linux` Unity suite (covering the FreeRTOS-backed `thermo::Task` and HAL-stub link checks); both run via `scripts/dev.py test` (or `test-linux` / `test-qemu`). More on-target tests for hardware-dependent code are planned.
+> - **Host unit tests + native `espidf_cpp_test` suite.** `test/` builds for the ESP-IDF `linux` target (Unity) and `espidf_cpp_test/` runs a second native `linux` Unity suite (covering the FreeRTOS-backed `thermo::Task` and HAL-stub link checks); both run via `scripts/dev.py test` (or `test-linux` / `test-espidf-cpp`). More on-target tests for hardware-dependent code are planned.
 
 > **Toolchain note:** The host's locally installed ESP-IDF is **v6.1** with **Xtensa GCC 15.2.0** (`esp-15.2.0_20251204`), which matches the pinned Docker image `espressif/idf:release-v6.1` exactly. Keep both in sync: if you upgrade the host toolchain, update the pin in `Dockerfile`/`docker-compose.yml` and this document.
 
@@ -118,7 +118,7 @@ targets ESP32-S3; `test/` and `espidf_cpp_test/` both target `linux`. All are gi
 - `sdkconfig.defaults` — the committed configuration intent (target, C++ exceptions/RTTI off, partition table, `-Os`). `sdkconfig` is generated from this and is **not** tracked.
 - `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash environment. Extend these (not ad-hoc `docker run`) when adding tooling. The compose `dev` service is also the target of the Dev Container (see below).
 - `.devcontainer/devcontainer.json` — the CLion / VS Code **Dev Container** definition. It **reuses the compose `dev` service** (it does not define its own image), so CLion builds/starts the same container the CLI uses. Edit `docker-compose.yml` for image/mount/user changes; edit `devcontainer.json` only for IDE-level wiring.
-- `scripts/dev.py` — the single container task runner (`build`, `flash`, `monitor`, `menuconfig`, `test`, `test-linux`, `test-qemu`, `self-check`, `format`, `format-check`, `format-check-staged`, `install-hooks`, `shell`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. `shell` is the preferred way to run a container command from the host: with no arguments it opens an interactive login shell, and with arguments it runs them in the container (e.g. `./scripts/dev.py shell ls -1d /`). The pre-commit hook (`.githooks/pre-commit`) delegates its check to `scripts/dev.py format-check-staged`. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
+- `scripts/dev.py` — the single container task runner (`build`, `flash`, `monitor`, `menuconfig`, `test`, `test-linux`, `test-espidf-cpp`, `self-check`, `format`, `format-check`, `format-check-staged`, `install-hooks`, `shell`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. `shell` is the preferred way to run a container command from the host: with no arguments it opens an interactive login shell, and with arguments it runs them in the container (e.g. `./scripts/dev.py shell ls -1d /`). The pre-commit hook (`.githooks/pre-commit`) delegates its check to `scripts/dev.py format-check-staged`. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
 - `scripts/test_dev.py` — host-side unit tests for `dev.py` itself (stdlib `unittest`, run by `scripts/dev.py self-check`). Imports `dev.py` in-process and covers its pure helpers — chiefly the command line `shell` builds (so shell syntax like pipes/semicolons is passed through verbatim) and `shell -C` path resolution.
 - `scripts/dev.py-completion.bash` — bash tab-completion for `scripts/dev.py`. Source it to complete subcommands (e.g. `./scripts/dev.py form<TAB>` → `format`, `format-check`, `format-check-staged`). It asks `dev.py complete <prefix>` for candidates, so the command list is defined in exactly one place.
 - `.idea/cmake.xml` / `.idea/runConfigurations/*.xml` — **committed** shared CLion configuration. `cmake.xml` defines the CMake profile used inside the Dev Container; the run configurations drive the build, test, format, flash, and shell tasks (six via `python3 scripts/dev.py`, one native CMake config for build/refactor). `.idea/workspace.xml` (local, git-ignored) holds per-machine state.
@@ -259,7 +259,7 @@ configuration used for building and refactoring inside the IDE:
 | esp32_sensors (container CMake) | CMake | Builds the `esp32_sensors` CMake target in the container; enables CLion Build/Compile and C++ **refactorings** |
 | Build firmware (container) | `scripts/dev.py build` | `idf.py -B build_esp32s3 build` in the container |
 | Flash & monitor (container) | `scripts/dev.py flash` | `idf.py -B build_esp32s3 -p $ESP32_PORT flash monitor` (default `/dev/ttyUSB0`) |
-| Host unit tests (container) | `scripts/dev.py test` | runs both suites (below); use `test-linux` / `test-qemu` to run one |
+| Host unit tests (container) | `scripts/dev.py test` | runs both suites (below); use `test-linux` / `test-espidf-cpp` to run one |
 | clang-format check (container) | `scripts/dev.py format-check` | `clang-format --dry-run --Werror` |
 | menuconfig (container) | `scripts/dev.py menuconfig` | Kconfig UI |
 | Container shell (ESP-IDF) | `scripts/dev.py shell` | login shell with the IDF env sourced (accepts trailing args to run a command) |
@@ -307,7 +307,7 @@ enacted on the host.
 |both|build|Compile the source code|
 |both|test|Run both test suites: the host unit tests then the native `espidf_cpp_test` suite|
 |both|test-linux|Build and run the host unit tests (ESP-IDF `linux` target)|
-|both|test-qemu|Build and run the native `espidf_cpp_test` Unity suite (linux target)|
+|both|test-espidf-cpp|Build and run the native `espidf_cpp_test` Unity suite (linux target)|
 |both|self-check|Run the host unit tests for dev.py itself (stdlib `unittest`)|
 |both|flash|idf.py flash monitor|
 |both|monitor|idf.py monitor|
@@ -379,8 +379,8 @@ There are two test suites, both runnable from the host via `scripts/dev.py`:
 ./scripts/dev.py test
 
 # Run just one suite.
-./scripts/dev.py test-linux    # host Unity tests (linux target, build_linux/)
-./scripts/dev.py test-qemu     # build + run the native `espidf_cpp_test` suite
+./scripts/dev.py test-linux        # host Unity tests (linux target, build_linux/)
+./scripts/dev.py test-espidf-cpp   # build + run the native `espidf_cpp_test` suite
 
 # Run the host-side unit tests for dev.py itself (no container/hardware).
 ./scripts/dev.py self-check
