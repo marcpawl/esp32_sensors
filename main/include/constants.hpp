@@ -26,8 +26,8 @@ constexpr std::size_t kSensorCount = 3;  // Three DS18B20 on the shared bus.
 // Caps are deliberately conservative to keep the RTC struct small.
 constexpr std::size_t kMaxBufferRecords = 256;
 
-// Sensor ROM IDs are 8 bytes each.
-constexpr std::size_t kRomIdBytes = 8;
+// The DS18B20 ROM-ID byte count lives with the type in `hal_common`
+// (`hal/ds18b20_types.hpp`: `thermo::hal::kRomIdBytes`).
 
 }  // namespace thermo::limits
 

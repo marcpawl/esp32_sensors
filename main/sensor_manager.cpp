@@ -21,7 +21,7 @@ esp_err_t SensorManager::init() {
     return bus_.init();
 }
 
-std::vector<SensorReading> SensorManager::read_all(
+std::vector<DS18B20Reading> SensorManager::read_all(
     const std::vector<RomId>& roms, std::vector<RomId>* out_roms) {
     std::vector<RomId> active = roms;
 
@@ -38,7 +38,7 @@ std::vector<SensorReading> SensorManager::read_all(
     // Kick off one conversion for all devices, then wait once.
     if (device_.start_conversion() != ESP_OK) {
         ESP_LOGW(kTag, "no presence pulse; all readings null");
-        std::vector<SensorReading> nulls;
+        std::vector<DS18B20Reading> nulls;
         nulls.reserve(active.size());
         for (const auto& rom : active) {
             nulls.push_back({rom, std::nullopt});
@@ -47,7 +47,7 @@ std::vector<SensorReading> SensorManager::read_all(
     }
     vTaskDelay(pdMS_TO_TICKS(kConversionWaitMs));
 
-    std::vector<SensorReading> readings;
+    std::vector<DS18B20Reading> readings;
     readings.reserve(active.size());
     for (const auto& rom : active) {
         readings.push_back({rom, device_.read_temperature(rom)});

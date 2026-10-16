@@ -19,10 +19,10 @@
 #include "sensor.hpp"
 
 using thermo::Config;
+using thermo::DS18B20Reading;
 using thermo::PowerSource;
 using thermo::RomId;
 using thermo::ScanSnapshot;
-using thermo::SensorReading;
 using thermo::config_page::render_scan_json;
 
 namespace {
@@ -35,9 +35,9 @@ RomId rom_with_byte(std::uint8_t tag) {
     return rom;
 }
 
-SensorReading reading_with_temp(std::uint8_t tag,
-                                std::optional<std::int16_t> temp) {
-    SensorReading r{};
+DS18B20Reading reading_with_temp(std::uint8_t tag,
+                                 std::optional<std::int16_t> temp) {
+    DS18B20Reading r{};
     r.rom = rom_with_byte(tag);
     r.temp_c_x100 = temp;
     return r;

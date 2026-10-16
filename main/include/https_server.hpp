@@ -18,7 +18,7 @@ struct ScanSnapshot {
     PowerSource power_source;
     /** Battery strength, absent when running without a battery (on USB). */
     std::optional<std::uint32_t> battery_mv = std::nullopt;
-    std::vector<SensorReading> sensors;
+    std::vector<DS18B20Reading> sensors;
 };
 
 // Callback used by the server to obtain a fresh /scan snapshot on demand.
