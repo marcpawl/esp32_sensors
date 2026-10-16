@@ -192,6 +192,8 @@ def _run_host_tests() -> int:
         rc = run( cmd, cwd="test")
         if rc != 0:
             return 1
+
+    print("SUCCESS: host tests passed")
     return 0
 
 
