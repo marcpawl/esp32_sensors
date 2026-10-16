@@ -73,7 +73,8 @@ esp32_sensors/
 ├── CMakeLists.txt       # Top-level ESP-IDF project definition
 ├── sdkconfig.defaults   # Committed IDF defaults (sdkconfig itself is generated)
 ├── main/                # Firmware component (C++26) — see module map below
-├── components/          # Reusable ESP-IDF components (see "HAL" section)
+├── components/          # Reusable ESP-IDF components (each has a README.md)
+│   ├── espidf_cpp/      # Header-only C++ wrappers over ESP-IDF/FreeRTOS C APIs
 │   ├── hal_common/      # Shared, header-only HAL vocabulary (types/concepts)
 │   ├── hal_board/       # Real, GPIO-backed HAL (linked by the firmware)
 │   └── hal_stub/        # Pin-free HAL stub (linked by QEMU/host tests)
@@ -139,58 +140,34 @@ ESP32-S3 for QEMU/main use; `test/` targets `linux`. All are git-ignored.
 | Run mode | `run_mode.cpp` (stubbed network path), `ntp_server.cpp` |
 | Payload | `payload.cpp`, `temp_format.cpp`, `rom_id.cpp` (ROM-ID hex) |
 
-**HAL components (`components/`).** Hardware-specific drivers live in reusable
-ESP-IDF components rather than in `main/`, so host tests and QEMU can swap them
-for deterministic stubs. The HAL is split into one shared component plus two
-**mutually exclusive** implementations:
+**Components (`components/`).** Reusable code lives in ESP-IDF components rather
+than in `main/`, so host tests and QEMU can swap hardware for deterministic
+stubs. **Each component has a `README.md` documenting its purpose and contents —
+read it before working in that directory.** In brief:
 
-| Component | Kind | Linked by | Provides |
-|---|---|---|---|
-| `hal_common` | header-only | everything (firmware, QEMU, tests) | shared vocabulary: types + concepts |
-| `hal_board` | `.cpp` | production firmware (`main/`) | real, GPIO-backed drivers |
-| `hal_stub` | `.cpp` | QEMU project (`qemu/`), host tests (`test/`) | pin-free, software-driven stubs |
+- `espidf_cpp` — header-only C++ wrappers over ESP-IDF/FreeRTOS C APIs (`Task`,
+  `OneMessageQueue`, handle deleters, fixed-capacity containers). Not HAL;
+  abstracts the RTOS, not hardware.
+- `hal_common` — shared, **implementation-free** HAL vocabulary (types and
+  `*Like` concepts). Shared by both HAL implementations, never excluded.
+- `hal_board` — real, GPIO-backed HAL drivers; linked by the production firmware.
+- `hal_stub` — pin-free, software-driven HAL stubs; linked by QEMU and the host
+  tests.
 
-`hal_common` is **implementation-free**: it defines the vocabulary but no
-concrete `Switch` class, so both implementations can require it without
-duplication. `hal_board` and `hal_stub` are mutually exclusive — a project
-links exactly one.
-
-The interface for each HAL device is a header pair: the shared vocabulary in
-`hal_common` (e.g. `hal/switch_types.hpp`) plus a per-implementation header of
-the same name (e.g. `hal/switch.hpp`) that includes it and adds the concrete
-class. For the 3-position mode switch:
-
-- `hal/switch_types.hpp` (`hal_common`) defines `thermo::hal::PinState`,
-  `thermo::hal::Pins`, and the `thermo::hal::SwitchLike` concept — the single
-  definition of the shared types.
-- `hal/switch.hpp` (`hal_board` and `hal_stub`, one each) defines
-  `thermo::hal::Switch` with an identical public interface (same ctor, inline
-  `create()` factory, `init()`, `read()`). Each `static_assert`s
-  `SwitchLike<Switch>`, so the two implementations cannot drift from the shared
-  contract (or from each other).
-
-The HAL is **semantics-free**: `Switch::read()` returns the raw `Pins` (one
-`PinState` per sense pole), and mapping pin states to Configure / Off / Run is
-the caller's job (`main/main.cpp`). Reporting both poles lets the caller detect
-bad hardware (both-pins-on / both-pins-off), which the switch stub can simulate
-via `set_pins()`.
-
-Because `hal_board` and `hal_stub` would otherwise be discovered together (both
-live under the project's default `components/` search path), each project
-excludes the *other* via `EXCLUDE_COMPONENTS` in its top-level `CMakeLists.txt`
-(set **before** `project()`): the firmware excludes `hal_stub`; the QEMU project
-adds `components/` to `EXTRA_COMPONENT_DIRS` and excludes `hal_board`; the host
-test project also adds `components/` to `EXTRA_COMPONENT_DIRS` (its own project
-root is `test/`, so the repo-root `components/` is not on the default path) and
-excludes `hal_board`.
-`hal_common` is shared and is never excluded.
+`hal_board` and `hal_stub` expose the **same** headers and symbols and are
+**mutually exclusive**: a project links exactly one. Each project excludes the
+other via `EXCLUDE_COMPONENTS` in its top-level `CMakeLists.txt` (set **before**
+`project()`), because both live under the default `components/` search path. The
+QEMU and host-test projects also add `components/` to `EXTRA_COMPONENT_DIRS`
+(their project roots are `qemu/` and `test/`, so the repo-root `components/` is
+not on the default path).
 
 **Host-testable modules.** `temp_format.cpp`, `payload.cpp`, `app_config.cpp`,
 `rom_id.cpp`, and `rtc_buffer.cpp` are deliberately free of chip-specific
 ESP-IDF dependencies so they build for the `linux` target and are covered by
-`test/`. The HAL's `hal_stub` component (the pin-free switch) is likewise built
-for the `linux` target and covered by `test/main/test_hal_switch.cpp`. **Keep it
-that way** — put pure logic in these files and hardware/IDF calls behind them.
+`test/`. The `hal_stub` component is likewise built for the `linux` target and
+covered by `test/`. **Keep it that way** — put pure logic in these files and
+hardware/IDF calls behind them.
 
 **Not yet present (expected next):**
 - On-target tests for hardware-dependent code (1-Wire, deep-sleep, Wi-Fi).
@@ -371,10 +348,9 @@ There are two test suites, both runnable from the host via `scripts/dev.py`:
 
 - **Host-based unit tests** live in `test/` and run on the ESP-IDF `linux`
   target with Unity — no hardware needed. They cover the pure-logic modules
-  (`temp_format`, `payload`, `app_config` validation, `rom_id`, `rtc_buffer`) and
-  the `hal_stub` components (`test_hal_switch.cpp` exercises the pin-free mode
-  switch: `create()`/`init()`, the default reading, `set_pins()` round-trips, and
-  bad-hardware simulation).
+  (`temp_format`, `payload`, `app_config` validation, `rom_id`, `rtc_buffer`),
+  the fixed-capacity containers (`static_vector`, `static_string`), and the
+  `hal_stub` devices.
 - **QEMU smoke test** (`qemu/`) builds the ESP32-S3 image and boots it under
   QEMU, then checks the boot log for expected output — no hardware needed.
 - **On-target tests** are planned for hardware-dependent code (1-Wire/DS18B20
