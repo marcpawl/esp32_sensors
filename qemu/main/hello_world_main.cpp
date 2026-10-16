@@ -14,6 +14,7 @@
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "hal/board.hpp"
 #include "hal/chip_temperature.hpp"
 #include "hal/led.hpp"
 #include "hal/onewire.hpp"
@@ -217,6 +218,47 @@ void report_push_button() {
         g_button_events.last == thermo::hal::ButtonState::kOn ? "On" : "Off");
 }
 
+// Exercises the shared HAL aggregate Board interface via its QEMU stub
+// (`hal_stub`). The board owns one stub device per HAL device, so this proves
+// the aggregate is linked, that `init_all()` succeeds, and that each accessor
+// returns the same live, deterministic device the individual reports drive.
+// The pins default to the real board map (`hal/pin_map.hpp`), so `BoardPins{}`
+// is enough on the reference hardware (the stub ignores them anyway).
+void report_board() {
+    static_assert(thermo::hal::BoardLike<thermo::hal::Board>);
+
+    thermo::hal::Board board = thermo::hal::Board::create({});
+    if (board.init_all() != ESP_OK) {
+        std::printf("Board init_all failed\n");
+        return;
+    }
+
+    // Drive each device through its accessor to prove the board wires them up.
+    board.chip_temperature().set_celsius(3150);
+    std::printf("Board chip temperature %d.%02d C\n",
+                board.chip_temperature().read() / 100,
+                std::abs(board.chip_temperature().read() % 100));
+
+    board.one_wire().set_sensors(
+        {{{0x28, 0xFF, 0x64, 0xA1, 0xB2, 0x16, 0x03, 0xC4}, 2150}});
+    std::printf("Board one-wire sensors %u\n",
+                static_cast<unsigned>(board.one_wire().read().size()));
+
+    board.green().write(thermo::hal::LedState::kOn);
+    board.red().write(thermo::hal::LedState::kOff);
+
+    board.button().set(thermo::hal::ButtonState::kOn);
+    std::printf(
+        "Board button %s\n",
+        board.button().read() == thermo::hal::ButtonState::kOn ? "On" : "Off");
+
+    board.mode_switch().set_pins(
+        {thermo::hal::PinState::kOff, thermo::hal::PinState::kOn});
+    const thermo::hal::Pins sw = board.mode_switch().read();
+    std::printf("Board mode switch first=%d third=%d\n", sw.first_on() ? 1 : 0,
+                sw.third_on() ? 1 : 0);
+}
+
 }  // namespace
 
 extern "C" void app_main(void) {
@@ -227,6 +269,7 @@ extern "C" void app_main(void) {
     report_push_button();
     report_onewire();
     report_chip_temperature();
+    report_board();
 
     /* Print chip information */
     esp_chip_info_t chip_info;

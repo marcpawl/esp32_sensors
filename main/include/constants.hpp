@@ -1,22 +1,15 @@
-// Application-wide constants: GPIO assignments, timing, and limits.
+// Application-wide constants: timing and limits.
 // Values follow Specification.md Rev 12 (§2, §3, §4, §7).
+//
+// The GPIO assignment (§2.4) now lives in `hal_common` (`hal/pin_map.hpp`,
+// namespace `thermo::pins`) so the firmware and the HAL `BoardPins` defaults
+// share one definition; it is re-exported here for existing callers.
 #pragma once
 
 #include <cstddef>
 #include <cstdint>
 
-namespace thermo::pins {
-
-// §2.4 GPIO assignment.
-constexpr int kWireBus = 4;       // 1-Wire bus (DS18B20 x3 + 4.7k pull-up)
-constexpr int kRedLed = 16;       // Red LED
-constexpr int kGreenLed = 17;     // Green LED
-constexpr int kConfig = 1;        // Mode sense: Configure (HIGH == configure)
-constexpr int kRun = 2;           // Mode sense: Run (HIGH == run)
-constexpr int kBatteryAdc = 34;   // Battery voltage ADC (via divider)
-constexpr int kDividerGate = 25;  // Optional divider gate (P-MOSFET control)
-
-}  // namespace thermo::pins
+#include "hal/pin_map.hpp"  // thermo::pins::{kWireBus, kRedLed, ...} (§2.4)
 
 namespace thermo::limits {
 
