@@ -24,7 +24,9 @@ class Switch {
     Switch(int first_gpio, int third_gpio) noexcept;
 
     Switch(Switch const&) = delete;
-    Switch(Switch&&) = delete;
+    // Movable so `create()` (and containers/factories) can hand a Switch back
+    // by value without needing guaranteed copy elision.
+    Switch(Switch&&) noexcept = default;
     ~Switch() = default;
     Switch& operator=(Switch const&) = delete;
     Switch& operator=(Switch&&) = delete;

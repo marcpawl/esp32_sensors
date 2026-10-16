@@ -5,6 +5,9 @@
 # not depend on chip-specific IDF drivers are listed here; hardware-facing code
 # (1-Wire GPIO, Wi-Fi, HTTPS) is covered by on-target tests instead.
 #
+# The pin-free HAL stub (hal_stub's switch) is host-testable too and is pulled
+# in via PRIV_REQUIRES below; test_hal_switch.cpp exercises it.
+#
 # WHOLE_ARCHIVE is required so the TEST_CASE registrations in the test sources
 # are linked into the final executable even though nothing references them.
 
@@ -18,6 +21,7 @@ set(test_srcs
     "test_rtc_buffer.cpp"
     "test_static_vector.cpp"
     "test_static_string.cpp"
+    "test_hal_switch.cpp"
 )
 
 # Production sources under test (paths are relative to this component dir).
@@ -38,6 +42,7 @@ idf_component_register(
         "${CMAKE_CURRENT_LIST_DIR}/../../main/include"
     PRIV_REQUIRES
         unity
+        hal_stub
     WHOLE_ARCHIVE
 )
 
