@@ -38,13 +38,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # file list is discovered via git so it always matches the tracked files (no
 # missing-glob errors). Keep this in sync with the pre-commit hook
 # (.githooks/pre-commit).
-ROOTS = ("main", "test", "qemu")
+ROOTS = ("main", "components", "test", "qemu")
 EXTENSIONS = (".cpp", ".hpp", ".h", ".cc", ".cxx")
-
-# C/C++ sources checked/formatted by clang-format, discovered via git.
-GIT_LS_FILES = (
-    'git ls-files "main/*" "test/*" "qemu/*" | grep -E "\\.(cpp|hpp|h|cc|cxx)$"'
-)
 
 # Docker dev image that ships the pinned clang-format version.
 DEV_IMAGE = "esp32-sensors-dev:latest"
@@ -80,7 +75,8 @@ def source_files():
     
         # Filter the files using the EXTENSIONS tuple
         filtered_files = [file for file in all_files if file.endswith(EXTENSIONS)]
-        return filtered_files
+        # Skip tracked-but-deleted files: formatting cannot read them.
+        return [file for file in filtered_files if (REPO_ROOT / file).is_file()]
     
     except subprocess.CalledProcessError as e:
         print(f"Git command failed with exit code {e.returncode}", file=sys.stderr)
