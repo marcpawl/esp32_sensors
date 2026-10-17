@@ -41,7 +41,7 @@
     "IDF_PATH": "/opt/esp/idf",
     "IDF_TOOLS_PATH": "/home/dev/.espressif",
     "HISTFILE": "/home/dev/.commandhistory/.bash_history",
-    "PATH": "/opt/esp/idf/components/espcoredump:/opt/esp/idf/components/partition_table:/opt/esp/idf/components/app_update:/opt/esp/tools/xtensa-esp-elf-gdb/17.1_20260402/xtensa-esp-elf-gdb/bin:/opt/esp/tools/riscv32-esp-elf-gdb/17.1_20260402/riscv32-esp-elf-gdb/bin:/opt/esp/tools/xtensa-esp-elf/esp-15.2.0_20251204/xtensa-esp-elf/bin:/opt/esp/tools/riscv32-esp-elf/esp-15.2.0_20251204/riscv32-esp-elf/bin:/opt/esp/tools/esp32ulp-elf/2.38_20240113/esp32ulp-elf/bin:/opt/esp/tools/cmake/4.0.3/bin:/opt/esp/tools/openocd-esp32/v0.12.0-esp32-20260831/openocd-esp32/bin:/opt/esp/tools/qemu-xtensa/esp_develop_9.2.2_20260417/qemu/bin:/opt/esp/tools/qemu-riscv32/esp_develop_9.2.2_20260417/qemu/bin:/opt/esp/tools/esp-clangd/esp-21.1.3_20260408/esp-clangd/bin:/opt/esp/python_env/idf6.1_py3.12_env/bin:/opt/esp/idf/tools:${containerEnv:PATH}"
+    "PATH": "/opt/esp/idf/components/espcoredump:/opt/esp/idf/components/partition_table:/opt/esp/idf/components/app_update:/opt/esp/tools/xtensa-esp-elf-gdb/17.1_20260402/xtensa-esp-elf-gdb/bin:/opt/esp/tools/riscv32-esp-elf-gdb/17.1_20260402/riscv32-esp-elf-gdb/bin:/opt/esp/tools/xtensa-esp-elf/esp-15.2.0_20251204/xtensa-esp-elf/bin:/opt/esp/tools/riscv32-esp-elf/esp-15.2.0_20251204/riscv32-esp-elf/bin:/opt/esp/tools/esp32ulp-elf/2.38_20240113/esp32ulp-elf/bin:/opt/esp/tools/cmake/4.0.3/bin:/opt/esp/tools/openocd-esp32/v0.12.0-esp32-20260831/openocd-esp32/bin:/opt/esp/tools/esp-clangd/esp-21.1.3_20260408/esp-clangd/bin:/opt/esp/python_env/idf6.1_py3.12_env/bin:/opt/esp/idf/tools:${containerEnv:PATH}"
   },
 
   // The IDF PATH is prepended via a login shell so it is present for tools

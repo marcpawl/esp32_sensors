@@ -1,0 +1,13 @@
+# ESP-IDF defaults for the "native" (linux-target) test project.
+#
+# Kept minimal on purpose: this project only runs the Unity suite (the FreeRTOS
+# `Task` tests, the `HttpsServer` router tests, and HAL-stub linkage checks), so
+# it needs no Wi-Fi, ADC, or other peripherals. See the top-level
+# sdkconfig.defaults for the production firmware configuration.
+
+# Host (linux) target: the suite builds as a native ELF and runs directly,
+# against ESP-IDF's FreeRTOS (pthread) port — no chip or emulator needed.
+CONFIG_IDF_TARGET="linux"
+
+# --- Logging ---
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y

@@ -4,36 +4,24 @@
 // application logic (buffering, payload formatting) remains host-testable.
 #pragma once
 
-#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <string>
 #include <vector>
 
 #include "constants.hpp"
 #include "esp_err.h"
-#include "temp_format.hpp"  // kTempNull, format_temp_c_x100
+#include "hal/ds18b20_types.hpp"  // RomId, DS18B20Reading
+#include "temp_format.hpp"        // kTempNull, format_temp_c_x100
 
 namespace thermo {
 
-// 8-byte DS18B20 ROM ID.
-struct RomId {
-    std::array<std::uint8_t, limits::kRomIdBytes> bytes{};
-
-    bool operator==(const RomId& other) const { return bytes == other.bytes; }
-
-    // Uppercase hex, 16 chars (matches §5.1.3 / §6.1 example formatting).
-    std::string to_hex() const;
-
-    // Parses 16 hex chars (case-insensitive). Returns nullopt on bad input.
-    static std::optional<RomId> from_hex(std::string_view hex);
-};
-
-// A single reading for one sensor.
-struct SensorReading {
-    RomId rom{};
-    std::optional<std::int16_t> temp_c_x100;  // nullopt == missing/null.
-};
+// The DS18B20 identity and reading types live in the shared, implementation-
+// free `hal_common` component (`hal/ds18b20_types.hpp`) so the sensor layer,
+// the configuration UI, and host tests all agree on one definition. Re-export
+// them into `thermo` for convenience.
+using thermo::hal::DS18B20Reading;
+using thermo::hal::RomId;
 
 // Low-level 1-Wire bus operations. Bit-banged on a single GPIO since ESP-IDF
 // v6.1 ships no DS18B20 driver.
@@ -96,8 +84,8 @@ class SensorManager {
 
     // Reads all known sensors. When `roms` is empty, a bus scan is performed
     // and the discovered ROM IDs are returned via `out_roms`.
-    std::vector<SensorReading> read_all(const std::vector<RomId>& roms,
-                                        std::vector<RomId>* out_roms);
+    std::vector<DS18B20Reading> read_all(const std::vector<RomId>& roms,
+                                         std::vector<RomId>* out_roms);
 
   private:
     OneWireBus bus_;

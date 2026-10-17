@@ -83,8 +83,8 @@ class BuildShellCommandTests(unittest.TestCase):
 
     def test_directory_prefixes_a_cd(self):
         self.assertEqual(
-            dev._build_shell_command(["pwd"], directory="qemu"),
-            ["bash", "-l", "-c", "cd /project/qemu && pwd"],
+            dev._build_shell_command(["pwd"], directory="espidf_cpp_test"),
+            ["bash", "-l", "-c", "cd /project/espidf_cpp_test && pwd"],
         )
 
     def test_absolute_directory_is_used_verbatim(self):
@@ -101,8 +101,8 @@ class BuildShellCommandTests(unittest.TestCase):
 
     def test_directory_without_command_execs_interactive_login_shell(self):
         self.assertEqual(
-            dev._build_shell_command([], directory="qemu"),
-            ["bash", "-l", "-c", "cd /project/qemu && exec bash -l"],
+            dev._build_shell_command([], directory="espidf_cpp_test"),
+            ["bash", "-l", "-c", "cd /project/espidf_cpp_test && exec bash -l"],
         )
 
 
@@ -111,7 +111,8 @@ class ResolveContainerDirectoryTests(unittest.TestCase):
 
     def test_relative_is_resolved_under_project_root(self):
         self.assertEqual(
-            dev._resolve_container_directory("qemu"), "/project/qemu"
+            dev._resolve_container_directory("espidf_cpp_test"),
+            "/project/espidf_cpp_test"
         )
 
     def test_nested_relative_is_resolved_under_project_root(self):

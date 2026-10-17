@@ -7,7 +7,6 @@ idf_component_register(
         "power_manager.cpp"
         "power_source.cpp"
         "led_task.cpp"
-        "mode_controller.cpp"
         "onewire_bus.cpp"
         "rom_id.cpp"
         "ds18b20.cpp"
@@ -17,21 +16,20 @@ idf_component_register(
         "temp_format.cpp"
         "payload.cpp"
         "configure_mode.cpp"
-        "https_server.cpp"
         "config_page.cpp"
+        "config_form.cpp"
         "wifi_ap.cpp"
-        "ntp_client.cpp"
         "run_mode.cpp"
 	"reboot.cpp"
-        "certs/self_signed_cert.cpp"
     INCLUDE_DIRS
         "include"
     REQUIRES
+        hal_board
+        espidf_cpp
         nvs_flash
         esp_wifi
         esp_netif
         esp_event
-        esp_https_server
         esp_http_client
         esp_adc
         esp_driver_gpio

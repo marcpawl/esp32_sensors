@@ -3,11 +3,14 @@
 // Kept free of ESP-IDF dependencies so the hex round-trip and validation rules
 // can be unit-tested on the host target — the same rationale as temp_format.cpp
 // and payload.cpp. The 1-Wire transport itself lives in onewire_bus.cpp.
-#include "sensor.hpp"
+//
+// `RomId` is defined in the shared `hal_common` component
+// (`hal/ds18b20_types.hpp`); its textual helpers are implemented here.
+#include "hal/ds18b20_types.hpp"
 
 #include <cstdio>
 
-namespace thermo {
+namespace thermo::hal {
 
 std::string RomId::to_hex() const {
     // 8 bytes -> 16 uppercase hex chars, no separator.
@@ -48,4 +51,4 @@ std::optional<RomId> RomId::from_hex(std::string_view hex) {
     return id;
 }
 
-}  // namespace thermo
+}  // namespace thermo::hal

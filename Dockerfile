@@ -47,8 +47,6 @@ RUN apt-get update \
         # libbsd is required by the ESP-IDF `linux` target (host unit tests);
         # the IDF build emits a warning / link error without it.
         libbsd-dev \
-        # QEMU dependencies
-        libgcrypt20 libglib2.0-0 libpixman-1-0 libsdl2-2.0-0 libslirp0 \
     && rm -rf /var/lib/apt/lists/*
 
 # ---------------------------------------------------------------------------
@@ -69,7 +67,7 @@ RUN apt-get update \
 RUN cd $IDF_PATH && \
     . "$IDF_PATH/export.sh" && \
      "$IDF_PATH/tools/idf_tools.py" --non-interactive install \
-          esp-clang qemu-xtensa qemu-riscv32
+          esp-clang 
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +141,7 @@ RUN cd $IDF_PATH && \
     /opt/esp/idf/tools/idf_tools.py --non-interactive  install-python-env && \
     . "$IDF_PATH/export.sh" && \
     "$IDF_PATH/tools/idf_tools.py" --non-interactive install \
-        esp-clang qemu-xtensa qemu-riscv32
+        esp-clang 
 
 WORKDIR /project
 ENV DOCKER_IMAGE=esp32_sensors

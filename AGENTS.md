@@ -34,6 +34,7 @@ This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its s
 > **Implementation status (current milestone):**
 > - **Configure mode — implemented.** SoftAP, HTTPS server, config UI, NVS persistence, LED semantics.
 > - **Run mode — scaffolded/stubbed.** Real: boot self-test LEDs, battery read + hysteresis, sensor read with cached ROM IDs (first-boot scan), sample append to the RTC buffer, deep sleep. **Stubbed:** Wi-Fi station connect + cached fast-reconnect (§3.9), batch upload + payload wire-out (§9, payload is formatted and logged but not sent), exponential backoff (§3.7).
+> - **Host unit tests + native `espidf_cpp_test` suite.** `test/` builds for the ESP-IDF `linux` target (Unity) and `espidf_cpp_test/` runs a second native `linux` Unity suite (covering the FreeRTOS-backed `thermo::Task`, the `thermo::HttpsServer` router driven over a real plain-HTTP listener, and HAL-stub link checks); both run via `scripts/dev.py test` (or `test-linux` / `test-espidf-cpp`). More on-target tests for hardware-dependent code are planned.
 
 > **Toolchain note:** The host's locally installed ESP-IDF is **v6.1** with **Xtensa GCC 15.2.0** (`esp-15.2.0_20251204`), which matches the pinned Docker image `espressif/idf:release-v6.1` exactly. Keep both in sync: if you upgrade the host toolchain, update the pin in `Dockerfile`/`docker-compose.yml` and this document.
 
@@ -72,11 +73,19 @@ esp32_sensors/
 ├── CMakeLists.txt       # Top-level ESP-IDF project definition
 ├── sdkconfig.defaults   # Committed IDF defaults (sdkconfig itself is generated)
 ├── main/                # Firmware component (C++26) — see module map below
+├── components/          # Reusable ESP-IDF components (each has a README.md)
+│   ├── espidf_cpp/      # C++ wrappers over ESP-IDF/FreeRTOS C APIs (+ HTTPS router)
+│   ├── hal_common/      # Shared, header-only HAL vocabulary (types/concepts)
+│   ├── hal_board/       # Real, GPIO-backed HAL (linked by the firmware)
+│   └── hal_stub/        # Pin-free HAL stub (linked by the simulated environment/tests)
 ├── test/                # Host-based unit tests (IDF `linux` target, Unity)
+├── espidf_cpp_test/     # Standalone native Unity test project (linux target)
+│   └── build_linux/     # Native test build output (git-ignored; target-named)
 ├── Dockerfile           # Dev container: ESP-IDF v6.1 + non-root host-mapped user
 ├── docker-compose.yml   # `dev` service with serial (/dev) passthrough
 ├── .devcontainer/       # CLion / VS Code Dev Container definition (reuses compose)
 ├── scripts/dev.py       # Container task runner (build/flash/test/format/shell)
+├── scripts/test_dev.py  # Host unit tests for dev.py (`dev.py self-check`)
 ├── scripts/dev.py-completion.bash  # Bash tab-completion for scripts/dev.py
 ├── build_esp32s3/       # Firmware build output from `idf.py` (git-ignored)
 ├── cmake-build-esp32s3/ # CLion's own CMake build tree (git-ignored; see .idea/cmake.xml)
@@ -88,13 +97,29 @@ esp32_sensors/
 └── .idea/               # CLion config (shared cmake.xml + run configs tracked; workspace.xml local)
 ```
 
+**Build directories.** Every ESP-IDF build directory is named after its target
+(`build_esp32s3` for ESP32-S3, `build_linux` for the `linux` host target), so
+the target is obvious and the directories never collide. Each project owns its
+own:
+
+| Project | Directory | Target | Produces |
+|---|---|---|---|
+| firmware (top level) | `build_esp32s3/` | esp32s3 | `esp32_sensors.bin` (flashed to the board) |
+| native tests (`espidf_cpp_test/`) | `espidf_cpp_test/build_linux/` | linux | `esp32_sensors_espidf_cpp_test.elf` (run natively) |
+| host tests (`test/`) | `test/build_linux/` | linux | `esp32_sensors_tests.elf` (run natively) |
+
+The firmware and test builds are separate ESP-IDF *projects* (each with its own
+`project()` and `sdkconfig`), so they cannot share one directory. `main/`
+targets ESP32-S3; `test/` and `espidf_cpp_test/` both target `linux`. All are git-ignored.
+
 **Key files:**
 - `Specification.md` — the single source of truth for hardware, modes, RTC memory layout, payload format, and power budget. Any implementation must conform to it.
-- `main/CMakeLists.txt` — lists all sources and the IDF component `REQUIRES` (nvs_flash, esp_wifi, esp_https_server, esp_http_client, esp_adc, esp_driver_gpio, mbedtls, …). **Add new sources here** or they will not compile.
+- `main/CMakeLists.txt` — lists all sources and the IDF component `REQUIRES` (nvs_flash, esp_wifi, esp_http_client, esp_adc, esp_driver_gpio, mbedtls, …). **Add new sources here** or they will not compile. (The HTTPS listener lives in `espidf_cpp`, which requires `esp_https_server`.)
 - `sdkconfig.defaults` — the committed configuration intent (target, C++ exceptions/RTTI off, partition table, `-Os`). `sdkconfig` is generated from this and is **not** tracked.
 - `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash environment. Extend these (not ad-hoc `docker run`) when adding tooling. The compose `dev` service is also the target of the Dev Container (see below).
 - `.devcontainer/devcontainer.json` — the CLion / VS Code **Dev Container** definition. It **reuses the compose `dev` service** (it does not define its own image), so CLion builds/starts the same container the CLI uses. Edit `docker-compose.yml` for image/mount/user changes; edit `devcontainer.json` only for IDE-level wiring.
-- `scripts/dev.py` — the single container task runner (`build`, `flash`, `monitor`, `menuconfig`, `test`, `format`, `format-check`, `format-check-staged`, `install-hooks`, `shell`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. `shell` is the preferred way to run a container command from the host: with no arguments it opens an interactive login shell, and with arguments it runs them in the container (e.g. `./scripts/dev.py shell ls -1d /`). The pre-commit hook (`.githooks/pre-commit`) delegates its check to `scripts/dev.py format-check-staged`. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
+- `scripts/dev.py` — the single container task runner (`build`, `flash`, `monitor`, `menuconfig`, `test`, `test-linux`, `test-espidf-cpp`, `self-check`, `format`, `format-check`, `format-check-staged`, `install-hooks`, `shell`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. `shell` is the preferred way to run a container command from the host: with no arguments it opens an interactive login shell, and with arguments it runs them in the container (e.g. `./scripts/dev.py shell ls -1d /`). The pre-commit hook (`.githooks/pre-commit`) delegates its check to `scripts/dev.py format-check-staged`. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
+- `scripts/test_dev.py` — host-side unit tests for `dev.py` itself (stdlib `unittest`, run by `scripts/dev.py self-check`). Imports `dev.py` in-process and covers its pure helpers — chiefly the command line `shell` builds (so shell syntax like pipes/semicolons is passed through verbatim) and `shell -C` path resolution.
 - `scripts/dev.py-completion.bash` — bash tab-completion for `scripts/dev.py`. Source it to complete subcommands (e.g. `./scripts/dev.py form<TAB>` → `format`, `format-check`, `format-check-staged`). It asks `dev.py complete <prefix>` for candidates, so the command list is defined in exactly one place.
 - `.idea/cmake.xml` / `.idea/runConfigurations/*.xml` — **committed** shared CLion configuration. `cmake.xml` defines the CMake profile used inside the Dev Container; the run configurations drive the build, test, format, flash, and shell tasks (six via `python3 scripts/dev.py`, one native CMake config for build/refactor). `.idea/workspace.xml` (local, git-ignored) holds per-machine state.
 - `LICENSE` — GPL-3.0.
@@ -105,23 +130,63 @@ esp32_sensors/
 | Area | Files |
 |---|---|
 | Entry point | `main.cpp` (`extern "C" void app_main`), `constants.hpp`, `mode.hpp` |
-| Mode switching | `mode_controller.cpp`, `led_manager.cpp` |
+| Mode switching | `main.cpp` maps `hal::Switch` pin states to `Mode`; `led_manager.cpp` |
 | Sensors | `onewire_bus.cpp` (bit-banged 1-Wire), `ds18b20.cpp`, `sensor_manager.cpp`, `sensor.hpp` |
 | RTC state / buffer | `rtc_state.cpp` (`RTC_DATA_ATTR` state block), `rtc_buffer.cpp` (FIFO) |
 | Power / battery | `battery_monitor.cpp` |
 | Config | `app_config.cpp` (validation), `app_config_store.cpp` (NVS) |
-| Configure mode | `configure_mode.cpp`, `wifi_ap.cpp`, `https_server.cpp`, `config_page.cpp`, `certs/self_signed_cert.cpp` |
+| Configure mode | `configure_mode.cpp`, `wifi_ap.cpp`, `https_server.cpp` (TLS router), `config_page.cpp` (HTML), `config_form.cpp` (form parsing); the self-signed cert (`certs/self_signed_cert.cpp`) lives in `espidf_cpp` |
 | Run mode | `run_mode.cpp` (stubbed network path), `ntp_server.cpp` |
 | Payload | `payload.cpp`, `temp_format.cpp`, `rom_id.cpp` (ROM-ID hex) |
 
+**Components (`components/`).** Reusable code lives in ESP-IDF components rather
+than in `main/`, so host tests and the simulated environment can swap hardware for deterministic
+stubs. **Each component has a `README.md` documenting its purpose and contents —
+read it before working in that directory.** In brief:
+
+- `espidf_cpp` — C++ wrappers over ESP-IDF/FreeRTOS C APIs (`Task`,
+  `OneMessageQueue`, handle deleters, fixed-capacity containers, and the
+  `HttpsServer` TLS router). Mostly header-only, but it also **compiles**
+  `https_server.cpp` (the TLS router) and `certs/self_signed_cert.cpp` (the
+  bundled development certificate used by the Configure-mode HTTPS server) into
+  its archive; requiring it transitively pulls in `esp_https_server`. Not HAL;
+  abstracts the RTOS, not hardware.
+- `hal_common` — shared, **implementation-free** HAL vocabulary (types and
+  `*Like` concepts, including `NetworkTimeProtocolLike`). Shared by both HAL
+  implementations, never excluded.
+- `hal_board` — real, GPIO-backed HAL drivers plus the driver-backed chip
+  temperature sensor and the SNTP-backed `NetworkTimeProtocol` client; linked by
+  the production firmware.
+- `hal_stub` — pin-free, software-driven HAL stubs (including the settable
+  `NetworkTimeProtocol`); linked by the simulated environment and the host tests.
+
+`hal_board` and `hal_stub` expose the **same** headers and symbols and are
+**mutually exclusive**: a project links exactly one. Each project excludes the
+other via `EXCLUDE_COMPONENTS` in its top-level `CMakeLists.txt` (set **before**
+`project()`), because both live under the default `components/` search path. The
+native and host-test projects also add `components/` to `EXTRA_COMPONENT_DIRS`
+(their project roots are `espidf_cpp_test/` and `test/`, so the repo-root `components/` is
+not on the default path).
+
 **Host-testable modules.** `temp_format.cpp`, `payload.cpp`, `app_config.cpp`,
-`rom_id.cpp`, and `rtc_buffer.cpp` are deliberately free of chip-specific
+`config_page.cpp`, `config_form.cpp`, `rom_id.cpp`, and `rtc_buffer.cpp` are
+deliberately free of chip-specific
 ESP-IDF dependencies so they build for the `linux` target and are covered by
-`test/`. **Keep it that way** — put pure logic in these files and hardware/IDF
-calls behind them.
+`test/`. The `hal_stub` component is likewise built for the `linux` target and
+covered by `test/`. **Keep it that way** — put pure logic in these files and
+hardware/IDF calls behind them.
+
+> **HTTPS server is a router.** `HttpsServer` (`https_server.cpp`, in the
+> `espidf_cpp` component) owns only the listener and a small URI-handler
+> table; the Configure-mode pages are registered by the client via
+> `register_handler` / `deregister_handler` and live in `configure_mode.cpp`.
+> Handlers receive an `HttpRequest` and return an `HttpResponse`, so request
+> parsing and page rendering stay host-testable. The listener scheme is chosen
+> at construction (`Scheme::kHttps` for the firmware's TLS endpoint on port 443;
+> `Scheme::kHttp` serves plain HTTP on a chosen port, which the native
+> `espidf_cpp_test` suite uses to drive the router over loopback).
 
 **Not yet present (expected next):**
-- `components/` — reusable ESP-IDF components (currently everything is in `main/`).
 - On-target tests for hardware-dependent code (1-Wire, deep-sleep, Wi-Fi).
 
 **Entry point:** In ESP-IDF, `app_main(void)` is the firmware entry point and must be declared with C linkage:
@@ -200,7 +265,7 @@ configuration used for building and refactoring inside the IDE:
 | esp32_sensors (container CMake) | CMake | Builds the `esp32_sensors` CMake target in the container; enables CLion Build/Compile and C++ **refactorings** |
 | Build firmware (container) | `scripts/dev.py build` | `idf.py -B build_esp32s3 build` in the container |
 | Flash & monitor (container) | `scripts/dev.py flash` | `idf.py -B build_esp32s3 -p $ESP32_PORT flash monitor` (default `/dev/ttyUSB0`) |
-| Host unit tests (container) | `scripts/dev.py test` | builds + runs the `linux`-target Unity tests (`build_linux/`) |
+| Host unit tests (container) | `scripts/dev.py test` | runs both suites (below); use `test-linux` / `test-espidf-cpp` to run one |
 | clang-format check (container) | `scripts/dev.py format-check` | `clang-format --dry-run --Werror` |
 | menuconfig (container) | `scripts/dev.py menuconfig` | Kconfig UI |
 | Container shell (ESP-IDF) | `scripts/dev.py shell` | login shell with the IDF env sourced (accepts trailing args to run a command) |
@@ -246,7 +311,10 @@ enacted on the host.
 |platform|command|action|
 |===|===|===|
 |both|build|Compile the source code|
-|both|test|Compile and execute the host test code|
+|both|test|Run both test suites: the host unit tests then the native `espidf_cpp_test` suite|
+|both|test-linux|Build and run the host unit tests (ESP-IDF `linux` target)|
+|both|test-espidf-cpp|Build and run the native `espidf_cpp_test` Unity suite (linux target)|
+|both|self-check|Run the host unit tests for dev.py itself (stdlib `unittest`)|
 |both|flash|idf.py flash monitor|
 |both|monitor|idf.py monitor|
 |both|menuteconfig|idf.py menuconfig|
@@ -293,26 +361,50 @@ the container.
 
 ### Testing approach
 
-> **Requirement:** `./scripts/dev.py test` **must pass** before any change is
-> considered complete. Do not commit or hand off work while this command fails
-> (non-zero exit). Treat a red `test` run as a broken build.
+There are two test suites, both runnable from the host via `scripts/dev.py`:
 
 - **Host-based unit tests** live in `test/` and run on the ESP-IDF `linux`
   target with Unity — no hardware needed. They cover the pure-logic modules
-  (`temp_format`, `payload`, `app_config` validation, `rom_id`, `rtc_buffer`).
-- **On-target tests** are planned for hardware-dependent code (1-Wire/DS18B20
-  reads, deep-sleep wake, Wi-Fi upload).
+  (`temp_format`, `payload`, `app_config` validation, `rom_id`, `rtc_buffer`),
+  the fixed-capacity containers (`static_vector`, `static_string`), and the
+  `hal_stub` devices (switch, LED, push button, 1-Wire bus, chip temperature,
+  NTP client, aggregate board).
+- **Native `espidf_cpp_test` suite** (`espidf_cpp_test/`) builds a second Unity
+  suite for the ESP-IDF `linux` target and runs it natively, then checks for a
+  zero-failure completion marker — no hardware needed. It covers code that needs
+  the real FreeRTOS scheduler (`thermo::Task`), the `thermo::HttpsServer` router
+  (stood up as a real plain-HTTP listener on the linux target and driven over
+  loopback, so registration semantics and the request-body → response path are
+  exercised end-to-end), plus linkage checks for the `hal_stub` devices (each
+  case just constructs the stub to prove it links; deeper behaviour lives in the
+  host suite).
+- **On-target tests** are planned for more hardware-dependent code (1-Wire
+  GPIO, deep-sleep wake, Wi-Fi upload).
 - Keep hardware interactions behind thin interfaces so business logic remains
   host-testable. When adding pure logic, put it in a host-testable translation
   unit and add it to both `main/CMakeLists.txt` and `test/main/CMakeLists.txt`.
 
 ```bash
-# Build and run the host-based unit tests (exit code is non-zero on failure).
+# Run both suites (host unit tests, then the native `espidf_cpp_test` suite).
 ./scripts/dev.py test
+
+# Run just one suite.
+./scripts/dev.py test-linux        # host Unity tests (linux target, build_linux/)
+./scripts/dev.py test-espidf-cpp   # build + run the native `espidf_cpp_test` suite
+
+# Run the host-side unit tests for dev.py itself (no container/hardware).
+./scripts/dev.py self-check
 ```
 
-The test binary prints Unity `PASS`/`FAIL` lines and exits non-zero if any case
-fails, so it is CI-friendly.
+Every command exits non-zero if its suite fails, so all three are CI-friendly.
+The host test binary prints Unity `PASS`/`FAIL` lines; the native driver prints
+a `==> PASS`/`==> FAIL` summary line.
+
+**`self-check`** runs `scripts/test_dev.py` — host-side `unittest` tests for
+`dev.py`'s own pure helpers (notably the `shell` command line it builds, so
+shell syntax like pipes and semicolons is passed through verbatim, and the
+`shell -C DIR` path resolution). It needs no container, hardware, or
+third-party dependency and works on the host and inside the container alike.
 
 ### Lint and format
 
@@ -321,7 +413,8 @@ indent, 80 columns). The existing sources already conform, so a format run is a
 no-op on clean code — keep it that way and format before committing.
 
 **Always run clang-format via the container task runner**, which formats all
-`.hpp` and `.cpp` source files under `main/` and `test/`:
+`.hpp` and `.cpp` source files under `main/`, `components/`, `test/`, and
+`espidf_cpp_test/`:
 
 ```bash
 # Apply clang-format to every .hpp and .cpp source file.
@@ -339,8 +432,6 @@ C++26 token set, and the codebase uses no C++23+ *syntax* that would confuse it.
 
 ### Conventions to follow
 
-- **`./scripts/dev.py test` must pass** before you consider a task done. Never
-  commit or hand off work while this command exits non-zero.
 - Target **ESP-IDF v6.1** APIs only.
 - Use **C++26** with GNU extensions; do not introduce the C-only style where C++ is appropriate.
 - Declare `app_main` with `extern "C"` linkage.
