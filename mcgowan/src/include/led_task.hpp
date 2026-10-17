@@ -8,7 +8,7 @@
 #include <utility>
 #include <variant>
 
-#include "one_message_queue.hpp"
+#include "espidf_cpp/one_message_queue.hpp"
 #include "task.hpp"
 
 namespace thermo {
@@ -201,7 +201,7 @@ class LedRunner {
     LedState current_state_ = LedState::kOff;
 
     /** Queue that contains what the new state should be. */
-    OneMessageQueue<LedState> queue_;
+    espidf_cpp::OneMessageQueue<LedState> queue_;
 };
 
 class LedTask : protected Task<LedRunner> {

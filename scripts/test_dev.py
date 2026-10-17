@@ -133,8 +133,11 @@ class ResolveContainerDirectoryTests(unittest.TestCase):
 class SubprojectBuildTests(unittest.TestCase):
     """Subproject layout: `_idf()`, `build` argument parsing, root build."""
 
-    def test_subprojects_are_mcgowan_qemu_test(self):
-        self.assertEqual(dev.SUBPROJECTS, ("mcgowan", "qemu", "test"))
+    def test_subprojects_are_firmware_qemu_and_host_tests(self):
+        self.assertEqual(
+            dev.SUBPROJECTS,
+            ("mcgowan", "qemu", "test", "espidf-cpp-test"),
+        )
 
     def test_idf_runs_in_subproject_with_build_tree_inside_it(self):
         self.assertEqual(
@@ -177,7 +180,7 @@ class SubprojectBuildTests(unittest.TestCase):
                     "cmake",
                     "-S", ".",
                     "-B", dev.ROOT_BUILD_DIR,
-                    "-DSUBPROJECTS=mcgowan;qemu;test",
+                    "-DSUBPROJECTS=mcgowan;qemu;test;espidf-cpp-test",
                 ],
                 ["cmake", "--build", dev.ROOT_BUILD_DIR],
             ],
@@ -214,6 +217,23 @@ class CommandRegistryTests(unittest.TestCase):
         self.assertIn("self-check", dev.COMMANDS)
         self.assertIs(dev.COMMANDS["self-check"], dev.cmd_self_check)
 
+    def test_build_espidf_cpp_test_is_registered(self):
+        self.assertIn("build-espidf-cpp-test", dev.COMMANDS)
+        self.assertIs(
+            dev.COMMANDS["build-espidf-cpp-test"],
+            dev.cmd_build_espidf_cpp_test,
+        )
+
+    def test_host_test_projects_cover_both_suites(self):
+        projects = [project for project, _ in dev.HOST_TEST_PROJECTS]
+        self.assertEqual(
+            projects,
+            [dev.TEST_PROJECT, dev.ESPIDF_CPP_TEST_PROJECT],
+        )
+        # Every host-test project is also a buildable subproject.
+        for project in projects:
+            self.assertIn(project, dev.SUBPROJECTS)
+
     def test_complete_skips_itself(self):
         # The internal `complete` helper must not advertise itself.
         old = sys.argv
@@ -237,6 +257,51 @@ class CommandRegistryTests(unittest.TestCase):
                 (handler.__doc__ or "").strip(),
                 f"command {name!r} has no docstring",
             )
+
+
+class BuildProjectTests(unittest.TestCase):
+    """`_build_project` picks the target-specific build directory."""
+
+    def setUp(self):
+        # Record the commands `run()` would execute instead of executing them.
+        self.calls = []
+        self._original_run = dev.run
+
+        def fake_run(cmd, cwd=dev.REPO_ROOT):
+            self.calls.append(list(cmd))
+            return 0
+
+        dev.run = fake_run
+
+    def tearDown(self):
+        dev.run = self._original_run
+
+    def test_espidf_cpp_test_is_built_for_linux(self):
+        self.assertEqual(dev._build_project(dev.ESPIDF_CPP_TEST_PROJECT), 0)
+        self.assertEqual(
+            self.calls,
+            [
+                dev._idf(
+                    dev.ESPIDF_CPP_TEST_PROJECT,
+                    dev.TEST_BUILD_DIR,
+                    "--preview",
+                    "set-target",
+                    "linux",
+                ),
+                dev._idf(
+                    dev.ESPIDF_CPP_TEST_PROJECT,
+                    dev.TEST_BUILD_DIR,
+                    "build",
+                ),
+            ],
+        )
+
+    def test_firmware_is_built_for_the_chip(self):
+        self.assertEqual(dev._build_project(dev.FIRMWARE_PROJECT), 0)
+        self.assertEqual(
+            self.calls,
+            [dev._idf(dev.FIRMWARE_PROJECT, dev.FW_BUILD_DIR, "build")],
+        )
 
 
 class GitHooksInstallationTests(unittest.TestCase):

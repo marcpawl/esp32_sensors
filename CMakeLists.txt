@@ -7,9 +7,11 @@ cmake_minimum_required(VERSION 3.22)
 # Each subproject is a standalone ESP-IDF project with its own `CMakeLists.txt`,
 # `sdkconfig.defaults`, and build directory inside its own folder:
 #
-#   mcgowan/  ESP32-S3 firmware (hal_board)   -> mcgowan/build_esp32s3/mcgowan.bin
-#   qemu/     ESP32-S3 QEMU smoke test (hal_stub) -> qemu/build_esp32s3/
-#   test/     host unit tests, `linux` target (hal_stub) -> test/build_linux/
+#   mcgowan/         ESP32-S3 firmware (hal_board)   -> mcgowan/build_esp32s3/mcgowan.bin
+#   qemu/            ESP32-S3 QEMU smoke test (hal_stub) -> qemu/build_esp32s3/
+#   test/            host unit tests, `linux` target (hal_stub) -> test/build_linux/
+#   espidf-cpp-test/ host tests for components/espidf_cpp, `linux`
+#                                                -> espidf-cpp-test/build_linux/
 #
 # This file only aggregates them, so ONE build covers all of them. It is plain
 # CMake (no repo-root sdkconfig): each target invokes `idf.py` for its
@@ -48,11 +50,12 @@ endif()
 project(esp32_sensors_subprojects NONE)
 
 # Which subprojects to build. Default: all of them.
-set(SUBPROJECTS "mcgowan;qemu;test" CACHE STRING
-    "Semicolon-separated subprojects to build (mcgowan, qemu, test)")
-set_property(CACHE SUBPROJECTS PROPERTY STRINGS mcgowan qemu test)
+set(SUBPROJECTS "mcgowan;qemu;test;espidf-cpp-test" CACHE STRING
+    "Subprojects to build: mcgowan, qemu, test, espidf-cpp-test")
+set_property(CACHE SUBPROJECTS PROPERTY STRINGS
+    mcgowan qemu test espidf-cpp-test)
 
-set(KNOWN_SUBPROJECTS mcgowan qemu test)
+set(KNOWN_SUBPROJECTS mcgowan qemu test espidf-cpp-test)
 foreach(sub IN LISTS SUBPROJECTS)
     if(NOT sub IN_LIST KNOWN_SUBPROJECTS)
         message(FATAL_ERROR
@@ -106,4 +109,12 @@ endif()
 # is cheap on every invocation and keeps a fresh build tree pointed at linux.
 if(test IN_LIST SUBPROJECTS)
     _idf_subproject(test build_linux "--preview|set-target|linux" "build")
+endif()
+
+# --- espidf-cpp-test: host tests for espidf_cpp (linux) -> *_build --------
+# Same `linux` target rules as `test/`; built (not run) here, since running is
+# `scripts/dev.py test-linux`'s job.
+if(espidf-cpp-test IN_LIST SUBPROJECTS)
+    _idf_subproject(espidf-cpp-test build_linux
+        "--preview|set-target|linux" "build")
 endif()

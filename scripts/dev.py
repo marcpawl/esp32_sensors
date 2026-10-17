@@ -9,9 +9,9 @@
 # specifics live in one place.
 #
 # Usage:
-#   scripts/dev.py [image|build|flash|monitor|menuconfig|test|test-linux|\
-#                   test-qemu|self-check|format|format-check|\
-#                   format-check-staged|install-hooks|shell]
+#   scripts/dev.py [image|build|build-espidf-cpp-test|flash|monitor|\
+#                   menuconfig|test|test-linux|test-qemu|self-check|format|\
+#                   format-check|format-check-staged|install-hooks|shell]
 #   scripts/dev.py --help        # full help, including per-command details
 #
 # Environment:
@@ -39,7 +39,14 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # file list is discovered via git so it always matches the tracked files (no
 # missing-glob errors). Keep this in sync with the pre-commit hook
 # (.githooks/pre-commit).
-ROOTS = ("mcgowan", "components", "test", "qemu", "scripts")
+ROOTS = (
+    "mcgowan",
+    "components",
+    "test",
+    "espidf-cpp-test",
+    "qemu",
+    "scripts",
+)
 EXTENSIONS = (".cpp", ".hpp", ".h", ".cc", ".cxx")
 
 # Docker dev image that ships the pinned clang-format version.
@@ -53,12 +60,16 @@ FORMAT_ARGS = ("--dry-run", "--Werror")
 #   mcgowan/  ESP32-S3 firmware (hal_board) -> mcgowan/build_esp32s3/mcgowan.bin
 #   qemu/     ESP32-S3 QEMU smoke test (hal_stub) -> qemu/build_esp32s3
 #   test/     host unit tests (linux target)      -> test/build_linux
+#   espidf-cpp-test/
+#             host unit tests for components/espidf_cpp (linux target)
+#                                                -> espidf-cpp-test/build_linux
 #
 # Build directories are named after the ESP-IDF target so the esp32s3 and
 # linux builds stay separate.
 FIRMWARE_PROJECT = "mcgowan"
 QEMU_PROJECT = "qemu"
 TEST_PROJECT = "test"
+ESPIDF_CPP_TEST_PROJECT = "espidf-cpp-test"
 FW_BUILD_DIR = "build_esp32s3"
 TEST_BUILD_DIR = "build_linux"
 ROOT_BUILD_DIR = "build_root"
@@ -66,7 +77,19 @@ ROOT_BUILD_DIR = "build_root"
 # The firmware app binary (named after the mcgowan project).
 FW_BINARY = "mcgowan.bin"
 
-SUBPROJECTS = (FIRMWARE_PROJECT, QEMU_PROJECT, TEST_PROJECT)
+# The host-test projects (linux target) and the ELF each one produces (named
+# after its ESP-IDF project). Each is pinned to `linux`, built, then run.
+HOST_TEST_PROJECTS = (
+    (TEST_PROJECT, "esp32_sensors_tests.elf"),
+    (ESPIDF_CPP_TEST_PROJECT, "esp32_sensors_espidf_cpp_tests.elf"),
+)
+
+SUBPROJECTS = (
+    FIRMWARE_PROJECT,
+    QEMU_PROJECT,
+    TEST_PROJECT,
+    ESPIDF_CPP_TEST_PROJECT,
+)
 
 # Host-side unit tests for this script itself (stdlib `unittest`), run by
 # `scripts/dev.py self-check`.
@@ -223,15 +246,26 @@ def _build_subprojects(subprojects: list[str]) -> int:
                 return rc
         return 0
     for project in subprojects:
-        build_dir = TEST_BUILD_DIR if project == TEST_PROJECT else FW_BUILD_DIR
-        if project == TEST_PROJECT:
-            rc = run(_idf(project, build_dir, "set-target", "linux"))
-            if rc != 0:
-                return rc
-        rc = run(_idf(project, build_dir, "build"))
+        rc = _build_project(project)
         if rc != 0:
             return rc
     return 0
+
+
+def _build_project(project: str) -> int:
+    """Build one subproject with its own target and build directory.
+
+    The host-test projects (`test`, `espidf-cpp-test`) are pinned to the
+    `linux` target and build into `build_linux`; the firmware and QEMU image
+    build for ESP32-S3 into `build_esp32s3`.
+    """
+    if project in (TEST_PROJECT, ESPIDF_CPP_TEST_PROJECT):
+        rc = run(_idf(project, TEST_BUILD_DIR, "--preview", "set-target",
+                      "linux"))
+        if rc != 0:
+            return rc
+        return run(_idf(project, TEST_BUILD_DIR, "build"))
+    return run(_idf(project, FW_BUILD_DIR, "build"))
 
 
 def cmd_build(args: list[str]) -> int:
@@ -239,13 +273,19 @@ def cmd_build(args: list[str]) -> int:
 
     `build`            → every subproject (firmware, QEMU image, host tests)
     `build mcgowan`    → just the ESP32-S3 firmware (mcgowan/build_esp32s3)
-    `build qemu test`  → any combination of: mcgowan qemu test
+    `build qemu test`  → any of: mcgowan qemu test espidf-cpp-test
     """
     change_to_container()
     subprojects = _parse_subprojects(args)
     if subprojects is None:
         return 1
     return _build_subprojects(subprojects)
+
+
+def cmd_build_espidf_cpp_test() -> int:
+    """Build the espidf_cpp unit tests for the ESP-IDF `linux` target."""
+    change_to_container()
+    return _build_project(ESPIDF_CPP_TEST_PROJECT)
 
 
 def cmd_flash() -> int:
@@ -270,20 +310,22 @@ def cmd_menuconfig() -> int:
 
 
 def _run_host_tests() -> int:
-    """Build and run the host tests (ESP-IDF `linux` target). No container hop.
+    """Build and run every host test suite (ESP-IDF `linux` target).
 
-    Assumes it is already running inside the dev container.
+    No container hop; assumes it is already running inside the dev container.
+    Each project in `HOST_TEST_PROJECTS` is pinned to `linux`, built, and its
+    ELF run; the first failing suite stops the run with a non-zero status.
     """
-    cmds = [
-            _idf(TEST_PROJECT, TEST_BUILD_DIR, "--preview", "set-target",
-                  "linux"),
-            _idf(TEST_PROJECT, TEST_BUILD_DIR, "build"),
-            [ f"./{TEST_PROJECT}/{TEST_BUILD_DIR}/esp32_sensors_tests.elf"]
-           ]
-    for cmd in cmds:
-        rc = run(cmd)
-        if rc != 0:
-            return 1
+    for project, elf in HOST_TEST_PROJECTS:
+        for cmd in (
+            _idf(project, TEST_BUILD_DIR, "--preview", "set-target", "linux"),
+            _idf(project, TEST_BUILD_DIR, "build"),
+            [f"./{project}/{TEST_BUILD_DIR}/{elf}"],
+        ):
+            rc = run(cmd)
+            if rc != 0:
+                print(f"FAILED: host tests '{project}'", file=sys.stderr)
+                return 1
 
     print("SUCCESS: host tests passed")
     return 0
@@ -538,6 +580,7 @@ def cmd_format_check_staged() -> int:
 COMMANDS = {
     "image": cmd_image,
     "build": cmd_build,
+    "build-espidf-cpp-test": cmd_build_espidf_cpp_test,
     "flash": cmd_flash,
     "monitor": cmd_monitor,
     "menuconfig": cmd_menuconfig,
