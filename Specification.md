@@ -134,7 +134,7 @@ ESP-IDF is C-first. All ESP-IDF APIs are C functions and structs. Key interop ru
 - Declare component dependencies explicitly (`REQUIRES` or `PRIV_REQUIRES`).
 - For C++ source files, no special flag is needed for C++26; it is the default.
 
-Example `main/CMakeLists.txt`:
+Example `mcgowan/main/CMakeLists.txt` (the firmware component):
 
 ```cmake
 idf_component_register(

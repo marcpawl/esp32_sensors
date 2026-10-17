@@ -77,9 +77,9 @@ The container is now ready for use with ESP-IDF.
 Configure the environment:
 
 ```console
-$ rm -rf build_esp32s3
-$ ./scripts/dev.py shell idf.py -B build_esp32s3 fullclean
-$ ./scripts/dev.py shell idf.py -B build_esp32s3 set-target esp32s3
+$ rm -rf mcgowan/build_esp32s3
+$ ./scripts/dev.py shell -C mcgowan idf.py -B build_esp32s3 fullclean
+$ ./scripts/dev.py shell -C mcgowan idf.py -B build_esp32s3 set-target esp32s3
 $
 ```
 

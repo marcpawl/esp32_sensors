@@ -6,6 +6,11 @@ Under development.
 Implemented
 -----------
 
+- Project layout: the firmware is its own subproject (`mcgowan/`) producing
+  `mcgowan.bin` for the ESP32-S3 (linking the `hal_board` HAL). The repo root is
+  no longer an ESP-IDF project; it aggregates the subprojects (`mcgowan/`,
+  `qemu/`, `test/`) with plain CMake, so one `scripts/dev.py build` builds them all.
+
 - Configure mode: SoftAP, HTTPS server, configuration UI, NVS persistence,
   and LED semantics.
 - Run mode (partial): boot self-test LEDs, battery read with hysteresis,

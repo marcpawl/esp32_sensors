@@ -8,11 +8,16 @@ docker-compose.yml
 Dockerfile
 .dockerignore
 
-# ESP-IDF build output and local state (never needed inside the image)
-build/
-test/build/
+# ESP-IDF build output and local state (never needed inside the image). Each
+# subproject (mcgowan/, qemu/, test/) keeps its build tree inside its directory.
+build_root/
+build_*/
+*/build_*/
 managed_components/
+sdkconfig
 sdkconfig.old
+*/sdkconfig
+*/sdkconfig.old
 dependencies.lock
 
 # Local caches / editor noise
