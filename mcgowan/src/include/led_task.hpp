@@ -9,7 +9,7 @@
 #include <variant>
 
 #include "espidf_cpp/one_message_queue.hpp"
-#include "task.hpp"
+#include "espidf_cpp/task.hpp"
 
 namespace thermo {
 // Operating states the LED task can display.
@@ -46,7 +46,7 @@ class LedRunner {
     void set_state(LedState new_state) noexcept { send(new_state); }
 
     // Task body: waits for state messages and applies them. `[[noreturn]]`,
-    // as required by `Task<Derived>`.
+    // as required by `espidf_cpp::Task<Derived>`.
     [[noreturn]] void run() noexcept;
 
   private:
@@ -204,7 +204,7 @@ class LedRunner {
     espidf_cpp::OneMessageQueue<LedState> queue_;
 };
 
-class LedTask : protected Task<LedRunner> {
+class LedTask : protected espidf_cpp::Task<LedRunner> {
   public:
     LedTask();
 

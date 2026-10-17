@@ -15,6 +15,8 @@
 set(test_srcs
     "test_main.cpp"
     "test_one_message_queue.cpp"
+    "test_static_vector.cpp"
+    "test_static_string.cpp"
 )
 
 idf_component_register(
@@ -28,3 +30,25 @@ idf_component_register(
         hal_stub
     WHOLE_ARCHIVE
 )
+
+# Standalone assert-trigger programs.
+#
+# The Unity tests fork+exec these programs to verify that contract violations
+# abort, without aborting the test runner itself. Each is built as a plain host
+# executable (no IDF runtime) into the build directory next to the test ELF, so
+# the corresponding test can locate it via a path derived from /proc/self/exe.
+# The `_assert_cases.hpp` headers are shared between the trigger program and
+# the Unity test; the component's own include directory comes from `espidf_cpp`.
+function(add_assert_program name)
+    add_executable(${name} "test_${name}.cpp")
+    target_link_libraries(${name} PRIVATE idf::espidf_cpp)
+    target_include_directories(${name} PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}"
+    )
+    set_target_properties(${name} PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+    )
+endfunction()
+
+add_assert_program(static_string_assert)
+add_assert_program(static_vector_assert)

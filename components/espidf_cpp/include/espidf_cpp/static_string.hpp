@@ -13,9 +13,9 @@
 #include <cstddef>
 #include <cstring>
 
-#include "thermo_static_vector.hpp"
+#include "espidf_cpp/static_vector.hpp"
 
-namespace thermo {
+namespace thermo::espidf_cpp {
 
 // Fixed-capacity, always-NUL-terminated string.
 //
@@ -107,4 +107,4 @@ class static_string {
     static_vector<char, N + 1> buf_;
 };
 
-}  // namespace thermo
+}  // namespace thermo::espidf_cpp

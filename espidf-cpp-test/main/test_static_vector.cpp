@@ -1,4 +1,5 @@
-// Tests for the project-local fixed-capacity container (thermo::static_vector).
+// Tests for the project-local fixed-capacity container
+// (thermo::espidf_cpp::static_vector).
 //
 // This stands in for C++26 std::static_vector, which the toolchain's libstdc++
 // does not yet provide. It is pure logic with no IDF dependencies, so it is
@@ -13,9 +14,9 @@
 #include <string>
 
 #include "assert_unity_support.hpp"
-#include "thermo_static_vector.hpp"
+#include "espidf_cpp/static_vector.hpp"
 
-using thermo::static_vector;
+using thermo::espidf_cpp::static_vector;
 
 // --- constexpr usability ----------------------------------------------------
 //

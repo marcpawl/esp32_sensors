@@ -23,8 +23,6 @@ set(test_srcs
     "test_config_page.cpp"
     "test_rom_id.cpp"
     "test_rtc_buffer.cpp"
-    "test_static_vector.cpp"
-    "test_static_string.cpp"
     "test_hal_switch.cpp"
     "test_hal_led.cpp"
     "test_hal_push_button.cpp"
@@ -54,23 +52,3 @@ idf_component_register(
         hal_stub
     WHOLE_ARCHIVE
 )
-
-# Standalone assert-trigger programs.
-#
-# The Unity tests fork+exec these programs to verify that contract violations
-# abort, without aborting the test runner itself. Each is built as a plain host
-# executable (no IDF runtime) into the build directory next to the test ELF, so
-# the corresponding test can locate it via a path derived from /proc/self/exe.
-function(add_assert_program name)
-    add_executable(${name} "test_${name}.cpp")
-    target_include_directories(${name} PRIVATE
-        "${CMAKE_CURRENT_LIST_DIR}"
-        "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/include"
-    )
-    set_target_properties(${name} PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
-    )
-endfunction()
-
-add_assert_program(static_string_assert)
-add_assert_program(static_vector_assert)
