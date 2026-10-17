@@ -10,16 +10,35 @@
 #include "constants.hpp"
 #include "esp_err.h"
 #include "esp_log.h"
+#include "hal/switch.hpp"
 #include "led_task.hpp"
 #include "mode.hpp"
-#include "mode_controller.hpp"
 #include "nvs_flash.h"
+#include "reboot.hpp"
 #include "rtc_state.hpp"
 #include "run_mode.hpp"
 
 namespace {
 
 constexpr const char* kTag = "app_main";
+
+// Maps the raw switch pin states onto an operating mode (§3). A healthy
+// 3-position ON-OFF-ON switch energizes at most one pole, so both-pins-on and
+// both-pins-off are hardware faults: fail loudly rather than guess a mode.
+thermo::Mode mode_from_pins(thermo::hal::Pins pins) {
+    if (pins.first_on() && !pins.third_on()) {
+        return thermo::Mode::kConfigure;
+    }
+    if (!pins.first_on() && pins.third_on()) {
+        return thermo::Mode::kRun;
+    }
+    if (!pins.first_on() && !pins.third_on()) {
+        return thermo::Mode::kOff;
+    }
+    // Both poles energized: the switch is miswired or shorted.
+    ESP_LOGE(kTag, "switch fault: both sense pins on");
+    thermo::reboot();
+}
 
 // Initializes NVS, erasing and retrying if the partition is full or had a
 // version mismatch (standard ESP-IDF recovery for a corrupted NVS).
@@ -41,10 +60,10 @@ extern "C" void app_main(void) {
     ESP_ERROR_CHECK(init_nvs());
     thermo::rtc_state_init();
 
-    thermo::ModeController mode_ctl(thermo::pins::kConfig, thermo::pins::kRun);
-    ESP_ERROR_CHECK(mode_ctl.init());
+    thermo::hal::Switch mode_switch(thermo::pins::kConfig, thermo::pins::kRun);
+    ESP_ERROR_CHECK(mode_switch.init());
 
-    const thermo::Mode mode = mode_ctl.read();
+    const thermo::Mode mode = mode_from_pins(mode_switch.read());
     ESP_LOGI(kTag, "boot: mode=%s", thermo::to_string(mode));
 
     switch (mode) {

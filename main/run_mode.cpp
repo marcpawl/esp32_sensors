@@ -41,7 +41,7 @@ constexpr const char* kTag = "run";
 
 // Builds a fixed-size sample record from a reading set (§4.1).
 SampleRecord make_record(std::uint32_t age_base, std::uint16_t batt_mv,
-                         const std::vector<SensorReading>& readings) {
+                         const std::vector<DS18B20Reading>& readings) {
     SampleRecord rec{};
     rec.age_base = age_base;
     rec.batt_mv = batt_mv;
@@ -77,8 +77,8 @@ std::vector<payload::NamedSample> collect_batch(const RtcState& st) {
 }
 
 // Friendly names in column order, padded to the sensor count (§5.1.3).
-std::vector<std::string> names_for(const Config& cfg,
-                                   const std::vector<SensorReading>& readings) {
+std::vector<std::string> names_for(
+    const Config& cfg, const std::vector<DS18B20Reading>& readings) {
     std::vector<std::string> names;
     names.reserve(limits::kSensorCount);
     for (std::size_t i = 0; i < limits::kSensorCount && i < readings.size();
@@ -99,7 +99,7 @@ std::vector<std::string> names_for(const Config& cfg,
 // the wire format can be reviewed, but no connection is attempted yet. Returns
 // false to represent "not yet implemented", which triggers backoff (§3.7).
 bool stub_upload(const Config& cfg, RtcState& st,
-                 const std::vector<SensorReading>& readings) {
+                 const std::vector<DS18B20Reading>& readings) {
     const auto batch = collect_batch(st);
     const std::string json = payload::build_batch_json(
         cfg.dev_name, names_for(cfg, readings), batch);

@@ -17,6 +17,20 @@ cmake_minimum_required(VERSION 3.16)
 #   scripts/dev.py test-qemu
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+
+# Make the shared HAL components visible to this standalone project. The QEMU
+# build links `hal_stub` (the deterministic, pin-free implementation); the
+# production firmware links `hal_board` instead. Both expose the same
+# `hal/switch.hpp` interface.
+list(APPEND EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../components")
+
 # Trim the build to the minimal component set (main and its dependencies).
 idf_build_set_property(MINIMAL_BUILD ON)
+
+# This project links `hal_stub` (pins declared in software) instead of the
+# GPIO-backed `hal_board`. Both expose `hal/switch.hpp` and define the same
+# symbols, so exclude `hal_board` to keep exactly one implementation in view.
+# Must be set before project().
+set(EXCLUDE_COMPONENTS hal_board)
+
 project(esp32_sensors_qemu)
