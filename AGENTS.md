@@ -29,7 +29,7 @@ This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its s
 | Toolchain | GCC 15.2.0 (Xtensa `esp-15.2.0_20251204`, bundled with ESP-IDF v6.1) |
 | License | GPL-3.0 |
 
-> **Note:** Firmware source lives in `main/` and builds successfully (`esp32_sensors.bin` has been produced). `Specification.md` remains the authoritative source of truth for all implementation work; where code and spec disagree, the spec wins. The `install.sh` at the repo root is an unrelated Continue CLI installer artifact and is **not** part of the firmware.
+> **Note:** Firmware source lives in the `mcgowan/` subproject and builds successfully (`mcgowan.bin` has been produced). `Specification.md` remains the authoritative source of truth for all implementation work; where code and spec disagree, the spec wins. The `install.sh` at the repo root is an unrelated Continue CLI installer artifact and is **not** part of the firmware.
 
 > **Implementation status (current milestone):**
 > - **Configure mode — implemented.** SoftAP, HTTPS server, config UI, NVS persistence, LED semantics.
@@ -70,23 +70,27 @@ Refer to `Specification.md` for the detailed contracts: operating modes, sample 
 esp32_sensors/
 ├── Specification.md     # Authoritative software spec (Rev 12) — read this first
 ├── RELEASE_NOTES.md     # Human-readable release notes
-├── CMakeLists.txt       # Top-level ESP-IDF project definition
-├── sdkconfig.defaults   # Committed IDF defaults (sdkconfig itself is generated)
-├── main/                # Firmware component (C++26) — see module map below
+├── CMakeLists.txt       # Root aggregator (plain CMake) — builds all subprojects
+├── mcgowan/             # Firmware subproject (ESP32-S3, hal_board) -> mcgowan.bin
+│   ├── CMakeLists.txt   #   standalone ESP-IDF project (project(mcgowan))
+│   ├── sdkconfig.defaults
+│   ├── main/            #   ESP-IDF `main` component (must be named main)
+│   │   └── CMakeLists.txt
+│   └── src/             #   C++26 sources + include/ — see module map below
 ├── components/          # Reusable ESP-IDF components (see "HAL" section)
 │   ├── hal_common/      # Shared, header-only HAL vocabulary (types/concepts)
-│   ├── hal_board/       # Real, GPIO-backed HAL (linked by the firmware)
+│   ├── hal_board/       # Real, GPIO-backed HAL (linked by mcgowan)
 │   └── hal_stub/        # Pin-free HAL stub (linked by QEMU/host tests)
-├── test/                # Host-based unit tests (IDF `linux` target, Unity)
-├── qemu/                # Standalone QEMU smoke-test project (ESP32-S3)
-│   └── build_esp32s3/   # QEMU build output (git-ignored; target-named)
+├── test/                # Host-based unit tests subproject (IDF `linux`, Unity)
+├── qemu/                # QEMU smoke-test subproject (ESP32-S3)
 ├── Dockerfile           # Dev container: ESP-IDF v6.1 + non-root host-mapped user
 ├── docker-compose.yml   # `dev` service with serial (/dev) passthrough
 ├── .devcontainer/       # CLion / VS Code Dev Container definition (reuses compose)
 ├── scripts/dev.py       # Container task runner (build/flash/test/format/shell)
 ├── scripts/test_dev.py  # Host unit tests for dev.py (`dev.py self-check`)
+├── scripts/test_qemu.py # Driver for the QEMU smoke test (`test-qemu`)
 ├── scripts/dev.py-completion.bash  # Bash tab-completion for scripts/dev.py
-├── build_esp32s3/       # Firmware build output from `idf.py` (git-ignored)
+├── build_root/          # Root aggregator CMake build tree (git-ignored)
 ├── cmake-build-esp32s3/ # CLion's own CMake build tree (git-ignored; see .idea/cmake.xml)
 ├── .dockerignore        # Build-context exclusions
 ├── .gitignore           # Excludes build dirs, sdkconfig, local IDE state
@@ -96,26 +100,36 @@ esp32_sensors/
 └── .idea/               # CLion config (shared cmake.xml + run configs tracked; workspace.xml local)
 ```
 
-**Build directories.** Every ESP-IDF build directory is named after its target
-(`build_esp32s3` for ESP32-S3, `build_linux` for the `linux` host target), so
-the target is obvious and the directories never collide. Each project owns its
-own:
+**The root is not an ESP-IDF project.** The top-level `CMakeLists.txt` is plain
+CMake that only aggregates the subprojects, so a single build covers everything.
+Each subproject is a standalone ESP-IDF project with its own `CMakeLists.txt`,
+`project()`, `sdkconfig.defaults`, and a build directory **inside its own
+folder**, named after the target:
 
-| Project | Directory | Target | Produces |
+| Subproject | Directory | Target | Produces |
 |---|---|---|---|
-| firmware (top level) | `build_esp32s3/` | esp32s3 | `esp32_sensors.bin` (flashed to the board) |
-| QEMU smoke test (`qemu/`) | `qemu/build_esp32s3/` | esp32s3 | `esp32_sensors_qemu.bin` (booted under QEMU) |
-| host tests (`test/`) | `test/build_linux/` | linux | `esp32_sensors_tests.elf` (run on the host) |
+| `mcgowan/` (firmware) | `mcgowan/build_esp32s3/` | esp32s3 | `mcgowan.bin` (flashed to the board) |
+| `qemu/` (smoke test) | `qemu/build_esp32s3/` | esp32s3 | `esp32_sensors_qemu.bin` (booted under QEMU) |
+| `test/` (host tests) | `test/build_linux/` | linux | `esp32_sensors_tests.elf` (run on the host) |
 
-The firmware and QEMU builds are separate ESP-IDF *projects* (each with its own
-`project()` and `sdkconfig`), so they cannot share one directory; naming both
-`build_esp32s3` keeps the convention uniform. `main/` and `qemu/` both target
-ESP32-S3 for QEMU/main use; `test/` targets `linux`. All are git-ignored.
+The aggregate (root) project configures into `build_root/`. Each aggregate
+target is prefixed with its subproject name (`mcgowan_build`, `qemu_build`,
+`test_build`) so it cannot collide with another target in the project, with
+names CMake/ESP-IDF define themselves (e.g. `test`), or with a directory name.
+`scripts/dev.py build` drives the aggregate project; `scripts/dev.py build
+mcgowan` builds just the firmware. `mcgowan/` and `qemu/` target ESP32-S3;
+`test/` targets `linux`. All build trees are git-ignored.
+
+**Why `mcgowan/main/` and `mcgowan/src/`.** ESP-IDF requires the component that
+defines `app_main` to be named `main`, so `mcgowan/main/` is that (near-empty)
+component; it compiles the sources from `mcgowan/src/` and exposes
+`mcgowan/src/include`. Application code lives in `mcgowan/src/`.
 
 **Key files:**
 - `Specification.md` — the single source of truth for hardware, modes, RTC memory layout, payload format, and power budget. Any implementation must conform to it.
-- `main/CMakeLists.txt` — lists all sources and the IDF component `REQUIRES` (nvs_flash, esp_wifi, esp_https_server, esp_http_client, esp_adc, esp_driver_gpio, mbedtls, …). **Add new sources here** or they will not compile.
-- `sdkconfig.defaults` — the committed configuration intent (target, C++ exceptions/RTTI off, partition table, `-Os`). `sdkconfig` is generated from this and is **not** tracked.
+- `mcgowan/main/CMakeLists.txt` — the firmware's component definition: lists all sources under `mcgowan/src/` and the IDF component `REQUIRES` (hal_board, nvs_flash, esp_wifi, esp_https_server, esp_http_client, esp_adc, esp_driver_gpio, mbedtls, …). **Add new sources here** or they will not compile.
+- `mcgowan/sdkconfig.defaults` — the committed configuration intent (target, C++ exceptions/RTTI off, partition table, `-Os`). `mcgowan/sdkconfig` is generated from this and is **not** tracked.
+- `CMakeLists.txt` (root) — the generator-agnostic aggregator: one prefixed target per subproject invoking `idf.py -C <sub> -B <sub>/<build-dir>`. `-DSUBPROJECTS="mcgowan;qemu;test"` (default: all) selects what is built.
 - `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash environment. Extend these (not ad-hoc `docker run`) when adding tooling. The compose `dev` service is also the target of the Dev Container (see below).
 - `.devcontainer/devcontainer.json` — the CLion / VS Code **Dev Container** definition. It **reuses the compose `dev` service** (it does not define its own image), so CLion builds/starts the same container the CLI uses. Edit `docker-compose.yml` for image/mount/user changes; edit `devcontainer.json` only for IDE-level wiring.
 - `scripts/dev.py` — the single container task runner (`build`, `flash`, `monitor`, `menuconfig`, `test`, `test-linux`, `test-qemu`, `self-check`, `format`, `format-check`, `format-check-staged`, `install-hooks`, `shell`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. `shell` is the preferred way to run a container command from the host: with no arguments it opens an interactive login shell, and with arguments it runs them in the container (e.g. `./scripts/dev.py shell ls -1d /`). The pre-commit hook (`.githooks/pre-commit`) delegates its check to `scripts/dev.py format-check-staged`. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
@@ -125,7 +139,7 @@ ESP32-S3 for QEMU/main use; `test/` targets `linux`. All are git-ignored.
 - `LICENSE` — GPL-3.0.
 - `RELEASE_NOTES.md` — human-readable release notes; keep the "Implemented" / "Not yet implemented" split honest as milestones land.
 
-**`main/` module map:**
+**`mcgowan/src/` module map:**
 
 | Area | Files |
 |---|---|
@@ -140,14 +154,14 @@ ESP32-S3 for QEMU/main use; `test/` targets `linux`. All are git-ignored.
 | Payload | `payload.cpp`, `temp_format.cpp`, `rom_id.cpp` (ROM-ID hex) |
 
 **HAL components (`components/`).** Hardware-specific drivers live in reusable
-ESP-IDF components rather than in `main/`, so host tests and QEMU can swap them
+ESP-IDF components rather than in `mcgowan/src/`, so host tests and QEMU can swap them
 for deterministic stubs. The HAL is split into one shared component plus two
 **mutually exclusive** implementations:
 
 | Component | Kind | Linked by | Provides |
 |---|---|---|---|
 | `hal_common` | header-only | everything (firmware, QEMU, tests) | shared vocabulary: types + concepts |
-| `hal_board` | `.cpp` | production firmware (`main/`) | real, GPIO-backed drivers |
+| `hal_board` | `.cpp` | production firmware (`mcgowan/`) | real, GPIO-backed drivers |
 | `hal_stub` | `.cpp` | QEMU project (`qemu/`), host tests (`test/`) | pin-free, software-driven stubs |
 
 `hal_common` is **implementation-free**: it defines the vocabulary but no
@@ -171,7 +185,7 @@ class. For the 3-position mode switch:
 
 The HAL is **semantics-free**: `Switch::read()` returns the raw `Pins` (one
 `PinState` per sense pole), and mapping pin states to Configure / Off / Run is
-the caller's job (`main/main.cpp`). Reporting both poles lets the caller detect
+the caller's job (`mcgowan/src/main.cpp`). Reporting both poles lets the caller detect
 bad hardware (both-pins-on / both-pins-off), which the switch stub can simulate
 via `set_pins()`.
 
@@ -251,8 +265,8 @@ necessary") and the toolchain, CMake, Ninja, and the ESP-IDF Python venv all run
 - **Toolchain/CMake:** select the container as the remote host (SSH into the Dev
   Container). CLion configures and builds under its **own** CMake build
   directory, `/project/cmake-build-esp32s3` (from `.idea/cmake.xml`), so the IDE
-  and `idf.py` never share a CMake cache. `build_esp32s3/` remains the canonical
-  `idf.py` build used by `scripts/dev.py build`/`flash`.
+  and `idf.py` never share a CMake cache. `mcgowan/build_esp32s3/` remains the
+  canonical `idf.py` build used by `scripts/dev.py build`/`flash`.
 
 > Editing the image, mounts, or user? Change `docker-compose.yml` (and `Dockerfile`),
 > **not** `devcontainer.json`. The Dev Container deliberately inherits everything
@@ -269,8 +283,8 @@ configuration used for building and refactoring inside the IDE:
 | Run configuration | Kind | What it does |
 |---|---|---|
 | esp32_sensors (container CMake) | CMake | Builds the `esp32_sensors` CMake target in the container; enables CLion Build/Compile and C++ **refactorings** |
-| Build firmware (container) | `scripts/dev.py build` | `idf.py -B build_esp32s3 build` in the container |
-| Flash & monitor (container) | `scripts/dev.py flash` | `idf.py -B build_esp32s3 -p $ESP32_PORT flash monitor` (default `/dev/ttyUSB0`) |
+| Build firmware (container) | `scripts/dev.py build` | `idf.py -C mcgowan -B mcgowan/build_esp32s3 build` (and the other subprojects) |
+| Flash & monitor (container) | `scripts/dev.py flash` | `idf.py -C mcgowan -B mcgowan/build_esp32s3 -p $ESP32_PORT flash monitor` (default `/dev/ttyUSB0`) |
 | Host unit tests (container) | `scripts/dev.py test` | runs both suites (below); use `test-linux` / `test-qemu` to run one |
 | clang-format check (container) | `scripts/dev.py format-check` | `clang-format --dry-run --Werror` |
 | menuconfig (container) | `scripts/dev.py menuconfig` | Kconfig UI |
@@ -278,8 +292,8 @@ configuration used for building and refactoring inside the IDE:
 
 Set `ESP32_PORT` (e.g. `/dev/ttyACM0`) to target a different serial device.
 
-> **Building is container-only.** The top-level `CMakeLists.txt` refuses to
-> configure unless `DOCKER_IMAGE=esp32_sensors` (set by the `Dockerfile`), so a
+> **Building is container-only.** The root `CMakeLists.txt` and every subproject
+> refuse to configure unless `DOCKER_IMAGE=esp32_sensors` (set by the `Dockerfile`), so a
 > host invocation fails fast. The CMake profile in `.idea/cmake.xml` and the
 > "esp32_sensors (container CMake)" run configuration both use the Dev
 > Container toolchain, so CLion builds and refactors through the container.
@@ -316,7 +330,7 @@ enacted on the host.
 
 |platform|command|action|
 |===|===|===|
-|both|build|Compile the source code|
+|both|build [SUBPROJECT...]|Build all subprojects via the root aggregator, or just the named ones (mcgowan, qemu, test)|
 |both|test|Run both test suites: the host unit tests then the QEMU smoke test|
 |both|test-linux|Build and run the host unit tests (ESP-IDF `linux` target)|
 |both|test-qemu|Build and boot the QEMU smoke test (ESP32-S3 image)|
@@ -347,10 +361,12 @@ Then `./scripts/dev.py form<TAB>` completes to `format`, `format-check`,
 
 ### Container commands
 ```bash
-# Run any IDF command via compose. The build directory is named after the
-# target (`build_esp32s3`) so it never clashes with the host-test build.
-docker compose run --rm dev idf.py -B build_esp32s3 set-target esp32s3   # first time only
-docker compose run --rm dev idf.py -B build_esp32s3 build
+# Build every subproject via the root aggregator (plain CMake: configure, then build).
+docker compose run --rm dev cmake -S . -B build_root && \
+    docker compose run --rm dev cmake --build build_root
+
+# Build just the firmware: idf.py runs in mcgowan/ with its build tree inside it.
+docker compose run --rm dev idf.py -C mcgowan -B mcgowan/build_esp32s3 build
 ```
 
 C++26 (`-std=gnu++26`) is the ESP-IDF v6.1 default for chip targets — no extra compiler flags are required.
@@ -381,7 +397,7 @@ There are two test suites, both runnable from the host via `scripts/dev.py`:
   reads, deep-sleep wake, Wi-Fi upload).
 - Keep hardware interactions behind thin interfaces so business logic remains
   host-testable. When adding pure logic, put it in a host-testable translation
-  unit and add it to both `main/CMakeLists.txt` and `test/main/CMakeLists.txt`.
+  unit and add it to both `mcgowan/main/CMakeLists.txt` and `test/main/CMakeLists.txt`.
 
 ```bash
 # Run both suites (host unit tests, then the QEMU smoke test).
@@ -412,7 +428,7 @@ indent, 80 columns). The existing sources already conform, so a format run is a
 no-op on clean code — keep it that way and format before committing.
 
 **Always run clang-format via the container task runner**, which formats all
-`.hpp` and `.cpp` source files under `main/`, `components/`, `test/`, and
+`.hpp` and `.cpp` source files under `mcgowan/`, `components/`, `test/`, and
 `qemu/`:
 
 ```bash

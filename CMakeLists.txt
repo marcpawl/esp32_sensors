@@ -1,24 +1,109 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
 
-# Fail fast when building on the host instead of inside the dev container.
-# The Dockerfile exports DOCKER_IMAGE=esp32_sensors (see the ENV at its end);
-# requiring it keeps the toolchain reproducible and boxes the build/format/
-# test workflow into the container documented in AGENTS.md.
+# Repository root — NOT an ESP-IDF project.
+#
+# The root holds the documentation, the shared `components/` HAL directory, the
+# dev tooling (scripts/, Docker*, .devcontainer/, .idea/), and the subprojects.
+# Each subproject is a standalone ESP-IDF project with its own `CMakeLists.txt`,
+# `sdkconfig.defaults`, and build directory inside its own folder:
+#
+#   mcgowan/  ESP32-S3 firmware (hal_board)   -> mcgowan/build_esp32s3/mcgowan.bin
+#   qemu/     ESP32-S3 QEMU smoke test (hal_stub) -> qemu/build_esp32s3/
+#   test/     host unit tests, `linux` target (hal_stub) -> test/build_linux/
+#
+# This file only aggregates them, so ONE build covers all of them. It is plain
+# CMake (no repo-root sdkconfig): each target invokes `idf.py` for its
+# subproject, and idf.py reads that subproject's committed defaults (target,
+# Wi-Fi, HTTPS, ...) so nothing depends on IDF's ambient defaults.
+#
+# Build everything (container-only; see AGENTS.md):
+#   scripts/dev.py build              # all subprojects
+#   scripts/dev.py build mcgowan      # just the firmware
+#
+# or directly:
+#   docker compose run --rm dev     cmake -B build_root && cmake --build build_root
+#   docker compose run --rm dev     cmake -B build_root -DSUBPROJECTS="mcgowan" \
+#                                   && cmake --build build_root
+#
+# Every target in this file is prefixed with its subproject name (e.g.
+# qemu_build, mcgowan_build, test_build; a HAL component's would be
+# hal_board_test) so it cannot collide with another target in this project,
+# with names CMake / ESP-IDF define for themselves (test, build_test, ...), or
+# with a subproject directory name.
+
 if(NOT "$ENV{DOCKER_IMAGE}" STREQUAL "esp32_sensors")
     message(FATAL_ERROR
         "This project must be built inside the ESP-IDF dev container.\n"
         "DOCKER_IMAGE is not 'esp32_sensors', so this looks like a host "
         "invocation.\n"
         "Use:  scripts/dev.py build\n"
-        "or:   docker compose run --rm dev idf.py -B build_esp32s3 build")
+        "or:   docker compose run --rm dev cmake -B build_root")
 endif()
 
-# `components/` holds two mutually exclusive HAL implementations that expose the
-# same headers (`hal_*`): `hal_board` (real GPIO) and `hal_stub` (pins declared
-# in software). The production firmware links `hal_board`; exclude `hal_stub` so
-# the two cannot be built together and define the same symbols. Must be set
-# before project().
-set(EXCLUDE_COMPONENTS hal_stub)
+if(NOT DEFINED ENV{IDF_PATH} OR NOT EXISTS "$ENV{IDF_PATH}/export.sh")
+    message(FATAL_ERROR
+        "IDF_PATH is not set; run this inside the ESP-IDF dev container.")
+endif()
 
-include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(esp32_sensors)
+project(esp32_sensors_subprojects NONE)
+
+# Which subprojects to build. Default: all of them.
+set(SUBPROJECTS "mcgowan;qemu;test" CACHE STRING
+    "Semicolon-separated subprojects to build (mcgowan, qemu, test)")
+set_property(CACHE SUBPROJECTS PROPERTY STRINGS mcgowan qemu test)
+
+set(KNOWN_SUBPROJECTS mcgowan qemu test)
+foreach(sub IN LISTS SUBPROJECTS)
+    if(NOT sub IN_LIST KNOWN_SUBPROJECTS)
+        message(FATAL_ERROR
+            "Unknown subproject '${sub}'. Known subprojects: "
+            "${KNOWN_SUBPROJECTS}")
+    endif()
+endforeach()
+
+# idf.py and its Python environment live in IDF_PATH/tools.
+set(ENV{PATH} "$ENV{IDF_PATH}/tools:$ENV{PATH}")
+
+# One `<subproject>_build` target per subproject. It runs idf.py in the
+# subproject directory (`-C`) with the build tree inside that directory
+# (`-B`); both are absolute so they resolve the same from the root and from
+# inside the subproject directory. Each remaining argument is one idf.py
+# invocation: a `|`-separated `SUBCOMMAND|arg|arg` string (e.g. "build" or
+# "--preview|set-target|linux"), run in order. `|` (not `;`) separates the
+# words because `;` is CMake's list separator; the invocations are `;`-separated
+# in turn. One target per subproject keeps its name unique.
+function(_idf_subproject sub build_dir)
+    set(common
+        idf.py
+        -C "${CMAKE_CURRENT_SOURCE_DIR}/${sub}"
+        -B "${CMAKE_CURRENT_SOURCE_DIR}/${sub}/${build_dir}"
+        --no-hints)
+    set(commands)
+    foreach(step IN LISTS ARGN)
+        string(REPLACE "|" ";" words "${step}")
+        list(APPEND commands COMMAND ${common} ${words})
+    endforeach()
+    add_custom_target(${sub}_build ALL
+        ${commands}
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${sub}"
+        COMMENT "${sub}: build (${sub}/${build_dir})"
+        VERBATIM
+    )
+endfunction()
+
+# --- mcgowan: ESP32-S3 firmware (mcgowan.bin) -> target mcgowan_build ------
+if(mcgowan IN_LIST SUBPROJECTS)
+    _idf_subproject(mcgowan build_esp32s3 "build")
+endif()
+
+# --- qemu: ESP32-S3 QEMU smoke test -> target qemu_build ------------------
+if(qemu IN_LIST SUBPROJECTS)
+    _idf_subproject(qemu build_esp32s3 "build")
+endif()
+
+# --- test: host unit tests (linux target) -> target test_build ------------
+# `set-target linux` is only meaningful when sdkconfig is (re)generated, so it
+# is cheap on every invocation and keeps a fresh build tree pointed at linux.
+if(test IN_LIST SUBPROJECTS)
+    _idf_subproject(test build_linux "--preview|set-target|linux" "build")
+endif()

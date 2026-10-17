@@ -14,7 +14,7 @@ being checked rather than a copy.
 
 from __future__ import annotations
 
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 import io
 import os
 from pathlib import Path
@@ -128,6 +128,83 @@ class ResolveContainerDirectoryTests(unittest.TestCase):
 
     def test_absolute_below_root_is_used_verbatim(self):
         self.assertEqual(dev._resolve_container_directory("/tmp"), "/tmp")
+
+
+class SubprojectBuildTests(unittest.TestCase):
+    """Subproject layout: `_idf()`, `build` argument parsing, root build."""
+
+    def test_subprojects_are_mcgowan_qemu_test(self):
+        self.assertEqual(dev.SUBPROJECTS, ("mcgowan", "qemu", "test"))
+
+    def test_idf_runs_in_subproject_with_build_tree_inside_it(self):
+        self.assertEqual(
+            dev._idf("mcgowan", "build_esp32s3", "build"),
+            [
+                "idf.py",
+                "-C", "mcgowan",
+                "-B", "mcgowan/build_esp32s3",
+                "build",
+            ],
+        )
+
+    def test_idf_keeps_multiple_arguments_in_order(self):
+        self.assertEqual(
+            dev._idf("qemu", "build_esp32s3", "flash", "monitor")[5:],
+            ["flash", "monitor"],
+        )
+
+    def test_no_arguments_selects_every_subproject(self):
+        self.assertEqual(dev._parse_subprojects([]), list(dev.SUBPROJECTS))
+
+    def test_named_subprojects_are_kept_in_argument_order(self):
+        self.assertEqual(
+            dev._parse_subprojects(["test", "mcgowan"]),
+            ["test", "mcgowan"],
+        )
+
+    def test_unknown_subproject_is_rejected(self):
+        # Fail loudly instead of silently building nothing.
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertIsNone(dev._parse_subprojects(["mcgowan", "bogus"]))
+        self.assertIn("bogus", err.getvalue())
+
+    def test_root_build_configures_then_builds_all_subprojects(self):
+        self.assertEqual(
+            dev._root_build_commands(list(dev.SUBPROJECTS)),
+            [
+                [
+                    "cmake",
+                    "-S", ".",
+                    "-B", dev.ROOT_BUILD_DIR,
+                    "-DSUBPROJECTS=mcgowan;qemu;test",
+                ],
+                ["cmake", "--build", dev.ROOT_BUILD_DIR],
+            ],
+        )
+
+    def test_firmware_binary_is_named_after_the_project(self):
+        # The ESP-IDF project name (mcgowan/) determines the app binary name.
+        self.assertEqual(dev.FW_BINARY, "mcgowan.bin")
+        self.assertEqual(dev.FIRMWARE_PROJECT, "mcgowan")
+
+    def test_subproject_directories_have_a_cmakelists(self):
+        for project in dev.SUBPROJECTS:
+            with self.subTest(project=project):
+                cmake = dev.REPO_ROOT / project / "CMakeLists.txt"
+                self.assertTrue(cmake.is_file(), f"missing {cmake}")
+
+    def test_root_is_not_an_espidf_project(self):
+        # The root aggregates subprojects with plain CMake; it must not
+        # include ESP-IDF's project.cmake (which would make it a project).
+        root_cmake = (dev.REPO_ROOT / "CMakeLists.txt").read_text()
+        self.assertNotIn("tools/cmake/project.cmake", root_cmake)
+        # Every aggregate target is prefixed with its subproject name.
+        for project in dev.SUBPROJECTS:
+            self.assertIn(
+                f"_idf_subproject({project} ", root_cmake,
+                f"no {project}_build target in the root CMakeLists.txt",
+            )
 
 
 class CommandRegistryTests(unittest.TestCase):

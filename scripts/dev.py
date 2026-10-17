@@ -39,7 +39,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # file list is discovered via git so it always matches the tracked files (no
 # missing-glob errors). Keep this in sync with the pre-commit hook
 # (.githooks/pre-commit).
-ROOTS = ("main", "components", "test", "qemu")
+ROOTS = ("mcgowan", "components", "test", "qemu", "scripts")
 EXTENSIONS = (".cpp", ".hpp", ".h", ".cc", ".cxx")
 
 # Docker dev image that ships the pinned clang-format version.
@@ -47,10 +47,26 @@ DEV_IMAGE = "esp32-sensors-dev:latest"
 
 FORMAT_ARGS = ("--dry-run", "--Werror")
 
-# Build directories are named after the ESP-IDF target so the firmware
-# (esp32s3) and host-test (linux) builds never clobber each other.
+# The repo root is not an ESP-IDF project; it aggregates the subprojects
+# (each a standalone ESP-IDF project with its own build directory):
+#
+#   mcgowan/  ESP32-S3 firmware (hal_board) -> mcgowan/build_esp32s3/mcgowan.bin
+#   qemu/     ESP32-S3 QEMU smoke test (hal_stub) -> qemu/build_esp32s3
+#   test/     host unit tests (linux target)      -> test/build_linux
+#
+# Build directories are named after the ESP-IDF target so the esp32s3 and
+# linux builds stay separate.
+FIRMWARE_PROJECT = "mcgowan"
+QEMU_PROJECT = "qemu"
+TEST_PROJECT = "test"
 FW_BUILD_DIR = "build_esp32s3"
 TEST_BUILD_DIR = "build_linux"
+ROOT_BUILD_DIR = "build_root"
+
+# The firmware app binary (named after the mcgowan project).
+FW_BINARY = "mcgowan.bin"
+
+SUBPROJECTS = (FIRMWARE_PROJECT, QEMU_PROJECT, TEST_PROJECT)
 
 # Host-side unit tests for this script itself (stdlib `unittest`), run by
 # `scripts/dev.py self-check`.
@@ -149,10 +165,87 @@ def cmd_image() -> int:
         return 1
     return run(["docker", "compose", "build"])
 
-def cmd_build() -> int:
-    """Build the firmware for the configured chip target (esp32s3)."""
+def _idf(project: str, build_dir: str, *args: str) -> list[str]:
+    """`idf.py` argv for a subproject: run in its directory with its own build.
+
+    Pure (no I/O), so it is unit-testable. `project` is a subproject directory
+    relative to the repo root; the build directory lives inside it.
+    """
+    return ["idf.py", "-C", project, "-B", f"{project}/{build_dir}", *args]
+
+
+def _parse_subprojects(args: list[str]) -> list[str] | None:
+    """Parse `build`'s optional subproject arguments.
+
+    No arguments means every subproject. Unknown names print an error and
+    return None so the caller can exit non-zero.
+    """
+    if not args:
+        return list(SUBPROJECTS)
+    unknown = [arg for arg in args if arg not in SUBPROJECTS]
+    if unknown:
+        print(
+            f"Unknown subproject(s): {' '.join(unknown)}. "
+            f"Known: {' '.join(SUBPROJECTS)}",
+            file=sys.stderr,
+        )
+        return None
+    return args
+
+
+def _root_build_commands(subprojects: list[str]) -> list[list[str]]:
+    """Configure and build the root aggregator project. Pure (testable).
+
+    The root project is plain CMake (not ESP-IDF); ``SUBPROJECTS`` selects
+    which of its ``<subproject>_build`` targets are built. It is passed on the
+    configure command line rather than cached so the selection never goes
+    stale. Returns the configure command followed by the build command.
+    """
+    return [
+        [
+            "cmake",
+            "-S", ".",
+            "-B", ROOT_BUILD_DIR,
+            f"-DSUBPROJECTS={';'.join(subprojects)}",
+        ],
+        ["cmake", "--build", ROOT_BUILD_DIR],
+    ]
+
+
+def _build_subprojects(subprojects: list[str]) -> int:
+    """Build the named subprojects in order. No container hop."""
+    if subprojects == list(SUBPROJECTS):
+        # The whole tree: let the root aggregator project drive every
+        # subproject (one CMake build over all of them).
+        for cmd in _root_build_commands(subprojects):
+            rc = run(cmd)
+            if rc != 0:
+                return rc
+        return 0
+    for project in subprojects:
+        build_dir = TEST_BUILD_DIR if project == TEST_PROJECT else FW_BUILD_DIR
+        if project == TEST_PROJECT:
+            rc = run(_idf(project, build_dir, "set-target", "linux"))
+            if rc != 0:
+                return rc
+        rc = run(_idf(project, build_dir, "build"))
+        if rc != 0:
+            return rc
+    return 0
+
+
+def cmd_build(args: list[str]) -> int:
+    """Build the firmware; with no argument also the other subprojects.
+
+    `build`            → every subproject (firmware, QEMU image, host tests)
+    `build mcgowan`    → just the ESP32-S3 firmware (mcgowan/build_esp32s3)
+    `build qemu test`  → any combination of: mcgowan qemu test
+    """
     change_to_container()
-    return run(["idf.py", "-B", FW_BUILD_DIR, "build"])
+    subprojects = _parse_subprojects(args)
+    if subprojects is None:
+        return 1
+    return _build_subprojects(subprojects)
 
 
 def cmd_flash() -> int:
@@ -161,19 +254,19 @@ def cmd_flash() -> int:
     # No need to pass in the port since it is either in the
     # container environment of idf.py will hunt for the board
     # across all the tty devices.
-    return run(["idf.py", "-B", FW_BUILD_DIR, "flash", "monitor"])
+    return run(_idf(FIRMWARE_PROJECT, FW_BUILD_DIR, "flash", "monitor"))
 
 
 def cmd_monitor() -> int:
     """Attach the serial monitor; exit it with Ctrl+]."""
     change_to_container()
-    return run(["idf.py", "-B", FW_BUILD_DIR, "monitor"])
+    return run(_idf(FIRMWARE_PROJECT, FW_BUILD_DIR, "monitor"))
 
 
 def cmd_menuconfig() -> int:
     """Interactive Kconfig UI; edits sdkconfig (generated from defaults)."""
     change_to_container()
-    return run(["idf.py", "-B", FW_BUILD_DIR, "menuconfig"])
+    return run(_idf(FIRMWARE_PROJECT, FW_BUILD_DIR, "menuconfig"))
 
 
 def _run_host_tests() -> int:
@@ -182,14 +275,13 @@ def _run_host_tests() -> int:
     Assumes it is already running inside the dev container.
     """
     cmds = [
-            [ "idf.py", "--preview", "-B",  TEST_BUILD_DIR,
-              "set-target", "linux" ],
-            [ "idf.py", "-B",  TEST_BUILD_DIR, "build" ],
-            [ f"./{TEST_BUILD_DIR}/esp32_sensors_tests.elf"]
+            _idf(TEST_PROJECT, TEST_BUILD_DIR, "--preview", "set-target",
+                  "linux"),
+            _idf(TEST_PROJECT, TEST_BUILD_DIR, "build"),
+            [ f"./{TEST_PROJECT}/{TEST_BUILD_DIR}/esp32_sensors_tests.elf"]
            ]
     for cmd in cmds:
-        print(cmd)
-        rc = run( cmd, cwd="test")
+        rc = run(cmd)
         if rc != 0:
             return 1
 
@@ -200,11 +292,11 @@ def _run_host_tests() -> int:
 def _run_qemu_test() -> int:
     """Build and boot the QEMU smoke test. No container hop.
 
-    Assumes it is already running inside the dev container. `qemu/test_qemu.py`
+    Assumes it is already running inside the dev container. `scripts/test_qemu.py`
     drives the whole flow itself (clean, build, boot under QEMU, verify output)
     and is CI-friendly (non-zero exit on failure).
     """
-    return run(["python3", "qemu/test_qemu.py"])
+    return run(["python3", "scripts/test_qemu.py"])
 
 
 def cmd_test_linux() -> int:
@@ -488,6 +580,16 @@ def _build_parser() -> argparse.ArgumentParser:
     # metacharacters) so `shell ls -1d /` and `shell "echo hi | wc -l"` work.
     # The `-C/--directory` option must appear before the command (options are
     # parsed up to the first positional token, which starts the REMAINDER).
+    # `build` takes optional subproject names (default: all of them).
+    build_parser = subparsers.choices["build"]
+    build_parser.add_argument(
+        "subprojects",
+        nargs="*",
+        metavar="SUBPROJECT",
+        help=f"subprojects to build (any of: {' '.join(SUBPROJECTS)}); "
+             "omit for all of them",
+    )
+
     shell_parser = subparsers.choices["shell"]
     shell_parser.add_argument(
         "-C",
@@ -524,6 +626,8 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv[1:])
     if args.command == "shell":
         return cmd_shell(args.args, args.directory)
+    if args.command == "build":
+        return cmd_build(args.subprojects)
     return args.handler()
 
 

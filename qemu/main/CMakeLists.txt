@@ -1,7 +1,7 @@
 # QEMU smoke-test component.
 #
 # The project's `main` component (`app_main`). This project is standalone and
-# intentionally does not compile the production `main/` sources. The source is
+# intentionally does not compile the production `mcgowan/src/` sources. The source is
 # the ESP-IDF `hello_world` example, used to verify the QEMU build/boot workflow
 # (`idf.py qemu` -> `qemu-system-xtensa -M esp32s3`) on the ESP32-S3 target.
 #

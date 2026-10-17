@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""QEMU smoke test for the standalone `qemu/` project (ESP32-S3).
+"""QEMU smoke test for the standalone `qemu/` subproject (ESP32-S3).
 
 This program cleans the build directory, builds the QEMU smoke-test firmware
 for the ESP32-S3 target, boots it under the ESP-IDF QEMU fork
@@ -14,7 +14,7 @@ This script must be run *inside* the ESP-IDF dev container (the image sets
 through the container task runner:
 
     scripts/dev.py test-qemu
-    scripts/dev.py shell python3 qemu/test_qemu.py
+    scripts/dev.py shell python3 scripts/test_qemu.py
 
 See https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-guides/tools/qemu.html
 """
@@ -29,9 +29,11 @@ import sys
 
 # --- Layout -----------------------------------------------------------------
 
-# This file lives in `qemu/`; the repo root is its parent.
-PROG_DIR = Path(__file__).resolve().parent
-BUILD_DIR = PROG_DIR / "build"
+# This script lives in `scripts/`; the QEMU subproject it drives is `qemu/`
+# and its build tree is named after the target, like the other subprojects.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+PROG_DIR = REPO_ROOT / "qemu"
+BUILD_DIR = PROG_DIR / "build_esp32s3"
 
 # --- Container --------------------------------------------------------------
 
@@ -82,7 +84,7 @@ def clean_build() -> None:
 def build_firmware() -> None:
     """Build the firmware for the ESP32-S3 target."""
     info(f"Building {IDF_TARGET} firmware")
-    rc = run(["idf.py", "build"], cwd=PROG_DIR)
+    rc = run(["idf.py", "-B", str(BUILD_DIR), "build"], cwd=PROG_DIR)
     if rc.returncode != 0:
         print("ERROR: firmware build failed", file=sys.stderr)
         sys.exit(1)
@@ -101,7 +103,7 @@ def run_qemu() -> subprocess.CompletedProcess:
     info("Running QEMU")
     cmd = [
         "timeout", "-k", "5", str(QEMU_TIMEOUT_S),
-        "idf.py", "qemu",
+        "idf.py", "-B", str(BUILD_DIR), "qemu",
     ]
     try:
         return subprocess.run(

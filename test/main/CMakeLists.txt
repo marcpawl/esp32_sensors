@@ -1,7 +1,8 @@
 # Unit-test component.
 #
-# Compiles the ESP-IDF-free production sources directly from ../main so the
-# tests exercise real firmware code rather than copies. Only modules that do
+# Compiles the ESP-IDF-free production sources directly from the `mcgowan`
+# subproject (../../mcgowan/src) so the tests exercise real firmware code rather
+# than copies. Only modules that do
 # not depend on chip-specific IDF drivers are listed here; hardware-facing code
 # (1-Wire GPIO, Wi-Fi, HTTPS) is covered by on-target tests instead.
 #
@@ -34,20 +35,20 @@ set(test_srcs
 
 # Production sources under test (paths are relative to this component dir).
 set(sut_srcs
-    "${CMAKE_CURRENT_LIST_DIR}/../../main/temp_format.cpp"
-    "${CMAKE_CURRENT_LIST_DIR}/../../main/payload.cpp"
-    "${CMAKE_CURRENT_LIST_DIR}/../../main/app_config.cpp"
-    "${CMAKE_CURRENT_LIST_DIR}/../../main/config_page.cpp"
-    "${CMAKE_CURRENT_LIST_DIR}/../../main/power_source.cpp"
-    "${CMAKE_CURRENT_LIST_DIR}/../../main/rom_id.cpp"
-    "${CMAKE_CURRENT_LIST_DIR}/../../main/rtc_buffer.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/temp_format.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/payload.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/app_config.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/config_page.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/power_source.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/rom_id.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/rtc_buffer.cpp"
 )
 
 idf_component_register(
     SRCS ${test_srcs} ${sut_srcs}
     INCLUDE_DIRS
         "."
-        "${CMAKE_CURRENT_LIST_DIR}/../../main/include"
+        "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/include"
     PRIV_REQUIRES
         unity
         hal_stub
@@ -64,7 +65,7 @@ function(add_assert_program name)
     add_executable(${name} "test_${name}.cpp")
     target_include_directories(${name} PRIVATE
         "${CMAKE_CURRENT_LIST_DIR}"
-        "${CMAKE_CURRENT_LIST_DIR}/../../main/include"
+        "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/include"
     )
     set_target_properties(${name} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
