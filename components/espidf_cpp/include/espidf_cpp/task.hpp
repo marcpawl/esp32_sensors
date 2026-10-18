@@ -10,13 +10,13 @@
 
 #include "esp_err.h"
 #include "esp_log.h"
+#include "espidf_cpp/handle.hpp"
+#include "espidf_cpp/static_string.hpp"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
-#include "handle_deleter.hpp"
-#include "thermo_static_string.hpp"
 
-namespace thermo {
+namespace thermo::espidf_cpp {
 
 // Maximum number of characters (excluding the terminating NUL) in a task name.
 // FreeRTOS copies at most configMAX_TASK_NAME_LEN bytes, so this is a safe
@@ -46,7 +46,7 @@ class Task {
         static_assert(
             std::is_nothrow_invocable_r_v<void, decltype(&Runner::run),
                                           Runner*>,
-            "thermo::Task requires an accessible [[noreturn]] void "
+            "thermo::espidf_cpp::Task requires an accessible [[noreturn]] void "
             "run() noexcept on Runner");
 
         // Copy the NUL-terminated name into our own inline storage so it
@@ -99,4 +99,4 @@ class Task {
     Runner runner_;
 };
 
-}  // namespace thermo
+}  // namespace thermo::espidf_cpp

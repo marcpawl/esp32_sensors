@@ -18,7 +18,7 @@
 #include <cstdlib>
 #include <utility>
 
-namespace thermo {
+namespace thermo::espidf_cpp {
 
 // Fixed-capacity vector with `N` slots of inline storage.
 //
@@ -130,4 +130,4 @@ class static_vector {
     size_type size_ = 0;
 };
 
-}  // namespace thermo
+}  // namespace thermo::espidf_cpp

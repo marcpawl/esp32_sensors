@@ -78,10 +78,12 @@ esp32_sensors/
 │   │   └── CMakeLists.txt
 │   └── src/             #   C++26 sources + include/ — see module map below
 ├── components/          # Reusable ESP-IDF components (see "HAL" section)
+│   ├── espidf_cpp/      # C++ wrappers over ESP-IDF/FreeRTOS (Task, queue, handles, ...)
 │   ├── hal_common/      # Shared, header-only HAL vocabulary (types/concepts)
 │   ├── hal_board/       # Real, GPIO-backed HAL (linked by mcgowan)
 │   └── hal_stub/        # Pin-free HAL stub (linked by QEMU/host tests)
 ├── test/                # Host-based unit tests subproject (IDF `linux`, Unity)
+├── espidf-cpp-test/     # Host tests for components/espidf_cpp (IDF `linux`, Unity)
 ├── qemu/                # QEMU smoke-test subproject (ESP32-S3)
 ├── Dockerfile           # Dev container: ESP-IDF v6.1 + non-root host-mapped user
 ├── docker-compose.yml   # `dev` service with serial (/dev) passthrough
@@ -111,6 +113,7 @@ folder**, named after the target:
 | `mcgowan/` (firmware) | `mcgowan/build_esp32s3/` | esp32s3 | `mcgowan.bin` (flashed to the board) |
 | `qemu/` (smoke test) | `qemu/build_esp32s3/` | esp32s3 | `esp32_sensors_qemu.bin` (booted under QEMU) |
 | `test/` (host tests) | `test/build_linux/` | linux | `esp32_sensors_tests.elf` (run on the host) |
+| `espidf-cpp-test/` (wrapper tests) | `espidf-cpp-test/build_linux/` | linux | `esp32_sensors_espidf_cpp_tests.elf` (run on the host) |
 
 The aggregate (root) project configures into `build_root/`. Each aggregate
 target is prefixed with its subproject name (`mcgowan_build`, `qemu_build`,
@@ -129,7 +132,7 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 - `Specification.md` — the single source of truth for hardware, modes, RTC memory layout, payload format, and power budget. Any implementation must conform to it.
 - `mcgowan/main/CMakeLists.txt` — the firmware's component definition: lists all sources under `mcgowan/src/` and the IDF component `REQUIRES` (hal_board, nvs_flash, esp_wifi, esp_https_server, esp_http_client, esp_adc, esp_driver_gpio, mbedtls, …). **Add new sources here** or they will not compile.
 - `mcgowan/sdkconfig.defaults` — the committed configuration intent (target, C++ exceptions/RTTI off, partition table, `-Os`). `mcgowan/sdkconfig` is generated from this and is **not** tracked.
-- `CMakeLists.txt` (root) — the generator-agnostic aggregator: one prefixed target per subproject invoking `idf.py -C <sub> -B <sub>/<build-dir>`. `-DSUBPROJECTS="mcgowan;qemu;test"` (default: all) selects what is built.
+- `CMakeLists.txt` (root) — the generator-agnostic aggregator: one prefixed target per subproject invoking `idf.py -C <sub> -B <sub>/<build-dir>`. `-DSUBPROJECTS="mcgowan;qemu;test;espidf-cpp-test"` (default: all) selects what is built.
 - `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash environment. Extend these (not ad-hoc `docker run`) when adding tooling. The compose `dev` service is also the target of the Dev Container (see below).
 - `.devcontainer/devcontainer.json` — the CLion / VS Code **Dev Container** definition. It **reuses the compose `dev` service** (it does not define its own image), so CLion builds/starts the same container the CLI uses. Edit `docker-compose.yml` for image/mount/user changes; edit `devcontainer.json` only for IDE-level wiring.
 - `scripts/dev.py` — the single container task runner (`build`, `flash`, `monitor`, `menuconfig`, `test`, `test-linux`, `test-qemu`, `self-check`, `format`, `format-check`, `format-check-staged`, `install-hooks`, `shell`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. `shell` is the preferred way to run a container command from the host: with no arguments it opens an interactive login shell, and with arguments it runs them in the container (e.g. `./scripts/dev.py shell ls -1d /`). The pre-commit hook (`.githooks/pre-commit`) delegates its check to `scripts/dev.py format-check-staged`. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
@@ -152,6 +155,7 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 | Configure mode | `configure_mode.cpp`, `wifi_ap.cpp`, `https_server.cpp`, `config_page.cpp`, `certs/self_signed_cert.cpp` |
 | Run mode | `run_mode.cpp` (stubbed network path), `ntp_server.cpp` |
 | Payload | `payload.cpp`, `temp_format.cpp`, `rom_id.cpp` (ROM-ID hex) |
+| Task | `led_task.cpp` (LED task, built on `espidf_cpp::Task`) |
 
 **HAL components (`components/`).** Hardware-specific drivers live in reusable
 ESP-IDF components rather than in `mcgowan/src/`, so host tests and QEMU can swap them
@@ -198,6 +202,23 @@ test project also adds `components/` to `EXTRA_COMPONENT_DIRS` (its own project
 root is `test/`, so the repo-root `components/` is not on the default path) and
 excludes `hal_board`.
 `hal_common` is shared and is never excluded.
+
+**`espidf_cpp` component (`components/espidf_cpp`).** Header-only C++ wrappers
+over the ESP-IDF/FreeRTOS C APIs, in namespace `thermo::espidf_cpp`:
+
+| Header | Provides |
+|---|---|
+| `espidf_cpp/task.hpp` | `Task<Runner>` (typed `[[noreturn]]` task body), `TaskParams` |
+| `espidf_cpp/one_message_queue.hpp` | `OneMessageQueue<T>` (single-slot, trivially-copyable messages) |
+| `espidf_cpp/handle.hpp` | `HandleDeleter`, `UniqueTaskHandle`, `UniqueQueueHandle` |
+| `espidf_cpp/static_vector.hpp` | fixed-capacity, inline-storage vector |
+| `espidf_cpp/static_string.hpp` | fixed-capacity, NUL-terminated string |
+
+The firmware requires this component (`REQUIRES espidf_cpp`). Its host tests
+live in `espidf-cpp-test/` (e.g. `test_one_message_queue.cpp`,
+`test_static_vector.cpp`, `test_static_string.cpp`, plus fork+exec `_assert`
+programs for the abort paths); `task.hpp` needs a real scheduler and is
+verified on target by the firmware build.
 
 **Host-testable modules.** `temp_format.cpp`, `payload.cpp`, `app_config.cpp`,
 `rom_id.cpp`, and `rtc_buffer.cpp` are deliberately free of chip-specific
@@ -330,7 +351,8 @@ enacted on the host.
 
 |platform|command|action|
 |===|===|===|
-|both|build [SUBPROJECT...]|Build all subprojects via the root aggregator, or just the named ones (mcgowan, qemu, test)|
+|both|build [SUBPROJECT...]|Build all subprojects via the root aggregator, or just the named ones (mcgowan, qemu, test, espidf-cpp-test)|
+|both|build-espidf-cpp-test|Build the espidf_cpp unit tests for the ESP-IDF `linux` target|
 |both|test|Run both test suites: the host unit tests then the QEMU smoke test|
 |both|test-linux|Build and run the host unit tests (ESP-IDF `linux` target)|
 |both|test-qemu|Build and boot the QEMU smoke test (ESP32-S3 image)|
@@ -470,6 +492,13 @@ The test case should fork and exec the "_assert" program with the name of the te
   and any changes it makes are noise unrelated to the task at hand. If such a
   file shows up modified or deleted in `git status`, leave it alone — do not
   "fix" or restore it — unless the user specifically asks about CLion config.
+- **Moving a class: ask about its dependencies first.** Before moving a class
+  to another component/project, identify what that class depends on (and what
+  depends on it). If any dependency would also have to move, **do not start
+  the move** — ask the user first whether that dependency should move too.
+  There is a good chance the user will abort the combined move and move the
+  dependencies one at a time, in their own steps, first. Wait for that
+  decision before editing anything.
 - When the current work item is complete and no further input is expected,
   output `DONE!` as the final line of your response in the Continue (`cn`)
   CLI. Do **not** print `DONE!` if there are follow-up questions, pending

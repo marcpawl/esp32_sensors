@@ -27,6 +27,8 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 
+#include "espidf_cpp/handle.hpp"
+
 namespace thermo::espidf_cpp {
 
 // Queue that holds only one message. Sending another message overwrites the
@@ -99,19 +101,6 @@ class OneMessageQueue {
     [[nodiscard]] QueueHandle_t handle() const noexcept { return queue_.get(); }
 
   private:
-    // Owns the FreeRTOS queue handle and deletes the queue on destruction.
-    struct QueueDeleter {
-        void operator()(
-            std::remove_pointer_t<QueueHandle_t>* queue) const noexcept {
-            if (queue != nullptr) {
-                vQueueDelete(queue);
-            }
-        }
-    };
-
-    using UniqueQueueHandle =
-        std::unique_ptr<std::remove_pointer_t<QueueHandle_t>, QueueDeleter>;
-
     static constexpr const char* kTag = "OMQ";
 
     UniqueQueueHandle queue_;

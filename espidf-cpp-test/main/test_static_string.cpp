@@ -1,12 +1,13 @@
-// Tests for the fixed-capacity NUL-terminated string (thermo::static_string).
+// Tests for the fixed-capacity NUL-terminated string
+// (thermo::espidf_cpp::static_string).
 //
-// static_string wraps thermo::static_vector<char, N + 1> and guarantees a
-// valid NUL terminator, so c_str() is always safe. It is pure logic with no
-// IDF dependencies and is covered on the host. Overflow asserts (a programming
-// error) rather than truncating, so the boundary cases below exercise exact-fit
-// operations only. The asserting overflow paths are verified in forked children
-// that exec the standalone `static_string_assert` program (see the [assert]
-// cases at the end).
+// static_string wraps thermo::espidf_cpp::static_vector<char, N + 1> and
+// guarantees a valid NUL terminator, so c_str() is always safe. It is pure
+// logic with no IDF dependencies and is covered on the host. Overflow asserts
+// (a programming error) rather than truncating, so the boundary cases below
+// exercise exact-fit operations only. The asserting overflow paths are verified
+// in forked children that exec the standalone `static_string_assert` program
+// (see the [assert] cases at the end).
 #include "unity.h"
 
 #include <cstddef>
@@ -14,9 +15,9 @@
 #include <string>
 
 #include "assert_unity_support.hpp"
-#include "thermo_static_string.hpp"
+#include "espidf_cpp/static_string.hpp"
 
-using thermo::static_string;
+using thermo::espidf_cpp::static_string;
 
 // --- constexpr usability ----------------------------------------------------
 //

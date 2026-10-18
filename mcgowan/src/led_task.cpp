@@ -96,7 +96,8 @@ template<std::size_t N>
     return LedState::kOff;
 }
 
-LedTask::LedTask() : Task<LedRunner>(LedRunner(), TaskParams()) {}
+LedTask::LedTask()
+    : espidf_cpp::Task<LedRunner>(LedRunner(), espidf_cpp::TaskParams()) {}
 
 }  // namespace thermo
 
