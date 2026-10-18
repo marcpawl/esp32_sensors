@@ -3,6 +3,7 @@
 // Reads the 3-position switch, initializes NVS + RTC state, then dispatches to
 // Configure mode (implemented) or Run mode (stubbed) per §3.
 #include <cstdio>
+#include <utility>
 
 #include "app_config.hpp"
 #include "app_config_store.hpp"
@@ -10,6 +11,7 @@
 #include "constants.hpp"
 #include "esp_err.h"
 #include "esp_log.h"
+#include "hal/board.hpp"
 #include "hal/switch.hpp"
 #include "led_task.hpp"
 #include "mode.hpp"
@@ -56,7 +58,6 @@ esp_err_t init_nvs() {
 }  // namespace
 
 extern "C" void app_main(void) {
-    thermo::LedTask led_task;
     ESP_ERROR_CHECK(init_nvs());
     thermo::rtc_state_init();
 
@@ -65,6 +66,13 @@ extern "C" void app_main(void) {
 
     const thermo::Mode mode = mode_from_pins(mode_switch.read());
     ESP_LOGI(kTag, "boot: mode=%s", thermo::to_string(mode));
+
+    // The LED task drives the LEDs through the board, so it is independent of
+    // the concrete board implementation (hal_board on target, hal_stub under
+    // QEMU/host tests). Bring the board up before starting the task.
+    thermo::hal::Board board = thermo::hal::Board::create({});
+    ESP_ERROR_CHECK(board.init_all());
+    thermo::LedTask led_task(std::move(board));
 
     switch (mode) {
         case thermo::Mode::kConfigure:

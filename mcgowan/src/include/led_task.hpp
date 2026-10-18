@@ -1,15 +1,22 @@
 // LED status task: drives the LED indication from a message queue.
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <utility>
 #include <variant>
 
 #include "espidf_cpp/one_message_queue.hpp"
 #include "espidf_cpp/task.hpp"
+#include "hal/board.hpp"
+#include "hal/board_types.hpp"
+
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
 
 namespace thermo {
 // Operating states the LED task can display.
@@ -25,11 +32,64 @@ enum class LedState : std::uint8_t {
     kRun_upload_error,
 };
 
+enum class RedLed : std::int8_t { Off = 0, On };
+
+enum class GreenLed : std::int8_t { Off = 0, On };
+
+struct Step {
+    std::chrono::milliseconds duration_;
+    RedLed red_led_;
+    GreenLed green_led_;
+
+    // Any chrono duration (e.g. `std::chrono::hours{1}`, `500ms`) converts
+    // implicitly to milliseconds. A non-template constructor keeps the type
+    // usable in constant expressions declared earlier in this class.
+    constexpr Step(std::chrono::milliseconds duration, RedLed red_led,
+                   GreenLed green_led) noexcept
+        : duration_(duration), red_led_(red_led), green_led_(green_led) {}
+};
+
+template<std::size_t N>
+struct CycleSteps {
+    LedState state_;
+    std::array<Step, N> steps_;
+
+    static_assert(N > 0, "A cycle must contain at least one step.");
+
+    template<typename... Args>
+        requires(sizeof...(Args) == N)
+    constexpr explicit(N == 1) CycleSteps(LedState state, Args&&... args)
+        : state_(state), steps_{std::forward<Args>(args)...} {}
+};
+
+// Deduction guide to automatically deduce N from the number of passed steps
+template<typename... Args>
+    requires(sizeof...(Args) > 0)
+CycleSteps(LedState state, Args...) -> CycleSteps<sizeof...(Args)>;
+
+// The compile-time table of LED cycles, indexed by `LedState`. Cycles have
+// differing step counts, so the element type is a variant of the concrete
+// step-count instantiations.
+using Cycle = std::variant<CycleSteps<1>, CycleSteps<2>>;
+using Cycles = std::array<Cycle, 9>;
+
 /** Turns on and off the LEDs.
+ *
+ * The LEDs are driven through the board, so the runner is independent of how
+ * they are implemented: `hal_board` drives real GPIO pins, while `hal_stub`
+ * records the state in software (used under QEMU and in host tests).
+ *
+ * The board lives in the runner that this task executes: for `LedTask` it
+ * comes from the board the firmware links in, whereas a test can construct an
+ * `LedRunner<hal_stub::Board>` directly from a local board and observe its
+ * LEDs.
+ *
+ * @tparam Board A type satisfying `hal::BoardLike` (see `hal/board_types.hpp`).
  */
+template<hal::BoardLike Board>
 class LedRunner {
   public:
-    LedRunner() = default;
+    explicit LedRunner(Board board) noexcept : board_(std::move(board)) {}
 
     LedRunner(LedRunner const&) = delete;
 
@@ -46,51 +106,10 @@ class LedRunner {
     void set_state(LedState new_state) noexcept { send(new_state); }
 
     // Task body: waits for state messages and applies them. `[[noreturn]]`,
-    // as required by `espidf_cpp::Task<Derived>`.
+    // as required by `espidf_cpp::Task<Runner>`.
     [[noreturn]] void run() noexcept;
 
   private:
-    enum class RedLed : std::int8_t { Off = 0, On };
-
-    enum class GreenLed : std::int8_t { Off = 0, On };
-
-    struct Step {
-        std::chrono::milliseconds duration_;
-        RedLed red_led_;
-        GreenLed green_led_;
-
-        // Any chrono duration (e.g. `std::chrono::hours{1}`, `500ms`) converts
-        // implicitly to milliseconds. A non-template constructor keeps the type
-        // usable in constant expressions declared earlier in this class.
-        constexpr Step(std::chrono::milliseconds duration, RedLed red_led,
-                       GreenLed green_led) noexcept
-            : duration_(duration), red_led_(red_led), green_led_(green_led) {}
-    };
-
-    template<std::size_t N>
-    struct CycleSteps {
-        LedState state_;
-        std::array<Step, N> steps_;
-
-        static_assert(N > 0, "A cycle must contain at least one step.");
-
-        template<typename... Args>
-            requires(sizeof...(Args) == N)
-        constexpr explicit(N == 1) CycleSteps(LedState state, Args&&... args)
-            : state_(state), steps_{std::forward<Args>(args)...} {}
-    };
-
-    // Deduction guide to automatically deduce N from the number of passed steps
-    template<typename... Args>
-        requires(sizeof...(Args) > 0)
-    CycleSteps(LedState state, Args...) -> CycleSteps<sizeof...(Args)>;
-
-    // The compile-time table of LED cycles, indexed by `LedState`. Cycles have
-    // differing step counts, so the element type is a variant of the concrete
-    // step-count instantiations.
-    using Cycle = std::variant<CycleSteps<1>, CycleSteps<2>>;
-    using Cycles = std::array<Cycle, 9>;
-
     // The table, built entirely at compile time. Returned by value (the
     // constructing function is `constexpr`), which avoids referencing the
     // nested constructors from an in-class static member initializer.
@@ -158,7 +177,8 @@ class LedRunner {
     }
 
   private:
-    // Change the LEDs to the modes indicated.
+    // Change the LEDs to the modes indicated. The board and its LED devices
+    // must already be initialized (`Board::init_all()`).
     void change_leds(Step const& step) noexcept;
 
     // Finds the cycle registered for `state` in the table. Aborts if the state
@@ -176,12 +196,9 @@ class LedRunner {
     // sent by set_state.
     [[nodiscard]] LedState on_state_changed(LedState new_state) noexcept;
 
-    // Publishes `msg`, overwriting any message not yet received. Never blocks
-    // (the queue has a single slot, so there is always room to overwrite).
-    //
-    // `Msg` is deduced and constrained to `Derived::Message`. This is a member
-    // function template purely to defer naming the (incomplete, at class
-    // definition time) `Derived::Message` until first use.
+    // Publishes `state`, overwriting any message not yet received. Never
+    // blocks (the queue has a single slot, so there is always room to
+    // overwrite).
     void send(LedState state) noexcept { queue_.send(state); }
 
     // Receive, blocking up to `timeout` ticks. Returns the message when one was
@@ -200,13 +217,22 @@ class LedRunner {
 
     LedState current_state_ = LedState::kOff;
 
+    /** The board whose LEDs are driven. */
+    [[no_unique_address]] Board board_;
+
     /** Queue that contains what the new state should be. */
     espidf_cpp::OneMessageQueue<LedState> queue_;
 };
 
-class LedTask : protected espidf_cpp::Task<LedRunner> {
+/** FreeRTOS task that runs a `LedRunner<Board>`.
+ *
+ * @tparam Board A type satisfying `hal::BoardLike`.
+ */
+template<hal::BoardLike Board>
+class LedTask : protected espidf_cpp::Task<LedRunner<Board>> {
   public:
-    LedTask();
+    // Takes ownership of `board` (move) and starts the LED task with it.
+    explicit LedTask(Board board);
 
     LedTask(LedTask const&) = delete;
 
@@ -219,7 +245,102 @@ class LedTask : protected espidf_cpp::Task<LedRunner> {
     LedTask& operator=(LedTask&&) = delete;
 
     void set_state(LedState new_state) noexcept {
-        runner_.set_state(new_state);
+        // `runner_` lives in the dependent base, so name it through the base
+        // type (unqualified lookup would not find it in a template).
+        this->runner_.set_state(new_state);
     }
 };
+
+namespace {
+
+constexpr const char* kLedTag = "led_task";
+
+}  // namespace
+
+template<hal::BoardLike Board>
+[[noreturn]] void LedRunner<Board>::run() noexcept {
+    LedState state = LedState::kBoot;
+    while (true) {
+        state = on_state_changed(state);
+    }
+}
+
+template<hal::BoardLike Board>
+Cycle const& LedRunner<Board>::lookup_cycle(LedState state) const noexcept {
+    // `cycles()` returns by value, so bind it to a function-local static to
+    // give the table (and thus the returned reference) static storage duration.
+    static constexpr Cycles kTable = cycles();
+    const auto it = std::find_if(kTable.begin(), kTable.end(),
+                                 [state](const Cycle& cycle) noexcept {
+                                     return std::visit(
+                                         [state](const auto& steps) noexcept {
+                                             return steps.state_ == state;
+                                         },
+                                         cycle);
+                                 });
+    if (it == kTable.end()) {
+        ESP_LOGE(kLedTag, "no LED cycle for state %u",
+                 static_cast<unsigned>(state));
+        std::abort();
+    }
+    return *it;
+}
+
+template<hal::BoardLike Board>
+LedState LedRunner<Board>::on_state_changed(LedState new_state) noexcept {
+    const Cycle& cycle = lookup_cycle(new_state);
+    return std::visit(
+        [this](const auto& steps) -> LedState { return execute_cycle(steps); },
+        cycle);
+}
+
+template<hal::BoardLike Board>
+void LedRunner<Board>::change_leds(Step const& step) noexcept {
+    board_.red().write(step.red_led_ == RedLed::On ? hal::LedState::kOn
+                                                   : hal::LedState::kOff);
+    board_.green().write(step.green_led_ == GreenLed::On ? hal::LedState::kOn
+                                                         : hal::LedState::kOff);
+}
+
+template<hal::BoardLike Board>
+template<std::size_t N>
+[[nodiscard]] LedState LedRunner<Board>::execute_cycle(
+    const CycleSteps<N>& cycle) noexcept {
+    while (true) {
+        for (Step const& step : cycle.steps_) {
+            change_leds(step);
+
+            // Wait for a state change for this step's duration; if one
+            // arrives, stop the cycle and hand the new state back.
+            if (auto next = receive(step.duration_)) {
+                if (*next != current_state_) {
+                    return *next;
+                }
+            }
+        }
+    }
+    // Unreachable: the loop above never exits normally.
+    [[assume(false)]];
+    return LedState::kOff;
+}
+
+template<hal::BoardLike Board>
+LedTask<Board>::LedTask(Board board)
+    : espidf_cpp::Task<LedRunner<Board>>(LedRunner<Board>(std::move(board)),
+                                         espidf_cpp::TaskParams()) {}
+
+}  // namespace thermo
+
+// Every `LedState` must have a cycle in the table, or `lookup_cycle` would
+// abort at runtime. Assert coverage at compile time for each enumerator.
+namespace thermo {
+static_assert(LedRunner<hal::Board>::has_cycle(LedState::kOff));
+static_assert(LedRunner<hal::Board>::has_cycle(LedState::kBoot));
+static_assert(LedRunner<hal::Board>::has_cycle(LedState::kConfig));
+static_assert(LedRunner<hal::Board>::has_cycle(LedState::kConfig_save));
+static_assert(LedRunner<hal::Board>::has_cycle(LedState::kConfig_reset));
+static_assert(LedRunner<hal::Board>::has_cycle(LedState::kRun));
+static_assert(LedRunner<hal::Board>::has_cycle(LedState::kRun_battery_low));
+static_assert(LedRunner<hal::Board>::has_cycle(LedState::kRun_uploading));
+static_assert(LedRunner<hal::Board>::has_cycle(LedState::kRun_upload_error));
 }  // namespace thermo

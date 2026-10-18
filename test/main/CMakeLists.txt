@@ -10,7 +10,8 @@
 # chip temperature, and the aggregate board) are host-testable too and are
 # pulled in via PRIV_REQUIRES below; test_hal_switch.cpp, test_hal_led.cpp,
 # test_hal_push_button.cpp, test_hal_onewire.cpp, test_hal_chip_temperature.cpp,
-# and test_hal_board.cpp exercise them.
+# and test_hal_board.cpp exercise them. test_led_runner.cpp instantiates the
+# templated LedRunner<Board> against the stub board.
 #
 # WHOLE_ARCHIVE is required so the TEST_CASE registrations in the test sources
 # are linked into the final executable even though nothing references them.
@@ -29,6 +30,7 @@ set(test_srcs
     "test_hal_onewire.cpp"
     "test_hal_chip_temperature.cpp"
     "test_hal_board.cpp"
+    "test_led_runner.cpp"
 )
 
 # Production sources under test (paths are relative to this component dir).
@@ -49,6 +51,7 @@ idf_component_register(
         "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/include"
     PRIV_REQUIRES
         unity
+        espidf_cpp
         hal_stub
     WHOLE_ARCHIVE
 )
