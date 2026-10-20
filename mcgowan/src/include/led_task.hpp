@@ -32,6 +32,9 @@ enum class LedState : std::uint8_t {
     kRun_upload_error,
 };
 
+namespace ledtask {
+constexpr const char* kLedTag = "led_task";
+
 enum class RedLed : std::int8_t { Off = 0, On };
 
 enum class GreenLed : std::int8_t { Off = 0, On };
@@ -224,39 +227,6 @@ class LedRunner {
     espidf_cpp::OneMessageQueue<LedState> queue_;
 };
 
-/** FreeRTOS task that runs a `LedRunner<Board>`.
- *
- * @tparam Board A type satisfying `hal::BoardLike`.
- */
-template<hal::BoardLike Board>
-class LedTask : protected espidf_cpp::Task<LedRunner<Board>> {
-  public:
-    // Takes ownership of `board` (move) and starts the LED task with it.
-    explicit LedTask(Board board);
-
-    LedTask(LedTask const&) = delete;
-
-    LedTask(LedTask&&) = delete;
-
-    ~LedTask() = default;
-
-    LedTask& operator=(LedTask const&) = delete;
-
-    LedTask& operator=(LedTask&&) = delete;
-
-    void set_state(LedState new_state) noexcept {
-        // `runner_` lives in the dependent base, so name it through the base
-        // type (unqualified lookup would not find it in a template).
-        this->runner_.set_state(new_state);
-    }
-};
-
-namespace {
-
-constexpr const char* kLedTag = "led_task";
-
-}  // namespace
-
 template<hal::BoardLike Board>
 [[noreturn]] void LedRunner<Board>::run() noexcept {
     LedState state = LedState::kBoot;
@@ -324,16 +294,8 @@ template<std::size_t N>
     return LedState::kOff;
 }
 
-template<hal::BoardLike Board>
-LedTask<Board>::LedTask(Board board)
-    : espidf_cpp::Task<LedRunner<Board>>(LedRunner<Board>(std::move(board)),
-                                         espidf_cpp::TaskParams()) {}
-
-}  // namespace thermo
-
 // Every `LedState` must have a cycle in the table, or `lookup_cycle` would
 // abort at runtime. Assert coverage at compile time for each enumerator.
-namespace thermo {
 static_assert(LedRunner<hal::Board>::has_cycle(LedState::kOff));
 static_assert(LedRunner<hal::Board>::has_cycle(LedState::kBoot));
 static_assert(LedRunner<hal::Board>::has_cycle(LedState::kConfig));
@@ -343,4 +305,39 @@ static_assert(LedRunner<hal::Board>::has_cycle(LedState::kRun));
 static_assert(LedRunner<hal::Board>::has_cycle(LedState::kRun_battery_low));
 static_assert(LedRunner<hal::Board>::has_cycle(LedState::kRun_uploading));
 static_assert(LedRunner<hal::Board>::has_cycle(LedState::kRun_upload_error));
+}  // namespace ledtask
+
+/** FreeRTOS task that runs a `LedRunner<Board>`.
+ *
+ * @tparam Board A type satisfying `hal::BoardLike`.
+ */
+template<hal::BoardLike Board>
+class LedTask : protected espidf_cpp::Task<ledtask::LedRunner<Board>> {
+  public:
+    // Takes ownership of `board` (move) and starts the LED task with it.
+    explicit LedTask(Board board);
+
+    LedTask(LedTask const&) = delete;
+
+    LedTask(LedTask&&) = delete;
+
+    ~LedTask() = default;
+
+    LedTask& operator=(LedTask const&) = delete;
+
+    LedTask& operator=(LedTask&&) = delete;
+
+    void set_state(LedState new_state) noexcept {
+        // `runner_` lives in the dependent base, so name it through the base
+        // type (unqualified lookup would not find it in a template).
+        this->runner_.set_state(new_state);
+    }
+};
+
+template<hal::BoardLike Board>
+LedTask<Board>::LedTask(Board board)
+    : espidf_cpp::Task<ledtask::LedRunner<Board>>(
+          ledtask::LedRunner<Board>(std::move(board)),
+          espidf_cpp::TaskParams()) {}
+
 }  // namespace thermo

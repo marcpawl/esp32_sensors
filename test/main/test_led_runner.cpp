@@ -23,9 +23,9 @@
 
 namespace {
 
-using thermo::LedRunner;
 using thermo::LedState;
 using thermo::hal::Board;
+using thermo::ledtask::LedRunner;
 
 // --- The templated runner satisfies its expected contract -------------------
 
