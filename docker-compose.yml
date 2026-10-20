@@ -55,11 +55,11 @@ services:
       - .:/project
       # Expose host USB/serial device nodes (ttyUSB*, ttyACM*, etc.).
       - /dev:/dev
-      # Bind-mount the container's /tmp onto a host directory inside the project
-      # so scratch files (e.g. a reference hello_world build used by the QEMU
-      # smoke test) survive across `docker compose run` invocations, which
-      # otherwise use a fresh container each time.
-      - ./tmp:/tmp
+      # NOTE: do NOT bind-mount /tmp (e.g. ./tmp:/tmp). It replaces the
+      # image's /tmp (mode 1777) with a root-owned host directory, so the
+      # non-root container user cannot create scratch files there. That breaks
+      # CLion/Gateway deploys, which fail with
+      # "open /tmp/cwmHostStatus<N>: permission denied".
       # Persist shell history and the IDF component cache between runs.
       - idf-bash-history:/home/dev/.commandhistory
       - idf-espressif-cache:/home/dev/.espressif
