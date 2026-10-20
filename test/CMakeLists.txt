@@ -31,18 +31,20 @@ endif()
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
-# Reusable HAL components live in the repo-root `components/` directory, which
-# is not the default search path for this project (that would be `test/components/`).
-# Point at it so `hal_stub` (and its `hal_common` dependency) are found.
+# Reusable components (`hal_*`, `logic`, `espidf_cpp`) live in the repo-root
+# `components/` directory, which is not the default search path for this project
+# (that would be `test/components/`). Point at it so `hal_stub` (and its
+# `hal_common` dependency) and the `logic` component are found.
 set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../components")
 
-# Restrict the component set to `main` (and its requirements) plus `hal_stub`.
+# Restrict the component set to `main` (and its requirements, which include the
+# header-only `logic`) plus `hal_stub`.
 # Without this the `linux` target also tries to build chip-specific components
 # such as esp_driver_ana_cmpr, which have no linux implementation and fail to
 # resolve. `hal_stub` is listed so the pin-free switch stub is built for the
 # host; `hal_board` is deliberately excluded (the two are mutually exclusive,
 # and the GPIO-backed switch has no `linux` target).
-set(COMPONENTS main hal_stub)
+set(COMPONENTS main hal_stub logic)
 set(EXCLUDE_COMPONENTS hal_board)
 
 project(esp32_sensors_tests)

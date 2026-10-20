@@ -1,4 +1,9 @@
 // LED status task: drives the LED indication from a message queue.
+//
+// Part of the `logic` component: the behaviour here is board-independent. The
+// LEDs are driven through a `hal::BoardLike` board, so the same code runs on
+// the real GPIO-backed board (`hal_board`, firmware), the pin-free stub
+// (`hal_stub`, QEMU and host tests), or any other conforming board.
 #pragma once
 
 #include <algorithm>
@@ -7,6 +12,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <optional>
 #include <utility>
 #include <variant>
 
@@ -162,7 +168,7 @@ class LedRunner {
     // Whether the compile-time table contains a cycle for `state`. Defined
     // after `cycles()` (which it calls in a constant expression) and exposed so
     // that translation units can `static_assert` full `LedState` coverage ---
-    // see the checks at the end of led_task.cpp. A missing entry would
+    // see the coverage checks at the end of this file. A missing entry would
     // otherwise abort at runtime in `lookup_cycle`.
     [[nodiscard]] static constexpr bool has_cycle(LedState state) noexcept {
         constexpr Cycles kTable = cycles();

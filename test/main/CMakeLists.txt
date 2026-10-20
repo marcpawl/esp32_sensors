@@ -13,6 +13,12 @@
 # and test_hal_board.cpp exercise them. test_led_runner.cpp instantiates the
 # templated LedRunner<Board> against the stub board.
 #
+# The LED task itself lives in the shared `logic` component
+# (`components/logic/include/logic/led_task.hpp`), not in `mcgowan/src/`, so
+# the tests include it as `logic/led_task.hpp` and pull the component in via
+# PRIV_REQUIRES below. It is header-only today; any .cpp files added to `logic`
+# are compiled by that component, not listed here.
+#
 # WHOLE_ARCHIVE is required so the TEST_CASE registrations in the test sources
 # are linked into the final executable even though nothing references them.
 
@@ -52,6 +58,7 @@ idf_component_register(
     PRIV_REQUIRES
         unity
         espidf_cpp
+        logic
         hal_stub
     WHOLE_ARCHIVE
 )

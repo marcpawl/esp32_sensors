@@ -1,5 +1,6 @@
 // Tests for the templated `LedRunner<Board>`
-// (mcgowan/src/include/led_task.hpp).
+// (components/logic/include/logic/led_task.hpp, included as
+// `logic/led_task.hpp`).
 //
 // The LED runner is generic over the board (`hal::BoardLike`). Here it is
 // instantiated with the pin-free `hal_stub` Board, which proves the template
@@ -19,7 +20,7 @@
 
 #include "hal/board.hpp"
 #include "hal/board_types.hpp"
-#include "led_task.hpp"
+#include "logic/led_task.hpp"
 
 namespace {
 
