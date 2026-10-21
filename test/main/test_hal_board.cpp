@@ -27,16 +27,20 @@
 #include "hal/pin_map.hpp"
 #include "hal/push_button.hpp"
 #include "hal/switch.hpp"
+#include "hal/wifi.hpp"
 
 namespace {
 
 // Convenience aliases for the shared HAL vocabulary.
+using thermo::hal::AccessPointConfig;
 using thermo::hal::Board;
 using thermo::hal::BoardPins;
 using thermo::hal::ButtonState;
+using thermo::hal::copy_text;
 using thermo::hal::LedState;
 using thermo::hal::Pins;
 using thermo::hal::PinState;
+using thermo::hal::StationConfig;
 
 // Pin numbers are irrelevant to the stub, but every device takes them for
 // interface parity with the GPIO-backed implementation.
@@ -161,6 +165,32 @@ TEST_CASE("hal board: mode_switch() is a live stub device", "[hal_board]") {
     TEST_ASSERT_TRUE(b.mode_switch().read() == first);
 }
 
+TEST_CASE("hal board: wifi() is a live stub device", "[hal_board]") {
+    Board b = make_board();
+    // init_all() initializes the radio but starts neither interface.
+    TEST_ASSERT_TRUE(b.wifi().initialized());
+    TEST_ASSERT_FALSE(b.wifi().ap_running());
+    TEST_ASSERT_FALSE(b.wifi().station_running());
+
+    AccessPointConfig ap;
+    copy_text(ap.ssid, "thermo-setup");
+    copy_text(ap.password, "hunter22");
+    TEST_ASSERT_EQUAL(ESP_OK, b.wifi().start_ap(ap));
+    TEST_ASSERT_TRUE(b.wifi().ap_running());
+    TEST_ASSERT_EQUAL_STRING("thermo-setup", b.wifi().ap_config()->ssid.data());
+
+    StationConfig sta;
+    copy_text(sta.ssid, "home");
+    TEST_ASSERT_EQUAL(ESP_OK, b.wifi().start_station(sta));
+    TEST_ASSERT_TRUE(b.wifi().station_running());
+    // The two interfaces are independent: both may run at once (§3.2).
+    TEST_ASSERT_TRUE(b.wifi().ap_running());
+
+    TEST_ASSERT_EQUAL(ESP_OK, b.wifi().stop_ap());
+    TEST_ASSERT_FALSE(b.wifi().ap_running());
+    TEST_ASSERT_TRUE(b.wifi().station_running());
+}
+
 // --- The board exposes the const accessors too ------------------------------
 
 TEST_CASE("hal board: const accessors yield const device references",
@@ -179,6 +209,11 @@ TEST_CASE("hal board: const accessors yield const device references",
                       static_cast<int>(b.red().state()));
     const Pins p = b.mode_switch().read();
     TEST_ASSERT_FALSE(p.first_on());
+    // The radio was inited by init_all(); neither interface is running, so the
+    // const observation accessors are meaningful.
+    TEST_ASSERT_TRUE(b.wifi().initialized());
+    TEST_ASSERT_FALSE(b.wifi().ap_running());
+    TEST_ASSERT_FALSE(b.wifi().station_running());
 }
 
 // --- The stub satisfies the shared concept ---------------------------------

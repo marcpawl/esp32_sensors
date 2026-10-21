@@ -303,6 +303,22 @@ void report_board() {
     const thermo::hal::Pins sw = board.mode_switch().read();
     std::printf("Board mode switch first=%d third=%d\n", sw.first_on() ? 1 : 0,
                 sw.third_on() ? 1 : 0);
+
+    // The board inits the radio; the caller starts the interfaces (§3.2).
+    std::printf("Board wifi inited=%d ap=%d station=%d\n",
+                board.wifi().initialized() ? 1 : 0,
+                board.wifi().ap_running() ? 1 : 0,
+                board.wifi().station_running() ? 1 : 0);
+
+    thermo::hal::AccessPointConfig ap_config;
+    thermo::hal::copy_text(ap_config.ssid, "ESP32-Thermo-QEMU");
+    thermo::hal::copy_text(ap_config.password, "configme123");
+    if (board.wifi().start_ap(ap_config) != ESP_OK) {
+        std::printf("Board wifi start_ap failed\n");
+        return;
+    }
+    std::printf("Board wifi after start_ap: ap=%d (expect 1)\n",
+                board.wifi().ap_running() ? 1 : 0);
 }
 
 }  // namespace

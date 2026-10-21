@@ -8,10 +8,11 @@
 // `init_all()`, and accessors) whose devices are the real, GPIO-backed ones, so
 // a project can link either one and include `<hal/board.hpp>` unchanged.
 //
-// Because every device is a `hal_stub` device, their `set_*()` controls are
-// reachable through the board's accessors (e.g. `board().one_wire().
-// set_sensors(...)`), so a test or QEMU scenario can drive the whole board
-// deterministically without hardware.
+// Because every device is a `hal_stub` device, their `set_*()` controls and
+// observation accessors are reachable through the board's accessors (e.g.
+// `board().one_wire().set_sensors(...)`, `board().wifi().ap_running()`), so a
+// test or QEMU scenario can drive and inspect the whole board deterministically
+// without hardware.
 #pragma once
 
 #include "esp_err.h"
@@ -86,6 +87,12 @@ class Board {
         return mode_switch_;
     }
 
+    // The WiFi radio (stub; state via ap_running() / station_running(),
+    // configuration via ap_config() / station_config()).
+    [[nodiscard]] WifiRadio& wifi() noexcept { return wifi_; }
+
+    [[nodiscard]] WifiRadio const& wifi() const noexcept { return wifi_; }
+
   private:
     ChipTemperature chip_temperature_;
     OneWire one_wire_;
@@ -93,6 +100,7 @@ class Board {
     Led red_;
     PushButton button_;
     Switch mode_switch_;
+    WifiRadio wifi_;
 };
 
 static_assert(BoardLike<Board>, "Board must satisfy the BoardLike concept");

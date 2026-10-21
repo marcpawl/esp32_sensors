@@ -197,6 +197,26 @@ the caller's job (`mcgowan/src/main.cpp`). Reporting both poles lets the caller 
 bad hardware (both-pins-on / both-pins-off), which the switch stub can simulate
 via `set_pins()`.
 
+The WiFi radio (§3.2, §3.9) follows the same header pair: `hal/wifi_types.hpp`
+(`hal_common`) defines `AccessPointConfig`, `StationConfig`,
+`copy_text()`, the length limits, and the `WifiRadioLike` concept;
+`hal/wifi.hpp` (`hal_board` / `hal_stub`) defines `WifiRadioBoard` /
+`WifiRadioStub` and aliases `using WifiRadio = ...`. The interface is
+`init()`, `start_ap()`/`stop_ap()`, `start_station()`/`stop_station()` — the
+API and station are **independent** (Configure mode may run both at once) and
+the radio is semantics-free (callers own retry policy). An empty station SSID
+is rejected with `ESP_ERR_INVALID_ARG`; callers must not start it. The stub
+adds observation accessors (`initialized()`, `ap_running()`,
+`station_running()`, `ap_config()`, `station_config()`), useful in tests and
+QEMU.
+
+**The aggregate `Board` owns one of every device**, including the WiFi radio:
+`BoardLike` (`hal/board_types.hpp`) requires `wifi()` (mutable and const), and
+`init_all()` initializes the radio last. `init_all()` does **not** start the AP
+or the station — the caller decides (Configure mode starts the AP, Run mode
+starts the station). Reach the stub controls through the board, e.g.
+`board.wifi().start_ap(cfg)` / `board.wifi().ap_running()`.
+
 Because `hal_board` and `hal_stub` would otherwise be discovered together (both
 live under the project's default `components/` search path), each project
 excludes the *other* via `EXCLUDE_COMPONENTS` in its top-level `CMakeLists.txt`
@@ -257,9 +277,11 @@ also listed in `set(COMPONENTS main hal_stub logic)` so it is built for `linux`
 **Host-testable modules.** `temp_format.cpp`, `payload.cpp`, `app_config.cpp`,
 `rom_id.cpp`, and `rtc_buffer.cpp` are deliberately free of chip-specific
 ESP-IDF dependencies so they build for the `linux` target and are covered by
-`test/`. The HAL's `hal_stub` component (the pin-free switch) is likewise built
-for the `linux` target and covered by `test/main/test_hal_switch.cpp`. **Keep it
-that way** — put pure logic in these files and hardware/IDF calls behind them.
+`test/`. The HAL's `hal_stub` component (the pin-free switch, LEDs, button,
+1-Wire bus, chip-temperature sensor, WiFi radio, and aggregate board) is
+likewise built for the `linux` target and covered by `test/main/test_hal_*.cpp`.
+**Keep it that way** — put pure logic in these files and hardware/IDF calls
+behind them.
 
 **Not yet present (expected next):**
 - On-target tests for hardware-dependent code (1-Wire, deep-sleep, Wi-Fi).
@@ -446,7 +468,9 @@ There are two test suites, both runnable from the host via `scripts/dev.py`:
   (`temp_format`, `payload`, `app_config` validation, `rom_id`, `rtc_buffer`) and
   the `hal_stub` components (`test_hal_switch.cpp` exercises the pin-free mode
   switch: `create()`/`init()`, the default reading, `set_pins()` round-trips, and
-  bad-hardware simulation).
+  bad-hardware simulation; `test_hal_wifi.cpp` covers the WiFi radio stub, and
+  `test_hal_board.cpp` covers the aggregate board — including that `wifi()` is
+  wired up and that `init_all()` initializes but does not start the radio).
 - **QEMU smoke test** (`qemu/`) builds the ESP32-S3 image and boots it under
   QEMU, then checks the boot log for expected output — no hardware needed.
 - **On-target tests** are planned for hardware-dependent code (1-Wire/DS18B20
