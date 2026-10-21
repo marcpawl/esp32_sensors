@@ -225,6 +225,7 @@ No power to ESP32. Battery continues charging.
 
 1. Both LEDs ON (solid).
 2. WiFi **AP** mode (credentials from NVS, factory default first boot).
+   Will try to connect to station if SSID is set, retrying periodically.
 3. **HTTPS server** on port 443.
 4. Config page at `/`.
 
