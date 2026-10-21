@@ -15,8 +15,9 @@
 #include "unity.h"
 #include "unity_test_runner.h"
 
+#include <concepts>
+#include <memory>
 #include <type_traits>
-#include <utility>
 
 #include "hal/board.hpp"
 #include "hal/board_types.hpp"
@@ -34,31 +35,40 @@ TEST_CASE("led runner: is generic over a BoardLike board", "[led_runner]") {
     static_assert(thermo::hal::BoardLike<Board>);
     // `create()` must return the same concrete type (part of the concept).
     static_assert(std::same_as<decltype(Board::create({})), Board>);
-    // The runner is built from a board and is move-only (it owns a queue);
-    // there is no default board, so there is no default constructor.
-    static_assert(std::is_constructible_v<LedRunner<Board>, Board>);
+    // The runner is built from a shared board and is move-only (it owns a
+    // queue); there is no default board, so there is no default constructor.
+    static_assert(
+        std::is_constructible_v<LedRunner<Board>, std::shared_ptr<Board>>);
     static_assert(std::is_move_constructible_v<LedRunner<Board>>);
     static_assert(!std::is_copy_constructible_v<LedRunner<Board>>);
     static_assert(!std::is_default_constructible_v<LedRunner<Board>>);
     TEST_PASS();
 }
 
-// --- Construction takes ownership of the board ------------------------------
+// --- Construction shares the board -----------------------------------------
 
-TEST_CASE("led runner: accepts an initialized stub board", "[led_runner]") {
-    Board board = Board::create({});
-    TEST_ASSERT_EQUAL(ESP_OK, board.init_all());
+TEST_CASE("led runner: shares an initialized stub board", "[led_runner]") {
+    auto board = std::make_shared<Board>(Board::create({}));
+    TEST_ASSERT_EQUAL(ESP_OK, board->init_all());
 
-    // Construction moves the board in; it must not drive the LEDs (only the
-    // LED task's `run()` loop does that).
-    LedRunner<Board> runner(std::move(board));
-    (void)runner;
+    // Construction takes a copy of the shared pointer; it must not drive the
+    // LEDs (only the LED task's `run()` loop does that).
+    LedRunner<Board> runner(board);
+
+    // The caller keeps sharing the board: one reference here, one in the
+    // runner, and the board is still alive after the runner is gone.
+    TEST_ASSERT_EQUAL(2, board.use_count());
+    {
+        LedRunner<Board> second(board);
+        TEST_ASSERT_EQUAL(3, board.use_count());
+    }
+    TEST_ASSERT_EQUAL(2, board.use_count());
 }
 
 // --- Publishing a state never blocks ---------------------------------------
 
 TEST_CASE("led runner: set_state overwrites pending states", "[led_runner]") {
-    LedRunner<Board> runner(Board::create({}));
+    LedRunner<Board> runner(std::make_shared<Board>(Board::create({})));
 
     // The queue has a single slot: publishing again overwrites the pending
     // state instead of blocking, so this is safe before the task starts.

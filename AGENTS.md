@@ -233,6 +233,13 @@ implementation, and the headers are included with the `logic/` prefix:
 |---|---|
 | `logic/led_task.hpp` | `thermo::LedState`, `thermo::ledtask::*` (`Step`, `CycleSteps`, `LedRunner<Board>`), `thermo::LedTask<Board>` — the LED status task built on `espidf_cpp::Task` |
 
+`LedRunner` and `LedTask` take a `std::shared_ptr<Board>` (never a null one) and
+share the board with the caller instead of owning it, so the caller can keep
+using the board the task drives (e.g. a test reads back the LEDs). Create it
+with `std::make_shared<Board>(Board::create(pins))` and call `init_all()`
+before starting the task. The HAL itself is unchanged: `Board` stays
+non-copyable and movable.
+
 Layout: `include/logic/` for public headers, `src/` for `.cpp` files (none yet —
 the component is header-only). **New `.cpp` files must be added to the `SRCS`
 list in `components/logic/CMakeLists.txt`**; consumers only need

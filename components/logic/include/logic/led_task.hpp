@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <memory>
 #include <optional>
 #include <utility>
 #include <variant>
@@ -88,17 +89,20 @@ using Cycles = std::array<Cycle, 9>;
  * they are implemented: `hal_board` drives real GPIO pins, while `hal_stub`
  * records the state in software (used under QEMU and in host tests).
  *
- * The board lives in the runner that this task executes: for `LedTask` it
- * comes from the board the firmware links in, whereas a test can construct an
- * `LedRunner<hal_stub::Board>` directly from a local board and observe its
- * LEDs.
+ * The runner *shares* the board rather than owning it: `LedTask` hands it the
+ * same `std::shared_ptr<Board>` the caller keeps, so both can drive/observe the
+ * board (e.g. a test keeps its own `shared_ptr` and watches the LEDs the task
+ * lights). The board must outlive its last user, which the shared pointer
+ * guarantees.
  *
  * @tparam Board A type satisfying `hal::BoardLike` (see `hal/board_types.hpp`).
  */
 template<hal::BoardLike Board>
 class LedRunner {
   public:
-    explicit LedRunner(Board board) noexcept : board_(std::move(board)) {}
+    // Shares ownership of `board`; `board` must not be null.
+    explicit LedRunner(std::shared_ptr<Board> board) noexcept
+        : board_(std::move(board)) {}
 
     LedRunner(LedRunner const&) = delete;
 
@@ -226,8 +230,8 @@ class LedRunner {
 
     LedState current_state_ = LedState::kOff;
 
-    /** The board whose LEDs are driven. */
-    [[no_unique_address]] Board board_;
+    /** The board whose LEDs are driven (shared with the caller). */
+    std::shared_ptr<Board> board_;
 
     /** Queue that contains what the new state should be. */
     espidf_cpp::OneMessageQueue<LedState> queue_;
@@ -272,10 +276,12 @@ LedState LedRunner<Board>::on_state_changed(LedState new_state) noexcept {
 
 template<hal::BoardLike Board>
 void LedRunner<Board>::change_leds(Step const& step) noexcept {
-    board_.red().write(step.red_led_ == RedLed::On ? hal::LedState::kOn
-                                                   : hal::LedState::kOff);
-    board_.green().write(step.green_led_ == GreenLed::On ? hal::LedState::kOn
-                                                         : hal::LedState::kOff);
+    // The board is shared, never null (the constructor requires one).
+    Board& board = *board_;
+    board.red().write(step.red_led_ == RedLed::On ? hal::LedState::kOn
+                                                  : hal::LedState::kOff);
+    board.green().write(step.green_led_ == GreenLed::On ? hal::LedState::kOn
+                                                        : hal::LedState::kOff);
 }
 
 template<hal::BoardLike Board>
@@ -320,8 +326,9 @@ static_assert(LedRunner<hal::Board>::has_cycle(LedState::kRun_upload_error));
 template<hal::BoardLike Board>
 class LedTask : protected espidf_cpp::Task<ledtask::LedRunner<Board>> {
   public:
-    // Takes ownership of `board` (move) and starts the LED task with it.
-    explicit LedTask(Board board);
+    // Shares `board` with the runner (the caller keeps its own reference) and
+    // starts the LED task with it. `board` must not be null.
+    explicit LedTask(std::shared_ptr<Board> board);
 
     LedTask(LedTask const&) = delete;
 
@@ -341,7 +348,7 @@ class LedTask : protected espidf_cpp::Task<ledtask::LedRunner<Board>> {
 };
 
 template<hal::BoardLike Board>
-LedTask<Board>::LedTask(Board board)
+LedTask<Board>::LedTask(std::shared_ptr<Board> board)
     : espidf_cpp::Task<ledtask::LedRunner<Board>>(
           ledtask::LedRunner<Board>(std::move(board)),
           espidf_cpp::TaskParams()) {}
