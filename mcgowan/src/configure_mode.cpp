@@ -93,7 +93,7 @@ template<hal::BoardLike Board>
 
     // The server holds references to `cfg`, `sensors`, and `battery`, all of
     // which outlive it for the duration of Configure mode.
-    HttpsServer server(
+    ConfigHttpsServer server(
         cfg,
         [&cfg, &sensors, &power_manager]() {
             return make_snapshot(cfg, sensors, power_manager);
