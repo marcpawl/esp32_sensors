@@ -79,6 +79,7 @@ esp32_sensors/
 │   └── src/             #   C++26 sources + include/ — see module map below
 ├── components/          # Reusable ESP-IDF components (see "HAL" section)
 │   ├── espidf_cpp/      # C++ wrappers over ESP-IDF/FreeRTOS (Task, queue, handles, ...)
+│   ├── logic/           # Board-independent application logic (led_task.hpp)
 │   ├── hal_common/      # Shared, header-only HAL vocabulary (types/concepts)
 │   ├── hal_board/       # Real, GPIO-backed HAL (linked by mcgowan)
 │   └── hal_stub/        # Pin-free HAL stub (linked by QEMU/host tests)
@@ -130,7 +131,7 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 
 **Key files:**
 - `Specification.md` — the single source of truth for hardware, modes, RTC memory layout, payload format, and power budget. Any implementation must conform to it.
-- `mcgowan/main/CMakeLists.txt` — the firmware's component definition: lists all sources under `mcgowan/src/` and the IDF component `REQUIRES` (hal_board, nvs_flash, esp_wifi, esp_https_server, esp_http_client, esp_adc, esp_driver_gpio, mbedtls, …). **Add new sources here** or they will not compile.
+- `mcgowan/main/CMakeLists.txt` — the firmware's component definition: lists all sources under `mcgowan/src/` and the IDF component `REQUIRES` (hal_board, logic, nvs_flash, esp_wifi, esp_https_server, esp_http_client, esp_adc, esp_driver_gpio, mbedtls, …). **Add new sources here** or they will not compile. Board-independent logic belongs in `components/logic` instead.
 - `mcgowan/sdkconfig.defaults` — the committed configuration intent (target, C++ exceptions/RTTI off, partition table, `-Os`). `mcgowan/sdkconfig` is generated from this and is **not** tracked.
 - `CMakeLists.txt` (root) — the generator-agnostic aggregator: one prefixed target per subproject invoking `idf.py -C <sub> -B <sub>/<build-dir>`. `-DSUBPROJECTS="mcgowan;qemu;test;espidf-cpp-test"` (default: all) selects what is built.
 - `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash environment. Extend these (not ad-hoc `docker run`) when adding tooling. The compose `dev` service is also the target of the Dev Container (see below).
@@ -155,7 +156,10 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 | Configure mode | `configure_mode.cpp`, `wifi_ap.cpp`, `https_server.cpp`, `config_page.cpp`, `certs/self_signed_cert.cpp` |
 | Run mode | `run_mode.cpp` (stubbed network path), `ntp_server.cpp` |
 | Payload | `payload.cpp`, `temp_format.cpp`, `rom_id.cpp` (ROM-ID hex) |
-| Task | `led_task.cpp` (LED task, built on `espidf_cpp::Task`) |
+
+The LED task (`led_task.hpp`) is **not** in `mcgowan/src/`: it is board-independent
+logic and lives in the `logic` component (see below), included as
+`logic/led_task.hpp`.
 
 **HAL components (`components/`).** Hardware-specific drivers live in reusable
 ESP-IDF components rather than in `mcgowan/src/`, so host tests and QEMU can swap them
@@ -219,6 +223,36 @@ live in `espidf-cpp-test/` (e.g. `test_one_message_queue.cpp`,
 `test_static_vector.cpp`, `test_static_string.cpp`, plus fork+exec `_assert`
 programs for the abort paths); `task.hpp` needs a real scheduler and is
 verified on target by the firmware build.
+
+**`logic` component (`components/logic`).** Board-independent application logic,
+shared by the firmware, the QEMU smoke test, and the host tests. It requires
+only `espidf_cpp` and `hal_common` (the HAL vocabulary), never a concrete HAL
+implementation, and the headers are included with the `logic/` prefix:
+
+| Header | Provides |
+|---|---|
+| `logic/led_task.hpp` | `thermo::LedState`, `thermo::ledtask::*` (`Step`, `CycleSteps`, `LedRunner<Board>`), `thermo::LedTask<Board>` — the LED status task built on `espidf_cpp::Task` |
+
+`LedRunner` and `LedTask` take a `std::shared_ptr<Board>` (never a null one) and
+share the board with the caller instead of owning it, so the caller can keep
+using the board the task drives (e.g. a test reads back the LEDs). Create it
+with `std::make_shared<Board>(Board::create(pins))` and call `init_all()`
+before starting the task. The HAL itself is unchanged: `Board` stays
+non-copyable and movable.
+
+Layout: `include/logic/` for public headers, `src/` for `.cpp` files (none yet —
+the component is header-only). **New `.cpp` files must be added to the `SRCS`
+list in `components/logic/CMakeLists.txt`**; consumers only need
+`REQUIRES logic` (firmware `mcgowan/main`, QEMU `qemu/main`) or
+`PRIV_REQUIRES logic` (host tests `test/main`), so adding sources there does not
+change any consumer.
+
+Because `LedRunner`/`LedTask` template over `hal::BoardLike`, the *project*
+decides the hardware: `mcgowan` links `hal_board` (GPIO), `qemu` and `test` link
+`hal_stub` (pin-free). The component deliberately requires neither, since those
+two are mutually exclusive per project. In the `test/` project the component is
+also listed in `set(COMPONENTS main hal_stub logic)` so it is built for `linux`
+(the restrict-to-`main` set would otherwise drop it once it has `.cpp` files).
 
 **Host-testable modules.** `temp_format.cpp`, `payload.cpp`, `app_config.cpp`,
 `rom_id.cpp`, and `rtc_buffer.cpp` are deliberately free of chip-specific
@@ -418,8 +452,10 @@ There are two test suites, both runnable from the host via `scripts/dev.py`:
 - **On-target tests** are planned for hardware-dependent code (1-Wire/DS18B20
   reads, deep-sleep wake, Wi-Fi upload).
 - Keep hardware interactions behind thin interfaces so business logic remains
-  host-testable. When adding pure logic, put it in a host-testable translation
-  unit and add it to both `mcgowan/main/CMakeLists.txt` and `test/main/CMakeLists.txt`.
+  host-testable. When adding pure logic that the firmware and QEMU both need,
+  put it in `components/logic` (headers under `include/logic/`, `.cpp` files in
+  its `SRCS`); when it is firmware-only, add it to both
+  `mcgowan/main/CMakeLists.txt` and `test/main/CMakeLists.txt`.
 
 ```bash
 # Run both suites (host unit tests, then the QEMU smoke test).

@@ -7,9 +7,10 @@
 #   * `mcgowan/src/` — the C++ sources and headers it compiles, so the
 #                      application code is clearly owned by the mcgowan project.
 #
-# The reusable HAL components are shared from the repo-root `components/`
-# directory (see ../CMakeLists.txt). **Add new sources here** or they will not
-# compile.
+# The reusable components (`hal_*`, `logic`, `espidf_cpp`) are shared from the
+# repo-root `components/` directory (see ../CMakeLists.txt). **Add new sources
+# here** or they will not compile. Board-independent logic (e.g. the LED task in
+# `logic/led_task.hpp`) lives in the `logic` component, not in `src/`.
 
 set(mcgowan_src "${CMAKE_CURRENT_LIST_DIR}/../src")
 
@@ -21,7 +22,6 @@ idf_component_register(
         "${mcgowan_src}/battery_monitor.cpp"
         "${mcgowan_src}/power_manager.cpp"
         "${mcgowan_src}/power_source.cpp"
-        "${mcgowan_src}/led_task.cpp"
         "${mcgowan_src}/onewire_bus.cpp"
         "${mcgowan_src}/rom_id.cpp"
         "${mcgowan_src}/ds18b20.cpp"
@@ -42,6 +42,7 @@ idf_component_register(
         "${mcgowan_src}/include"
     REQUIRES
         hal_board
+        logic
         espidf_cpp
         nvs_flash
         esp_wifi

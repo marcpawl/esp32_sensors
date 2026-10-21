@@ -120,7 +120,8 @@ void deep_sleep_for(std::uint32_t seconds) {
 
 }  // namespace
 
-[[noreturn]] void run_mode_cycle(LedTask& led_task) {
+template<hal::BoardLike Board>
+[[noreturn]] void run_mode_cycle(LedTask<Board>& led_task) {
     RtcState& st = rtc_state();
     st.boot_count++;
 
@@ -228,6 +229,10 @@ void deep_sleep_for(std::uint32_t seconds) {
 
     deep_sleep_for(sleep_s);  // Does not return.
     abort();
+}
+
+[[noreturn]] void run_mode_cycle(LedTask<hal::Board>& led_task) {
+    run_mode_cycle<hal::Board>(led_task);
 }
 
 }  // namespace thermo

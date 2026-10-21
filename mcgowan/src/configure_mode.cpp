@@ -71,8 +71,8 @@ std::optional<std::string> on_save(Config& cfg) {
 
 }  // namespace
 
-[[noreturn]]
-void run_configure_mode(LedTask& led_task) {
+template<hal::BoardLike Board>
+[[noreturn]] void run_configure_mode(LedTask<Board>& led_task) {
     ESP_LOGI(kTag, "entering Configure mode");
 
     Config cfg;
@@ -116,6 +116,10 @@ void run_configure_mode(LedTask& led_task) {
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
+}
+
+[[noreturn]] void run_configure_mode(LedTask<hal::Board>& led_task) {
+    run_configure_mode<hal::Board>(led_task);
 }
 
 }  // namespace thermo
