@@ -20,6 +20,7 @@
 #include "hal/onewire.hpp"
 #include "hal/push_button.hpp"
 #include "hal/switch.hpp"
+#include "hal/wifi.hpp"
 #include "sdkconfig.h"
 
 namespace {
@@ -218,6 +219,51 @@ void report_push_button() {
         g_button_events.last == thermo::hal::ButtonState::kOn ? "On" : "Off");
 }
 
+// Exercises the shared HAL WiFi radio interface via its QEMU stub
+// (`hal_stub`). The stub keeps the AP and station state in software, so this
+// proves the interface is linked, that Configure mode can run the AP and the
+// station at once (§3.2), and that stopping one leaves the other running.
+void report_wifi_radio() {
+    static_assert(thermo::hal::WifiRadioLike<thermo::hal::WifiRadio>);
+
+    thermo::hal::WifiRadio radio = thermo::hal::WifiRadio::create();
+    if (radio.init() != ESP_OK) {
+        std::printf("WifiRadio init failed\n");
+        return;
+    }
+
+    thermo::hal::AccessPointConfig ap_config;
+    thermo::hal::copy_text(ap_config.ssid, "ESP32-Thermo-QEMU");
+    thermo::hal::copy_text(ap_config.password, "configme123");
+
+    thermo::hal::StationConfig station_config;
+    thermo::hal::copy_text(station_config.ssid, "home-net");
+    thermo::hal::copy_text(station_config.password, "hunter2hunter2");
+
+    // An empty station SSID is rejected before any state changes.
+    thermo::hal::StationConfig const no_station;
+    std::printf("WifiRadio start_station(empty) -> %s\n",
+                radio.start_station(no_station) == ESP_ERR_INVALID_ARG
+                    ? "rejected"
+                    : "accepted");
+
+    if (radio.start_ap(ap_config) != ESP_OK ||
+        radio.start_station(station_config) != ESP_OK) {
+        std::printf("WifiRadio start failed\n");
+        return;
+    }
+    std::printf("WifiRadio ap=%d station=%d (both expected 1)\n",
+                radio.ap_running() ? 1 : 0, radio.station_running() ? 1 : 0);
+
+    radio.stop_ap();
+    std::printf("WifiRadio after stop_ap: ap=%d station=%d (expect 0 1)\n",
+                radio.ap_running() ? 1 : 0, radio.station_running() ? 1 : 0);
+
+    radio.stop_station();
+    std::printf("WifiRadio after stop_station: ap=%d station=%d (expect 0 0)\n",
+                radio.ap_running() ? 1 : 0, radio.station_running() ? 1 : 0);
+}
+
 // Exercises the shared HAL aggregate Board interface via its QEMU stub
 // (`hal_stub`). The board owns one stub device per HAL device, so this proves
 // the aggregate is linked, that `init_all()` succeeds, and that each accessor
@@ -257,6 +303,22 @@ void report_board() {
     const thermo::hal::Pins sw = board.mode_switch().read();
     std::printf("Board mode switch first=%d third=%d\n", sw.first_on() ? 1 : 0,
                 sw.third_on() ? 1 : 0);
+
+    // The board inits the radio; the caller starts the interfaces (§3.2).
+    std::printf("Board wifi inited=%d ap=%d station=%d\n",
+                board.wifi().initialized() ? 1 : 0,
+                board.wifi().ap_running() ? 1 : 0,
+                board.wifi().station_running() ? 1 : 0);
+
+    thermo::hal::AccessPointConfig ap_config;
+    thermo::hal::copy_text(ap_config.ssid, "ESP32-Thermo-QEMU");
+    thermo::hal::copy_text(ap_config.password, "configme123");
+    if (board.wifi().start_ap(ap_config) != ESP_OK) {
+        std::printf("Board wifi start_ap failed\n");
+        return;
+    }
+    std::printf("Board wifi after start_ap: ap=%d (expect 1)\n",
+                board.wifi().ap_running() ? 1 : 0);
 }
 
 }  // namespace
@@ -269,6 +331,7 @@ extern "C" void app_main(void) {
     report_push_button();
     report_onewire();
     report_chip_temperature();
+    report_wifi_radio();
     report_board();
 
     /* Print chip information */

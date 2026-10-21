@@ -31,6 +31,7 @@
 #include "hal/pin_map.hpp"
 #include "hal/push_button.hpp"
 #include "hal/switch.hpp"
+#include "hal/wifi.hpp"
 
 namespace thermo::hal {
 
@@ -87,6 +88,8 @@ concept BoardLike =
         { const_board.button() } -> std::same_as<PushButton const&>;
         { board.mode_switch() } -> std::same_as<Switch&>;
         { const_board.mode_switch() } -> std::same_as<Switch const&>;
+        { board.wifi() } -> std::same_as<WifiRadio&>;
+        { const_board.wifi() } -> std::same_as<WifiRadio const&>;
     };
 
 }  // namespace thermo::hal

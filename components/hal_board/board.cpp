@@ -10,7 +10,8 @@ Board::Board(BoardPins pins) noexcept
       green_(Led::create(pins.green_led, pins.green_name)),
       red_(Led::create(pins.red_led, pins.red_name)),
       button_(PushButton::create(pins.button)),
-      mode_switch_(Switch::create(pins.switch_first, pins.switch_third)) {}
+      mode_switch_(Switch::create(pins.switch_first, pins.switch_third)),
+      wifi_(WifiRadio::create()) {}
 
 esp_err_t Board::init_all() noexcept {
     if (esp_err_t err = chip_temperature_.init(); err != ESP_OK) {
@@ -28,7 +29,10 @@ esp_err_t Board::init_all() noexcept {
     if (esp_err_t err = button_.init(); err != ESP_OK) {
         return err;
     }
-    return mode_switch_.init();
+    if (esp_err_t err = mode_switch_.init(); err != ESP_OK) {
+        return err;
+    }
+    return wifi_.init();
 }
 
 }  // namespace thermo::hal

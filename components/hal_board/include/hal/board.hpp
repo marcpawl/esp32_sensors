@@ -20,6 +20,7 @@
 #include "hal/onewire.hpp"
 #include "hal/push_button.hpp"
 #include "hal/switch.hpp"
+#include "hal/wifi.hpp"
 
 namespace thermo::hal {
 
@@ -84,6 +85,13 @@ class Board {
         return mode_switch_;
     }
 
+    // The WiFi radio (§3.2, §3.9). Initialized by init_all(), but neither
+    // interface is started: the caller decides when to bring the AP (§3.2) or
+    // the station (§3.9) up.
+    [[nodiscard]] WifiRadio& wifi() noexcept { return wifi_; }
+
+    [[nodiscard]] WifiRadio const& wifi() const noexcept { return wifi_; }
+
   private:
     ChipTemperature chip_temperature_;
     OneWire one_wire_;
@@ -91,6 +99,7 @@ class Board {
     Led red_;
     PushButton button_;
     Switch mode_switch_;
+    WifiRadio wifi_;
 };
 
 static_assert(BoardLike<Board>, "Board must satisfy the BoardLike concept");
