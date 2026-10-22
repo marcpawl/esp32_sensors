@@ -30,10 +30,10 @@ using ScanProvider = std::function<ScanSnapshot()>;
 using SaveHandler = std::function<std::optional<std::string>(const Config&)>;
 
 // Serves the Configure-mode UI over TLS on port 443 (§6).
-class HttpsServer {
+class ConfigHttpsServer {
   public:
-    HttpsServer(Config& cfg, ScanProvider scan_provider,
-                SaveHandler save_handler);
+    ConfigHttpsServer(Config& cfg, ScanProvider scan_provider,
+                      SaveHandler save_handler);
 
     esp_err_t start();
     esp_err_t stop();

@@ -285,13 +285,13 @@ HandlerContext g_ctx{};
 
 }  // namespace
 
-HttpsServer::HttpsServer(Config& cfg, ScanProvider scan_provider,
-                         SaveHandler save_handler)
+ConfigHttpsServer::ConfigHttpsServer(Config& cfg, ScanProvider scan_provider,
+                                     SaveHandler save_handler)
     : cfg_(cfg),
       scan_provider_(std::move(scan_provider)),
       save_handler_(std::move(save_handler)) {}
 
-esp_err_t HttpsServer::start() {
+esp_err_t ConfigHttpsServer::start() {
     // The static context outlives the server; callbacks only dereference
     // pointers into the member callables below.
     g_ctx.cfg = &cfg_;
@@ -348,7 +348,7 @@ esp_err_t HttpsServer::start() {
     return ESP_OK;
 }
 
-esp_err_t HttpsServer::stop() {
+esp_err_t ConfigHttpsServer::stop() {
     if (handle_ == nullptr) {
         return ESP_OK;
     }
