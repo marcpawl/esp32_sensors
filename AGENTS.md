@@ -549,6 +549,25 @@ The test case should fork and exec the "_assert" program with the name of the te
   There is a good chance the user will abort the combined move and move the
   dependencies one at a time, in their own steps, first. Wait for that
   decision before editing anything.
+- **Found a bug in a class you are using but that is unrelated to the current
+  task? Do not fix it on the current branch.** Instead, park the work and fix
+  it on its own branch so the fix can be reviewed and merged independently:
+  1. **Stash** the in-progress changes with a message that describes the work
+     done so far and what is still pending for the task, e.g.
+     `git stash push -m "WIP <task>: done ...; pending ..."`.
+  2. **Branch** from the base of the current branch (the commit the current
+     branch was started from, not the current branch tip):
+     `git switch -c fix/<short-name> <base-commit>`.
+  3. **Fix** the problem, add tests where the bug is host-testable, then
+     **pull and rebase** the current branch (`git pull --rebase`), format-check
+     the staged files, commit, and **push** the branch.
+  4. **Wait** to be told the fix has been merged. Do not continue as if the
+     fix were available on the original branch.
+  5. Once merged, **delete** the fix branch and re-sync the original branch
+     (`git pull --rebase`) so it includes the merged fix.
+  6. **Return** to the original branch and `git stash pop`; read the stash
+     message to recall what was done and what was pending, then **resume** the
+     original task.
 - When the current work item is complete and no further input is expected,
   output `DONE!` as the final line of your response in the Continue (`cn`)
   CLI. Do **not** print `DONE!` if there are follow-up questions, pending
