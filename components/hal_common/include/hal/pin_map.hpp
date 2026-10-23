@@ -2,9 +2,9 @@
 //
 // This header is the *single* definition of the physical pin map, shared by
 // every consumer: the firmware's device wiring, the `hal_common` `BoardPins`
-// defaults, and (for reference) QEMU/test scenarios. Sharing one definition —
-// rather than each layer hard-coding its own numbers — keeps the firmware, the
-// HAL defaults, and the spec (§2.4) from drifting apart.
+// defaults, and (for reference) the host test scenarios. Sharing one
+// definition — rather than each layer hard-coding its own numbers — keeps the
+// firmware, the HAL defaults, and the spec (§2.4) from drifting apart.
 //
 // Values follow Specification.md Rev 12 §2.4 (GPIO 34 is input-only, so the
 // battery divider must keep its input below ~2.5 V at maximum battery voltage).

@@ -68,8 +68,8 @@ extern "C" void app_main(void) {
     ESP_LOGI(kTag, "boot: mode=%s", thermo::to_string(mode));
 
     // The LED task drives the LEDs through the board, so it is independent of
-    // the concrete board implementation (hal_board on target, hal_stub under
-    // QEMU/host tests). Bring the board up before starting the task.
+    // the concrete board implementation (hal_board on target, hal_stub in the
+    // host tests). Bring the board up before starting the task.
     //
     // The board is shared: `LedTask` holds a `std::shared_ptr` to it instead of
     // owning it, so it cannot be destroyed while the task still uses it.

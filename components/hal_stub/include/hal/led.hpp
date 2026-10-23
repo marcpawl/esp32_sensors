@@ -1,5 +1,5 @@
 // Hardware abstraction: single LED output (§2.1, §7), deterministic stub for
-// QEMU and host tests.
+// the host tests.
 //
 // The shared LED vocabulary (`LedState`, `LedLike`) lives in the header-only
 // `hal_common` component (`hal/led_types.hpp`); this header adds the
@@ -10,7 +10,7 @@
 // This stub replaces the GPIO-backed `hal_board` implementation where the
 // output pin does not exist (or should not be driven). It remembers the last
 // state and logs every `write()` using the LED's `name` (e.g. an LED created
-// with the name "Green" logs "Green: On"), so QEMU runs and host tests can
+// with the name "Green" logs "Green: On"), so the host tests can
 // observe LED activity in the log.
 #pragma once
 

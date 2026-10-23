@@ -1,4 +1,4 @@
-// Deterministic single-LED stub for QEMU and host tests.
+// Deterministic single-LED stub for the host tests.
 //
 // There is no output pin to drive, so the last state is held in software and
 // each write is logged using the LED's name. `init()` always succeeds.

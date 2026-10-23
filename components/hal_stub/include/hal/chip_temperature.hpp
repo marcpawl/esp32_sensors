@@ -1,5 +1,5 @@
 // Hardware abstraction: ESP32 on-die chip temperature sensor (§2.1, §10),
-// deterministic stub for QEMU and host tests.
+// deterministic stub for the host tests.
 //
 // The shared vocabulary (`ChipTemperatureLike`) lives in the header-only
 // `hal_common` component (`hal/chip_temperature_types.hpp`); this header adds
@@ -11,7 +11,7 @@
 // This stub replaces the driver-backed `hal_board` implementation where no
 // internal sensor is available (or should be touched). The reported
 // temperature is held in software and can be changed with `set_celsius()`, so
-// QEMU runs and host tests control exactly what `read()` returns.
+// host tests control exactly what `read()` returns.
 #pragma once
 
 #include <cstdint>
@@ -49,7 +49,7 @@ class ChipTemperature {
     [[nodiscard]] std::int16_t read() const noexcept;
 
     // Sets the temperature reported by subsequent `read()` calls, in
-    // hundredths of a degree Celsius. Intended for tests and QEMU scenarios.
+    // hundredths of a degree Celsius. Intended for host tests.
     void set_celsius(std::int16_t celsius_x100) noexcept;
 
   private:

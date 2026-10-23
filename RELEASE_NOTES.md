@@ -9,7 +9,8 @@ Implemented
 - Project layout: the firmware is its own subproject (`mcgowan/`) producing
   `mcgowan.bin` for the ESP32-S3 (linking the `hal_board` HAL). The repo root is
   no longer an ESP-IDF project; it aggregates the subprojects (`mcgowan/`,
-  `qemu/`, `test/`) with plain CMake, so one `scripts/dev.py build` builds them all.
+  `test/`, `espidf-cpp-test/`) with plain CMake, so one `scripts/dev.py build`
+  builds them all.
 
 - Configure mode: SoftAP, HTTPS server, configuration UI, NVS persistence,
   and LED semantics.
@@ -22,11 +23,9 @@ Implemented
 - Unit tests for the pin-free `hal_stub` mode switch (`test_hal_switch.cpp`):
   construction/`init()`, the default reading, `set_pins()` round-trips, bad
   hardware simulation, and the `SwitchLike` contract.
-- A QEMU smoke test that builds the ESP32-S3 image and boots it headless,
-  checking the boot log for expected output.
 - A swappable hardware abstraction layer (`components/`): `hal_common` (shared
   types/concepts), `hal_board` (real GPIO drivers, linked by the firmware), and
-  `hal_stub` (pin-free stubs, linked by the QEMU project and the host tests).
+  `hal_stub` (pin-free stubs, linked by the host tests).
 
 Not yet implemented
 -------------------

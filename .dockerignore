@@ -9,7 +9,8 @@ Dockerfile
 .dockerignore
 
 # ESP-IDF build output and local state (never needed inside the image). Each
-# subproject (mcgowan/, qemu/, test/) keeps its build tree inside its directory.
+# subproject (mcgowan/, test/, espidf-cpp-test/) keeps its build tree inside
+# its directory.
 build_root/
 build_*/
 */build_*/

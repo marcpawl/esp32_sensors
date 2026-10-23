@@ -5,7 +5,7 @@
 // implementations:
 //
 //   - `hal_board` — real GPIO implementation for the development board.
-//   - `hal_stub`  — deterministic stub used under QEMU and host tests.
+//   - `hal_stub`  — deterministic stub used by the host tests.
 //
 // Each implementation provides its own `hal/push_button.hpp` that includes
 // this header and adds the concrete `PushButton` class, so there is exactly

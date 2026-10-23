@@ -1,5 +1,5 @@
 // Hardware abstraction: DS18B20 1-Wire bus (§2.1, §2.4), deterministic stub for
-// QEMU and host tests.
+// the host tests.
 //
 // The shared bus vocabulary (`OneWireLike`) lives in the header-only
 // `hal_common` component (`hal/onewire_types.hpp`); this header adds the
@@ -10,7 +10,7 @@
 //
 // This stub replaces the GPIO-backed `hal_board` implementation where no real
 // bus exists. The sensor collection is held in software and can be changed with
-// `set_sensors()`, so tests and QEMU scenarios control exactly which ROM IDs
+// `set_sensors()`, so the host tests control exactly which ROM IDs
 // `discover_sensors()` reports and which readings `read()` returns.
 #pragma once
 
@@ -53,7 +53,7 @@ class OneWire {
 
     // Sets the sensor readings reported by subsequent `read()` and
     // `discover_sensors()` calls; the ROM IDs are extracted from the readings.
-    // Intended for tests and QEMU scenarios.
+    // Intended for host tests.
     void set_sensors(std::vector<DS18B20Reading> readings) noexcept;
 
   private:

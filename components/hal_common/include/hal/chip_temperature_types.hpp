@@ -6,7 +6,7 @@
 //
 //   - `hal_board` — real implementation backed by the ESP-IDF internal
 //     temperature sensor driver (`esp_driver_tsens`).
-//   - `hal_stub`  — deterministic stub used under QEMU and host tests.
+//   - `hal_stub`  — deterministic stub used by the host tests.
 //
 // Each implementation provides its own `hal/chip_temperature.hpp` that includes
 // this header and adds the concrete `ChipTemperature` class, so there is

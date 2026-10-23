@@ -4,7 +4,7 @@
 # the LEDs, the push button, and the DS18B20 1-Wire bus), the driver-backed
 # internal chip-temperature sensor, and the driver-backed WiFi radio (the
 # SoftAP and station, `hal/wifi.hpp`), aggregated into `hal/board.hpp`. The
-# production firmware (`main/`) depends on this component; the QEMU/test
+# production firmware (`main/`) depends on this component; the host test
 # projects depend on `hal_stub` instead, which exposes the same
 # `hal/switch.hpp`, `hal/led.hpp`, `hal/push_button.hpp`, `hal/onewire.hpp`,
 # `hal/chip_temperature.hpp`, `hal/wifi.hpp`, and `hal/board.hpp`. A project

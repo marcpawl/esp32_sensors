@@ -7,7 +7,7 @@
 // compiles and works against a non-hardware board without any ESP32. `run()`
 // never returns (it cycles until a new state is published) and blocks waiting
 // for state messages on a FreeRTOS queue, so the cycle timing is exercised by
-// the QEMU smoke test (which runs the whole firmware on the stub board); here
+// a whole mocked firmware boot on the stub board; here
 // we cover the construction contract and that publishing a state never blocks.
 //
 // These tests run on the ESP-IDF `linux` target with Unity and link the

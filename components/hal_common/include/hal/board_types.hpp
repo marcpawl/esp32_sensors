@@ -6,8 +6,7 @@
 // implementations:
 //
 //   - `hal_board` — real, GPIO-backed devices for the development board.
-//   - `hal_stub`  — deterministic, pin-free devices used under QEMU and host
-//     tests.
+//   - `hal_stub`  — deterministic, pin-free devices used by the host tests.
 //
 // Each implementation provides its own `hal/board.hpp` that includes this
 // header and adds the concrete `Board` class, so there is exactly one
