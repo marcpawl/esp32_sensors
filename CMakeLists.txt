@@ -8,7 +8,6 @@ cmake_minimum_required(VERSION 3.22)
 # `sdkconfig.defaults`, and build directory inside its own folder:
 #
 #   mcgowan/         ESP32-S3 firmware (hal_board)   -> mcgowan/build_esp32s3/mcgowan.bin
-#   qemu/            ESP32-S3 QEMU smoke test (hal_stub) -> qemu/build_esp32s3/
 #   test/            host unit tests, `linux` target (hal_stub) -> test/build_linux/
 #   espidf-cpp-test/ host tests for components/espidf_cpp, `linux`
 #                                                -> espidf-cpp-test/build_linux/
@@ -28,7 +27,7 @@ cmake_minimum_required(VERSION 3.22)
 #                                   && cmake --build build_root
 #
 # Every target in this file is prefixed with its subproject name (e.g.
-# qemu_build, mcgowan_build, test_build; a HAL component's would be
+# mcgowan_build, test_build, espidf-cpp-test_build; a HAL component's would be
 # hal_board_test) so it cannot collide with another target in this project,
 # with names CMake / ESP-IDF define for themselves (test, build_test, ...), or
 # with a subproject directory name.
@@ -50,12 +49,12 @@ endif()
 project(esp32_sensors_subprojects NONE)
 
 # Which subprojects to build. Default: all of them.
-set(SUBPROJECTS "mcgowan;qemu;test;espidf-cpp-test" CACHE STRING
-    "Subprojects to build: mcgowan, qemu, test, espidf-cpp-test")
+set(SUBPROJECTS "mcgowan;test;espidf-cpp-test" CACHE STRING
+    "Subprojects to build: mcgowan, test, espidf-cpp-test")
 set_property(CACHE SUBPROJECTS PROPERTY STRINGS
-    mcgowan qemu test espidf-cpp-test)
+    mcgowan test espidf-cpp-test)
 
-set(KNOWN_SUBPROJECTS mcgowan qemu test espidf-cpp-test)
+set(KNOWN_SUBPROJECTS mcgowan test espidf-cpp-test)
 foreach(sub IN LISTS SUBPROJECTS)
     if(NOT sub IN_LIST KNOWN_SUBPROJECTS)
         message(FATAL_ERROR
@@ -97,11 +96,6 @@ endfunction()
 # --- mcgowan: ESP32-S3 firmware (mcgowan.bin) -> target mcgowan_build ------
 if(mcgowan IN_LIST SUBPROJECTS)
     _idf_subproject(mcgowan build_esp32s3 "build")
-endif()
-
-# --- qemu: ESP32-S3 QEMU smoke test -> target qemu_build ------------------
-if(qemu IN_LIST SUBPROJECTS)
-    _idf_subproject(qemu build_esp32s3 "build")
 endif()
 
 # --- test: host unit tests (linux target) -> target test_build ------------

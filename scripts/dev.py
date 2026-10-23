@@ -10,7 +10,7 @@
 #
 # Usage:
 #   scripts/dev.py [image|build|build-espidf-cpp-test|flash|monitor|\
-#                   menuconfig|test|test-linux|test-qemu|self-check|format|\
+#                   menuconfig|test|test-linux|self-check|format|\
 #                   format-check|format-check-staged|install-hooks|shell]
 #   scripts/dev.py --help        # full help, including per-command details
 #
@@ -44,7 +44,6 @@ ROOTS = (
     "components",
     "test",
     "espidf-cpp-test",
-    "qemu",
     "scripts",
 )
 EXTENSIONS = (".cpp", ".hpp", ".h", ".cc", ".cxx")
@@ -58,7 +57,6 @@ FORMAT_ARGS = ("--dry-run", "--Werror")
 # (each a standalone ESP-IDF project with its own build directory):
 #
 #   mcgowan/  ESP32-S3 firmware (hal_board) -> mcgowan/build_esp32s3/mcgowan.bin
-#   qemu/     ESP32-S3 QEMU smoke test (hal_stub) -> qemu/build_esp32s3
 #   test/     host unit tests (linux target)      -> test/build_linux
 #   espidf-cpp-test/
 #             host unit tests for components/espidf_cpp (linux target)
@@ -67,7 +65,6 @@ FORMAT_ARGS = ("--dry-run", "--Werror")
 # Build directories are named after the ESP-IDF target so the esp32s3 and
 # linux builds stay separate.
 FIRMWARE_PROJECT = "mcgowan"
-QEMU_PROJECT = "qemu"
 TEST_PROJECT = "test"
 ESPIDF_CPP_TEST_PROJECT = "espidf-cpp-test"
 FW_BUILD_DIR = "build_esp32s3"
@@ -86,7 +83,6 @@ HOST_TEST_PROJECTS = (
 
 SUBPROJECTS = (
     FIRMWARE_PROJECT,
-    QEMU_PROJECT,
     TEST_PROJECT,
     ESPIDF_CPP_TEST_PROJECT,
 )
@@ -256,8 +252,8 @@ def _build_project(project: str) -> int:
     """Build one subproject with its own target and build directory.
 
     The host-test projects (`test`, `espidf-cpp-test`) are pinned to the
-    `linux` target and build into `build_linux`; the firmware and QEMU image
-    build for ESP32-S3 into `build_esp32s3`.
+    `linux` target and build into `build_linux`; the firmware builds for
+    ESP32-S3 into `build_esp32s3`.
     """
     if project in (TEST_PROJECT, ESPIDF_CPP_TEST_PROJECT):
         rc = run(_idf(project, TEST_BUILD_DIR, "--preview", "set-target",
@@ -271,9 +267,9 @@ def _build_project(project: str) -> int:
 def cmd_build(args: list[str]) -> int:
     """Build the firmware; with no argument also the other subprojects.
 
-    `build`            → every subproject (firmware, QEMU image, host tests)
+    `build`            → every subproject (firmware, host tests)
     `build mcgowan`    → just the ESP32-S3 firmware (mcgowan/build_esp32s3)
-    `build qemu test`  → any of: mcgowan qemu test espidf-cpp-test
+    `build test`       → any of: mcgowan test espidf-cpp-test
     """
     change_to_container()
     subprojects = _parse_subprojects(args)
@@ -331,35 +327,16 @@ def _run_host_tests() -> int:
     return 0
 
 
-def _run_qemu_test() -> int:
-    """Build and boot the QEMU smoke test. No container hop.
-
-    Assumes it is already running inside the dev container. `scripts/test_qemu.py`
-    drives the whole flow itself (clean, build, boot under QEMU, verify output)
-    and is CI-friendly (non-zero exit on failure).
-    """
-    return run(["python3", "scripts/test_qemu.py"])
-
-
 def cmd_test_linux() -> int:
     """Host-based Unity tests on the ESP-IDF `linux` target."""
     change_to_container()
     return _run_host_tests()
 
 
-def cmd_test_qemu() -> int:
-    """QEMU smoke test: build and boot the ESP32-S3 image under QEMU."""
-    change_to_container()
-    return _run_qemu_test()
-
-
 def cmd_test() -> int:
-    """Run both test suites: the host Unity tests and the QEMU smoke test."""
+    """Run the host unit test suites (alias of `test-linux`)."""
     change_to_container()
-    rc = _run_host_tests()
-    if rc != 0:
-        return rc
-    return _run_qemu_test()
+    return _run_host_tests()
 
 
 def cmd_self_check() -> int:
@@ -420,7 +397,7 @@ def _resolve_container_directory(directory: str) -> str:
     """Resolve a `shell -C DIR` value to an absolute in-container path.
 
     The value is interpreted as a path *in the container*. A relative path is
-    taken relative to the project mount root (e.g. `qemu` -> `/project/qemu`);
+    taken relative to the project mount root (e.g. `test` -> `/project/test`);
     an absolute path is used verbatim.
     """
     path = Path(directory)
@@ -476,9 +453,9 @@ def cmd_shell(extra: list[str], directory: str | None = None) -> int:
 
     Use `-C DIR` / `--directory DIR` to change into DIR before running the
     command. DIR is a path in the container: a relative path is resolved under
-    the project mount (`qemu` -> /project/qemu), an absolute path is used as-is:
+    the project mount (`test` -> /project/test), an absolute path is used as-is:
 
-        scripts/dev.py shell -C qemu ls -1
+        scripts/dev.py shell -C test ls -1
         scripts/dev.py shell -C /project/test idf.py build
 
     """
@@ -586,7 +563,6 @@ COMMANDS = {
     "menuconfig": cmd_menuconfig,
     "test": cmd_test,
     "test-linux": cmd_test_linux,
-    "test-qemu": cmd_test_qemu,
     "self-check": cmd_self_check,
     "format": cmd_format,
     "format-check": cmd_format_check,

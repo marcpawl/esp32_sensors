@@ -9,7 +9,7 @@ cmake_minimum_required(VERSION 3.22)
 # `components/` directory.
 #
 # The repo root is NOT an ESP-IDF project: it only builds the subprojects
-# (`mcgowan/`, `qemu/`, `test/`). Build this one on its own with:
+# (`mcgowan/`, `test/`, `espidf-cpp-test/`). Build this one on its own with:
 #   scripts/dev.py build
 # or directly in the container:
 #   scripts/dev.py shell -C mcgowan idf.py -B build_esp32s3 build

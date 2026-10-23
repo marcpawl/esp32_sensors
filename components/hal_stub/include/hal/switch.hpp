@@ -1,5 +1,5 @@
 // Hardware abstraction: 3-position ON-OFF-ON mode switch (§2.3), deterministic
-// stub for QEMU and host tests.
+// stub for the host tests.
 //
 // The shared switch vocabulary (`PinState`, `Pins`, `SwitchLike`) lives in the
 // header-only `hal_common` component (`hal/switch_types.hpp`); this header adds
@@ -52,7 +52,7 @@ class Switch {
     [[nodiscard]] Pins read() const noexcept;
 
     // Sets the pin states reported by subsequent `read()` calls. Intended for
-    // tests and QEMU scenarios, including simulating bad hardware.
+    // host tests, including simulating bad hardware.
     void set_pins(Pins pins) noexcept;
 
   private:

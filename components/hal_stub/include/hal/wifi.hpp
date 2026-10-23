@@ -1,5 +1,5 @@
-// Hardware abstraction: WiFi radio (§3.2, §3.9), deterministic stub for QEMU
-// and host tests.
+// Hardware abstraction: WiFi radio (§3.2, §3.9), deterministic stub for the
+// host tests.
 //
 // The shared WiFi vocabulary (`AccessPointConfig`, `StationConfig`,
 // `WifiRadioLike`) lives in the header-only `hal_common` component
@@ -11,7 +11,7 @@
 // This stub replaces the ESP-IDF WiFi driver where there is no radio (or it
 // must not be touched). It models the radio's behaviour in software: the AP
 // and the station keep their own state and can run at the same time, starting
-// one never stops the other, and the accessors below let QEMU runs and host
+// one never stops the other, and the accessors below let host
 // tests assert exactly what was asked of the radio. No networking happens —
 // the AP address is a fixed placeholder.
 //

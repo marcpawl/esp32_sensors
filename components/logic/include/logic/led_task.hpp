@@ -3,7 +3,7 @@
 // Part of the `logic` component: the behaviour here is board-independent. The
 // LEDs are driven through a `hal::BoardLike` board, so the same code runs on
 // the real GPIO-backed board (`hal_board`, firmware), the pin-free stub
-// (`hal_stub`, QEMU and host tests), or any other conforming board.
+// (`hal_stub`, host tests), or any other conforming board.
 #pragma once
 
 #include <algorithm>
@@ -87,7 +87,7 @@ using Cycles = std::array<Cycle, 9>;
  *
  * The LEDs are driven through the board, so the runner is independent of how
  * they are implemented: `hal_board` drives real GPIO pins, while `hal_stub`
- * records the state in software (used under QEMU and in host tests).
+ * records the state in software (used in host tests).
  *
  * The runner *shares* the board rather than owning it: `LedTask` hands it the
  * same `std::shared_ptr<Board>` the caller keeps, so both can drive/observe the

@@ -6,7 +6,7 @@
 // `WifiRadioLike` concept — used by both WiFi implementations:
 //
 //   - `hal_board` — real ESP-IDF WiFi (SoftAP + station) implementation.
-//   - `hal_stub`  — software-driven stub used under QEMU and host tests.
+//   - `hal_stub`  — software-driven stub used by the host tests.
 //
 // Each implementation provides its own `hal/wifi.hpp` that includes this
 // header and adds the concrete `Wifi` class, so there is exactly one

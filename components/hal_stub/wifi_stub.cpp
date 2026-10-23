@@ -1,4 +1,4 @@
-// Deterministic WiFi radio stub for QEMU and host tests.
+// Deterministic WiFi radio stub for the host tests.
 //
 // There is no radio to drive, so the AP and station state is held in software.
 // `init()` always succeeds; starting an interface records its configuration

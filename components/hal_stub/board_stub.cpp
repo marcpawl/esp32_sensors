@@ -1,4 +1,4 @@
-// Deterministic, pin-free aggregate Board stub for QEMU and host tests.
+// Deterministic, pin-free aggregate Board stub for the host tests.
 //
 // Constructs one `hal_stub` device per board device and initializes them in a
 // fixed order. Every stub `init()` is a no-op that succeeds, so `init_all()`

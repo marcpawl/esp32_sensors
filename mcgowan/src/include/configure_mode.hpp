@@ -22,8 +22,8 @@ template<hal::BoardLike Board>
 [[noreturn]] void run_configure_mode(LedTask<Board>& led_task);
 
 // Entry point used by `app_main`: runs the Configure-mode workflow on the board
-// the firmware links in (`hal_board` on target, `hal_stub` under QEMU/test
-// builds). Defined in configure_mode.cpp.
+// the firmware links in (`hal_board` on target, `hal_stub` in the host
+// tests). Defined in configure_mode.cpp.
 [[noreturn]] void run_configure_mode(LedTask<hal::Board>& led_task);
 
 }  // namespace thermo

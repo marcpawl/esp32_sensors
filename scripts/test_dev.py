@@ -83,8 +83,8 @@ class BuildShellCommandTests(unittest.TestCase):
 
     def test_directory_prefixes_a_cd(self):
         self.assertEqual(
-            dev._build_shell_command(["pwd"], directory="qemu"),
-            ["bash", "-l", "-c", "cd /project/qemu && pwd"],
+            dev._build_shell_command(["pwd"], directory="components"),
+            ["bash", "-l", "-c", "cd /project/components && pwd"],
         )
 
     def test_absolute_directory_is_used_verbatim(self):
@@ -101,8 +101,8 @@ class BuildShellCommandTests(unittest.TestCase):
 
     def test_directory_without_command_execs_interactive_login_shell(self):
         self.assertEqual(
-            dev._build_shell_command([], directory="qemu"),
-            ["bash", "-l", "-c", "cd /project/qemu && exec bash -l"],
+            dev._build_shell_command([], directory="components"),
+            ["bash", "-l", "-c", "cd /project/components && exec bash -l"],
         )
 
 
@@ -111,7 +111,7 @@ class ResolveContainerDirectoryTests(unittest.TestCase):
 
     def test_relative_is_resolved_under_project_root(self):
         self.assertEqual(
-            dev._resolve_container_directory("qemu"), "/project/qemu"
+            dev._resolve_container_directory("components"), "/project/components"
         )
 
     def test_nested_relative_is_resolved_under_project_root(self):
@@ -133,10 +133,10 @@ class ResolveContainerDirectoryTests(unittest.TestCase):
 class SubprojectBuildTests(unittest.TestCase):
     """Subproject layout: `_idf()`, `build` argument parsing, root build."""
 
-    def test_subprojects_are_firmware_qemu_and_host_tests(self):
+    def test_subprojects_are_firmware_and_host_tests(self):
         self.assertEqual(
             dev.SUBPROJECTS,
-            ("mcgowan", "qemu", "test", "espidf-cpp-test"),
+            ("mcgowan", "test", "espidf-cpp-test"),
         )
 
     def test_idf_runs_in_subproject_with_build_tree_inside_it(self):
@@ -150,9 +150,9 @@ class SubprojectBuildTests(unittest.TestCase):
             ],
         )
 
-    def test_idf_keeps_multiple_arguments_in_order(self):
+    def test_idf_passes_flash_monitor_through_in_order(self):
         self.assertEqual(
-            dev._idf("qemu", "build_esp32s3", "flash", "monitor")[5:],
+            dev._idf("mcgowan", "build_esp32s3", "flash", "monitor")[5:],
             ["flash", "monitor"],
         )
 
@@ -180,7 +180,7 @@ class SubprojectBuildTests(unittest.TestCase):
                     "cmake",
                     "-S", ".",
                     "-B", dev.ROOT_BUILD_DIR,
-                    "-DSUBPROJECTS=mcgowan;qemu;test;espidf-cpp-test",
+                    "-DSUBPROJECTS=mcgowan;test;espidf-cpp-test",
                 ],
                 ["cmake", "--build", dev.ROOT_BUILD_DIR],
             ],
