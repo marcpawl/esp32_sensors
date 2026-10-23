@@ -51,13 +51,8 @@ RUN apt-get update \
         # libbsd is required by the ESP-IDF `linux` target (host unit tests);
         # the IDF build emits a warning / link error without it.
         libbsd-dev \
-<<<<<<< Updated upstream
-=======
-        # QEMU dependencies
-        libgcrypt20 libglib2.0-0 libpixman-1-0 libsdl2-2.0-0 libslirp0 \
         # System python3 is also usable inside the container.
         python3-pip \
->>>>>>> Stashed changes
     && rm -rf /var/lib/apt/lists/*
 
 # ---------------------------------------------------------------------------
