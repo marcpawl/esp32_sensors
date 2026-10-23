@@ -5,6 +5,10 @@
 // slots and one reserved for the terminator. The buffer always holds a valid
 // NUL-terminated string, so `c_str()` is always safe to call.
 //
+// `size()` and `remaining()` count characters, not buffer slots:
+// `size() <= N` and `remaining() == N - size()`, so `remaining()` is exactly
+// how many characters can still be appended (0 for a full string).
+//
 // Exceptions are disabled in this firmware (-fno-exceptions); appending beyond
 // capacity is a programming error and asserts, rather than silently truncating.
 #pragma once
@@ -29,24 +33,22 @@ class static_string {
     static constexpr size_type capacity() noexcept { return N; }
 
     // Empty string (buffer holds just the NUL terminator).
-    constexpr static_string() noexcept { buf_.push_back('\0'); }
+    constexpr static_string() noexcept { buf_[0] = '\0'; }
 
     // Copy from a C string. Asserts if `s` does not fit (len > capacity()).
     constexpr static_string(const char* s) {
-        buf_.push_back('\0');  // Guarantee a terminator before any copy.
+        buf_[0] = '\0';  // Guarantee a terminator before any copy.
         assign(s);
     }
 
     // Number of characters, excluding the terminating NUL.
-    constexpr size_type size() const noexcept {
-        return buf_.size() == 0 ? 0 : buf_.size() - 1;
-    }
+    constexpr size_type size() const noexcept { return size_; }
 
-    constexpr bool empty() const noexcept { return size() == 0; }
+    constexpr bool empty() const noexcept { return size_ == 0; }
 
     // Remaining character capacity (excluding the reserved NUL).
     constexpr size_type remaining() const noexcept {
-        return capacity() - size();
+        return capacity() - size_;
     }
 
     // Always-valid NUL-terminated view of the contents.
@@ -80,31 +82,66 @@ class static_string {
         if (s == nullptr) {
             return;
         }
-        const size_type n = std::strlen(s);
+        append(s, std::strlen(s));
+    }
+
+    // Appends the first `n` characters of `s` — a bounded slice of a buffer
+    // that need not be NUL-terminated (e.g. a request URI). Asserts if the
+    // result would exceed capacity().
+    constexpr void append(const char* s, size_type n) {
+        if (s == nullptr) {
+            return;
+        }
         assert(n <= remaining());
         // Overwrite the current terminator, restoring it after each character.
         for (size_type i = 0; i < n; ++i) {
-            buf_.back() = s[i];
-            buf_.push_back('\0');
+            buf_[size_++] = s[i];
         }
+        buf_[size_] = '\0';
     }
 
     // Appends a single character. Asserts when full.
     constexpr void push_back(char c) {
         assert(remaining() > 0);
-        buf_.back() = c;
-        buf_.push_back('\0');
+        buf_[size_++] = c;
+        buf_[size_] = '\0';
+    }
+
+    // Non-aborting single-character append: returns false (and stores
+    // nothing) when the string is full.
+    constexpr bool try_push_back(char c) noexcept {
+        if (remaining() == 0) {
+            return false;
+        }
+        buf_[size_++] = c;
+        buf_[size_] = '\0';
+        return true;
+    }
+
+    // Non-aborting append of `n` bytes of `s`: returns false (and stores
+    // nothing) when the whole slice does not fit.
+    constexpr bool try_append(const char* s, size_type n) noexcept {
+        if (s == nullptr || n > remaining()) {
+            return false;
+        }
+        for (size_type i = 0; i < n; ++i) {
+            buf_[size_++] = s[i];
+        }
+        buf_[size_] = '\0';
+        return true;
     }
 
     // Empties the string (buffer still holds the NUL terminator).
     constexpr void clear() noexcept {
-        buf_.clear();
-        buf_.push_back('\0');
+        size_ = 0;
+        buf_[0] = '\0';
     }
 
   private:
     // N character slots plus one reserved for the terminator.
     static_vector<char, N + 1> buf_;
+    // Number of characters stored (the terminator is at buf_[size_]).
+    size_type size_ = 0;
 };
 
 }  // namespace thermo::espidf_cpp

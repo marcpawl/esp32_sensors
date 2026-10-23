@@ -2,7 +2,10 @@
 // (thermo::espidf_cpp::static_string).
 //
 // static_string wraps thermo::espidf_cpp::static_vector<char, N + 1> and
-// guarantees a valid NUL terminator, so c_str() is always safe. It is pure
+// guarantees a valid NUL terminator, so c_str() is always safe. `N` counts
+// characters only (the terminator has its own reserved slot), so `remaining()`
+// is exactly how many characters can still be appended and the try_* appends
+// succeed while the whole addition fits. It is pure
 // logic with no IDF dependencies and is covered on the host. Overflow asserts
 // (a programming error) rather than truncating, so the boundary cases below
 // exercise exact-fit operations only. The asserting overflow paths are verified
@@ -32,14 +35,21 @@ constexpr bool static_string_constexpr_builds() {
                        s[4] == 'o' && *s.begin() == 'h' && *s.cend() == '\0';
 
     s.push_back('!');
-    const bool pushed = s.size() == 6 && s.c_str()[5] == '!';
+    const bool pushed =
+        s.size() == 6 && s.c_str()[5] == '!' && s.remaining() == 2;
+
+    // Fill to capacity, then confirm the try_* appends refuse and the string
+    // is still intact.
+    s.assign("abcdefgh");
+    const bool filled = s.remaining() == 0 && !s.try_push_back('!') &&
+                        !s.try_append("x", 1) && s.c_str()[8] == '\0';
 
     s.assign("abc");
     const bool assigned = s.size() == 3 && s.c_str()[0] == 'a';
 
     s.clear();
     const bool cleared = s.empty() && s.c_str()[0] == '\0';
-    return built && pushed && assigned && cleared;
+    return built && pushed && filled && assigned && cleared;
 }
 
 }  // namespace
@@ -86,6 +96,7 @@ TEST_CASE("static_string: c_str is NUL-terminated at size", "[static_string]") {
 
 TEST_CASE("static_string: exactly-capacity construction fits",
           "[static_string]") {
+    // N == 5 stores 5 characters in the buffer's 6 slots (5 + the NUL).
     static_string<5> s("abcde");
     TEST_ASSERT_EQUAL_UINT(5, s.size());
     TEST_ASSERT_EQUAL_STRING("abcde", s.c_str());
@@ -189,6 +200,65 @@ TEST_CASE("static_string: remaining tracks free character slots",
     s.append("def");
     TEST_ASSERT_EQUAL_UINT(0, s.remaining());
     TEST_ASSERT_TRUE(s.size() == s.capacity());
+}
+
+// --- Non-aborting try_push_back / try_append --------------------------------
+
+TEST_CASE("static_string: try_push_back appends while there is room",
+          "[static_string]") {
+    static_string<2> s;
+    TEST_ASSERT_TRUE(s.try_push_back('a'));
+    TEST_ASSERT_TRUE(s.try_push_back('b'));
+    TEST_ASSERT_EQUAL_STRING("ab", s.c_str());
+
+    // Full: reports failure, stores nothing, and keeps the string valid.
+    TEST_ASSERT_FALSE(s.try_push_back('c'));
+    TEST_ASSERT_EQUAL_UINT(2, s.size());
+    TEST_ASSERT_EQUAL_STRING("ab", s.c_str());
+}
+
+TEST_CASE("static_string: try_append appends a bounded slice",
+          "[static_string]") {
+    static_string<5> s("ab");
+    TEST_ASSERT_TRUE(s.try_append("cde", 3));
+    TEST_ASSERT_EQUAL_STRING("abcde", s.c_str());
+
+    TEST_ASSERT_FALSE(s.try_append("f", 1));  // Full.
+    TEST_ASSERT_EQUAL_STRING("abcde", s.c_str());
+}
+
+TEST_CASE("static_string: try_append is all-or-nothing", "[static_string]") {
+    static_string<4> s("ab");
+    // One character fits, but the whole slice does not: nothing is stored.
+    TEST_ASSERT_FALSE(s.try_append("cde", 3));
+    TEST_ASSERT_EQUAL_UINT(2, s.size());
+    TEST_ASSERT_EQUAL_STRING("ab", s.c_str());
+
+    TEST_ASSERT_TRUE(s.try_append("cd", 2));  // The available characters.
+    TEST_ASSERT_EQUAL_STRING("abcd", s.c_str());
+
+    TEST_ASSERT_FALSE(s.try_append(nullptr, 3));  // Nothing to copy.
+    TEST_ASSERT_EQUAL_STRING("abcd", s.c_str());
+}
+
+TEST_CASE("static_string: a zero-capacity static_string stays empty",
+          "[static_string]") {
+    // N == 0 holds only the terminator: nothing can be appended, ever.
+    static_string<0> s;
+    TEST_ASSERT_EQUAL_UINT(0, s.remaining());
+    TEST_ASSERT_FALSE(s.try_push_back('x'));
+    TEST_ASSERT_FALSE(s.try_append("x", 1));
+    TEST_ASSERT_EQUAL_STRING("", s.c_str());
+}
+
+TEST_CASE("static_string: append a bounded slice copies exactly n bytes",
+          "[static_string]") {
+    // The source is not NUL-terminated: only the first `n` bytes count.
+    constexpr char raw[] = {'x', 'y', 'z', 'q'};
+    static_string<8> s("ab");
+    s.append(raw, 3);
+    TEST_ASSERT_EQUAL_UINT(5, s.size());
+    TEST_ASSERT_EQUAL_STRING("abxyz", s.c_str());
 }
 
 // --- Overflow asserts (fork + exec the standalone program) ------------------
