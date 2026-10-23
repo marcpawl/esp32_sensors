@@ -14,6 +14,10 @@
 # The container is intentionally kept close to the upstream image so the
 # ESP-IDF toolchain, Python venv, and env vars ($IDF_PATH, $PATH) keep working
 # out of the box. Add project-specific tooling in the marked section below.
+#
+# Project tooling added on top of the base image:
+#   - GitHub CLI (`gh`) from GitHub's official apt repository.
+#   - PyGithub (`import github`) in the ESP-IDF Python venv.
 
 FROM espressif/idf:release-v6.1
 
@@ -47,7 +51,43 @@ RUN apt-get update \
         # libbsd is required by the ESP-IDF `linux` target (host unit tests);
         # the IDF build emits a warning / link error without it.
         libbsd-dev \
+        # System python3 is also usable inside the container.
+        python3-pip \
     && rm -rf /var/lib/apt/lists/*
+
+# ---------------------------------------------------------------------------
+# PyGithub (`import github`): Python wrapper over the GitHub REST API.
+#
+# Installed into the ESP-IDF venv, because `python3` on PATH inside the
+# container IS that venv, and it is created with
+# `include-system-site-packages = false` — so an apt package or anything in
+# /usr/lib/python3/dist-packages would not be importable.
+#
+# The venv interpreter is used directly (rather than sourcing export.sh, which
+# needs a bash login context). Its name follows the image's IDF version and
+# Python version, e.g. /opt/esp/python_env/idf6.1_py3.12_env.
+RUN PYTHON="$(ls -d "${IDF_PATH%/idf}"/python_env/idf*_py*/bin/python | head -n 1)" \
+    && test -x "$PYTHON" \
+    && "$PYTHON" -m pip install --no-cache-dir PyGithub \
+    && "$PYTHON" -c "from github import Github; import importlib.metadata as m; print('PyGithub', m.version('PyGithub'))"
+
+# ---------------------------------------------------------------------------
+# GitHub CLI (`gh`), installed from GitHub's official apt repository.
+# https://github.com/cli/cli/blob/trunk/docs/install_linux.md
+# Adds /usr/bin/gh for authenticated repository work from inside the container
+# (e.g. `gh pr create`, `gh release create`). `auth login` is per-user, so the
+# token lives in the bind-mounted/persisted home, not in this image.
+# ---------------------------------------------------------------------------
+RUN mkdir -p -m 755 /etc/apt/keyrings \
+    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+        > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/* \
+    && gh --version
 
 # ---------------------------------------------------------------------------
 # esp-clang: the Espressif-maintained LLVM toolchain, which ships the
