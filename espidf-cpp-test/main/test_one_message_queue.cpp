@@ -14,18 +14,23 @@
 //
 // ESP-IDF's linux FreeRTOS port runs on POSIX threads, so blocking calls and
 // ISR-style calls are exercised in their task-context form here.
-#include "unity.h"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <chrono>
-#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 
+#include <cstdint>
+
 #include "espidf_cpp/one_message_queue.hpp"
-#include "freertos/FreeRTOS.h"
-#include "freertos/queue.h"
+#include "unity.h"
 
 namespace {
 

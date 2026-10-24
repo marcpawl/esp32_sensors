@@ -2,6 +2,11 @@
 //
 // Kept hardware-free so it links into host-based unit tests.
 #include "power_source.hpp"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+
+// NOLINTEND
 
 namespace thermo {
 

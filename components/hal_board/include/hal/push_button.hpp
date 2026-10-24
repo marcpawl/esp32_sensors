@@ -14,7 +14,12 @@
 // further (debouncing, hold timing) is the caller's job.
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "esp_err.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include "hal/push_button_types.hpp"
 
 namespace thermo::hal {

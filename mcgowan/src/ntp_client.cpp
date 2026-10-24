@@ -1,13 +1,17 @@
 // NTP time acquisition for the save handler (§5.3, §5.4).
 #include "ntp_client.hpp"
-
-#include <ctime>
-
-#include "constants.hpp"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "esp_log.h"
 #include "esp_sntp.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
+#include <ctime>
+
+#include "constants.hpp"
 
 namespace thermo {
 namespace {

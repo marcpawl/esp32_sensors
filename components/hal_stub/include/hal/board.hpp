@@ -15,7 +15,12 @@
 // without hardware.
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "esp_err.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include "hal/board_types.hpp"
 #include "hal/chip_temperature.hpp"
 #include "hal/led.hpp"

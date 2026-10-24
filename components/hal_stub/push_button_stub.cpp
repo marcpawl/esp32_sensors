@@ -4,6 +4,11 @@
 // `init()` always succeeds and `read()` returns whatever `set()` last set
 // (default: released). A callback registered with `set_interrupt()` is invoked
 // synchronously by `set()` whenever the state actually changes.
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include "hal/push_button.hpp"
 
 namespace thermo::hal {

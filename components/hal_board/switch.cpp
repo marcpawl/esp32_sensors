@@ -1,9 +1,13 @@
 // Real 3-position ON-OFF-ON mode switch implementation for the dev board
 // (§2.3). Reads the two sense GPIOs into a `Pins` value; no debouncing or
 // interpretation happens here.
-#include "hal/switch.hpp"
-
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "driver/gpio.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
+#include "hal/switch.hpp"
 
 namespace thermo::hal {
 namespace {

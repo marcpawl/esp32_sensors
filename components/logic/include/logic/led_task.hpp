@@ -6,24 +6,29 @@
 // (`hal_stub`, host tests), or any other conforming board.
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <algorithm>
 #include <array>
 #include <chrono>
-#include <cstddef>
-#include <cstdint>
-#include <cstdlib>
 #include <memory>
 #include <optional>
 #include <utility>
 #include <variant>
 
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+
 #include "espidf_cpp/one_message_queue.hpp"
 #include "espidf_cpp/task.hpp"
 #include "hal/board.hpp"
 #include "hal/board_types.hpp"
-
-#include "esp_log.h"
-#include "freertos/FreeRTOS.h"
 
 namespace thermo {
 // Operating states the LED task can display.

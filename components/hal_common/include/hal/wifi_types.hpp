@@ -24,16 +24,21 @@
 // (asserting rather than silently losing) a longer string.
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_err.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <algorithm>
 #include <array>
-#include <cassert>
 #include <concepts>
+#include <type_traits>
+
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <type_traits>
-
-#include "esp_err.h"
 
 namespace thermo::hal {
 

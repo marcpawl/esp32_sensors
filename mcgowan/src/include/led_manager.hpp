@@ -1,9 +1,13 @@
 // LED status indication (§7).
 #pragma once
 
-#include <cstdint>
-
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "esp_err.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
+#include <cstdint>
 
 namespace thermo {
 

@@ -14,9 +14,14 @@
 // `discover_sensors()` reports and which readings `read()` returns.
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_err.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <vector>
 
-#include "esp_err.h"
 #include "hal/onewire_types.hpp"
 
 namespace thermo::hal {

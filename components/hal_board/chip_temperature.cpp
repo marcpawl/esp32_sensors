@@ -3,12 +3,16 @@
 // Backed by the ESP-IDF internal temperature sensor driver
 // (`esp_driver_tsens`): install the driver in `init()`, then read the die
 // temperature in degrees Celsius and convert to hundredths of a degree.
-#include "hal/chip_temperature.hpp"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "driver/temperature_sensor.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <cassert>
 #include <cmath>
 
-#include "driver/temperature_sensor.h"
+#include "hal/chip_temperature.hpp"
 
 namespace thermo::hal {
 namespace {

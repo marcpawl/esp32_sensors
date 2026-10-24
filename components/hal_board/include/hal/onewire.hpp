@@ -12,12 +12,18 @@
 // for each of them.
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_err.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <optional>
 #include <vector>
 
-#include "esp_err.h"
+#include <cstddef>
+#include <cstdint>
+
 #include "hal/onewire_types.hpp"
 
 namespace thermo::hal {

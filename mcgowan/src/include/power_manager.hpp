@@ -6,8 +6,14 @@
 // these three sources is supplying the board at construction time.
 #pragma once
 
-#include <cstdint>
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <optional>
+
+#include <cstdint>
 
 #include "app_config.hpp"
 #include "battery_monitor.hpp"

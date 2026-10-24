@@ -1,8 +1,12 @@
 // Real single-LED implementation for the dev board (§2.1, §7). Configures the
 // GPIO as an output and drives it to the requested level.
-#include "hal/led.hpp"
-
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "driver/gpio.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
+#include "hal/led.hpp"
 
 namespace thermo::hal {
 

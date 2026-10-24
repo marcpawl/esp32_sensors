@@ -7,11 +7,15 @@
 // returns).
 #pragma once
 
-#include <memory>
-
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
+#include <memory>
 
 namespace thermo::espidf_cpp {
 

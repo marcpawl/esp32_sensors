@@ -10,12 +10,16 @@
 //
 // The stub holds its reported state in software, so every case is
 // deterministic and needs no hardware.
-#include "unity.h"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <concepts>
 
 #include "hal/switch.hpp"
 #include "hal/switch_types.hpp"
+#include "unity.h"
 
 // Unity's TEST_ASSERT_EQUAL casts its operands to UNITY_INT, so it cannot
 // compare a `Pins` value directly. Pins already provides `operator==`; wrap it

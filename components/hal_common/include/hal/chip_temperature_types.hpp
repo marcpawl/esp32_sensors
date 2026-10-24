@@ -15,12 +15,17 @@
 // but both `REQUIRES hal_common`.)
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_err.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <concepts>
-#include <cstdint>
 #include <type_traits>
 #include <utility>
 
-#include "esp_err.h"
+#include <cstdint>
 
 namespace thermo::hal {
 

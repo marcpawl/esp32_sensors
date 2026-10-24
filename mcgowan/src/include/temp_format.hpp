@@ -4,8 +4,14 @@
 // be unit-tested on the host target.
 #pragma once
 
-#include <cstdint>
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <string>
+
+#include <cstdint>
 
 namespace thermo {
 

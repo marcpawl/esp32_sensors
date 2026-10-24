@@ -13,6 +13,11 @@
 // capacity is a programming error and asserts, rather than silently truncating.
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <cassert>
 #include <cstddef>
 #include <cstring>

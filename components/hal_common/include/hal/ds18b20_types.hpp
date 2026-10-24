@@ -12,12 +12,18 @@
 // the hex round-trip and validation rules can be unit-tested on the host.
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <array>
-#include <cstddef>
-#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
+
+#include <cstddef>
+#include <cstdint>
 
 namespace thermo::hal {
 

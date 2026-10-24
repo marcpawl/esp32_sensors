@@ -1,11 +1,14 @@
 // Power-source detection (§2.2, Rev 13).
 #include "power_manager.hpp"
-
-#include <cstdint>
-
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "driver/gpio.h"
 #include "driver/usb_serial_jtag.h"
 #include "esp_log.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
+#include <cstdint>
 
 namespace thermo {
 namespace {

@@ -8,6 +8,10 @@
 //
 // This is a DEVELOPMENT certificate; replace before production deployment.
 #include "self_signed_cert.hpp"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <cstring>
 

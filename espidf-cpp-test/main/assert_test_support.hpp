@@ -10,10 +10,16 @@
 // helpers that need Unity live in assert_unity_support.hpp.
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <algorithm>
+#include <span>
+
 #include <cstdio>
 #include <cstring>
-#include <span>
 
 namespace assert_test_support {
 

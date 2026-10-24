@@ -1,14 +1,18 @@
 // NVS-backed configuration persistence (§5.2).
 #include "app_config_store.hpp"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_log.h"
+#include "esp_mac.h"
+#include "nvs.h"
+#include "nvs_flash.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <cstdio>
 #include <cstring>
 
 #include "constants.hpp"
-#include "esp_log.h"
-#include "esp_mac.h"
-#include "nvs.h"
-#include "nvs_flash.h"
 
 namespace thermo {
 namespace {

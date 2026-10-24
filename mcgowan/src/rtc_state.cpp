@@ -1,11 +1,14 @@
 // RTC-memory state and buffer management (§4, §8).
 #include "rtc_state.hpp"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_attr.h"
+#include "esp_sleep.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <cstdint>
 #include <cstring>
-
-#include "esp_attr.h"
-#include "esp_sleep.h"
 
 namespace thermo {
 namespace {

@@ -3,12 +3,16 @@
 // ROM IDs are the stable identity used to attach friendly names to sensors in
 // the configuration, so the textual form must round-trip exactly and reject
 // malformed input rather than silently producing a wrong identity.
-#include "unity.h"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <string>
 
 #include "constants.hpp"
 #include "sensor.hpp"
+#include "unity.h"
 
 using thermo::RomId;
 

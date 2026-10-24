@@ -3,6 +3,11 @@
 // Constructs one `hal_stub` device per board device and initializes them in a
 // fixed order. Every stub `init()` is a no-op that succeeds, so `init_all()`
 // always returns ESP_OK without touching hardware.
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include "hal/board.hpp"
 
 namespace thermo::hal {

@@ -1,5 +1,10 @@
 // Real, GPIO-backed aggregate Board for the dev board. Constructs each device
 // from the wiring in `BoardPins` and initializes them in a fixed order.
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include "hal/board.hpp"
 
 namespace thermo::hal {

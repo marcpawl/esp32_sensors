@@ -1,13 +1,18 @@
 // HTTPS configuration server (§6).
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_err.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <functional>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include "app_config.hpp"
-#include "esp_err.h"
 #include "power_manager.hpp"
 #include "sensor.hpp"
 

@@ -21,10 +21,16 @@
 // to the caller; the stub records the last request verbatim.
 #pragma once
 
-#include <cstdint>
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_err.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <optional>
 
-#include "esp_err.h"
+#include <cstdint>
+
 #include "hal/wifi_types.hpp"
 
 namespace thermo::hal {

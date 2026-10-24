@@ -1,12 +1,18 @@
 // Wi-Fi Access Point for Configure mode (§3.2).
 #pragma once
 
-#include <cstdint>
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_err.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <optional>
 #include <string>
 
+#include <cstdint>
+
 #include "app_config.hpp"
-#include "esp_err.h"
 
 namespace thermo {
 

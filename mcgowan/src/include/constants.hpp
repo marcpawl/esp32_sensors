@@ -6,6 +6,11 @@
 // share one definition; it is re-exported here for existing callers.
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <cstddef>
 #include <cstdint>
 

@@ -5,14 +5,17 @@
 // a critical section (interrupts disabled) to keep the bit slots within the
 // 1-Wire spec. The bus is not thread-safe; callers must serialize access.
 #include "sensor.hpp"
-
-#include <cstring>
-
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_rom_sys.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
+#include <cstring>
 
 namespace thermo {
 namespace {

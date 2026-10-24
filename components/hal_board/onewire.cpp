@@ -7,12 +7,16 @@
 //
 // `discover_sensors()` runs the standard 1-Wire search (binary tree walk) so
 // *every* DS18B20 on the shared bus is found, not just one.
-#include "hal/onewire.hpp"
-
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "driver/gpio.h"
 #include "esp_rom_sys.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
+#include "hal/onewire.hpp"
 
 namespace thermo::hal {
 namespace {

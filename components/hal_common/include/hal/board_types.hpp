@@ -20,10 +20,15 @@
 // that device's own HAL.
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_err.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <concepts>
 #include <type_traits>
 
-#include "esp_err.h"
 #include "hal/chip_temperature.hpp"
 #include "hal/led.hpp"
 #include "hal/onewire.hpp"

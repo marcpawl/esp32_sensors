@@ -7,14 +7,19 @@
 // (aborts) and is verified in forked children that exec the standalone
 // `static_vector_assert` program (see the [assert] cases at the end);
 // try_push_back reports overflow via a return value and is tested inline.
-#include "unity.h"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
+#include <string>
 
 #include <cstddef>
 #include <cstdint>
-#include <string>
 
 #include "assert_unity_support.hpp"
 #include "espidf_cpp/static_vector.hpp"
+#include "unity.h"
 
 using thermo::espidf_cpp::static_vector;
 

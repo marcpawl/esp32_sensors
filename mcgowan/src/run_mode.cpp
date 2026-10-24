@@ -16,6 +16,15 @@
 //   - batch upload + payload formatting (§9)
 //   - exponential backoff on failure (§3.7)
 #include "run_mode.hpp"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_log.h"
+#include "esp_sleep.h"
+#include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <algorithm>
 #include <string>
@@ -25,11 +34,6 @@
 #include "app_config_store.hpp"
 #include "battery_monitor.hpp"
 #include "constants.hpp"
-#include "esp_log.h"
-#include "esp_sleep.h"
-#include "esp_timer.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "payload.hpp"
 #include "rtc_state.hpp"
 #include "sensor.hpp"

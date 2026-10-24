@@ -9,6 +9,11 @@
 // This is a DEVELOPMENT certificate; replace before production deployment.
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <cstddef>
 
 namespace thermo::certs {

@@ -2,20 +2,26 @@
 //
 // Reads the 3-position switch, initializes NVS + RTC state, then dispatches to
 // Configure mode (implemented) or Run mode (stubbed) per §3.
-#include <cstdio>
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_err.h"
+#include "esp_log.h"
+#include "nvs_flash.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <memory>
+
+#include <cstdio>
 
 #include "app_config.hpp"
 #include "app_config_store.hpp"
 #include "configure_mode.hpp"
 #include "constants.hpp"
-#include "esp_err.h"
-#include "esp_log.h"
 #include "hal/board.hpp"
 #include "hal/switch.hpp"
 #include "logic/led_task.hpp"
 #include "mode.hpp"
-#include "nvs_flash.h"
 #include "reboot.hpp"
 #include "rtc_state.hpp"
 #include "run_mode.hpp"

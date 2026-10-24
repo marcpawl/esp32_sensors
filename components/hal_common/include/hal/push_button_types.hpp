@@ -19,10 +19,16 @@
 // (edge detection, debouncing, hold timing) is the caller's job.
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <concepts>
-#include <cstdint>
 #include <optional>
 #include <type_traits>
+
+#include <cstdint>
 
 namespace thermo::hal {
 

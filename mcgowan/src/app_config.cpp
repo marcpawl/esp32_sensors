@@ -1,10 +1,15 @@
 // Configuration validation rules (§5.1). Pure logic, no I/O.
 #include "app_config.hpp"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <algorithm>
-#include <cctype>
 #include <charconv>
 #include <string_view>
+
+#include <cctype>
 
 namespace thermo::validation {
 namespace {

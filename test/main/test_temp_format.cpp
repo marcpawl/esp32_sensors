@@ -5,11 +5,15 @@
 //
 // Values are in hundredths of a degree Celsius (x100), matching the on-wire
 // representation used by the sample buffer (§4.1).
-#include "unity.h"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <string>
 
 #include "temp_format.hpp"
+#include "unity.h"
 
 using thermo::format_temp_c_x100;
 using thermo::kTempNull;

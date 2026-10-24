@@ -3,6 +3,11 @@
 // There is no internal sensor to read, so the temperature is held in software.
 // `init()` always succeeds; `read()` returns whatever `set_celsius()` last set
 // (defaulting to a plausible room temperature).
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include "hal/chip_temperature.hpp"
 
 namespace thermo::hal {

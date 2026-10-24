@@ -8,7 +8,12 @@
 // one and include `<hal/led.hpp>` unchanged.
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "esp_err.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include "hal/led_types.hpp"
 
 namespace thermo::hal {

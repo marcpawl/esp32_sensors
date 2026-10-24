@@ -1,6 +1,11 @@
 // Operating modes selected by the 3-position ON-OFF-ON switch (§3).
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <cstdint>
 
 namespace thermo {

@@ -2,11 +2,17 @@
 // high-water / low-water hysteresis state machine (§3.6).
 #pragma once
 
-#include <cstdint>
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_err.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <optional>
 
+#include <cstdint>
+
 #include "app_config.hpp"
-#include "esp_err.h"
 #include "led_manager.hpp"  // TxState
 
 namespace thermo {

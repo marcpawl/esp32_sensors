@@ -4,13 +4,17 @@
 // sleep and is only cleared after a successful upload. Its FIFO overflow rule
 // (§4.2) and the record layout (§4.1) are therefore safety-critical — a bug
 // here silently loses or corrupts readings.
-#include "unity.h"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <cstring>
 
 #include "constants.hpp"
 #include "rtc_state.hpp"
 #include "temp_format.hpp"
+#include "unity.h"
 
 using thermo::rtc_buffer_clear;
 using thermo::rtc_buffer_push;

@@ -6,10 +6,15 @@
 //
 // Run with:
 //   scripts/dev.py test-linux
-#include "unity.h"
-#include "unity_test_runner.h"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <cstdlib>
+
+#include "unity.h"
+#include "unity_test_runner.h"
 
 // Unity requires these, even when empty.
 void setUp(void) {}

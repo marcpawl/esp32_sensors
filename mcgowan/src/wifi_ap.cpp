@@ -1,15 +1,19 @@
 // Wi-Fi Access Point bring-up for Configure mode (§3.2).
 #include "wifi_ap.hpp"
-
-#include <cstring>
-
-#include "constants.hpp"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_netif.h"
 #include "esp_netif_ip_addr.h"
 #include "esp_wifi.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
+#include <cstring>
+
+#include "constants.hpp"
 
 namespace thermo {
 namespace {
