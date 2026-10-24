@@ -44,12 +44,23 @@ constexpr bool static_string_constexpr_builds() {
     const bool filled = s.remaining() == 0 && !s.try_push_back('!') &&
                         !s.try_append("x", 1) && s.c_str()[8] == '\0';
 
+    // A null C string is still a constant expression: the null check happens
+    // before the length walk.
+    s.assign(static_cast<const char*>(nullptr));
+    const bool null_assign = s.empty() && s.c_str()[0] == '\0';
+    s.assign("abc");
+    s.append(static_cast<const char*>(nullptr));
+    const bool null_append = s.size() == 3 && s.c_str()[3] == '\0';
+    s = static_string<8>(static_cast<const char*>(nullptr));
+    const bool null_construct = s.empty();
+
     s.assign("abc");
     const bool assigned = s.size() == 3 && s.c_str()[0] == 'a';
 
     s.clear();
     const bool cleared = s.empty() && s.c_str()[0] == '\0';
-    return built && pushed && filled && assigned && cleared;
+    return built && pushed && filled && null_assign && null_append &&
+           null_construct && assigned && cleared;
 }
 
 }  // namespace
