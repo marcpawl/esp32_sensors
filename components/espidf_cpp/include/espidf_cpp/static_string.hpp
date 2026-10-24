@@ -20,11 +20,33 @@
 
 #include <cassert>
 #include <cstddef>
-#include <cstring>
 
 #include "espidf_cpp/static_vector.hpp"
 
 namespace thermo::espidf_cpp {
+
+namespace detail {
+
+// Length of a C string, evaluated at compile time when `s` is constexpr.
+//
+// `std::strlen` is not `constexpr` here (this toolchain's libstdc++ does not
+// yet provide the C++26 constexpr overloads), so calling it from a `constexpr`
+// member would make the whole constructor non-constant. Walking the string
+// here keeps `assign`/`append`/the constructor usable in constant expressions.
+//
+// Precondition: `s` is not null. `append` checks for null *before* calling
+// this: a null dereference cannot be handled in a constant expression, which
+// would silently demote a constant-evaluated `append(nullptr)` to a runtime
+// call.
+constexpr std::size_t c_str_len(const char* s) noexcept {
+    std::size_t n = 0;
+    while (s[n] != '\0') {
+        ++n;
+    }
+    return n;
+}
+
+}  // namespace detail
 
 // Fixed-capacity, always-NUL-terminated string.
 //
@@ -87,7 +109,7 @@ class static_string {
         if (s == nullptr) {
             return;
         }
-        append(s, std::strlen(s));
+        append(s, detail::c_str_len(s));
     }
 
     // Appends the first `n` characters of `s` — a bounded slice of a buffer
