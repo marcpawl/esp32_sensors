@@ -133,11 +133,20 @@ class ResolveContainerDirectoryTests(unittest.TestCase):
 class SubprojectBuildTests(unittest.TestCase):
     """Subproject layout: `_idf()`, `build` argument parsing, root build."""
 
-    def test_subprojects_are_firmware_and_host_tests(self):
+    def test_subprojects_are_firmware_host_tests_and_donny(self):
         self.assertEqual(
             dev.SUBPROJECTS,
-            ("mcgowan", "test", "espidf-cpp-test"),
+            ("mcgowan", "test", "espidf-cpp-test", "donny"),
         )
+
+    def test_linux_projects_are_the_host_target_subprojects(self):
+        self.assertEqual(
+            dev.LINUX_PROJECTS,
+            (dev.TEST_PROJECT, dev.ESPIDF_CPP_TEST_PROJECT, dev.DONNY_PROJECT),
+        )
+        # Every linux project is also a buildable subproject.
+        for project in dev.LINUX_PROJECTS:
+            self.assertIn(project, dev.SUBPROJECTS)
 
     def test_idf_runs_in_subproject_with_build_tree_inside_it(self):
         self.assertEqual(
@@ -180,7 +189,7 @@ class SubprojectBuildTests(unittest.TestCase):
                     "cmake",
                     "-S", ".",
                     "-B", dev.ROOT_BUILD_DIR,
-                    "-DSUBPROJECTS=mcgowan;test;espidf-cpp-test",
+                    "-DSUBPROJECTS=mcgowan;test;espidf-cpp-test;donny",
                 ],
                 ["cmake", "--build", dev.ROOT_BUILD_DIR],
             ],
@@ -295,6 +304,27 @@ class BuildProjectTests(unittest.TestCase):
                 ),
             ],
         )
+
+    def test_donny_is_built_for_linux(self):
+        self.assertEqual(dev._build_project(dev.DONNY_PROJECT), 0)
+        self.assertEqual(
+            self.calls,
+            [
+                dev._idf(
+                    dev.DONNY_PROJECT,
+                    dev.TEST_BUILD_DIR,
+                    "--preview",
+                    "set-target",
+                    "linux",
+                ),
+                dev._idf(dev.DONNY_PROJECT, dev.TEST_BUILD_DIR, "build"),
+            ],
+        )
+
+    def test_donny_is_built_but_not_run_as_a_host_test(self):
+        # `donny` is an application (app_main spins forever), so `test-linux`
+        # must build it but never run it.
+        self.assertNotIn(dev.DONNY_PROJECT, dict(dev.HOST_TEST_PROJECTS))
 
     def test_firmware_is_built_for_the_chip(self):
         self.assertEqual(dev._build_project(dev.FIRMWARE_PROJECT), 0)

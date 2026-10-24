@@ -44,6 +44,7 @@ ROOTS = (
     "components",
     "test",
     "espidf-cpp-test",
+    "donny",
     "scripts",
 )
 EXTENSIONS = (".cpp", ".hpp", ".h", ".cc", ".cxx")
@@ -61,12 +62,15 @@ FORMAT_ARGS = ("--dry-run", "--Werror")
 #   espidf-cpp-test/
 #             host unit tests for components/espidf_cpp (linux target)
 #                                                -> espidf-cpp-test/build_linux
+#   donny/    linux-emulated application (hal_stub, linux target)
+#                                                -> donny/build_linux
 #
 # Build directories are named after the ESP-IDF target so the esp32s3 and
 # linux builds stay separate.
 FIRMWARE_PROJECT = "mcgowan"
 TEST_PROJECT = "test"
 ESPIDF_CPP_TEST_PROJECT = "espidf-cpp-test"
+DONNY_PROJECT = "donny"
 FW_BUILD_DIR = "build_esp32s3"
 TEST_BUILD_DIR = "build_linux"
 ROOT_BUILD_DIR = "build_root"
@@ -81,10 +85,20 @@ HOST_TEST_PROJECTS = (
     (ESPIDF_CPP_TEST_PROJECT, "esp32_sensors_espidf_cpp_tests.elf"),
 )
 
+# Subprojects that build for the ESP-IDF `linux` target (into build_linux).
+# `donny` is an application rather than a test suite, so it is built but is not
+# run by `test-linux` (see HOST_TEST_PROJECTS).
+LINUX_PROJECTS = (
+    TEST_PROJECT,
+    ESPIDF_CPP_TEST_PROJECT,
+    DONNY_PROJECT,
+)
+
 SUBPROJECTS = (
     FIRMWARE_PROJECT,
     TEST_PROJECT,
     ESPIDF_CPP_TEST_PROJECT,
+    DONNY_PROJECT,
 )
 
 # Host-side unit tests for this script itself (stdlib `unittest`), run by
@@ -255,7 +269,7 @@ def _build_project(project: str) -> int:
     `linux` target and build into `build_linux`; the firmware builds for
     ESP32-S3 into `build_esp32s3`.
     """
-    if project in (TEST_PROJECT, ESPIDF_CPP_TEST_PROJECT):
+    if project in LINUX_PROJECTS:
         rc = run(_idf(project, TEST_BUILD_DIR, "--preview", "set-target",
                       "linux"))
         if rc != 0:
@@ -269,7 +283,7 @@ def cmd_build(args: list[str]) -> int:
 
     `build`            → every subproject (firmware, host tests)
     `build mcgowan`    → just the ESP32-S3 firmware (mcgowan/build_esp32s3)
-    `build test`       → any of: mcgowan test espidf-cpp-test
+    `build test`       → any of: mcgowan test espidf-cpp-test donny
     """
     change_to_container()
     subprojects = _parse_subprojects(args)
