@@ -49,12 +49,12 @@ endif()
 project(esp32_sensors_subprojects NONE)
 
 # Which subprojects to build. Default: all of them.
-set(SUBPROJECTS "mcgowan;test;espidf-cpp-test" CACHE STRING
-    "Subprojects to build: mcgowan, test, espidf-cpp-test")
+set(SUBPROJECTS "mcgowan;test;espidf-cpp-test;donny" CACHE STRING
+    "Subprojects to build: mcgowan, test, espidf-cpp-test, donny")
 set_property(CACHE SUBPROJECTS PROPERTY STRINGS
-    mcgowan test espidf-cpp-test)
+    mcgowan test espidf-cpp-test donny)
 
-set(KNOWN_SUBPROJECTS mcgowan test espidf-cpp-test)
+set(KNOWN_SUBPROJECTS mcgowan test espidf-cpp-test donny)
 foreach(sub IN LISTS SUBPROJECTS)
     if(NOT sub IN_LIST KNOWN_SUBPROJECTS)
         message(FATAL_ERROR
