@@ -1,11 +1,13 @@
 # ESP-IDF build output. The repo root is not an ESP-IDF project; it aggregates
-# the subprojects (mcgowan/, test/, espidf-cpp-test/), and each subproject keeps
+# the subprojects (mcgowan/, test/, espidf-cpp-test/, donny/), and each
+# subproject keeps
 # its build tree inside its own directory, named after the target so the firmware
 # (esp32s3) and host-test (linux) builds stay separate:
 #
 #   mcgowan/build_esp32s3/        ESP32-S3 firmware (mcgowan.bin)
 #   test/build_linux/             host unit tests
 #   espidf-cpp-test/build_linux/  host tests for components/espidf_cpp
+#   donny/build_linux/            linux-emulated application (donny)
 #
 # The root aggregator's own CMake/Ninja tree (scripts/dev.py build).
 build_root/
@@ -24,16 +26,18 @@ __pycache__/
 # Generated project configuration.
 # sdkconfig is produced from sdkconfig.defaults by `idf.py`; keep only the
 # committed defaults (sdkconfig.defaults) under version control.
-# One per ESP-IDF project (mcgowan/, test/, espidf-cpp-test/), plus the root
-# aggregator's.
+# One per ESP-IDF project (mcgowan/, test/, espidf-cpp-test/, donny/), plus the
+# root aggregator's.
 sdkconfig
 mcgowan/sdkconfig
 test/sdkconfig
 espidf-cpp-test/sdkconfig
+donny/sdkconfig
 sdkconfig.old
 mcgowan/sdkconfig.old
 test/sdkconfig.old
 espidf-cpp-test/sdkconfig.old
+donny/sdkconfig.old
 
 # CMake / ninja ephemera
 CMakeCache.txt

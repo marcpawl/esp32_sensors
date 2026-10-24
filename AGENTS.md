@@ -85,6 +85,7 @@ esp32_sensors/
 │   └── hal_stub/        # Pin-free HAL stub (linked by host tests)
 ├── test/                # Host-based unit tests subproject (IDF `linux`, Unity)
 ├── espidf-cpp-test/     # Host tests for components/espidf_cpp (IDF `linux`, Unity)
+├── donny/               # Linux-emulated application (IDF `linux`, hal_stub)
 ├── Dockerfile           # Dev container: ESP-IDF v6.1 + non-root host-mapped user
 ├── docker-compose.yml   # `dev` service with serial (/dev) passthrough
 ├── .devcontainer/       # CLion / VS Code Dev Container definition (reuses compose)
@@ -112,14 +113,15 @@ folder**, named after the target:
 | `mcgowan/` (firmware) | `mcgowan/build_esp32s3/` | esp32s3 | `mcgowan.bin` (flashed to the board) |
 | `test/` (host tests) | `test/build_linux/` | linux | `esp32_sensors_tests.elf` (run on the host) |
 | `espidf-cpp-test/` (wrapper tests) | `espidf-cpp-test/build_linux/` | linux | `esp32_sensors_espidf_cpp_tests.elf` (run on the host) |
+| `donny/` (linux app) | `donny/build_linux/` | linux | `donny.elf` (an application, not a test: `app_main` spins on `vTaskDelay(1 min)`) |
 
 The aggregate (root) project configures into `build_root/`. Each aggregate
 target is prefixed with its subproject name (`mcgowan_build`, `test_build`,
-`espidf-cpp-test_build`) so it cannot collide with another target in the project, with
+`espidf-cpp-test_build`, `donny_build`) so it cannot collide with another target in the project, with
 names CMake/ESP-IDF define themselves (e.g. `test`), or with a directory name.
 `scripts/dev.py build` drives the aggregate project; `scripts/dev.py build
-mcgowan` builds just the firmware. `mcgowan/` targets ESP32-S3; `test/` and
-`espidf-cpp-test/` target `linux`. All build trees are git-ignored.
+mcgowan` builds just the firmware. `mcgowan/` targets ESP32-S3; `test/`,
+`espidf-cpp-test/`, and `donny/` target `linux`. All build trees are git-ignored.
 
 **Why `mcgowan/main/` and `mcgowan/src/`.** ESP-IDF requires the component that
 defines `app_main` to be named `main`, so `mcgowan/main/` is that (near-empty)
@@ -130,7 +132,7 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 - `Specification.md` — the single source of truth for hardware, modes, RTC memory layout, payload format, and power budget. Any implementation must conform to it.
 - `mcgowan/main/CMakeLists.txt` — the firmware's component definition: lists all sources under `mcgowan/src/` and the IDF component `REQUIRES` (hal_board, logic, nvs_flash, esp_wifi, esp_https_server, esp_http_client, esp_adc, esp_driver_gpio, mbedtls, …). **Add new sources here** or they will not compile. Board-independent logic belongs in `components/logic` instead.
 - `mcgowan/sdkconfig.defaults` — the committed configuration intent (target, C++ exceptions/RTTI off, partition table, `-Os`). `mcgowan/sdkconfig` is generated from this and is **not** tracked.
-- `CMakeLists.txt` (root) — the generator-agnostic aggregator: one prefixed target per subproject invoking `idf.py -C <sub> -B <sub>/<build-dir>`. `-DSUBPROJECTS="mcgowan;test;espidf-cpp-test"` (default: all) selects what is built.
+- `CMakeLists.txt` (root) — the generator-agnostic aggregator: one prefixed target per subproject invoking `idf.py -C <sub> -B <sub>/<build-dir>`. `-DSUBPROJECTS="mcgowan;test;espidf-cpp-test;donny"` (default: all) selects what is built.
 - `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash environment. Extend these (not ad-hoc `docker run`) when adding tooling. The compose `dev` service is also the target of the Dev Container (see below).
 - `.devcontainer/devcontainer.json` — the CLion / VS Code **Dev Container** definition. It **reuses the compose `dev` service** (it does not define its own image), so CLion builds/starts the same container the CLI uses. Edit `docker-compose.yml` for image/mount/user changes; edit `devcontainer.json` only for IDE-level wiring.
 - `scripts/dev.py` — the single container task runner (`build`, `flash`, `monitor`, `menuconfig`, `test`, `test-linux`, `self-check`, `format`, `format-check`, `format-check-staged`, `install-hooks`, `shell`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. `shell` is the preferred way to run a container command from the host: with no arguments it opens an interactive login shell, and with arguments it runs them in the container (e.g. `./scripts/dev.py shell ls -1d /`). The pre-commit hook (`.githooks/pre-commit`) delegates its check to `scripts/dev.py format-check-staged`. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
@@ -167,7 +169,7 @@ for deterministic stubs. The HAL is split into one shared component plus two
 |---|---|---|---|
 | `hal_common` | header-only | everything (firmware, tests) | shared vocabulary: types + concepts |
 | `hal_board` | `.cpp` | production firmware (`mcgowan/`) | real, GPIO-backed drivers |
-| `hal_stub` | `.cpp` | host tests (`test/`, `espidf-cpp-test/`) | pin-free, software-driven stubs |
+| `hal_stub` | `.cpp` | host tests (`test/`, `espidf-cpp-test/`), linux app (`donny/`) | pin-free, software-driven stubs |
 
 `hal_common` is **implementation-free**: it defines the vocabulary but no
 concrete `Switch` class, so both implementations can require it without
@@ -218,8 +220,8 @@ live under the project's default `components/` search path), each project
 excludes the *other* via `EXCLUDE_COMPONENTS` in its top-level `CMakeLists.txt`
 (set **before** `project()`): the firmware excludes `hal_stub`; the host test
 projects add `components/` to `EXTRA_COMPONENT_DIRS` (their own project roots
-are `test/` and `espidf-cpp-test/`, so the repo-root `components/` is not on the
-default path) and exclude `hal_board`.
+are `test/`, `espidf-cpp-test/`, and `donny/`, so the repo-root `components/` is
+not on the default path) and exclude `hal_board`.
 `hal_common` is shared and is never excluded.
 
 **`espidf_cpp` component (`components/espidf_cpp`).** Mostly header-only C++
@@ -281,6 +283,14 @@ ESP-IDF dependencies so they build for the `linux` target and are covered by
 likewise built for the `linux` target and covered by `test/main/test_hal_*.cpp`.
 **Keep it that way** — put pure logic in these files and hardware/IDF calls
 behind them.
+
+**`donny/` — linux-emulated application.** A plain (non-test) `linux`-target
+application whose `app_main` spins on `vTaskDelay(1 min)`. It requires
+`hal_stub`, `espidf_cpp`, and `logic`. It cannot link `hal_board` on the linux
+target: `hal_board` requires `esp_driver_tsens`, whose Kconfig needs
+`CONFIG_SOC_TEMP_SENSOR_SUPPORTED`, so the chain ends at `esp_hal_ana_conv`, a
+SoC-only component with no linux implementation (`esp_driver_gpio`, by contrast,
+registers itself empty on linux).
 
 **Not yet present (expected next):**
 - On-target tests for hardware-dependent code (1-Wire, deep-sleep, Wi-Fi).
@@ -406,7 +416,7 @@ enacted on the host.
 
 |platform|command|action|
 |===|===|===|
-|both|build [SUBPROJECT...]|Build all subprojects via the root aggregator, or just the named ones (mcgowan, test, espidf-cpp-test)|
+|both|build [SUBPROJECT...]|Build all subprojects via the root aggregator, or just the named ones (mcgowan, test, espidf-cpp-test, donny)|
 |both|build-espidf-cpp-test|Build the espidf_cpp unit tests for the ESP-IDF `linux` target|
 |both|test|Run the host unit test suites (alias of `test-linux`)|
 |both|test-linux|Build and run the host unit tests (ESP-IDF `linux` target)|
@@ -504,8 +514,8 @@ indent, 80 columns). The existing sources already conform, so a format run is a
 no-op on clean code — keep it that way and format before committing.
 
 **Always run clang-format via the container task runner**, which formats all
-`.hpp` and `.cpp` source files under `mcgowan/`, `components/`, `test/`, and
-`espidf-cpp-test/`:
+`.hpp` and `.cpp` source files under `mcgowan/`, `components/`, `test/`,
+`espidf-cpp-test/`, and `donny/`:
 
 ```bash
 # Apply clang-format to every .hpp and .cpp source file.

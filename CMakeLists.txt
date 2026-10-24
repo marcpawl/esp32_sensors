@@ -112,3 +112,9 @@ if(espidf-cpp-test IN_LIST SUBPROJECTS)
     _idf_subproject(espidf-cpp-test build_linux
         "--preview|set-target|linux" "build")
 endif()
+
+# --- donny: linux-emulated application (linux) -> target donny_build -------
+# Same `linux` target rules as the host test projects.
+if(donny IN_LIST SUBPROJECTS)
+    _idf_subproject(donny build_linux "--preview|set-target|linux" "build")
+endif()

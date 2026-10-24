@@ -1,0 +1,2 @@
+# Host (linux) target: the project is emulated on the host, not on a chip.
+CONFIG_IDF_TARGET="linux"
