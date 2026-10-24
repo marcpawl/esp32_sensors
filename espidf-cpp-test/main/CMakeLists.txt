@@ -5,6 +5,15 @@
 #   test_one_message_queue.cpp   OneMessageQueue<T>: creation, overwrite
 #                                semantics, send/receive round-trips, timeouts,
 #                                move semantics, and the raw handle.
+#   test_static_vector.cpp       static_vector<T, N>: storage, growth, and the
+#                                aborting and try_* overflow paths.
+#   test_static_string.cpp       static_string<N>: always-NUL-terminated,
+#                                bounded append, try_push_back/try_append.
+#   test_http_server_types.cpp   The HttpServer vocabulary: HttpMethod,
+#                                HttpStatus, parse_int, normalize_url, fields.
+#   test_http_server.cpp         HttpServer<BodyCapacity> over a real loopback
+#                                socket: prefix routing, registration,
+#                                GET/POST fields, and every HTTP-error path.
 #
 # `espidf_cpp` (the component under test) is a normal requirement;
 # `hal_stub` is a private requirement for parity with the firmware's test
@@ -17,6 +26,8 @@ set(test_srcs
     "test_one_message_queue.cpp"
     "test_static_vector.cpp"
     "test_static_string.cpp"
+    "test_http_server_types.cpp"
+    "test_http_server.cpp"
 )
 
 idf_component_register(

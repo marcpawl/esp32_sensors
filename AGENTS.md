@@ -222,8 +222,9 @@ are `test/` and `espidf-cpp-test/`, so the repo-root `components/` is not on the
 default path) and exclude `hal_board`.
 `hal_common` is shared and is never excluded.
 
-**`espidf_cpp` component (`components/espidf_cpp`).** Header-only C++ wrappers
-over the ESP-IDF/FreeRTOS C APIs, in namespace `thermo::espidf_cpp`:
+**`espidf_cpp` component (`components/espidf_cpp`).** Mostly header-only C++
+wrappers over the ESP-IDF/FreeRTOS C APIs, in namespace `thermo::espidf_cpp`
+(`HttpServer` has one `.cpp`, listed in the component's `SRCS`):
 
 | Header | Provides |
 |---|---|
@@ -231,13 +232,16 @@ over the ESP-IDF/FreeRTOS C APIs, in namespace `thermo::espidf_cpp`:
 | `espidf_cpp/one_message_queue.hpp` | `OneMessageQueue<T>` (single-slot, trivially-copyable messages) |
 | `espidf_cpp/handle.hpp` | `HandleDeleter`, `UniqueTaskHandle`, `UniqueQueueHandle` |
 | `espidf_cpp/static_vector.hpp` | fixed-capacity, inline-storage vector |
-| `espidf_cpp/static_string.hpp` | fixed-capacity, NUL-terminated string |
+| `espidf_cpp/static_string.hpp` | fixed-capacity, NUL-terminated string (`try_push_back` / `try_append` for the non-aborting path) |
+| `espidf_cpp/http_server_types.hpp` | `HttpServer` vocabulary: `HttpMethod`, `HttpField(s)`, `HttpRequest`, `HttpStatus`, `HttpResponse`, `HttpHandler`, `parse_int`, `normalize_url` (no ESP-IDF dependency) |
+| `espidf_cpp/http_server.hpp` | `HttpServer<BodyCapacity>` — prefix routes over `esp_http_server` with one GET/POST handler each; fixed-size request/response buffers, bad input becomes an HTTP error (never an abort) |
 
 The firmware requires this component (`REQUIRES espidf_cpp`). Its host tests
 live in `espidf-cpp-test/` (e.g. `test_one_message_queue.cpp`,
-`test_static_vector.cpp`, `test_static_string.cpp`, plus fork+exec `_assert`
-programs for the abort paths); `task.hpp` needs a real scheduler and is
-verified on target by the firmware build.
+`test_static_vector.cpp`, `test_static_string.cpp`, `test_http_server_types.cpp`,
+and `test_http_server.cpp` — which drives a real server over a loopback socket —
+plus fork+exec `_assert` programs for the abort paths); `task.hpp` needs a real
+scheduler and is verified on target by the firmware build.
 
 **`logic` component (`components/logic`).** Board-independent application logic,
 shared by the firmware and the host tests. It requires
