@@ -1,9 +1,13 @@
 // High-level sensor manager binding the 1-Wire bus and DS18B20 devices.
 #include "sensor.hpp"
-
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#pragma GCC diagnostic pop
+
+// NOLINTEND
 
 namespace thermo {
 namespace {

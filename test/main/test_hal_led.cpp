@@ -9,12 +9,16 @@
 //
 // The stub holds its state in software, so every case is deterministic and
 // needs no hardware.
-#include "unity.h"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <concepts>
 
 #include "hal/led.hpp"
 #include "hal/led_types.hpp"
+#include "unity.h"
 
 namespace {
 

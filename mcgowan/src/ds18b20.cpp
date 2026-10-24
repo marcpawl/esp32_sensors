@@ -1,5 +1,9 @@
 // DS18B20 device operations on the shared 1-Wire bus.
 #include "sensor.hpp"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <cstring>
 

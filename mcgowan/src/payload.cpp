@@ -1,5 +1,9 @@
 // Batched-upload payload formatting (§9).
 #include "payload.hpp"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <cstddef>
 

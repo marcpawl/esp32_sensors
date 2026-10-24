@@ -4,9 +4,13 @@
 // `init()` always succeeds; starting an interface records its configuration
 // and marks it up, stopping clears only that interface, and an empty station
 // SSID is rejected before any state changes.
-#include "hal/wifi.hpp"
-
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "esp_log.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
+#include "hal/wifi.hpp"
 
 namespace thermo::hal {
 namespace {

@@ -2,16 +2,20 @@
 // ESP-IDF WiFi driver through a fixed sequence: stop the driver, set the mode
 // for the enabled interfaces, restart it, then apply the pending interface
 // configuration (and connect the station).
-#include "hal/wifi.hpp"
-
-#include <cstdint>
-#include <cstring>
-
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
 #include "esp_wifi.h"
 #include "esp_wifi_default.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
+#include <cstdint>
+#include <cstring>
+
+#include "hal/wifi.hpp"
 
 namespace thermo::hal {
 namespace {

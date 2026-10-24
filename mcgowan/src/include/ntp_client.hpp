@@ -1,9 +1,15 @@
 // NTP time acquisition used by the save handler (§5.3, §5.4).
 #pragma once
 
-#include <cstdint>
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <optional>
 #include <string>
+
+#include <cstdint>
 
 namespace thermo {
 

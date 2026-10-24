@@ -11,14 +11,19 @@
 // exercise exact-fit operations only. The asserting overflow paths are verified
 // in forked children that exec the standalone `static_string_assert` program
 // (see the [assert] cases at the end).
-#include "unity.h"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
+#include <string>
 
 #include <cstddef>
 #include <cstring>
-#include <string>
 
 #include "assert_unity_support.hpp"
 #include "espidf_cpp/static_string.hpp"
+#include "unity.h"
 
 using thermo::espidf_cpp::static_string;
 

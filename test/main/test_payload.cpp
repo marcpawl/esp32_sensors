@@ -3,14 +3,19 @@
 // The payload is the device's wire contract with the remote collector, so the
 // structure (key names, ordering, array lengths) and escaping are asserted
 // precisely. Names come from the config page and are untrusted input (§5.1.3).
-#include "unity.h"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
-#include <cstring>
 #include <string>
 #include <vector>
 
+#include <cstring>
+
 #include "payload.hpp"
 #include "temp_format.hpp"
+#include "unity.h"
 
 using thermo::kTempNull;
 using thermo::payload::build_batch_json;

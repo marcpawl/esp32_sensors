@@ -14,9 +14,14 @@
 // host tests control exactly what `read()` returns.
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_err.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <cstdint>
 
-#include "esp_err.h"
 #include "hal/chip_temperature_types.hpp"
 
 namespace thermo::hal {

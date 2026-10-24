@@ -8,10 +8,15 @@
 //   docker compose run --rm dev bash -lc 'cd test && idf.py --preview
 //   -B build_linux set-target linux && idf.py -B build_linux build &&
 //   ./build_linux/esp32_sensors_tests.elf'
-#include "unity.h"
-#include "unity_test_runner.h"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <cstdlib>
+
+#include "unity.h"
+#include "unity_test_runner.h"
 
 // Unity requires these, even when empty.
 void setUp(void) {}

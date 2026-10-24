@@ -17,7 +17,12 @@
 // can be simulated.
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "esp_err.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include "hal/switch_types.hpp"
 
 namespace thermo::hal {

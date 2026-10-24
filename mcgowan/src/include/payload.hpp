@@ -5,10 +5,16 @@
 // §9.1 (structure) and §9.3 (temperature serialization).
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <array>
-#include <cstdint>
 #include <string>
 #include <vector>
+
+#include <cstdint>
 
 #include "constants.hpp"
 

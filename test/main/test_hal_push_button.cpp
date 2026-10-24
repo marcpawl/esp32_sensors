@@ -12,13 +12,17 @@
 // The stub holds its reported state in software, so every case is
 // deterministic and needs no hardware. The stub has no real interrupt, so
 // `set_interrupt()` callbacks are invoked synchronously from `set()`.
-#include "unity.h"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <concepts>
 #include <optional>
 
 #include "hal/push_button.hpp"
 #include "hal/push_button_types.hpp"
+#include "unity.h"
 
 namespace {
 

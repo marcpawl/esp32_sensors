@@ -1,10 +1,15 @@
 // NVS-backed configuration persistence (§5.2).
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_err.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <string>
 
 #include "app_config.hpp"
-#include "esp_err.h"
 
 namespace thermo {
 

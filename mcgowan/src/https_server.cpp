@@ -1,18 +1,23 @@
 // HTTPS configuration server (§6).
 #include "https_server.hpp"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_https_server.h"
+#include "esp_log.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <charconv>
-#include <cstring>
 #include <optional>
 #include <string>
 #include <system_error>
 #include <vector>
 
+#include <cstring>
+
 #include "app_config_store.hpp"
 #include "config_page.hpp"
 #include "constants.hpp"
-#include "esp_https_server.h"
-#include "esp_log.h"
 #include "self_signed_cert.hpp"
 
 namespace thermo {

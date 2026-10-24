@@ -1,5 +1,9 @@
 // HTML rendering for the configuration UI (§5.1, §6). Pure string building.
 #include "config_page.hpp"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <cstdio>
 #include <ctime>

@@ -15,17 +15,22 @@
 // the `espidf-cpp-test` project).
 #pragma once
 
-#include <chrono>
-#include <cstdint>
-#include <cstdlib>
-#include <memory>
-#include <optional>
-#include <type_traits>
-
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
+#include <chrono>
+#include <memory>
+#include <optional>
+#include <type_traits>
+
+#include <cstdint>
+#include <cstdlib>
 
 #include "espidf_cpp/handle.hpp"
 

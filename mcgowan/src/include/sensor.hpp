@@ -4,13 +4,19 @@
 // application logic (buffering, payload formatting) remains host-testable.
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_err.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <optional>
 #include <vector>
 
+#include <cstddef>
+#include <cstdint>
+
 #include "constants.hpp"
-#include "esp_err.h"
 #include "hal/ds18b20_types.hpp"  // RomId, DS18B20Reading
 #include "temp_format.hpp"        // kTempNull, format_temp_c_x100
 

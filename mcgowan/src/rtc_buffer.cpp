@@ -5,6 +5,10 @@
 // which is unavailable for the ESP-IDF `linux` target, whereas the buffer
 // operations below are pure and dependency-free.
 #include "rtc_state.hpp"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <cstring>
 

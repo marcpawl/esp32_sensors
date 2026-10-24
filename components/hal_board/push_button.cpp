@@ -10,10 +10,14 @@
 // forwards the new state to the registered callback (IRAM-safe, no logging).
 // The state change is detected by comparing the sampled level against the last
 // one observed by the ISR.
-#include "hal/push_button.hpp"
-
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "driver/gpio.h"
 #include "esp_attr.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
+#include "hal/push_button.hpp"
 
 namespace thermo::hal {
 namespace {

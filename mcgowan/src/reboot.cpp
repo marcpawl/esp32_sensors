@@ -1,6 +1,10 @@
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include "reboot.hpp"
 

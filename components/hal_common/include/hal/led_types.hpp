@@ -14,9 +14,15 @@
 // hal_common`.)
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <concepts>
-#include <cstdint>
 #include <type_traits>
+
+#include <cstdint>
 
 namespace thermo::hal {
 

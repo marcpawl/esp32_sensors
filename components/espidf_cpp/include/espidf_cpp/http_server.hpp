@@ -51,14 +51,19 @@
 // bottom of `http_server.cpp`).
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_err.h"
+#include "esp_http_server.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <array>
-#include <cstddef>
-#include <cstdint>
 #include <memory>
 #include <string_view>
 
-#include "esp_err.h"
-#include "esp_http_server.h"
+#include <cstddef>
+#include <cstdint>
 
 #include "espidf_cpp/http_server_types.hpp"
 #include "espidf_cpp/static_string.hpp"

@@ -10,17 +10,22 @@
 //
 // The stub holds its sensor collection in software, so every case is
 // deterministic and needs no hardware.
-#include "unity.h"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <concepts>
-#include <cstdint>
 #include <optional>
 #include <utility>
 #include <vector>
 
+#include <cstdint>
+
 #include "hal/ds18b20_types.hpp"
 #include "hal/onewire.hpp"
 #include "hal/onewire_types.hpp"
+#include "unity.h"
 
 namespace {
 

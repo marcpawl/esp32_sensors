@@ -10,12 +10,16 @@
 //
 // The stub holds its reading in software, so every case is deterministic and
 // needs no hardware.
-#include "unity.h"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <concepts>
 
 #include "hal/chip_temperature.hpp"
 #include "hal/chip_temperature_types.hpp"
+#include "unity.h"
 
 namespace {
 

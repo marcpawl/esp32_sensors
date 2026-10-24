@@ -12,11 +12,17 @@
 // return value.
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <array>
+#include <utility>
+
 #include <cassert>
 #include <cstddef>
 #include <cstdlib>
-#include <utility>
 
 namespace thermo::espidf_cpp {
 

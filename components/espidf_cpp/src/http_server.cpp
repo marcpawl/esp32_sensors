@@ -10,16 +10,21 @@
 // the request context). Request handling uses the pre-allocated request
 // context, so a malformed or oversized request costs no allocation and never
 // aborts — it turns into an HTTP error response.
-#include "espidf_cpp/http_server.hpp"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_log.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <array>
-#include <cstring>
 #include <memory>
 #include <new>
 #include <optional>
 #include <string_view>
 
-#include "esp_log.h"
+#include <cstring>
+
+#include "espidf_cpp/http_server.hpp"
 
 namespace thermo::espidf_cpp {
 namespace {

@@ -3,6 +3,11 @@
 // There are no sense pins to read, so the reported pin states are held in
 // software. `init()` always succeeds and `read()` returns whatever
 // `set_pins()` last set (default: the Third position).
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include "hal/switch.hpp"
 
 namespace thermo::hal {

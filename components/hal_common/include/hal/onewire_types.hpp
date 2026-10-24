@@ -16,11 +16,16 @@
 // for each of them. Mapping readings to friendly names is the caller's job.
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_err.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <concepts>
 #include <type_traits>
 #include <vector>
 
-#include "esp_err.h"
 #include "hal/ds18b20_types.hpp"  // RomId, DS18B20Reading
 
 namespace thermo::hal {

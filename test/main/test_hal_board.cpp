@@ -14,7 +14,10 @@
 // They run on the ESP-IDF `linux` target with Unity and link the pin-free
 // `hal_stub` component (never `hal_board`). Every device is deterministic, so
 // no hardware is needed.
-#include "unity.h"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <concepts>
 #include <vector>
@@ -28,6 +31,7 @@
 #include "hal/push_button.hpp"
 #include "hal/switch.hpp"
 #include "hal/wifi.hpp"
+#include "unity.h"
 
 namespace {
 

@@ -6,9 +6,14 @@
 //
 // `RomId` is defined in the shared `hal_common` component
 // (`hal/ds18b20_types.hpp`); its textual helpers are implemented here.
-#include "hal/ds18b20_types.hpp"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <cstdio>
+
+#include "hal/ds18b20_types.hpp"
 
 namespace thermo::hal {
 

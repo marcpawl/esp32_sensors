@@ -9,6 +9,11 @@
 //   * A missing or unknown case name exits 0 (nothing to execute), so the
 //     forking test can detect a *clean* exit as "the assert did not fire".
 #include "assert_test_support.hpp"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include "static_string_assert_cases.hpp"
 
 int main(int argc, char** argv) {

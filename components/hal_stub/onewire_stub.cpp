@@ -5,10 +5,15 @@
 // and `discover_sensors()` returns the ROM IDs extracted from those readings.
 // A default collection (the three example DS18B20 sensors from §5.1.3) is
 // provided so callers see realistic data without configuring anything.
-#include "hal/onewire.hpp"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <iterator>
 #include <utility>
+
+#include "hal/onewire.hpp"
 
 namespace thermo::hal {
 namespace {

@@ -4,6 +4,11 @@
 // hardware dependency so they can be used (and unit-tested) on the host.
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <cstdint>
 
 namespace thermo {

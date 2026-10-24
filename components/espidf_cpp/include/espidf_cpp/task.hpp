@@ -1,20 +1,26 @@
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_err.h"
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <chrono>
 #include <concepts>
-#include <cstdint>
-#include <cstdlib>
 #include <optional>
 #include <type_traits>
 #include <utility>
 
-#include "esp_err.h"
-#include "esp_log.h"
+#include <cstdint>
+#include <cstdlib>
+
 #include "espidf_cpp/handle.hpp"
 #include "espidf_cpp/static_string.hpp"
-#include "freertos/FreeRTOS.h"
-#include "freertos/queue.h"
-#include "freertos/task.h"
 
 namespace thermo::espidf_cpp {
 

@@ -12,8 +12,10 @@
 //
 // These tests run on the ESP-IDF `linux` target with Unity and link the
 // pin-free `hal_stub` component (never `hal_board`).
-#include "unity.h"
-#include "unity_test_runner.h"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <concepts>
 #include <memory>
@@ -22,6 +24,8 @@
 #include "hal/board.hpp"
 #include "hal/board_types.hpp"
 #include "logic/led_task.hpp"
+#include "unity.h"
+#include "unity_test_runner.h"
 
 namespace {
 

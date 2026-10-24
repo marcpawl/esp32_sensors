@@ -1,9 +1,7 @@
 // Battery voltage measurement and low/high-water hysteresis (§2.5, §3.6).
 #include "battery_monitor.hpp"
-
-#include <algorithm>
-
-#include "constants.hpp"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "driver/gpio.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
@@ -11,6 +9,12 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
+#include <algorithm>
+
+#include "constants.hpp"
 
 namespace thermo {
 namespace {

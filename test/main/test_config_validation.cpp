@@ -3,11 +3,15 @@
 // Validation runs before anything is persisted to NVS (§5.3 step 2), so these
 // rules are the gate that keeps a bad form submission out of the device's
 // stored configuration.
-#include "unity.h"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <string>
 
 #include "app_config.hpp"
+#include "unity.h"
 
 using thermo::Config;
 using thermo::validation::validate;

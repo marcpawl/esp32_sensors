@@ -6,16 +6,22 @@
 // (and must not) link.
 #pragma once
 
-#include "unity.h"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
+#include <string>
 
 #include <cerrno>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
-#include <string>
 
 #include <sys/wait.h>
 #include <unistd.h>
+
+#include "unity.h"
 
 namespace assert_test_support {
 

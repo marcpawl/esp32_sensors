@@ -2,9 +2,13 @@
 //
 // There is no output pin to drive, so the last state is held in software and
 // each write is logged using the LED's name. `init()` always succeeds.
-#include "hal/led.hpp"
-
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "esp_log.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
+#include "hal/led.hpp"
 
 namespace thermo::hal {
 namespace {

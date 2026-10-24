@@ -17,23 +17,28 @@
 // One server instance is shared by the socket cases (Unity has no cross-case
 // hook that suits a listener); each starts from `prepare()`, which stops the
 // server, clears every route, and starts it again on a fresh port.
-#include "unity.h"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
+#include <array>
+#include <string>
+#include <string_view>
+
+#include <cctype>
+#include <cerrno>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include <array>
-#include <cctype>
-#include <cerrno>
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
-#include <string>
-#include <string_view>
-
 #include "espidf_cpp/http_server.hpp"
+#include "unity.h"
 
 using namespace thermo::espidf_cpp;
 

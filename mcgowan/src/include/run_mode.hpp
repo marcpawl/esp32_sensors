@@ -4,6 +4,11 @@
 // mirrors the spec's sampling loop so it can be filled in incrementally.
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include "hal/board.hpp"
 #include "hal/board_types.hpp"
 #include "logic/led_task.hpp"

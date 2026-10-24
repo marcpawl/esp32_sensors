@@ -6,15 +6,20 @@
 // `parse_int()` / `normalize_url()` helpers the server uses to turn a raw URI
 // into a route key. Everything here is pure logic and is exercised on the
 // host. The server itself is covered by test_http_server.cpp.
-#include "unity.h"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <array>
-#include <cstddef>
-#include <cstdint>
 #include <optional>
 #include <string_view>
 
+#include <cstddef>
+#include <cstdint>
+
 #include "espidf_cpp/http_server_types.hpp"
+#include "unity.h"
 
 namespace {
 

@@ -17,14 +17,20 @@
 //     resources beyond its inline storage.
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <charconv>
-#include <cstddef>
-#include <cstdint>
 #include <optional>
 #include <span>
 #include <string_view>
 #include <system_error>
 #include <type_traits>
+
+#include <cstddef>
+#include <cstdint>
 
 #include "espidf_cpp/static_string.hpp"
 #include "espidf_cpp/static_vector.hpp"

@@ -10,12 +10,16 @@
 //
 // The stub holds its state in software, so every case is deterministic and
 // needs no radio.
-#include "unity.h"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <concepts>
 
 #include "hal/wifi.hpp"
 #include "hal/wifi_types.hpp"
+#include "unity.h"
 
 namespace {
 

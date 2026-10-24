@@ -4,19 +4,24 @@
 // its structure (key names, quoting, ordering) and its handling of missing
 // values are asserted precisely. Sensor names come from the config page and
 // are untrusted input (§5.1.3).
-#include "unity.h"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
 
-#include <cstdint>
-#include <cstring>
 #include <optional>
 #include <string>
 #include <vector>
+
+#include <cstdint>
+#include <cstring>
 
 #include "app_config.hpp"
 #include "config_page.hpp"
 #include "https_server.hpp"
 #include "power_source.hpp"
 #include "sensor.hpp"
+#include "unity.h"
 
 using thermo::Config;
 using thermo::DS18B20Reading;

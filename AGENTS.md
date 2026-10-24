@@ -546,6 +546,58 @@ Assert tests should be in a stand alone program whose name ends with "_assert". 
 
 The test case should fork and exec the "_assert" program with the name of the test case, wait for the child, and confirm that it was aborted.
 
+- **C++ header blocks are ordered and warning-scoped.** Every C++ source
+  (`.cpp`) and header (`.hpp`) file's include block follows this order,
+  separated into the groups below:
+
+  1. **The file's own header**, outside the wrapper (a `.cpp`'s own header, or
+     a `.hpp` that includes itself by name) — parsed before the suppression
+     scope so its diagnostics are never masked. Test sources, whose first
+     include is `unity.h`, have no own header and start at step 2.
+  2. **Turn off clang-tidy** for the block (`// NOLINTBEGIN`).
+  3. **`#pragma GCC diagnostic push`**, then (only if needed) disable the
+     warnings that come from FreeRTOS/ESP-IDF headers, so third-party warnings
+     never leak into our build. The list is deliberately empty today: the
+     third-party headers in use are warning-clean at the build's warning level,
+     and inventing flags for warnings that do not fire only adds noise. Add an
+     ignore here when a new ESP-IDF header actually trips a diagnostic.
+  4. **`#include` the FreeRTOS headers.**
+  5. **`#include` the ESP-IDF headers.**
+  6. **`#pragma GCC diagnostic pop`** — restore warnings.
+  7. **Turn clang-tidy back on** (`// NOLINTEND`).
+  8. **`#include`s for C++ libraries.**
+  9. **`#include`s for C libraries.**
+  10. **`#include`s for system headers.**
+  11. **All other project `#include`s.**
+
+  Keep each group separated by a blank line. `clang-format` (`SortIncludes:
+  CaseSensitive`, `IncludeBlocks: Preserve`) sorts each group but does not
+  reorder across the blank lines, so the groups must be laid out by hand.
+  Write includes fully qualified (`"esp_log.h"`, `"freertos/FreeRTOS.h"`,
+  `"hal/switch.hpp"`) so the group is unambiguous:
+
+  ```cpp
+  #include "sensor.hpp"
+
+  // NOLINTBEGIN
+  #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+  #include "esp_log.h"
+  #include "freertos/FreeRTOS.h"
+  #include "freertos/task.h"
+  #pragma GCC diagnostic pop
+
+  // NOLINTEND
+
+  #include <cstdint>
+  #include <cstring>
+  #include <sys/types.h>
+
+  #include "hal/switch.hpp"
+  ```
+
+  clang-format inserts the blank line after `#pragma GCC diagnostic pop`
+  unless another pragma follows it; run `scripts/dev.py format` after editing
+  an include block.
 
 ### Agent interaction
 

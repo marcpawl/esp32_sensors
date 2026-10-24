@@ -1,5 +1,12 @@
 // Configure-mode workflow (§3.2, §5, §6).
 #include "configure_mode.hpp"
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 #include <string>
 #include <vector>
@@ -9,9 +16,6 @@
 #include "battery_monitor.hpp"
 #include "config_page.hpp"
 #include "constants.hpp"
-#include "esp_log.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "https_server.hpp"
 #include "ntp_client.hpp"
 #include "power_manager.hpp"

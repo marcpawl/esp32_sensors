@@ -2,7 +2,13 @@
 // backoff reboots, but is lost on power removal.
 #pragma once
 
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic pop
+// NOLINTEND
+
 #include <array>
+
 #include <cstdint>
 
 #include "constants.hpp"
