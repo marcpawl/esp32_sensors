@@ -60,8 +60,8 @@ services:
       dockerfile: Dockerfile
       args:
         # User baked into the image. Keep at 1000: the image's non-root user
-        # owns /home/dev and the ESP-IDF tree, and dev.py always runs as
-        # 1000:1000 (see the note above).
+        # owns /home/dev and the ESP-IDF tree, and dev.py runs the container
+        # as that user when dev.py itself runs as root (see the note above).
         UID: "${UID:-1000}"
         GID: "${GID:-1000}"
         DIALOUT_GID: "${DIALOUT_GID:-20}"

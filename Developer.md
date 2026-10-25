@@ -120,35 +120,47 @@ throw-away tag and run it directly with the compose service's mounts:
 ```console
 $ docker build -t esp32-sensors-dev:local .
 $ docker run --rm -it --init -v "$PWD:/project" -v /dev:/dev \
-    -u 1000:1000 --group-add "$(getent group dialout | cut -d: -f3)" \
-    -e HOME=/home/dev -e CCACHE_DIR=/home/dev/.cache/ccache \
+    -u "$(id -u):$(id -g)" --group-add "$(getent group dialout | cut -d: -f3)" \
+    --entrypoint sh \
+    -e HOME=/tmp -e CCACHE_DIR=/tmp/.cache/ccache \
     -e GIT_CONFIG_COUNT=1 \
     -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/opt/esp/idf \
-    esp32-sensors-dev:local bash -l
+    esp32-sensors-dev:local -c '. $IDF_PATH/export.sh; exec bash -l'
 ```
 
 (`docker compose build` also works, but it overwrites the locally cached copy
 of the pinned tag, so `docker compose pull` afterwards to restore it.)
 
-**Run as UID/GID 1000:1000, always.** The image's non-root user owns
-`/home/dev` and the ESP-IDF tree, so it is the only user the toolchain works
-for. Do **not** pass `-u "$(id -u):$(id -g)"`: on a host whose UID differs
-(GitHub Actions runners use 1001) the container user has no passwd entry,
-`HOME` falls back to `/`, and `ccache` fails with `Permission denied`. For the
-same reason the environment must pin `HOME` and `CCACHE_DIR` to the writable
-`/home/dev` tree, and `safe.directory` to `/opt/esp/idf` (root-owned, so `git`
-would otherwise abort with *dubious ownership* when `idf.py` runs git in the
-IDF component submodules). `scripts/dev.py` sets all of these for you.
+**Run as the host user.** `scripts/dev.py` starts the container with
+`--user "$(id -u):$(id -g)"`, so everything the build writes into the
+bind-mounted project belongs to whoever ran the command and the checkout never
+changes owner. That is also the only thing that works in CI: a GitHub Actions
+runner (uid 1001) owns its checkout but, as a non-root user, cannot `chown` it
+(`chown: Operation not permitted`).
+
+The host user has no passwd entry in the image, so `dev.py` picks an
+environment it can write (`_container_environment`): `HOME=/tmp` and
+`CCACHE_DIR=/tmp/.cache/ccache` (never `/home/dev`, which is `750` — a foreign
+uid cannot read it, `HOME` would fall back to `/`, and `ccache` would fail with
+`Permission denied`). It also pins `safe.directory` to `/opt/esp/idf`
+(root-owned, so `git` would otherwise abort with *dubious ownership* when
+`idf.py` runs git in the IDF component submodules). Because such a user cannot
+read the image's login files either, the command runs as
+`sh -c ". $IDF_PATH/export.sh <command>"`, or `idf.py` would not be found.
+
+Running `dev.py` as root is the one exception: root's IDs would leave every
+artifact root-owned, so the container then runs as the image's own user
+`1000:1000` (which keeps `/home/dev`), `dev.py` prints a note, and the checkout
+is given to that user first.
 
 It also makes sure the container can write the project before a command that
 writes into it, since the container cannot create its build tree inside a
 directory owned by someone else (CMake: "Unable to (re)create the private
-pkgRedirects directory"). It reads the owner of the mount's *source*, gives
-the checkout to `1000:$HOST_GID` when it is owned by someone else, and
-verifies the result with a throwaway container running as the container user
+pkgRedirects directory"). It reads the owner of the mount's *source* and
+verifies the result with a throwaway container running as the container user,
 which creates and removes one probe file in each tracked directory of the
-project. When your checkout is already owned by UID 1000 only the
-verification runs.
+project. When the container user already owns the checkout (the normal case,
+and the CI case) nothing is chowned and only the verification runs.
 
 On the host the source is the checkout itself, wherever it lives. Only inside
 the container is it read at `<HOST_ROOT>/project` (`HOST_ROOT` is `/dev` in

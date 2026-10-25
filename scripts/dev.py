@@ -57,12 +57,12 @@ EXTENSIONS = (".cpp", ".hpp", ".h", ".cc", ".cxx")
 DEV_IMAGE = "marcpawl/esp-idf:20261025"
 LOCAL_IMAGE = "esp32-sensors-dev:local"
 
-# The container user, fixed at image build time (Dockerfile ARG defaults). The
-# prebuilt image's files are owned by this UID/GID and its home directory is
-# /home/dev, so a container running as anyone else (e.g. a CI runner whose
-# build user has some other UID) cannot write to $HOME/.cache — which breaks
-# ccache ("ccache: error: Permission denied") — and git refuses to read the
-# root-owned ESP-IDF tree ("dubious ownership").
+# The image's own user, fixed at image build time (Dockerfile ARG defaults).
+# Its home directory is /home/dev and it owns the tool caches in it. The
+# container normally runs as the *host* user instead (see `_container_user`);
+# this user is used only when `dev.py` runs as root, since its home is the only
+# writable one besides /tmp. Either way git must be told to trust the
+# root-owned ESP-IDF tree ("dubious ownership"), see `IDF_SAFE_DIRECTORY`.
 CONTAINER_UID = 1000
 CONTAINER_GID = 1000
 CONTAINER_HOME = "/home/dev"
@@ -91,6 +91,12 @@ IDF_SAFE_DIRECTORY = "/opt/esp/idf"
 # ccache directory override, relative to a writable home in the container
 # (see `_container_environment`).
 CCACHE_DIR = ".cache/ccache"
+
+# The image's ESP-IDF export script, which establishes the environment
+# `idf.py` needs (PATH, IDF_PATH, IDF_PYTHON_ENV_PATH, ...). A container user
+# that cannot read the image's login files must source it explicitly, or
+# `idf.py` is not on PATH.
+IDF_EXPORT = "$IDF_PATH/export.sh"
 
 FORMAT_ARGS = ("--dry-run", "--Werror")
 
@@ -207,42 +213,55 @@ def run(
 def _container_user(host_uid: int, host_gid: int) -> str:
     """The `--user` value for the dev container. Pure (testable).
 
-    The prebuilt image is built for CONTAINER_UID/GID, and its home directory,
-    ccache cache, and tool caches are all owned by that user. Running as any
-    other UID makes $HOME unwritable (ccache: Permission denied) and leaves
-    the process without a passwd entry (getpwuid() failures), so a host user
-    with different IDs runs as the image's user instead — the container only
-    writes to the bind-mounted project, which stays host-owned either way.
+    Normally that is the host user itself, so everything the build creates in
+    the bind-mounted project belongs to them. The checkout needs no chown
+    then, and a non-root host user could not chown it anyway (GitHub runners
+    run as uid 1001 and own the checkout: `chown` fails with "Operation not
+    permitted").
+
+    The one exception is root, whose UID/GID would make every build artifact
+    root-owned on the host. It runs as the image's own user CONTAINER_UID/GID
+    instead, which owns the image's home and tool caches. `HOME` is then
+    pointed inside the container by `_container_environment`, and the checkout
+    is handed to that user first (`_reclaim_checkout`).
     """
-    if (host_uid, host_gid) == (CONTAINER_UID, CONTAINER_GID):
+    if host_uid == 0:
+        print(
+            f"dev.py: running as root; the container runs as its own user "
+            f"{CONTAINER_UID}:{CONTAINER_GID} so build artifacts are not "
+            "root-owned.",
+            file=sys.stderr,
+        )
         return f"{CONTAINER_UID}:{CONTAINER_GID}"
-    print(
-        f"dev.py: host uid:gid is {host_uid}:{host_gid}; running the container "
-        f"as its own user {CONTAINER_UID}:{CONTAINER_GID} so $HOME "
-        f"({CONTAINER_HOME}) and the caches stay writable.",
-        file=sys.stderr,
-    )
-    return f"{CONTAINER_UID}:{CONTAINER_GID}"
+    return f"{host_uid}:{host_gid}"
+
+
+def _container_uid_gid(container_user: str) -> tuple[int, int]:
+    """The UID/GID in a `--user` value, as handed to the container. Pure."""
+    uid, _, gid = container_user.partition(":")
+    return int(uid), int(gid or uid)
 
 
 def _container_environment(
     container_user: str, base_env: dict[str, str]
 ) -> dict[str, str]:
-    """Environment for a `dev` container started with `container_user`. Pure.
+    """Environment for a `dev` container started as `container_user`. Pure.
 
-    The container always runs as the image's user (see `_container_user`), so
-    `container_user` only documents the pairing; `HOME` must point at that
-    user's home because it owns it. Without this, `docker compose run --user`
-    can leave `HOME` unusable and ccache falls back to `/.cache` (unwritable).
-    Point HOME at the image user's home and keep ccache there.
+    `HOME` must be a directory that user can write, or ccache falls back to an
+    unusable cache and fails with "Permission denied". The image's own user
+    owns `/home/dev`; any other user (the host user of a normal developer or CI
+    machine, which has no passwd entry in the image) gets the world-writable
+    `/tmp` instead. ccache then lives in a per-user cache directory there.
 
     `safe.directory` is the mechanism `git` documents for trusting a tree from
     the environment; it is set (rather than appended) so the container trusts
     exactly the IDF tree. `base_env` is not mutated.
     """
+    uid, _ = _container_uid_gid(container_user)
+    home = CONTAINER_HOME if uid == CONTAINER_UID else "/tmp"
     env = dict(base_env)
-    env["HOME"] = CONTAINER_HOME
-    env["CCACHE_DIR"] = f"{CONTAINER_HOME}/{CCACHE_DIR}"
+    env["HOME"] = home
+    env["CCACHE_DIR"] = f"{home}/{CCACHE_DIR}"
     env["GIT_CONFIG_COUNT"] = "1"
     env["GIT_CONFIG_KEY_0"] = "safe.directory"
     env["GIT_CONFIG_VALUE_0"] = IDF_SAFE_DIRECTORY
@@ -310,18 +329,18 @@ def _container_write_probe_script(probe: Path, targets: list[Path]) -> str:
 
 
 def _container_write_failure(
-    probe: Path, targets: list[Path], mount: str
+    probe: Path, targets: list[Path], mount: str, container_user: str
 ) -> str | None:
-    """Why a container running as the container user cannot write `targets`.
+    """Why a container running as `container_user` cannot write `targets`.
 
     Returns None when it can. This runs in a throwaway container because only
-    the kernel can answer "can uid 1000 write here"; the host user's own access
+    the kernel can answer "can this uid write here"; the host user's own access
     says nothing about it, which is how the earlier host-side probe passed
     while the build failed.
     """
     rc = run([
         "docker", "compose", "run", "--rm",
-        "--user", f"{CONTAINER_UID}:{CONTAINER_GID}",
+        "--user", container_user,
         "--entrypoint", "sh", "dev", "-c",
         _container_write_probe_script(probe, targets),
     ])
@@ -331,18 +350,22 @@ def _container_write_failure(
 
 
 def _reclaim_checkout(
-    host_root: str, mount: str, owner_uid: int | None = None
+    host_root: str,
+    mount: str,
+    container_user: str,
+    owner_uid: int | None = None,
 ) -> None:
-    """Make the project mount writable by the container user (host side).
+    """Make the project mount writable by `container_user` (host side).
 
-    The container runs as CONTAINER_UID/GID (see `_container_user`) and CMake
-    creates its build tree in the bind-mounted project, so the checkout must
-    be *owned* by that user: a container without a user namespace cannot write
-    into another user's directory however generous its mode bits are (CMake
-    then fails with "Unable to (re)create the private pkgRedirects directory").
-    A normal developer host already owns it as that UID, so this is a no-op
-    there; it matters where the checkout belongs to someone else — e.g. a
-    GitHub Actions runner checks out as UID 1001.
+    CMake creates its build tree in the bind-mounted project, so the checkout
+    must be *owned* by the user the container runs as: a container without a
+    user namespace cannot write into another user's directory however generous
+    its mode bits are (CMake then fails with "Unable to (re)create the private
+    pkgRedirects directory").
+
+    The user is normally the host user itself (see `_container_user`), who
+    owns the checkout, so nothing needs doing. It differs only when `dev.py`
+    runs as root and deliberately runs the container as the image's own user.
 
     `host_root` is where the host exposes the mount's source (see
     `_project_mount`) and `mount` the container path (`/project`).
@@ -357,9 +380,10 @@ def _reclaim_checkout(
 
     Handing over is *verified*, not assumed: a successful chown proves nothing
     about the mount (a bind mount that was already mounted elsewhere keeps the
-    stale owner), so a container running as the container user must be able to
-    write both a probe file and the tracked paths in the container's own mount.
+    stale owner), so a container running as `container_user` must be able to
+    write a probe file inside every tracked directory of its own mount.
     """
+    container_uid, container_gid = _container_uid_gid(container_user)
     host_uid, host_gid = os.getuid(), os.getgid()
     # The probe creates a file inside each tracked *directory* of the mount,
     # so tracked files are skipped.
@@ -380,67 +404,63 @@ def _reclaim_checkout(
                 f"cannot read the owner of {source}, the local path behind the "
                 f"container's {mount} mount: {error}"
             ) from error
-    chown = _checkout_transfer_command(host_uid, host_gid, owner_uid)
+    chown = _checkout_transfer_command(
+        host_uid, host_gid, owner_uid, container_uid, container_gid
+    )
     if chown is not None:
-        if host_uid != 0 and owner_uid != host_uid and owner_uid != CONTAINER_UID:
+        if host_uid != 0 and owner_uid != host_uid and owner_uid != container_uid:
             raise CheckoutError(
                 f"{source} is owned by uid {owner_uid}, not by you (uid "
-                f"{host_uid}), so the container user (uid {CONTAINER_UID}) "
+                f"{host_uid}), so the container user (uid {container_uid}) "
                 "cannot write the build tree. Run this command with sudo, or "
                 "use a checkout you own."
             )
         print(
             f"dev.py: giving the checkout to the container user "
-            f"{CONTAINER_UID}:{_container_gid(host_gid)} so its build tree is "
-            "writable.",
+            f"{container_uid}:{container_gid} so its build tree is writable.",
             file=sys.stderr,
         )
         rc = run(chown)
         if rc != 0:
             raise CheckoutError(
-                f"could not give {REPO_ROOT} to uid {CONTAINER_UID}"
+                f"could not give {REPO_ROOT} to uid {container_uid}"
             )
 
     # Verify with the access the container will actually have, whichever
     # branch was taken above.
     probe = Path(mount) / WRITE_PROBE
-    unwritable = _container_write_failure(probe, targets, mount)
+    unwritable = _container_write_failure(probe, targets, mount, container_user)
     if unwritable is not None:
         raise CheckoutError(
-            f"the container user (uid {CONTAINER_UID}) still cannot write "
+            f"the container user (uid {container_uid}) still cannot write "
             f"the project mount ({unwritable}), so it cannot create the build "
             f"tree under {mount}. Check that {REPO_ROOT} is not a bind mount "
             "left over from another owner."
         )
 
 
-def _container_gid(host_gid: int) -> int:
-    """Group the checkout is handed to alongside the container user. Pure.
-
-    The host user's own GID keeps them able to write the files they gave away.
-    Root (GID 0) is never used: it would leave the checkout group-root.
-    """
-    return host_gid if host_gid != 0 else CONTAINER_GID
-
-
 def _checkout_transfer_command(
-    host_uid: int, host_gid: int, owner_uid: int
+    host_uid: int,
+    host_gid: int,
+    owner_uid: int,
+    container_uid: int,
+    container_gid: int,
 ) -> list[str] | None:
     """`chown` the checkout to the container user, or None if unnecessary. Pure.
 
-    Returns None only when the mount already belongs to the container user,
-    which is the normal developer case. A mount owned by someone else must be
-    handed over even when the host user is uid 1000 itself: on a CI runner the
-    checkout belongs to uid 1001, and trusting the host uid alone left the
-    container unable to create `build_root/CMakeFiles/pkgRedirects`. The
-    hand-over keeps the host user's GID as the group, so it does not lock the
-    host user out.
+    Returns None when the host user *is* the container user (the normal case:
+    it owns the checkout and the container writes as it) or when the mount
+    already belongs to the container user. A mount owned by someone else must
+    be handed over, keeping the host user's GID as the group so they do not
+    lock themselves out. Never GID 0: a sudo run must not leave the checkout
+    group-root.
     """
-    if owner_uid == CONTAINER_UID:
+    if owner_uid == container_uid:
         return None
+    group = host_gid if host_gid != 0 else container_gid
     return [
         "find", str(REPO_ROOT), "-xdev", "-exec",
-        "chown", f"{CONTAINER_UID}:{_container_gid(host_gid)}", "{}", "+",
+        "chown", f"{container_uid}:{group}", "{}", "+",
     ]
 
 
@@ -456,15 +476,33 @@ def compose_run(args: list[str]) -> int:
     environment = _container_environment(container_user, os.environ)
     if _command_writes_project(args):
         try:
-            _reclaim_checkout(HOST_ROOT, CONTAINER_PROJECT_ROOT)
+            _reclaim_checkout(HOST_ROOT, CONTAINER_PROJECT_ROOT, container_user)
         except CheckoutError as error:
             print(f"dev.py: {error}", file=sys.stderr)
             return 1
-    command = ["docker", "compose", "run",
-               "--user", container_user,
-               "--rm", "dev"]
-    command.extend(args)
+    command = _run_command(container_user, args)
     return run(command, env=environment)
+
+
+def _run_command(container_user: str, args: list[str]) -> list[str]:
+    """The `docker compose run` argv for `args` as `container_user`. Pure.
+
+    The image's own user owns the image home, so its login shell sources
+    `.bashrc` (which sources the ESP-IDF export script) and `args` run as
+    written. A uid the image does not know cannot read that home (it is
+    `750`), so the ESP-IDF environment would silently go missing; such a user
+    sources the export script explicitly first. `args` are then the shell's
+    child (no `exec`), just as the entrypoint's `exec "$@"` makes them.
+    """
+    uid, _ = _container_uid_gid(container_user)
+    head = [
+        "docker", "compose", "run",
+        "--user", container_user,
+        "--rm",
+    ]
+    if uid == CONTAINER_UID:
+        return [*head, "dev", *args]
+    return [*head, "dev", "-c", f". {IDF_EXPORT} {shlex.join(args)}"]
 
 
 # Commands that write into the bind-mounted project from the container.

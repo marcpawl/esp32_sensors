@@ -332,43 +332,61 @@ Only rebuild when the `Dockerfile` itself changes: `docker compose build` (rebui
 > ./scripts/dev.py shell "echo hi | wc -l"   # shell syntax works too
 > ```
 
-**Container user.** The container always runs as UID/GID **1000:1000** — the
-user baked into the published image (`marcpawl/esp-idf:20261025`), which owns
-`/home/dev` and the ESP-IDF tree. Never pass your host UID/GID through: on a
-host whose UID differs (e.g. CI runners use 1001) the container user has no
-passwd entry, so `HOME` falls back to `/`, and `ccache` then fails with
-`Permission denied`. `scripts/dev.py` refuses to do that and prints a warning
-when your host IDs differ.
+**Container user.** The container runs as **the host user** (`--user
+"$UID:$GID"`), so everything the build writes into the bind-mounted project
+belongs to whoever runs the command and the checkout never needs to change
+owner. The one exception is running `dev.py` as root (UID 0): its IDs would
+leave every build artifact root-owned, so the container then runs as the
+image's own user `1000:1000`, which owns `/home/dev` and the tool caches, and
+the checkout is handed over first (see below). `scripts/dev.py` prints a note
+when it does that.
 
-Because the container user is fixed, `scripts/dev.py` also pins the environment
-the toolchain needs:
+The environment the toolchain needs is therefore chosen per user
+(`_container_environment`):
 
-- `HOME=/home/dev` and `CCACHE_DIR=/home/dev/.cache/ccache` — writable, so
-  `ccache` (and anything else keyed off `HOME`) works.
+- `HOME` / `CCACHE_DIR` — the host user has **no passwd entry in the image**,
+  so it gets the world-writable `/tmp` (and `/tmp/.cache/ccache`); the image
+  user keeps `/home/dev` (and `/home/dev/.cache/ccache`). Both are writable, so
+  `ccache` (and anything else keyed off `HOME`) works. Never point a non-image
+  user at `/home/dev`: it is `750`, so `HOME` would fall back to `/` and
+  `ccache` would fail with `Permission denied`.
 - `GIT_CONFIG_KEY_0=safe.directory` / `GIT_CONFIG_VALUE_0=/opt/esp/idf` —
   `/opt/esp/idf` is root-owned, so `git` (used by `idf.py` for component
   submodules) would otherwise abort with *dubious ownership*. Only the IDF tree
   is trusted, **not** `*`, so a bad project checkout is still reported.
 
+**ESP-IDF environment.** The image's entrypoint execs its argument without a
+shell, and the ESP-IDF environment comes from the login files in the image home
+(`/home/dev/.bashrc` sources `$IDF_PATH/export.sh`). The image user can read
+them, so its command runs as written. A host-user uid cannot read that home, so
+`dev.py` runs the command through `sh -c ". $IDF_PATH/export.sh <command>"`
+(`_run_command`) — otherwise `idf.py` is simply not on `PATH`.
+
 **Checkout ownership.** CMake writes its build tree inside the bind-mounted
 project, and a container cannot write into another user's directory however
-generous its mode bits are. `dev.py` therefore, before every command that
+generous its mode bits are. Running as the host user makes that a non-issue:
+the user owns the checkout and a non-root user could not `chown` it anyway
+(GitHub runners run as uid 1001 and own the checkout; `chown` fails with
+"Operation not permitted"). `dev.py` therefore, before every command that
 writes to the project (`build`, `test`, `format*`, `flash`, `menuconfig`):
 
-1. Finds the local path behind the mount (`_project_mount`): on the host
+1. Determines the container user (`_container_user`): the host user, or the
+   image user when `dev.py` runs as root.
+2. Finds the local path behind the mount (`_project_mount`): on the host
    that is the checkout itself; inside the container it is `/dev/project`,
    because the dev service also mounts the host's `/` at `/dev` (`/project`
    is `<HOST_ROOT>/project`). A bind mount keeps the owner it had when it was
    mounted, so the host's own view of the checkout can be stale and only the
    mount source counts. If that path cannot be read, the command fails with
    an explicit error (never a traceback).
-2. If that owner is not the container user, hands it over
-   (`find … -exec chown 1000:$HOST_GID …`; the host GID is kept so the host
-   user keeps group access, and GID 0 is never used). A checkout that belongs
-   to a third party and that you are not root for fails with an explicit
-   warning rather than letting CMake report "Unable to (re)create the private
-   pkgRedirects directory".
-3. **Verifies** the result in a throwaway container running as the container
+3. Hands the checkout to the container user **only when it is not already
+   theirs** (`_checkout_transfer_command`): `find … -exec chown
+   <container-uid>:<host-gid> …`, keeping the host GID for group access and
+   never using GID 0. Only root does this in practice; a checkout owned by a
+   third party that you are not root for fails with an explicit error rather
+   than letting CMake report "Unable to (re)create the private pkgRedirects
+   directory".
+4. **Verifies** the result in a throwaway container running as the container
    user, which creates and removes one probe file
    (`.dev-py-write-probe`) inside each tracked *directory* of the mount: a
    successful chown proves nothing about the mount, and the host user's own
@@ -376,14 +394,14 @@ writes to the project (`build`, `test`, `format*`, `flash`, `menuconfig`):
    existing file and its cleanup only removes its own fixed path, so it cannot
    damage the checkout. If the probe fails, the build never starts.
 
-On a normal developer host (UID 1000 owning the checkout) only the probe runs,
-so this is a no-op there. On a GitHub Actions runner (checkout owned by UID
-1001) ownership moves to `1000:1001` before the build.
+On a normal developer host and on a GitHub Actions runner alike the container
+user is the owner, so nothing is chowned and only the probe runs; the result is
+independent of the host UID (1000, 1001, …).
 
-Build artifacts under the bind-mounted `/project` are therefore owned by UID
-1000 even when your host UID differs, and the `dialout` group is joined for
-serial access. The `Dockerfile` sets the same `HOME`, `CCACHE_DIR`, and
-`safe.directory` so a shell started directly via `docker compose run` (or CLion)
+Build artifacts under the bind-mounted `/project` are therefore owned by the
+user who ran the command, and the `dialout` group is joined for serial access.
+The `Dockerfile` sets the same `HOME`, `CCACHE_DIR`, and `safe.directory` for
+the image user, so a shell started directly via `docker compose run` (or CLion)
 behaves identically. Inside the container, ESP-IDF is already on the
 environment; if needed, source it manually:
 

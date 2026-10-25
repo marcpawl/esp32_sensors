@@ -451,10 +451,23 @@ class ContainerRunTests(unittest.TestCase):
             ), mock.patch.object(dev.os, "getgid", return_value=uid):
                 yield tmp
 
-    def _reclaim(self, owner_uid: int, uid: int):
-        """Run `_reclaim_checkout` for a temp mount owned by `owner_uid`."""
+    def _reclaim(
+        self,
+        owner_uid: int,
+        uid: int,
+        container_user: str | None = None,
+    ):
+        """Run `_reclaim_checkout` for a temp mount owned by `owner_uid`.
+
+        The container runs as `uid` itself unless `container_user` says
+        otherwise (the root case, where it is the image user).
+        """
         with self._checkout(owner_uid=owner_uid, uid=uid):
-            dev._reclaim_checkout(dev.HOST_ROOT, dev.CONTAINER_PROJECT_ROOT)
+            dev._reclaim_checkout(
+                dev.HOST_ROOT,
+                dev.CONTAINER_PROJECT_ROOT,
+                container_user or f"{uid}:{uid}",
+            )
 
     def test_project_mount_translates_only_inside_the_container(self):
         # Inside the container /project is reached as <HOST_ROOT>/project.
@@ -493,34 +506,52 @@ class ContainerRunTests(unittest.TestCase):
                 dev, "_container_write_failure", return_value=None
             ):
                 with self.assertRaises(dev.CheckoutError) as raised:
-                    dev._reclaim_checkout(host_root, "/project")
+                    dev._reclaim_checkout(host_root, "/project", "1000:1000")
         self.assertIn(f"{host_root}/project", str(raised.exception))
         self.assertEqual(self.calls, [])
 
-    def test_matching_host_user_is_used_as_is(self):
-        self.assertEqual(
-            dev._container_user(dev.CONTAINER_UID, dev.CONTAINER_GID),
-            f"{dev.CONTAINER_UID}:{dev.CONTAINER_GID}",
-        )
+    def test_host_user_is_passed_through(self):
+        # The container runs as the host user, so everything it writes in the
+        # bind-mounted project keeps the host ownership.
+        self.assertEqual(dev._container_user(1000, 1000), "1000:1000")
+        self.assertEqual(dev._container_user(1001, 1001), "1001:1001")
+        self.assertEqual(dev._container_user(1001, 1002), "1001:1002")
 
-    def test_other_host_user_runs_as_the_image_user(self):
-        # e.g. the GitHub runner's uid 1001 must not be passed through.
-        self.assertEqual(
-            dev._container_user(1001, 1001),
-            f"{dev.CONTAINER_UID}:{dev.CONTAINER_GID}",
-        )
+    def test_root_runs_as_the_image_user(self):
+        # Running as root would leave every build artifact root-owned.
         self.assertEqual(
             dev._container_user(0, 0),
             f"{dev.CONTAINER_UID}:{dev.CONTAINER_GID}",
         )
 
+    def test_container_uid_gid_reads_the_user_value(self):
+        self.assertEqual(dev._container_uid_gid("1001:1002"), (1001, 1002))
+        # A bare uid means the same GID (`docker --user 1001`).
+        self.assertEqual(dev._container_uid_gid("1001"), (1001, 1001))
+
     def test_environment_pins_a_writable_home_and_ccache(self):
+        # The image's own user owns its home.
         env = dev._container_environment("1000:1000", {})
         self.assertEqual(env["HOME"], dev.CONTAINER_HOME)
         self.assertTrue(env["CCACHE_DIR"].startswith(dev.CONTAINER_HOME + "/"))
         self.assertEqual(
             env["CCACHE_DIR"], f"{dev.CONTAINER_HOME}/{dev.CCACHE_DIR}"
         )
+
+    def test_other_user_gets_a_writable_home(self):
+        # A host-user container has no passwd entry in the image, so there is
+        # no home for it; /tmp is writable and holds its own cache directory.
+        # Its HOME must never be the image user's home (not writable by it).
+        env = dev._container_environment("1001:1001", {})
+        self.assertEqual(env["HOME"], "/tmp")
+        self.assertEqual(env["CCACHE_DIR"], f"/tmp/{dev.CCACHE_DIR}")
+        self.assertNotEqual(env["HOME"], dev.CONTAINER_HOME)
+
+    def test_home_is_not_the_image_home_for_other_users(self):
+        for user in ("1001:1001", "0:0", "65534:65534"):
+            with self.subTest(user=user):
+                env = dev._container_environment(user, {})
+                self.assertTrue(env["HOME"].startswith("/tmp"), user)
 
     def test_environment_trusts_only_the_idf_tree(self):
         # Trusting `*` would hide a genuinely bad project checkout.
@@ -534,6 +565,49 @@ class ContainerRunTests(unittest.TestCase):
         dev._container_environment("1000:1000", base)
         self.assertEqual(base, {"PATH": "/usr/bin"})
 
+    def test_image_user_runs_the_command_as_written(self):
+        # The image user owns the login files, so the entrypoint's shell sets
+        # up ESP-IDF and `args` are the command verbatim.
+        self.assertEqual(
+            dev._run_command("1000:1000", ["idf.py", "--version"]),
+            [
+                "docker", "compose", "run",
+                "--user", "1000:1000",
+                "--rm",
+                "dev", "idf.py", "--version",
+            ],
+        )
+
+    def test_other_user_sources_the_idf_environment_first(self):
+        # A uid the image does not know cannot read the image home, so its
+        # login files (which source ESP-IDF) never run: source them explicitly
+        # in the same shell `-c` string, or `idf.py` is not found.
+        cmd = dev._run_command("1001:1001", ["idf.py", "-C", "mcgowan", "build"])
+        self.assertEqual(
+            cmd[:7],
+            ["docker", "compose", "run", "--user", "1001:1001", "--rm", "dev"],
+        )
+        self.assertEqual(cmd[7], "-c")
+        self.assertEqual(
+            cmd[8],
+            f". {dev.IDF_EXPORT} idf.py -C mcgowan build",
+        )
+
+    def test_other_user_arguments_are_shell_quoted(self):
+        # The arguments become a shell command line, so they must survive
+        # shell metacharacters intact; no `exec`/`"$@"` (args are not argv).
+        cmd = dev._run_command("1001:1001", ["sh", "-c", "echo hi | wc -l"])
+        self.assertIn("'echo hi | wc -l'", cmd[-1])
+        self.assertNotIn("exec", cmd[-1])
+        self.assertNotIn("$@", cmd[-1])
+
+    def test_root_gets_the_image_user_command_shape(self):
+        # `compose_run` maps root onto the image user, whose home is readable.
+        container_user = dev._container_user(0, 0)
+        with redirect_stderr(io.StringIO()):
+            cmd = dev._run_command(container_user, ["dev.py", "build"])
+        self.assertEqual(cmd[6:], ["dev", "dev.py", "build"])
+
     def test_only_writing_commands_write_the_project(self):
         for name in dev.WRITING_COMMANDS:
             self.assertTrue(dev._command_writes_project(["dev.py", name]), name)
@@ -544,63 +618,68 @@ class ContainerRunTests(unittest.TestCase):
         self.assertFalse(dev._command_writes_project(["dev.py"]))
 
     def test_matching_host_user_needs_no_chown(self):
-        # The normal developer case: the mount already belongs to uid 1000.
-        self.assertIsNone(
-            dev._checkout_transfer_command(
-                dev.CONTAINER_UID, dev.CONTAINER_GID, dev.CONTAINER_UID
-            )
-        )
+        # The normal developer and CI case: the host user owns the checkout
+        # and the container runs as it.
+        for uid, gid in ((1000, 1000), (1000, 1001), (1001, 1001)):
+            with self.subTest(uid=uid, gid=gid):
+                self.assertIsNone(
+                    dev._checkout_transfer_command(uid, gid, uid, uid, gid)
+                )
 
     def test_foreign_checkout_is_given_to_the_container_user(self):
-        # GitHub runners check out as uid 1001; the container writes as 1000.
-        cmd = dev._checkout_transfer_command(1001, 1001, 1001)
+        # Running as root, the container is the image user, but the checkout
+        # under /home/runner may belong to 1001: hand it over.
+        cmd = dev._checkout_transfer_command(0, 0, 1001, 1000, 1000)
         self.assertEqual(
             cmd[:4], ["find", str(dev.REPO_ROOT), "-xdev", "-exec"]
         )
-        self.assertIn(f"{dev.CONTAINER_UID}:1001", cmd)
-        self.assertEqual(cmd[-1], "+")
-
-    def test_container_user_hostless_checkout_is_reclaimed(self):
-        # The CI shape: the host user is uid 1000 itself (matching the
-        # container), but the mount is owned by 1001. Skipping the chown on
-        # the host uid alone left CMake unable to create pkgRedirects.
-        cmd = dev._checkout_transfer_command(dev.CONTAINER_UID, 1000, 1001)
-        self.assertIsNotNone(cmd)
         self.assertIn(f"{dev.CONTAINER_UID}:{dev.CONTAINER_GID}", cmd)
+        self.assertEqual(cmd[-1], "+")
 
     def test_chown_from_root_does_not_leave_group_zero(self):
         # A sudo run must not make the checkout group root.
-        cmd = dev._checkout_transfer_command(0, 0, 0)
+        cmd = dev._checkout_transfer_command(0, 0, 0, 1000, 1000)
         self.assertIn(f"{dev.CONTAINER_UID}:{dev.CONTAINER_GID}", cmd)
-        cmd = dev._checkout_transfer_command(0, 0, 1001)
-        self.assertIn(f"{dev.CONTAINER_UID}:{dev.CONTAINER_GID}", cmd)
+        cmd = dev._checkout_transfer_command(0, 0, 0, 1001, 1002)
+        self.assertIn("1001:1002", cmd)
 
     def test_non_owner_is_told_to_use_sudo(self):
         # A checkout owned by a third party cannot be handed over. This must
         # fail loudly (never silently continue), since CI once showed a
         # warning path degrade to "no output, build anyway".
         with self.assertRaises(dev.CheckoutError) as raised:
-            self._reclaim(owner_uid=1002, uid=1001)
+            self._reclaim(owner_uid=1002, uid=1001, container_user="1000:1000")
         self.assertIn("sudo", str(raised.exception))
         self.assertEqual(self.calls, [])
 
-    def test_owned_checkout_is_reclaimed_and_verified(self):
-        # The GitHub-runner case: we own it (uid 1001), the container is 1000.
-        # The chown is followed by a probe run *as the container user*, since
-        # a successful chown says nothing about the bind mount.
-        with self._checkout(owner_uid=1001, uid=1001) as tmp:
+    def test_host_user_checkout_is_never_chowned(self):
+        # The GitHub-runner case after the fix: the checkout belongs to the
+        # host user (1001) and the container runs as that same user, so no
+        # chown is attempted (a non-root user cannot give files to 1000
+        # anyway: "chown: Operation not permitted") and only the probe runs.
+        self._reclaim(owner_uid=1001, uid=1001)
+        self.assertEqual([cmd for cmd, _ in self.calls if cmd[0] == "find"], [])
+        self.assertEqual(len(self.calls), 1)  # just the probe
+        self.assertIn("1001:1001", self.calls[0][0])
+
+    def test_root_checkout_is_given_to_the_image_user(self):
+        # dev.py as root with the container as the image user: the chown runs,
+        # and the probe then runs as that user, verifying the hand-over.
+        with self._checkout(owner_uid=1001, uid=0) as tmp:
             with redirect_stderr(io.StringIO()) as err:
-                dev._reclaim_checkout(dev.HOST_ROOT, dev.CONTAINER_PROJECT_ROOT)
+                dev._reclaim_checkout(
+                    dev.HOST_ROOT, dev.CONTAINER_PROJECT_ROOT, "1000:1000"
+                )
         self.assertIn("giving the checkout", err.getvalue())
         chowns = [cmd for cmd, _ in self.calls if cmd[0] == "find"]
         self.assertEqual(len(chowns), 1)
         self.assertEqual(chowns[0][:4], ["find", str(tmp), "-xdev", "-exec"])
-        self.assertIn(f"{dev.CONTAINER_UID}:1001", chowns[0])
+        self.assertIn(f"{dev.CONTAINER_UID}:{dev.CONTAINER_GID}", chowns[0])
         probes = [cmd for cmd, _ in self.calls if "compose" in cmd]
         self.assertEqual(len(probes), 1)
-        self.assertIn(f"{dev.CONTAINER_UID}:{dev.CONTAINER_GID}", probes[0])
+        self.assertEqual(probes[0][5], "1000:1000")
         # The probe must write inside the container's mount, not host paths.
-        self.assertIn("/project/fake", probes[0][-1].replace("mcgowan", "fake"))
+        self.assertIn("/project/mcgowan/.dev-py-write-probe", probes[0][-1])
 
     def test_unwritable_checkout_raises_instead_of_continuing(self):
         # chown can "succeed" and transfer nothing (a stale bind mount); the
@@ -608,12 +687,12 @@ class ContainerRunTests(unittest.TestCase):
         self.reply[0] = 1  # the probe fails
         with redirect_stderr(io.StringIO()):
             with self.assertRaises(dev.CheckoutError):
-                self._reclaim(owner_uid=1001, uid=1001)
+                self._reclaim(owner_uid=1001, uid=0, container_user="1000:1000")
 
     def test_write_probe_only_creates_and_removes_the_probe(self):
         # It must never write an existing file, and its cleanup must never be
         # able to delete anything but the probe itself (a probe that touched
-        # tracked files once left a checkout destroyed).
+        # and `rm -f`ed every tracked file once left a checkout destroyed).
         targets = [Path("/project/mcgowan"), Path("/project")]
         script = dev._container_write_probe_script(
             Path("/project/.probe"), targets
@@ -638,22 +717,30 @@ class ContainerRunTests(unittest.TestCase):
         )
 
     def test_checkout_owned_by_the_container_user_needs_no_chown(self):
-        # A mount the container user owns cannot be chowned by us, but needs
-        # no chown: the write probe decides. Never fail here.
-        self._reclaim(owner_uid=dev.CONTAINER_UID, uid=1001)
+        # A mount the image user owns cannot be chowned by a non-root host
+        # user, but needs no chown: the write probe decides. Never fail here.
+        self._reclaim(owner_uid=dev.CONTAINER_UID, uid=1001, container_user="1000:1000")
         self.assertEqual([cmd for cmd, _ in self.calls if cmd[0] == "find"], [])
         self.assertEqual(len(self.calls), 1)  # just the probe
 
-    def test_compose_run_reclaims_the_checkout_before_a_build(self):
-        # The CI shape: the host user owns the checkout (uid 1001), the
-        # container is 1000, so the chown runs first and the probe verifies it.
+    def test_compose_run_runs_as_the_host_user(self):
+        # The GitHub-runner shape (uid 1001 owning the checkout): the
+        # container runs as that user, so nothing is chowned and only the
+        # write probe runs before the real command.
         with self._checkout(owner_uid=1001, uid=1001):
-            with redirect_stderr(io.StringIO()):
-                self.assertEqual(dev.compose_run(["dev.py", "format"]), 0)
-        finds = [cmd for cmd, _ in self.calls if cmd[0] == "find"]
-        self.assertEqual(len(finds), 1)
-        self.assertIn("compose", self.calls[1][0])  # probe, before the real run
-        self.assertEqual(self.calls[-1][0][-2:], ["dev.py", "format"])
+            self.assertEqual(dev.compose_run(["dev.py", "format"]), 0)
+        self.assertEqual([cmd for cmd, _ in self.calls if cmd[0] == "find"], [])
+        self.assertEqual(len(self.calls), 2)  # probe, then the real run
+        self.assertIn("touch ", self.calls[0][0][-1])
+        # A uid the image does not know gets the command through a shell that
+        # sources the ESP-IDF environment first (see `_run_command`).
+        self.assertEqual(
+            self.calls[-1][0],
+            [
+                "docker", "compose", "run", "--user", "1001:1001", "--rm",
+                "dev", "-c", f". {dev.IDF_EXPORT} dev.py format",
+            ],
+        )
 
     def test_compose_run_skips_the_chown_when_not_writing(self):
         # A checkout the container user owns: nothing to chown.
@@ -666,7 +753,7 @@ class ContainerRunTests(unittest.TestCase):
     def test_compose_run_fails_before_building_an_unwritable_checkout(self):
         # The container cannot write the mount: never start the build.
         self.reply[0] = 1  # the probe container exits non-zero
-        with self._checkout(owner_uid=dev.CONTAINER_UID, uid=1001):
+        with self._checkout(owner_uid=1001, uid=1001):
             with redirect_stderr(io.StringIO()) as err:
                 self.assertEqual(dev.compose_run(["dev.py", "build"]), 1)
         self.assertIn("cannot write the project mount", err.getvalue())
