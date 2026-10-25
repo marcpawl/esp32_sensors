@@ -334,6 +334,61 @@ class BuildProjectTests(unittest.TestCase):
         )
 
 
+class DevImageTests(unittest.TestCase):
+    """The dev image is pulled (prebuilt), not rebuilt on every machine.
+
+    `docker-compose.yml` pins the prebuilt image as the `dev` service's
+    `image:`; the `build:` section stays so the image can still be rebuilt from
+    the committed Dockerfile. `dev.py` exposes only `pull` — there is no
+    `image` (build) command in the normal workflow.
+    """
+
+    def setUp(self):
+        self.compose = (dev.REPO_ROOT / "docker-compose.yml").read_text()
+
+    def test_pinned_image_is_the_prebuilt_registry_image(self):
+        self.assertEqual(dev.DEV_IMAGE, "marcpawl/esp-idf:20261025")
+
+    def test_compose_service_uses_the_pinned_image(self):
+        self.assertIn(f"image: {dev.DEV_IMAGE}", self.compose)
+
+    def test_compose_still_keeps_the_dockerfile_build(self):
+        # Rebuilding must remain possible from the committed Dockerfile.
+        self.assertTrue((dev.REPO_ROOT / "Dockerfile").is_file())
+        self.assertIn("build:", self.compose)
+        self.assertIn("dockerfile: Dockerfile", self.compose)
+
+    def test_local_rebuild_tag_differs_from_the_pinned_image(self):
+        # A developer's own rebuild must never masquerade as the shared image.
+        self.assertNotEqual(dev.LOCAL_IMAGE, dev.DEV_IMAGE)
+
+    def test_pull_is_registered_and_build_is_not(self):
+        self.assertIs(dev.COMMANDS.get("pull"), dev.cmd_pull)
+        self.assertNotIn("image", dev.COMMANDS)
+
+    def test_pull_pulls_the_pinned_image(self):
+        calls = []
+        original_run, original_in_container = dev.run, dev.is_in_container
+        dev.run = lambda cmd, cwd=dev.REPO_ROOT: calls.append(list(cmd)) or 0
+        dev.is_in_container = lambda: False
+        try:
+            self.assertEqual(dev.cmd_pull(), 0)
+        finally:
+            dev.run, dev.is_in_container = original_run, original_in_container
+        self.assertEqual(calls, [["docker", "pull", dev.DEV_IMAGE]])
+
+    def test_pull_is_refused_inside_the_container(self):
+        original_in_container = dev.is_in_container
+        dev.is_in_container = lambda: True
+        err = io.StringIO()
+        try:
+            with redirect_stderr(err):
+                self.assertEqual(dev.cmd_pull(), 1)
+        finally:
+            dev.is_in_container = original_in_container
+        self.assertIn("container", err.getvalue())
+
+
 class GitHooksInstallationTests(unittest.TestCase):
     """`install-hooks` invariants: the tracked hook is present and active.
 
@@ -458,6 +513,22 @@ class SelfCheckModuleTests(unittest.TestCase):
         # From the repo root, `scripts/test_dev.py` must exist.
         expected = dev.REPO_ROOT / "scripts" / "test_dev.py"
         self.assertTrue(os.path.isfile(expected))
+
+    def test_self_check_runs_on_the_host_without_docker(self):
+        # CI runs `dev.py self-check` on a fresh runner (before any container
+        # exists), so it must never hop into the container; it just runs
+        # `python3 -m unittest <SELF_CHECK_MODULE>` from the repo root.
+        calls = []
+        original_run = dev.run
+        dev.run = lambda cmd, cwd=dev.REPO_ROOT: calls.append(list(cmd)) or 0
+        try:
+            self.assertEqual(dev.cmd_self_check(), 0)
+        finally:
+            dev.run = original_run
+        self.assertEqual(
+            calls,
+            [["python3", "-m", "unittest", "-v", dev.SELF_CHECK_MODULE]],
+        )
 
 
 if __name__ == "__main__":

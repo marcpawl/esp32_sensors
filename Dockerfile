@@ -18,6 +18,15 @@
 # Project tooling added on top of the base image:
 #   - GitHub CLI (`gh`) from GitHub's official apt repository.
 #   - PyGithub (`import github`) in the ESP-IDF Python venv.
+#   - esp-clang (`clang-format` / `clang-tidy`).
+#
+# NOTE: this image is normally NOT built locally. It is prebuilt and published
+# as `marcpawl/esp-idf:YYYYMMDD`, and docker-compose.yml pins that tag as the
+# `dev` service image, so developers and CI just pull it
+# (`./scripts/dev.py pull`). Change this file only when the image itself must
+# change; then build, publish under a NEW date-stamped tag (never move an
+# existing tag) and bump the pin in docker-compose.yml + scripts/dev.py
+# (DEV_IMAGE). See Developer.md, "Updating / publishing the dev image".
 
 FROM espressif/idf:release-v6.1
 

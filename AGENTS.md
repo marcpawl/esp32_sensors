@@ -36,7 +36,7 @@ This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its s
 > - **Run mode — scaffolded/stubbed.** Real: boot self-test LEDs, battery read + hysteresis, sensor read with cached ROM IDs (first-boot scan), sample append to the RTC buffer, deep sleep. **Stubbed:** Wi-Fi station connect + cached fast-reconnect (§3.9), batch upload + payload wire-out (§9, payload is formatted and logged but not sent), exponential backoff (§3.7).
 > - **Host unit tests.** `test/` and `espidf-cpp-test/` build for the ESP-IDF `linux` target (Unity) and run via `scripts/dev.py test` (alias of `test-linux` / `build-espidf-cpp-test`). On-target tests for hardware-dependent code are planned.
 
-> **Toolchain note:** The host's locally installed ESP-IDF is **v6.1** with **Xtensa GCC 15.2.0** (`esp-15.2.0_20251204`), which matches the pinned Docker image `espressif/idf:release-v6.1` exactly. Keep both in sync: if you upgrade the host toolchain, update the pin in `Dockerfile`/`docker-compose.yml` and this document.
+> **Toolchain note:** The host's locally installed ESP-IDF is **v6.1** with **Xtensa GCC 15.2.0** (`esp-15.2.0_20251204`), which matches the pinned Docker image `marcpawl/esp-idf:20261025` (built on `espressif/idf:release-v6.1`) exactly. Keep both in sync: if you upgrade the host toolchain, change the base image in `Dockerfile`, publish a new image under a **new** date-stamped tag (never move an existing tag), and bump the pin in `docker-compose.yml` + `scripts/dev.py` (`DEV_IMAGE`) and this document.
 
 ## Architecture Overview
 
@@ -135,7 +135,7 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 - `CMakeLists.txt` (root) — the generator-agnostic aggregator: one prefixed target per subproject invoking `idf.py -C <sub> -B <sub>/<build-dir>`. `-DSUBPROJECTS="mcgowan;test;espidf-cpp-test;donny"` (default: all) selects what is built.
 - `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash environment. Extend these (not ad-hoc `docker run`) when adding tooling. The compose `dev` service is also the target of the Dev Container (see below).
 - `.devcontainer/devcontainer.json` — the CLion / VS Code **Dev Container** definition. It **reuses the compose `dev` service** (it does not define its own image), so CLion builds/starts the same container the CLI uses. Edit `docker-compose.yml` for image/mount/user changes; edit `devcontainer.json` only for IDE-level wiring.
-- `scripts/dev.py` — the single container task runner (`build`, `flash`, `monitor`, `menuconfig`, `test`, `test-linux`, `self-check`, `format`, `format-check`, `format-check-staged`, `install-hooks`, `shell`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. `shell` is the preferred way to run a container command from the host: with no arguments it opens an interactive login shell, and with arguments it runs them in the container (e.g. `./scripts/dev.py shell ls -1d /`). The pre-commit hook (`.githooks/pre-commit`) delegates its check to `scripts/dev.py format-check-staged`. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
+- `scripts/dev.py` — the single container task runner (`pull`, `build`, `flash`, `monitor`, `menuconfig`, `test`, `test-linux`, `self-check`, `format`, `format-check`, `format-check-staged`, `install-hooks`, `shell`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. `shell` is the preferred way to run a container command from the host: with no arguments it opens an interactive login shell, and with arguments it runs them in the container (e.g. `./scripts/dev.py shell ls -1d /`). The pre-commit hook (`.githooks/pre-commit`) delegates its check to `scripts/dev.py format-check-staged`. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
 - `scripts/test_dev.py` — host-side unit tests for `dev.py` itself (stdlib `unittest`, run by `scripts/dev.py self-check`). Imports `dev.py` in-process and covers its pure helpers — chiefly the command line `shell` builds (so shell syntax like pipes/semicolons is passed through verbatim) and `shell -C` path resolution.
 - `scripts/dev.py-completion.bash` — bash tab-completion for `scripts/dev.py`. Source it to complete subcommands (e.g. `./scripts/dev.py form<TAB>` → `format`, `format-check`, `format-check-staged`). It asks `dev.py complete <prefix>` for candidates, so the command list is defined in exactly one place.
 - `.idea/cmake.xml` / `.idea/runConfigurations/*.xml` — **committed** shared CLion configuration. `cmake.xml` defines the CMake profile used inside the Dev Container; the run configurations drive the build, test, format, flash, and shell tasks (six via `python3 scripts/dev.py`, one native CMake config for build/refactor). `.idea/workspace.xml` (local, git-ignored) holds per-machine state.
@@ -306,15 +306,17 @@ extern "C" void app_main(void);
 
 ### Development environment setup
 
-All builds run inside the official ESP-IDF Docker image to guarantee a reproducible toolchain (ESP-IDF v6.1, Xtensa GCC 15.2.0, CMake, Ninja, Python venv). The environment is defined by the committed `Dockerfile` + `docker-compose.yml`:
+All builds run inside the prebuilt ESP-IDF Docker image to guarantee a reproducible toolchain (ESP-IDF v6.1, Xtensa GCC 15.2.0, CMake, Ninja, Python venv). The image (`marcpawl/esp-idf:20261025`) is pinned in `docker-compose.yml`, never moves, and is the same image CI pulls, so there is nothing to build locally:
 
 ```bash
-# From the repository root, build the dev image (first time or after Dockerfile edits)
-docker compose build
+# From the repository root, pull the pinned dev image (first time, or to refresh)
+./scripts/dev.py pull       # == docker pull marcpawl/esp-idf:20261025
 
 # Interactive shell with the ESP-IDF environment auto-sourced
 docker compose run --rm dev
 ```
+
+Only rebuild when the `Dockerfile` itself changes: `docker compose build` (rebuilds and overwrites the locally cached pinned tag), then publish a **new** date-stamped tag and bump the pin in `docker-compose.yml` + `scripts/dev.py` (`DEV_IMAGE`). See `Developer.md` ("Updating / publishing the dev image").
 
 > **Preferred way to run a command in the container from the host.**
 > Use `./scripts/dev.py shell <command> [args...]` instead of ad-hoc
@@ -347,7 +349,7 @@ necessary") and the toolchain, CMake, Ninja, and the ESP-IDF Python venv all run
   it never defines its own image).
 - **Connect:** open the repo in CLion and accept the Dev Container prompt, or use
   *Remote Development → Dev Containers → docker-compose.yml → `dev`*. CLion
-  (re)builds the image if the `Dockerfile` changed and starts the service on demand.
+  pulls the pinned image (or uses the local copy) and starts the service on demand.
 - **Toolchain/CMake:** select the container as the remote host (SSH into the Dev
   Container). CLion configures and builds under its **own** CMake build
   directory, `/project/cmake-build-esp32s3` (from `.idea/cmake.xml`), so the IDE

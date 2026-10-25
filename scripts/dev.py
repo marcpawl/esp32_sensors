@@ -9,7 +9,7 @@
 # specifics live in one place.
 #
 # Usage:
-#   scripts/dev.py [image|build|build-espidf-cpp-test|flash|monitor|\
+#   scripts/dev.py [pull|build|build-espidf-cpp-test|flash|monitor|\
 #                   menuconfig|test|test-linux|self-check|format|\
 #                   format-check|format-check-staged|install-hooks|shell]
 #   scripts/dev.py --help        # full help, including per-command details
@@ -49,8 +49,13 @@ ROOTS = (
 )
 EXTENSIONS = (".cpp", ".hpp", ".h", ".cc", ".cxx")
 
-# Docker dev image that ships the pinned clang-format version.
-DEV_IMAGE = "esp32-sensors-dev:latest"
+# Prebuilt Docker dev image that ships the pinned clang-format version. It is
+# the `image:` of the `dev` service in docker-compose.yml and is normally
+# pulled, not built (`dev.py pull`). Bump the date-stamped tag together with
+# docker-compose.yml when the Dockerfile changes. A plain `local` tag is used
+# for a developer's own rebuild, so these two are never confused.
+DEV_IMAGE = "marcpawl/esp-idf:20261025"
+LOCAL_IMAGE = "esp32-sensors-dev:local"
 
 FORMAT_ARGS = ("--dry-run", "--Werror")
 
@@ -191,12 +196,12 @@ def git(*args: str) -> subprocess.CompletedProcess:
         text=True,
     )
 
-def cmd_image() -> int:
-    """Build the docker image"""
+def cmd_pull() -> int:
+    """Pull the pinned prebuilt dev image from the registry."""
     if is_in_container():
-        print("Image cannot be built while in container", file=sys.stderr)
+        print("Image cannot be pulled while in container", file=sys.stderr)
         return 1
-    return run(["docker", "compose", "build"])
+    return run(["docker", "pull", DEV_IMAGE])
 
 def _idf(project: str, build_dir: str, *args: str) -> list[str]:
     """`idf.py` argv for a subproject: run in its directory with its own build.
@@ -569,7 +574,7 @@ def cmd_format_check_staged() -> int:
 
 
 COMMANDS = {
-    "image": cmd_image,
+    "pull": cmd_pull,
     "build": cmd_build,
     "build-espidf-cpp-test": cmd_build_espidf_cpp_test,
     "flash": cmd_flash,

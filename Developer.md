@@ -48,10 +48,16 @@ $ esptool --port /dev/ttyACM0
 
 ## Setup the Docker Environment
 
-Build the image and start the container:
+The development container uses the **prebuilt** image
+`marcpawl/esp-idf:20261025` (ESP-IDF v6.1 plus the project tooling: gh,
+PyGithub, esp-clang). The tag is pinned in `docker-compose.yml`, is never
+moved, and is the same image CI pulls, so there is nothing to build on a
+fresh machine — just pull it.
+
+Pull the image and start the container:
 
 ```console
-$ ./scripts/dev.py image
+$ ./scripts/dev.py pull
 ...
 $ docker compose up -d
 ...
@@ -82,6 +88,47 @@ $ ./scripts/dev.py shell -C mcgowan idf.py -B build_esp32s3 fullclean
 $ ./scripts/dev.py shell -C mcgowan idf.py -B build_esp32s3 set-target esp32s3
 $
 ```
+
+### Updating / publishing the dev image
+
+The `Dockerfile` is kept so the image can still be rebuilt, but a rebuild is
+**not** part of the normal workflow. When the `Dockerfile` changes (or the
+base ESP-IDF image moves), publish a new image under a **new** date-stamped
+tag — never move an existing tag, since CI and every developer pin it:
+
+```console
+# 1. Build locally from the committed Dockerfile.
+$ docker build \
+    --build-arg UID=1000 --build-arg GID=1000 --build-arg DIALOUT_GID=20 \
+    -t marcpawl/esp-idf:YYYYMMDD .
+
+# 2. Sanity-check it (build, tests, format inside the container).
+$ ...
+
+# 3. Publish, then bump the tag in exactly two places:
+#      docker-compose.yml  (image: ...)
+#      scripts/dev.py      (DEV_IMAGE)
+$ docker push marcpawl/esp-idf:YYYYMMDD
+```
+
+`scripts/test_dev.py` asserts that `DEV_IMAGE` and the compose `image:` agree,
+so `./scripts/dev.py self-check` catches a half-done bump.
+
+To try a Dockerfile change without touching the pinned image, build it under a
+throw-away tag and run it directly with the compose service's mounts:
+
+```console
+$ docker build -t esp32-sensors-dev:local .
+$ docker run --rm -it --init -v "$PWD:/project" -v /dev:/dev \
+    -u "$(id -u):$(id -g)" --group-add "$(getent group dialout | cut -d: -f3)" \
+    esp32-sensors-dev:local bash -l
+```
+
+(`docker compose build` also works, but it overwrites the locally cached copy
+of the pinned tag, so `docker compose pull` afterwards to restore it.)
+
+The image is built for UID/GID 1000. On a host with different IDs,
+`scripts/dev.py` already runs containers with `--user "$(id -u):$(id -g)"`.
 
 ## CLion
 
@@ -117,7 +164,8 @@ officially supported. Configure it under **Settings | Build, Execution,
 Deployment | Toolchains → Add → Docker**.
 
 - Point CLion at the standard Docker socket (`unix:///var/run/docker.sock`).
-- Select the `espressif/idf:release-v6.1` image.
+- Select the pinned dev image `marcpawl/esp-idf:20261025` (the one
+  `docker-compose.yml` uses; pull it first with `./scripts/dev.py pull`).
 - CLion will build and run commands inside the container transparently.
 
 **ESP-IDF environment in CLion:** Inside the Docker container, ESP-IDF's
