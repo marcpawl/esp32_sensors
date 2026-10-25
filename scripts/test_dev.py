@@ -389,6 +389,88 @@ class DevImageTests(unittest.TestCase):
         self.assertIn("container", err.getvalue())
 
 
+class ContainerRunTests(unittest.TestCase):
+    """`compose_run` starts the container as a user that can write its $HOME.
+
+    Regression for the CI failure: GitHub runners use uid 1001, `dev.py`
+    passed that through as `--user 1001:1001`, and the image's $HOME
+    (`/home/dev`, owned by 1000) was then unwritable, so ccache died with
+    "ccache: error: Permission denied" and git rejected the root-owned IDF
+    tree as "dubious ownership".
+    """
+
+    def setUp(self):
+        self.calls = []
+        self._original_run = dev.run
+
+        def fake_run(cmd, cwd=dev.REPO_ROOT, env=None):
+            self.calls.append((list(cmd), dict(env or {})))
+            return 0
+
+        dev.run = fake_run
+
+    def tearDown(self):
+        dev.run = self._original_run
+
+    def test_matching_host_user_is_used_as_is(self):
+        self.assertEqual(
+            dev._container_user(dev.CONTAINER_UID, dev.CONTAINER_GID),
+            f"{dev.CONTAINER_UID}:{dev.CONTAINER_GID}",
+        )
+
+    def test_other_host_user_runs_as_the_image_user(self):
+        # e.g. the GitHub runner's uid 1001 must not be passed through.
+        self.assertEqual(
+            dev._container_user(1001, 1001),
+            f"{dev.CONTAINER_UID}:{dev.CONTAINER_GID}",
+        )
+        self.assertEqual(
+            dev._container_user(0, 0),
+            f"{dev.CONTAINER_UID}:{dev.CONTAINER_GID}",
+        )
+
+    def test_environment_pins_a_writable_home_and_ccache(self):
+        env = dev._container_environment("1000:1000", {})
+        self.assertEqual(env["HOME"], dev.CONTAINER_HOME)
+        self.assertTrue(env["CCACHE_DIR"].startswith(dev.CONTAINER_HOME + "/"))
+        self.assertEqual(
+            env["CCACHE_DIR"], f"{dev.CONTAINER_HOME}/{dev.CCACHE_DIR}"
+        )
+
+    def test_environment_trusts_only_the_idf_tree(self):
+        # Trusting `*` would hide a genuinely bad project checkout.
+        env = dev._container_environment("1000:1000", {})
+        self.assertEqual(env["GIT_CONFIG_VALUE_0"], dev.IDF_SAFE_DIRECTORY)
+        self.assertEqual(env["GIT_CONFIG_COUNT"], "1")
+        self.assertNotEqual(env["GIT_CONFIG_VALUE_0"], "*")
+
+    def test_environment_does_not_mutate_the_base(self):
+        base = {"PATH": "/usr/bin"}
+        dev._container_environment("1000:1000", base)
+        self.assertEqual(base, {"PATH": "/usr/bin"})
+
+    def test_compose_run_passes_user_and_environment(self):
+        self.assertEqual(dev.compose_run(["dev.py", "build"]), 0)
+        cmd, env = self.calls[0]
+        self.assertEqual(
+            cmd[:6],
+            ["docker", "compose", "run", "--user",
+             f"{dev.CONTAINER_UID}:{dev.CONTAINER_GID}", "--rm"],
+        )
+        self.assertEqual(cmd[6:], ["dev", "dev.py", "build"])
+        self.assertEqual(env["HOME"], dev.CONTAINER_HOME)
+        self.assertEqual(env["GIT_CONFIG_VALUE_0"], dev.IDF_SAFE_DIRECTORY)
+
+    def test_dockerfile_image_carries_the_same_safety_net(self):
+        # Direct `idf.py` use (docs, CLion) bypasses dev.py, so the image must
+        # pin the same HOME/CCACHE_DIR/safe.directory.
+        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        self.assertIn("safe.directory /opt/esp/idf", dockerfile)
+        self.assertIn("CCACHE_DIR=/home/${USERNAME}/.cache/ccache", dockerfile)
+        self.assertNotIn("safe.directory '*'", dockerfile)
+        self.assertNotIn('safe.directory "*"', dockerfile)
+
+
 class GitHooksInstallationTests(unittest.TestCase):
     """`install-hooks` invariants: the tracked hook is present and active.
 

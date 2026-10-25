@@ -86,7 +86,7 @@ esp32_sensors/
 ├── test/                # Host-based unit tests subproject (IDF `linux`, Unity)
 ├── espidf-cpp-test/     # Host tests for components/espidf_cpp (IDF `linux`, Unity)
 ├── donny/               # Linux-emulated application (IDF `linux`, hal_stub)
-├── Dockerfile           # Dev container: ESP-IDF v6.1 + non-root host-mapped user
+├── Dockerfile           # Dev container: ESP-IDF v6.1 + non-root user (UID 1000)
 ├── docker-compose.yml   # `dev` service with serial (/dev) passthrough
 ├── .devcontainer/       # CLion / VS Code Dev Container definition (reuses compose)
 ├── scripts/dev.py       # Container task runner (build/flash/test/format/shell)
@@ -332,7 +332,30 @@ Only rebuild when the `Dockerfile` itself changes: `docker compose build` (rebui
 > ./scripts/dev.py shell "echo hi | wc -l"   # shell syntax works too
 > ```
 
-The container user is mapped to your host UID/GID, so build artifacts are not root-owned, and the `dialout` group is joined for serial access. Inside the container, ESP-IDF is already on the environment; if needed, source it manually:
+**Container user.** The container always runs as UID/GID **1000:1000** — the
+user baked into the published image (`marcpawl/esp-idf:20261025`), which owns
+`/home/dev` and the ESP-IDF tree. Never pass your host UID/GID through: on a
+host whose UID differs (e.g. CI runners use 1001) the container user has no
+passwd entry, so `HOME` falls back to `/`, and `ccache` then fails with
+`Permission denied`. `scripts/dev.py` refuses to do that and prints a warning
+when your host IDs differ.
+
+Because the container user is fixed, `scripts/dev.py` also pins the environment
+the toolchain needs:
+
+- `HOME=/home/dev` and `CCACHE_DIR=/home/dev/.cache/ccache` — writable, so
+  `ccache` (and anything else keyed off `HOME`) works.
+- `GIT_CONFIG_KEY_0=safe.directory` / `GIT_CONFIG_VALUE_0=/opt/esp/idf` —
+  `/opt/esp/idf` is root-owned, so `git` (used by `idf.py` for component
+  submodules) would otherwise abort with *dubious ownership*. Only the IDF tree
+  is trusted, **not** `*`, so a bad project checkout is still reported.
+
+Build artifacts under the bind-mounted `/project` are therefore owned by UID
+1000 even when your host UID differs, and the `dialout` group is joined for
+serial access. The `Dockerfile` sets the same `HOME`, `CCACHE_DIR`, and
+`safe.directory` so a shell started directly via `docker compose run` (or CLion)
+behaves identically. Inside the container, ESP-IDF is already on the
+environment; if needed, source it manually:
 
 ```bash
 . $IDF_PATH/export.sh
@@ -431,7 +454,7 @@ enacted on the host.
 |both|format-check-staged|Check if staged code is formatted, non-zero exit if anything is unformatted |
 |both|shell|Run a bash command in the container (arguments after `shell` are executed); with no arguments, an interactive login shell|
 |both|complete|Print subcommands matching a prefix (internal; used by bash completion)|
-|host|image|Create the docker image|
+|host|pull|Pull the pinned dev image (`docker pull marcpawl/esp-idf:20261025`)|
 |host|install-hooks|install git commit hooks|
 
 ### Shell completion

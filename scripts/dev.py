@@ -57,6 +57,29 @@ EXTENSIONS = (".cpp", ".hpp", ".h", ".cc", ".cxx")
 DEV_IMAGE = "marcpawl/esp-idf:20261025"
 LOCAL_IMAGE = "esp32-sensors-dev:local"
 
+# The container user, fixed at image build time (Dockerfile ARG defaults). The
+# prebuilt image's files are owned by this UID/GID and its home directory is
+# /home/dev, so a container running as anyone else (e.g. a CI runner whose
+# build user has some other UID) cannot write to $HOME/.cache — which breaks
+# ccache ("ccache: error: Permission denied") — and git refuses to read the
+# root-owned ESP-IDF tree ("dubious ownership").
+CONTAINER_UID = 1000
+CONTAINER_GID = 1000
+CONTAINER_HOME = "/home/dev"
+
+# Root under which the project is mounted inside the dev container.
+CONTAINER_PROJECT_ROOT = "/project"
+
+# The ESP-IDF install inside the image is owned by root, while the container
+# user is not, so git rejects it as "dubious ownership" (the ESP-IDF build
+# inspects the submodule trees). Trust exactly that tree — NOT `*`, so a real
+# ownership problem in the project checkout is still reported.
+IDF_SAFE_DIRECTORY = "/opt/esp/idf"
+
+# ccache directory override, relative to a writable home in the container
+# (see `_container_environment`).
+CCACHE_DIR = ".cache/ccache"
+
 FORMAT_ARGS = ("--dry-run", "--Werror")
 
 # The repo root is not an ESP-IDF project; it aggregates the subprojects
@@ -146,18 +169,72 @@ def source_files():
         raise
     
 
-def run(cmd: list[str], cwd: Path | str = REPO_ROOT) -> int:
-    """Run a command in `cwd` (default: repo root), inheriting stdio."""
+def run(
+    cmd: list[str],
+    cwd: Path | str = REPO_ROOT,
+    env: dict[str, str] | None = None,
+) -> int:
+    """Run a command in `cwd` (default: repo root), inheriting stdio.
 
-    # Add UID and GID to environment
-    uid = os.geteuid()
-    gid = os.getegid()
-    env = os.environ.copy()
+    `env` is the *in-container* environment for a `docker compose run` (see
+    `_container_environment`); UID/GID are additionally exported from it so
+    docker-compose.yml can interpolate them.
+    """
+
+    if env is None:
+        env = os.environ.copy()
+    else:
+        env = dict(env)
     env["UID"] = str(os.getuid())
     env["GID"] = str(os.getgid())
 
     print(cmd)
     return subprocess.run(cmd, env=env, cwd=cwd).returncode
+
+
+def _container_user(host_uid: int, host_gid: int) -> str:
+    """The `--user` value for the dev container. Pure (testable).
+
+    The prebuilt image is built for CONTAINER_UID/GID, and its home directory,
+    ccache cache, and tool caches are all owned by that user. Running as any
+    other UID makes $HOME unwritable (ccache: Permission denied) and leaves
+    the process without a passwd entry (getpwuid() failures), so a host user
+    with different IDs runs as the image's user instead — the container only
+    writes to the bind-mounted project, which stays host-owned either way.
+    """
+    if (host_uid, host_gid) == (CONTAINER_UID, CONTAINER_GID):
+        return f"{CONTAINER_UID}:{CONTAINER_GID}"
+    print(
+        f"dev.py: host uid:gid is {host_uid}:{host_gid}; running the container "
+        f"as its own user {CONTAINER_UID}:{CONTAINER_GID} so $HOME "
+        f"({CONTAINER_HOME}) and the caches stay writable.",
+        file=sys.stderr,
+    )
+    return f"{CONTAINER_UID}:{CONTAINER_GID}"
+
+
+def _container_environment(
+    container_user: str, base_env: dict[str, str]
+) -> dict[str, str]:
+    """Environment for a `dev` container started with `container_user`. Pure.
+
+    The container always runs as the image's user (see `_container_user`), so
+    `container_user` only documents the pairing; `HOME` must point at that
+    user's home because it owns it. Without this, `docker compose run --user`
+    can leave `HOME` unusable and ccache falls back to `/.cache` (unwritable).
+    Point HOME at the image user's home and keep ccache there.
+
+    `safe.directory` is the mechanism `git` documents for trusting a tree from
+    the environment; it is set (rather than appended) so the container trusts
+    exactly the IDF tree. `base_env` is not mutated.
+    """
+    env = dict(base_env)
+    env["HOME"] = CONTAINER_HOME
+    env["CCACHE_DIR"] = f"{CONTAINER_HOME}/{CCACHE_DIR}"
+    env["GIT_CONFIG_COUNT"] = "1"
+    env["GIT_CONFIG_KEY_0"] = "safe.directory"
+    env["GIT_CONFIG_VALUE_0"] = IDF_SAFE_DIRECTORY
+    return env
 
 
 def compose_run(args: list[str]) -> int:
@@ -166,13 +243,13 @@ def compose_run(args: list[str]) -> int:
     The service is created on demand and removed afterwards (--rm), matching
     the documented `docker compose run --rm dev <cmd>` workflow.
     """
-    uid = os.geteuid()
-    gid = os.getegid()
+    container_user = _container_user(os.getuid(), os.getgid())
+    environment = _container_environment(container_user, os.environ)
     command = ["docker", "compose", "run",
-               "--user", f"{uid}:{gid}",
-               "--rm", "dev"] 
+               "--user", container_user,
+               "--rm", "dev"]
     command.extend(args)
-    return run(command)
+    return run(command, env=environment)
 
 
 def change_to_container():
@@ -407,17 +484,12 @@ def cmd_install_hooks() -> int:
     return rc
 
 
-# Root under which the project is mounted inside the dev container. The
-# `shell -C DIR` option resolves relative directories against this.
-CONTAINER_PROJECT_ROOT = "/project"
-
-
 def _resolve_container_directory(directory: str) -> str:
     """Resolve a `shell -C DIR` value to an absolute in-container path.
 
     The value is interpreted as a path *in the container*. A relative path is
-    taken relative to the project mount root (e.g. `test` -> `/project/test`);
-    an absolute path is used verbatim.
+    taken relative to the project mount root (`CONTAINER_PROJECT_ROOT`, e.g.
+    `test` -> `/project/test`); an absolute path is used verbatim.
     """
     path = Path(directory)
     if path.is_absolute():

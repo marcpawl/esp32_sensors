@@ -120,15 +120,25 @@ throw-away tag and run it directly with the compose service's mounts:
 ```console
 $ docker build -t esp32-sensors-dev:local .
 $ docker run --rm -it --init -v "$PWD:/project" -v /dev:/dev \
-    -u "$(id -u):$(id -g)" --group-add "$(getent group dialout | cut -d: -f3)" \
+    -u 1000:1000 --group-add "$(getent group dialout | cut -d: -f3)" \
+    -e HOME=/home/dev -e CCACHE_DIR=/home/dev/.cache/ccache \
+    -e GIT_CONFIG_COUNT=1 \
+    -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/opt/esp/idf \
     esp32-sensors-dev:local bash -l
 ```
 
 (`docker compose build` also works, but it overwrites the locally cached copy
 of the pinned tag, so `docker compose pull` afterwards to restore it.)
 
-The image is built for UID/GID 1000. On a host with different IDs,
-`scripts/dev.py` already runs containers with `--user "$(id -u):$(id -g)"`.
+**Run as UID/GID 1000:1000, always.** The image's non-root user owns
+`/home/dev` and the ESP-IDF tree, so it is the only user the toolchain works
+for. Do **not** pass `-u "$(id -u):$(id -g)"`: on a host whose UID differs
+(GitHub Actions runners use 1001) the container user has no passwd entry,
+`HOME` falls back to `/`, and `ccache` fails with `Permission denied`. For the
+same reason the environment must pin `HOME` and `CCACHE_DIR` to the writable
+`/home/dev` tree, and `safe.directory` to `/opt/esp/idf` (root-owned, so `git`
+would otherwise abort with *dubious ownership* when `idf.py` runs git in the
+IDF component submodules). `scripts/dev.py` sets all of these for you.
 
 ## CLion
 

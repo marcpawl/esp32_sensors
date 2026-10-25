@@ -160,6 +160,22 @@ RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/home/${USERN
 
 RUN mkdir -p /tmp/esp_idf_activate_dev && chmod 777 /tmp/esp_idf_activate_dev
 
+# The ESP-IDF tree is owned by root while we run as ${USERNAME}, so git would
+# reject it as "dubious ownership" when the build inspects its submodules.
+# Trust exactly that tree (not `*`, which would hide a bad project checkout).
+# tools/idf.py also inherits this via GIT_CONFIG_* below.
+#
+# HOME and CCACHE_DIR are pinned so the build's ccache (IDF_CCACHE_ENABLE=1)
+# always has a writable cache directory, even when the container is started
+# with `docker compose run --user <some other uid>` (e.g. a CI runner).
+RUN git config --global --add safe.directory /opt/esp/idf
+
+ENV HOME=/home/${USERNAME} \
+    CCACHE_DIR=/home/${USERNAME}/.cache/ccache \
+    GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=safe.directory \
+    GIT_CONFIG_VALUE_0=/opt/esp/idf
+
 USER ${USERNAME}
 
 WORKDIR /project

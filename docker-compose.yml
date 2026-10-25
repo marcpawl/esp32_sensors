@@ -18,9 +18,13 @@
 #       docker compose build
 #   - build under a throw-away tag, leaving the pinned image untouched:
 #       docker build -t esp32-sensors-dev:local .
-# Note: the image is pushed for UID 1000/GID 1000 (the normal case). On a host
-# with other IDs, either rebuild (docker compose build) or run with
-# `docker compose run --user "$(id -u):$(id -g)"`.
+# Note: the image's non-root user is UID 1000/GID 1000, which owns /home/dev
+# and the ESP-IDF tree. Always run as that user — never pass
+# `--user "$(id -u):$(id -g)"`. On a host whose UID differs (e.g. CI runners
+# use 1001) the container user would have no passwd entry, so HOME falls back
+# to `/` and ccache fails with "Permission denied". `scripts/dev.py` therefore
+# always uses `--user 1000:1000` and pins HOME, CCACHE_DIR, and a git
+# `safe.directory` for the root-owned IDF tree.
 #
 # --- CLion / Dev Containers ----------------------------------------------
 # The `dev` service below is also the target of `.devcontainer/devcontainer.json`,
@@ -55,8 +59,9 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        # Match the container user to your host user so build artifacts are
-        # not root-owned. Defaults are sensible for UID/GID 1000.
+        # User baked into the image. Keep at 1000: the image's non-root user
+        # owns /home/dev and the ESP-IDF tree, and dev.py always runs as
+        # 1000:1000 (see the note above).
         UID: "${UID:-1000}"
         GID: "${GID:-1000}"
         DIALOUT_GID: "${DIALOUT_GID:-20}"
