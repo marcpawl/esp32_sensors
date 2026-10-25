@@ -449,9 +449,96 @@ class ContainerRunTests(unittest.TestCase):
         dev._container_environment("1000:1000", base)
         self.assertEqual(base, {"PATH": "/usr/bin"})
 
+    def test_only_writing_commands_write_the_project(self):
+        for name in dev.WRITING_COMMANDS:
+            self.assertTrue(dev._command_writes_project(["dev.py", name]), name)
+        for name in ("pull", "self-check", "shell", "monitor", "complete"):
+            self.assertFalse(
+                dev._command_writes_project(["dev.py", name]), name
+            )
+        self.assertFalse(dev._command_writes_project(["dev.py"]))
+
+    def test_matching_host_user_needs_no_chown(self):
+        # The normal developer case: host uid == container uid, nothing to do.
+        self.assertIsNone(
+            dev._checkout_transfer_command(
+                dev.CONTAINER_UID, dev.CONTAINER_GID, dev.CONTAINER_UID
+            )
+        )
+
+    def test_foreign_checkout_is_given_to_the_container_user(self):
+        # GitHub runners check out as uid 1001; the container writes as 1000.
+        cmd = dev._checkout_transfer_command(1001, 1001, 1001)
+        self.assertEqual(
+            cmd[:4], ["find", str(dev.REPO_ROOT), "-xdev", "-exec"]
+        )
+        self.assertIn(f"{dev.CONTAINER_UID}:1001", cmd)
+        self.assertEqual(cmd[-1], "+")
+
+    def test_chown_from_root_does_not_leave_group_zero(self):
+        # A sudo run must not make the checkout group root.
+        cmd = dev._checkout_transfer_command(0, 0, 0)
+        self.assertIn(f"{dev.CONTAINER_UID}:{dev.CONTAINER_GID}", cmd)
+
+    def test_non_owner_is_told_to_use_sudo(self):
+        # A checkout owned by a third party cannot be handed over; say so
+        # instead of letting CMake fail with a misleading permission error.
+        orig_uid = dev.os.getuid
+        dev.os.getuid = lambda: 1001
+        try:
+            with redirect_stderr(io.StringIO()) as err:
+                rc = dev._reclaim_checkout(dev.REPO_ROOT / "probe", 1002)
+        finally:
+            dev.os.getuid = orig_uid
+        self.assertEqual(rc, 1)
+        self.assertIn("WARNING", err.getvalue())
+        self.assertIn("sudo", err.getvalue())
+        self.assertEqual(self.calls, [])
+
+    def test_owned_checkout_is_reclaimed(self):
+        # The GitHub-runner case: we own it (uid 1001), the container is 1000.
+        orig_uid, orig_gid = dev.os.getuid, dev.os.getgid
+        dev.os.getuid = lambda: 1001
+        dev.os.getgid = lambda: 1001
+        try:
+            with redirect_stderr(io.StringIO()) as err:
+                dev._reclaim_checkout(dev.REPO_ROOT / "probe", 1001)
+        finally:
+            dev.os.getuid, dev.os.getgid = orig_uid, orig_gid
+        self.assertIn("giving the checkout", err.getvalue())
+        self.assertEqual(self.calls[0][0][:4], [
+            "find", str(dev.REPO_ROOT), "-xdev", "-exec",
+        ])
+
+    def test_unwritable_checkout_fails_before_docker_runs(self):
+        # chown can "succeed" in a sandbox and transfer nothing; the write
+        # probe catches that instead of leaving a confusing CMake error.
+        orig_uid, orig_gid = dev.os.getuid, dev.os.getgid
+        dev.os.getuid = lambda: 1001
+        dev.os.getgid = lambda: 1001
+        try:
+            with redirect_stderr(io.StringIO()) as err:
+                rc = dev._reclaim_checkout(dev.REPO_ROOT / "no-such-dir" /
+                                           "probe", 1001)
+        finally:
+            dev.os.getuid, dev.os.getgid = orig_uid, orig_gid
+        if rc == 0:
+            self.skipTest("host can write an arbitrary path")
+        self.assertIn("WARNING", err.getvalue())
+
+    def test_compose_run_reclaims_the_checkout_before_a_build(self):
+        self.assertEqual(dev.compose_run(["dev.py", "format"]), 0)
+        self.assertEqual(dev.compose_run(["dev.py", "shell", "ls"]), 0)
+        finds = [cmd for cmd, _ in self.calls if cmd[0] == "find"]
+        self.assertLessEqual(len(finds), 1)
+        self.assertEqual(self.calls[-1][0][:6], [
+            "docker", "compose", "run", "--user",
+            f"{dev.CONTAINER_UID}:{dev.CONTAINER_GID}", "--rm",
+        ])
+
     def test_compose_run_passes_user_and_environment(self):
         self.assertEqual(dev.compose_run(["dev.py", "build"]), 0)
-        cmd, env = self.calls[0]
+        cmd, env = self.calls[-1]
         self.assertEqual(
             cmd[:6],
             ["docker", "compose", "run", "--user",

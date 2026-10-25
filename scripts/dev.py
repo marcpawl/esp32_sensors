@@ -237,19 +237,135 @@ def _container_environment(
     return env
 
 
+def _checkout_owner_uid() -> int:
+    """UID that owns the repo checkout (the seam `_reclaim_checkout` uses)."""
+    return REPO_ROOT.stat().st_uid
+
+
+def _reclaim_checkout(probe: Path, owner_uid: int | None = None) -> int:
+    """Make the project mount writable by the container user (host side).
+
+    The container runs as CONTAINER_UID/GID (see `_container_user`), and CMake
+    creates its build tree in the bind-mounted project, so the checkout must
+    be *owned* by that user: containers without a user namespace cannot write
+    to another user's directory however generous its mode bits are (CMake then
+    fails with "Unable to (re)create the private pkgRedirects directory").
+    A normal developer host already uses that UID, so this is a no-op there;
+    it matters where the checkout belongs to someone else — e.g. a GitHub
+    Actions runner checks out as UID 1001.
+
+    Ownership is only handed over when it is safe: the host user must be able
+    to chown the checkout (root, or already its owner). Otherwise an explicit
+    warning says what to do. Returns 0 when the container can write `probe`,
+    else 1.
+    """
+    host_uid, host_gid = os.getuid(), os.getgid()
+    if owner_uid is None:
+        owner_uid = _checkout_owner_uid()
+    if _checkout_transfer_command(host_uid, host_gid, owner_uid) is None:
+        return 0
+    if host_uid != 0 and owner_uid != host_uid:
+        print(
+            f"dev.py: WARNING: {REPO_ROOT} is owned by uid {owner_uid}, not "
+            f"by you (uid {host_uid}), so the container user (uid "
+            f"{CONTAINER_UID}) cannot write the build tree. Run this command "
+            "with sudo, or use a checkout you own.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(
+        f"dev.py: host uid:gid is {host_uid}:{host_gid}; giving the checkout "
+        f"to the container user {CONTAINER_UID}:{CONTAINER_GID} so its build "
+        "tree is writable.",
+        file=sys.stderr,
+    )
+    rc = run(_checkout_transfer_command(host_uid, host_gid, owner_uid))
+    if rc != 0:
+        return rc
+
+    # Verify rather than assume: a sandboxed environment can make chown report
+    # success without transferring anything. Writing the probe is exactly what
+    # the container will do (create CMake's build tree), so probe that instead
+    # of trusting the exit status and leaving a confusing CMake error.
+    try:
+        probe.parent.mkdir(parents=True, exist_ok=True)
+        probe.touch()
+        probe.unlink()
+    except OSError as error:
+        print(
+            f"dev.py: WARNING: could not write {probe} after chowning the "
+            f"checkout ({error}). The container user (uid {CONTAINER_UID}) "
+            "will not be able to create the build tree.",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+def _checkout_transfer_command(
+    host_uid: int, host_gid: int, owner_uid: int
+) -> list[str] | None:
+    """`chown` the checkout to the container user, or None if unnecessary. Pure.
+
+    Returns None when the host user already is the container user (the normal
+    developer case). Otherwise the host user's own GID is kept as the group,
+    so handing ownership to uid 1000 does not lock the host user out of the
+    files it just gave away.
+    """
+    if host_uid == CONTAINER_UID:
+        return None
+    gid = host_gid if host_gid != 0 else CONTAINER_GID
+    return [
+        "find", str(REPO_ROOT), "-xdev", "-exec",
+        "chown", f"{CONTAINER_UID}:{gid}", "{}", "+",
+    ]
+
+
 def compose_run(args: list[str]) -> int:
     """Run a command inside the `dev` service defined by docker-compose.yml.
 
     The service is created on demand and removed afterwards (--rm), matching
-    the documented `docker compose run --rm dev <cmd>` workflow.
+    the documented `docker compose run --rm dev <cmd>` workflow. Commands that
+    write into the project mount (build, test, format) first make sure the
+    checkout is owned by the container user (see `_reclaim_checkout`).
     """
     container_user = _container_user(os.getuid(), os.getgid())
     environment = _container_environment(container_user, os.environ)
+    if _command_writes_project(args[1:]):
+        rc = _reclaim_checkout(REPO_ROOT / ".dev-py-write-probe")
+        if rc != 0:
+            return rc
     command = ["docker", "compose", "run",
                "--user", container_user,
                "--rm", "dev"]
     command.extend(args)
     return run(command, env=environment)
+
+
+# Commands that write into the bind-mounted project from the container.
+WRITING_COMMANDS = frozenset(
+    {
+        "build",
+        "build-espidf-cpp-test",
+        "test",
+        "test-linux",
+        "format",
+        "format-check",
+        "format-check-staged",
+        "flash",
+        "menuconfig",
+    }
+)
+
+
+def _command_writes_project(args: list[str]) -> bool:
+    """Whether the re-executed `dev.py` command writes into the project. Pure.
+
+    `args` is the argv being re-executed inside the container, i.e.
+    `dev.py` followed by the command name.
+    """
+    return len(args) > 1 and args[1] in WRITING_COMMANDS
 
 
 def change_to_container():

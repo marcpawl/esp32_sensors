@@ -350,6 +350,17 @@ the toolchain needs:
   submodules) would otherwise abort with *dubious ownership*. Only the IDF tree
   is trusted, **not** `*`, so a bad project checkout is still reported.
 
+**Checkout ownership.** CMake writes its build tree inside the bind-mounted
+project, and a container cannot write into another user's directory however
+generous its mode bits are. `dev.py` therefore hands the checkout to the
+container user (`find … -exec chown 1000:$HOST_GID …`) before running a
+command that writes to it (`build`, `test`, `format*`, `flash`, `menuconfig`).
+On a normal host the user is already UID 1000, so nothing happens; on a GitHub
+Actions runner (checkout owned by UID 1001) ownership moves to `1000:1001`, so
+the host user keeps group access. If the checkout belongs to a third party and
+you are not root, `dev.py` fails with an explicit warning instead of letting
+CMake report "Unable to (re)create the private pkgRedirects directory".
+
 Build artifacts under the bind-mounted `/project` are therefore owned by UID
 1000 even when your host UID differs, and the `dialout` group is joined for
 serial access. The `Dockerfile` sets the same `HOME`, `CCACHE_DIR`, and

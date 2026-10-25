@@ -140,6 +140,11 @@ same reason the environment must pin `HOME` and `CCACHE_DIR` to the writable
 would otherwise abort with *dubious ownership* when `idf.py` runs git in the
 IDF component submodules). `scripts/dev.py` sets all of these for you.
 
+It also gives the checkout to `1000:$HOST_GID` before a command that writes
+into it, since the container cannot create its build tree inside a directory
+owned by someone else (CMake: "Unable to (re)create the private pkgRedirects
+directory"). Nothing happens when your host UID is already 1000.
+
 ## CLion
 
 Version: CLion 2026.2

@@ -110,3 +110,7 @@ Thumbs.db
 # Host-side scratch directory bind-mounted as the container /tmp (see
 # docker-compose.yml).
 /tmp/
+
+# Write probe scripts/dev.py creates (and removes) to check that the container
+# user can write the checkout. Only visible if a run is interrupted.
+/.dev-py-write-probe
