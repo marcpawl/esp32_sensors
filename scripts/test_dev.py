@@ -565,16 +565,18 @@ class ContainerRunTests(unittest.TestCase):
         dev._container_environment("1000:1000", base)
         self.assertEqual(base, {"PATH": "/usr/bin"})
 
-    def test_image_user_runs_the_command_as_written(self):
-        # The image user owns the login files, so the entrypoint's shell sets
-        # up ESP-IDF and `args` are the command verbatim.
+    def test_image_user_runs_the_command_through_the_entrypoint(self):
+        # The image user owns the login files, so a login shell has already
+        # set up ESP-IDF; the command still goes through `sh -c` under the
+        # image entrypoint (`CONTAINER_SHELL`), never bare and never through
+        # an entrypoint override.
         self.assertEqual(
             dev._run_command("1000:1000", ["idf.py", "--version"]),
             [
                 "docker", "compose", "run",
                 "--user", "1000:1000",
                 "--rm",
-                "dev", "idf.py", "--version",
+                "dev", *dev.CONTAINER_SHELL, "idf.py --version",
             ],
         )
 
@@ -587,11 +589,56 @@ class ContainerRunTests(unittest.TestCase):
             cmd[:7],
             ["docker", "compose", "run", "--user", "1001:1001", "--rm", "dev"],
         )
-        self.assertEqual(cmd[7], "-c")
+        self.assertEqual(cmd[7:9], dev.CONTAINER_SHELL)
         self.assertEqual(
-            cmd[8],
-            f". {dev.IDF_EXPORT}; idf.py -C mcgowan build",
+            cmd[9],
+            f". {dev.IDF_EXPORT}{dev.COMMAND_SEPARATOR}idf.py -C mcgowan build",
         )
+
+    def test_no_command_overrides_the_image_entrypoint(self):
+        # The image entrypoint (`exec "$@"`) runs what it is given. A
+        # `--entrypoint …` override is not exec'd the same way, so it must
+        # never appear in the argv.
+        for user in ("1000:1000", "1001:1001"):
+            with self.subTest(user=user):
+                cmd = dev._run_command(user, ["dev.py", "build"])
+                self.assertNotIn("--entrypoint", cmd)
+                self.assertIn("dev", cmd)
+                self.assertEqual(cmd[cmd.index("dev") + 1], "sh")
+
+    def test_script_is_an_argument_of_sh_not_of_the_source_command(self):
+        # Regression for the CI exit 127:
+        #   /project/. $IDF_PATH/export.sh; scripts/dev.py build: No such file
+        # Passing `dev -c <script>` *replaces* the image CMD with the arguments
+        # and the entrypoint runs `/bin/sh -c <script>`; `/bin/sh` is dash,
+        # which does not accept arguments after `.`, so `. <export>; <cmd>` was
+        # taken as one file name. With `sh -c <script>` the script is an
+        # argument of `sh`, never an argument of `.`.
+        for user in ("1000:1000", "1001:1001"):
+            for args in (["dev.py", "build"], ["idf.py", "--version"]):
+                with self.subTest(user=user, args=args):
+                    cmd = dev._run_command(user, args)
+                    self.assertEqual(cmd[-2:-1], ["-c"])
+                    self.assertEqual(cmd[-3:-2], ["sh"])
+                    script = cmd[-1]
+                    # `.` must see exactly one argument (the export file) --
+                    # or, for the image's own user, not be used at all (its
+                    # login shell already sourced ESP-IDF).
+                    if user == "1000:1000":
+                        self.assertNotIn(". ", script)
+                    else:
+                        source = script.split(dev.COMMAND_SEPARATOR.strip())[0]
+                        self.assertEqual(source, f". {dev.IDF_EXPORT}")
+
+    def test_write_probe_script_is_an_argument_of_sh(self):
+        # The probe takes the same shape as every other command: without `sh`
+        # the entrypoint would hand the script to dash (see
+        # `test_script_is_an_argument_of_sh_not_of_the_source_command`).
+        self.reply[0] = 0
+        self._reclaim(owner_uid=1001, uid=1001)
+        probe = [cmd for cmd, _ in self.calls if "compose" in cmd][0]
+        self.assertEqual(probe[-3:-1], ["sh", "-c"])
+        self.assertEqual(probe[6:8], ["dev", "sh"])
 
     def test_other_user_script_separates_the_source_from_the_command(self):
         # Regression: `.` treats every following word as an argument to the
@@ -615,7 +662,7 @@ class ContainerRunTests(unittest.TestCase):
         container_user = dev._container_user(0, 0)
         with redirect_stderr(io.StringIO()):
             cmd = dev._run_command(container_user, ["dev.py", "build"])
-        self.assertEqual(cmd[6:], ["dev", "dev.py", "build"])
+        self.assertEqual(cmd[6:], ["dev", *dev.CONTAINER_SHELL, "dev.py build"])
 
     def test_only_writing_commands_write_the_project(self):
         for name in dev.WRITING_COMMANDS:
@@ -741,7 +788,7 @@ class ContainerRunTests(unittest.TestCase):
         self._reclaim(owner_uid=dev.CONTAINER_UID, uid=1001, container_user="1000:1000")
         probe = [cmd for cmd, _ in self.calls if "compose" in cmd][0]
         self.assertNotIn("--entrypoint", probe)
-        self.assertEqual(probe[6:9], ["dev", "sh", "-c"])
+        self.assertEqual(probe[6:], ["dev", *dev.CONTAINER_SHELL, probe[-1]])
 
     def test_compose_run_runs_as_the_host_user(self):
         # The GitHub-runner shape (uid 1001 owning the checkout): the
@@ -758,7 +805,8 @@ class ContainerRunTests(unittest.TestCase):
             self.calls[-1][0],
             [
                 "docker", "compose", "run", "--user", "1001:1001", "--rm",
-                "dev", "-c", f". {dev.IDF_EXPORT}; dev.py format",
+                "dev", *dev.CONTAINER_SHELL,
+                f". {dev.IDF_EXPORT}{dev.COMMAND_SEPARATOR}dev.py format",
             ],
         )
 
@@ -791,7 +839,7 @@ class ContainerRunTests(unittest.TestCase):
             ["docker", "compose", "run", "--user",
              f"{dev.CONTAINER_UID}:{dev.CONTAINER_GID}", "--rm"],
         )
-        self.assertEqual(cmd[6:], ["dev", "dev.py", "build"])
+        self.assertEqual(cmd[6:], ["dev", *dev.CONTAINER_SHELL, "dev.py build"])
         self.assertEqual(env["HOME"], dev.CONTAINER_HOME)
         self.assertEqual(env["GIT_CONFIG_VALUE_0"], dev.IDF_SAFE_DIRECTORY)
 

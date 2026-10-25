@@ -355,12 +355,23 @@ The environment the toolchain needs is therefore chosen per user
   submodules) would otherwise abort with *dubious ownership*. Only the IDF tree
   is trusted, **not** `*`, so a bad project checkout is still reported.
 
-**ESP-IDF environment.** The image's entrypoint execs its argument without a
-shell, and the ESP-IDF environment comes from the login files in the image home
-(`/home/dev/.bashrc` sources `$IDF_PATH/export.sh`). The image user can read
-them, so its command runs as written. A host-user uid cannot read that home, so
-`dev.py` runs the command through `sh -c ". $IDF_PATH/export.sh <command>"`
-(`_run_command`) — otherwise `idf.py` is simply not on `PATH`.
+**ESP-IDF environment.** The image's entrypoint (`/opt/esp/entrypoint.sh`) ends
+with `exec "$@"`, and the ESP-IDF environment comes from the login files in the
+image home (`/home/dev/.bashrc` sources `$IDF_PATH/export.sh`). The image user
+can read them, so its command runs as written. A host-user uid cannot read that
+home, so `dev.py` runs the command through `sh -c` after sourcing the same
+script itself (`_run_command`, `CONTAINER_SHELL`):
+`dev sh -c ". $IDF_PATH/export.sh; <command>"` — otherwise `idf.py` is simply
+not on `PATH`.
+
+The `sh` and the `;` are both load-bearing. `docker compose run dev <args>`
+**replaces** the compose `command:` (`/bin/bash -l`), so the entrypoint runs
+`/bin/sh -c <args>`, and `/bin/sh` in the image is **dash**, which does not
+accept arguments after `.`. Passing `dev -c ". $X; cmd"` (no `sh`) therefore
+made dash source a file literally named `. $X; cmd` and the build died with
+exit 127 (`/project/. $IDF_PATH/export.sh; scripts/dev.py build: No such file
+or directory`). With `sh -c <script>` the script is `sh`'s own argument and the
+remaining words are never parsed by `.`. Never use `--entrypoint`.
 
 **Checkout ownership.** CMake writes its build tree inside the bind-mounted
 project, and a container cannot write into another user's directory however

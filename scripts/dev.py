@@ -93,9 +93,7 @@ IDF_SAFE_DIRECTORY = "/opt/esp/idf"
 CCACHE_DIR = ".cache/ccache"
 
 # The image's ESP-IDF export script, which establishes the environment
-# `idf.py` needs (PATH, IDF_PATH, IDF_PYTHON_ENV_PATH, ...). A container user
-# that cannot read the image's login files must source it explicitly, or
-# `idf.py` is not on PATH.
+# `idf.py` needs (PATH, IDF_PATH, IDF_PYTHON_ENV_PATH, ...).
 IDF_EXPORT = "$IDF_PATH/export.sh"
 
 # How the export script and the actual command are joined into one shell `-c`
@@ -103,6 +101,28 @@ IDF_EXPORT = "$IDF_PATH/export.sh"
 # the script being sourced (`. a b c` sources `a` with arguments `b c`), so
 # `. $X cmd` would look for a script named `$X cmd` and never run the command.
 COMMAND_SEPARATOR = "; "
+
+# The only way to run a command in the container: the image entrypoint, then
+# `sh`, then `-c` and the command. A container user dev.py did not create
+# cannot read the image's login files, which is where the ESP-IDF environment
+# comes from, so the export script is sourced first — the same script those
+# login files source, in the same shell that runs the command.
+#
+# `sh` is required, and the argument list must be exactly `sh -c <script>`:
+#
+#   * Without `sh`, the arguments replace the image's CMD (`/bin/bash -l`,
+#     see docker-compose.yml) and the entrypoint runs `/bin/sh -c <script>`.
+#     `/bin/sh` here is dash, which does not take arguments after `.`, so
+#     dash treated the whole script as the name of the file to source and
+#     failed with exit 127:
+#       /project/. $IDF_PATH/export.sh; scripts/dev.py build: No such file
+#     bash (the image's CMD) accepts arguments after `.`; dash does not.
+#   * With `sh -c <script>` the script is `sh`'s argument, so how the
+#     remaining words are parsed no longer matters.
+#
+# The entrypoint stays the image's own (`exec "$@"`): a `--entrypoint`
+# override is not `exec`'d the same way and must not be used.
+CONTAINER_SHELL = ["sh", "-c"]
 
 FORMAT_ARGS = ("--dry-run", "--Werror")
 
@@ -345,14 +365,13 @@ def _container_write_failure(
     while the build failed.
 
     The probe runs under the image's own entrypoint (`sh -c` as the command,
-    not `--entrypoint`), because compose turns an entrypoint override into a
-    single `exec` argument that is never run as a script (see
-    docker-compose.yml).
+    not `--entrypoint`), with the arguments exactly `dev sh -c <script>` (see
+    `CONTAINER_SHELL`).
     """
     rc = run([
         "docker", "compose", "run", "--rm",
         "--user", container_user,
-        "dev", "sh", "-c",
+        "dev", *CONTAINER_SHELL,
         _container_write_probe_script(probe, targets),
     ])
     if rc == 0:
@@ -498,23 +517,26 @@ def compose_run(args: list[str]) -> int:
 def _run_command(container_user: str, args: list[str]) -> list[str]:
     """The `docker compose run` argv for `args` as `container_user`. Pure.
 
-    The image's own user owns the image home, so its login shell sources
-    `.bashrc` (which sources the ESP-IDF export script) and `args` run as
-    written. A uid the image does not know cannot read that home (it is
-    `750`), so the ESP-IDF environment would silently go missing; such a user
-    sources the export script explicitly, first. `args` are then the shell's
-    child (no `exec`), just as the entrypoint's `exec "$@"` makes them.
+    The command always goes through `sh -c` under the image entrypoint (see
+    `CONTAINER_SHELL`). The image's own user is started by a login shell, which
+    has already sourced the ESP-IDF environment; any other user (the host
+    user, whose uid has no passwd entry in the image) cannot read those login
+    files, so the export script is sourced explicitly first. `args` are then
+    the shell's child (no `exec`), just as the entrypoint's `exec "$@"` makes
+    them.
     """
     uid, _ = _container_uid_gid(container_user)
     head = [
         "docker", "compose", "run",
         "--user", container_user,
         "--rm",
+        "dev", *CONTAINER_SHELL,
     ]
+    command = shlex.join(args)
     if uid == CONTAINER_UID:
-        return [*head, "dev", *args]
-    script = f". {IDF_EXPORT}{COMMAND_SEPARATOR}{shlex.join(args)}"
-    return [*head, "dev", "-c", script]
+        return [*head, command]
+    script = f". {IDF_EXPORT}{COMMAND_SEPARATOR}{command}"
+    return [*head, script]
 
 
 # Commands that write into the bind-mounted project from the container.

@@ -18,13 +18,15 @@
 #       docker compose build
 #   - build under a throw-away tag, leaving the pinned image untouched:
 #       docker build -t esp32-sensors-dev:local .
-# Note: the image's non-root user is UID 1000/GID 1000, which owns /home/dev
-# and the ESP-IDF tree. Always run as that user — never pass
-# `--user "$(id -u):$(id -g)"`. On a host whose UID differs (e.g. CI runners
-# use 1001) the container user would have no passwd entry, so HOME falls back
-# to `/` and ccache fails with "Permission denied". `scripts/dev.py` therefore
-# always uses `--user 1000:1000` and pins HOME, CCACHE_DIR, and a git
-# `safe.directory` for the root-owned IDF tree.
+# Note: the image's non-root user is UID 1000/GID 1000 and owns /home/dev and
+# the ESP-IDF tree. The container runs as the *host* user (`--user
+# "$(id -u):$(id -g)"`), so build artifacts keep the host ownership; when
+# dev.py itself runs as root it uses the image user 1000:1000 instead. On a
+# host whose UID differs from 1000 (e.g. CI runners use 1001) the container
+# user has no passwd entry in the image, so HOME falls back to a directory it
+# cannot use and ccache fails with "Permission denied". `scripts/dev.py`
+# therefore pins HOME, CCACHE_DIR, and a git `safe.directory` for the
+# root-owned IDF tree for whatever user the container runs as.
 #
 # --- CLion / Dev Containers ----------------------------------------------
 # The `dev` service below is also the target of `.devcontainer/devcontainer.json`,
@@ -111,11 +113,13 @@ services:
 
     # No entrypoint override, deliberately. The image runs
     # /opt/esp/entrypoint.sh, which sources the ESP-IDF environment and then
-    # `exec "$@"`. docker-compose override commands (`docker compose run dev
-    # -c "..."`) and `--entrypoint sh` both make that exec a single argument,
-    # so a `-c` script is not run: `exec` looks for a file literally named
-    # `. $IDF_PATH/export.sh; cmd` and fails with exit 127. `docker compose
-    # run` (as dev.py uses it) keeps the image's entrypoint.
+    # `exec "$@"`. `docker compose run dev <args>` *replaces* the CMD above
+    # with <args>, and any further words in a target compose file's `command:`
+    # are appended to them. `scripts/dev.py` therefore always passes exactly
+    # `sh -c <script>` and never `--entrypoint`: without `sh` the entrypoint
+    # would run `/bin/sh -c <script>`, and `/bin/sh` here is dash, which does
+    # not accept arguments after `.` — so `. <export>; <cmd>` was sourced as
+    # a single (nonexistent) file name and failed with exit 127.
 
 volumes:
   idf-bash-history:

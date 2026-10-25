@@ -146,7 +146,16 @@ uid cannot read it, `HOME` would fall back to `/`, and `ccache` would fail with
 (root-owned, so `git` would otherwise abort with *dubious ownership* when
 `idf.py` runs git in the IDF component submodules). Because such a user cannot
 read the image's login files either, the command runs as
-`sh -c ". $IDF_PATH/export.sh <command>"`, or `idf.py` would not be found.
+`sh -c ". $IDF_PATH/export.sh; <command>"`, or `idf.py` would not be found.
+
+The `sh` must be there: `docker compose run dev <args>` replaces the compose
+`command: ["/bin/bash", "-l"]`, so the entrypoint would otherwise run
+`/bin/sh -c <args>` — and `/bin/sh` in the image is **dash**, which does not
+accept arguments after `.`. A bare `dev -c ". $X; cmd"` thus made dash source a
+file named `. $X; cmd` and failed with exit 127
+(`/project/. $IDF_PATH/export.sh; scripts/dev.py build: No such file or
+directory`). The `;` matters for the same reason: `.` takes every following
+word as an argument to the file it sources.
 
 Running `dev.py` as root is the one exception: root's IDs would leave every
 artifact root-owned, so the container then runs as the image's own user
