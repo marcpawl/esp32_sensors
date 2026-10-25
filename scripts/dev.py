@@ -67,8 +67,16 @@ CONTAINER_UID = 1000
 CONTAINER_GID = 1000
 CONTAINER_HOME = "/home/dev"
 
-# Root under which the project is mounted inside the dev container.
+# Root under which the project is mounted inside the dev container, and the
+# host path that mount's *source* is reachable at inside the container (the
+# dev service also mounts the host's `/`, so `/project` is `<HOST_ROOT>/project`
+# there). A container cannot see its own bind-mount source any other way, and
+# only the source has the ownership the container is actually subject to.
 CONTAINER_PROJECT_ROOT = "/project"
+HOST_ROOT = Path("/dev")
+
+# Probe file the container write check creates (and removes) in the checkout.
+WRITE_PROBE = ".dev-py-write-probe"
 
 # The ESP-IDF install inside the image is owned by root, while the container
 # user is not, so git rejects it as "dubious ownership" (the ESP-IDF build
@@ -237,70 +245,148 @@ def _container_environment(
     return env
 
 
-def _checkout_owner_uid() -> int:
-    """UID that owns the repo checkout (the seam `_reclaim_checkout` uses)."""
-    return REPO_ROOT.stat().st_uid
+class CheckoutError(RuntimeError):
+    """The checkout cannot be made writable for the container user."""
 
 
-def _reclaim_checkout(probe: Path, owner_uid: int | None = None) -> int:
+def _tracked_paths() -> list[Path]:
+    """Files and directories git tracks (the seam the ownership checks use).
+
+    CMake writes both the build tree (`build_root/`) and inside existing
+    subproject directories, so both kinds are witnesses of writability.
+    """
+    out = git("ls-files", "--directory", "--no-empty-directory").stdout
+    return [REPO_ROOT / line for line in out.splitlines() if line]
+
+
+def _project_mount(host_root: Path, mount: str) -> Path:
+    """Host directory `mount` (e.g. `/project`) is bind-mounted from. Pure.
+
+    A container cannot see its own bind-mount source, but the sources are all
+    under the host's `/`, which the dev service happens to mount at `/dev`, so
+    the source is the path with `host_root` in front: `/project` becomes
+    `<host_root>/project` on the host.
+    """
+    return host_root / mount.lstrip("/")
+
+
+def _checkout_owner_uid(mount: Path) -> int:
+    """UID that owns the project mount *as the container sees it*.
+
+    A bind mount keeps the owner the directory had when it was mounted (the
+    container cannot change it, and the host's view can be stale), so the
+    ownership must be read through the mount point the container itself sees.
+    """
+    return mount.stat().st_uid
+
+
+def _container_write_probe_script(probe: Path, targets: list[Path]) -> str:
+    """Shell script that must be able to `touch` every target. Pure.
+
+    `probe` and `targets` are paths in the container. Everything is removed
+    again, so the probe leaves no trace and can run on every writing command.
+    """
+    paths = [shlex.quote(path.as_posix()) for path in [*targets, probe]]
+    return f"touch {' '.join(paths)} && rm -f {' '.join(paths)}"
+
+
+def _container_write_failure(
+    probe: Path, targets: list[Path], mount: str
+) -> str | None:
+    """Why a container running as the container user cannot write `targets`.
+
+    Returns None when it can. This runs in a throwaway container because only
+    the kernel can answer "can uid 1000 write here"; the host user's own access
+    says nothing about it, which is how the earlier host-side probe passed
+    while the build failed.
+    """
+    rc = run([
+        "docker", "compose", "run", "--rm",
+        "--user", f"{CONTAINER_UID}:{CONTAINER_GID}",
+        "--entrypoint", "sh", "dev", "-c",
+        _container_write_probe_script(probe, targets),
+    ])
+    if rc == 0:
+        return None
+    return f"the container write probe in {mount} exited {rc}"
+
+
+def _reclaim_checkout(
+    host_root: Path, mount: str, owner_uid: int | None = None
+) -> None:
     """Make the project mount writable by the container user (host side).
 
-    The container runs as CONTAINER_UID/GID (see `_container_user`), and CMake
+    The container runs as CONTAINER_UID/GID (see `_container_user`) and CMake
     creates its build tree in the bind-mounted project, so the checkout must
-    be *owned* by that user: containers without a user namespace cannot write
-    to another user's directory however generous its mode bits are (CMake then
-    fails with "Unable to (re)create the private pkgRedirects directory").
-    A normal developer host already uses that UID, so this is a no-op there;
-    it matters where the checkout belongs to someone else — e.g. a GitHub
-    Actions runner checks out as UID 1001.
+    be *owned* by that user: a container without a user namespace cannot write
+    into another user's directory however generous its mode bits are (CMake
+    then fails with "Unable to (re)create the private pkgRedirects directory").
+    A normal developer host already owns it as that UID, so this is a no-op
+    there; it matters where the checkout belongs to someone else — e.g. a
+    GitHub Actions runner checks out as UID 1001.
+
+    `host_root` is where the host exposes the mount's source (see
+    `_project_mount`) and `mount` the container path (`/project`).
 
     Ownership is only handed over when it is safe: the host user must be able
-    to chown the checkout (root, or already its owner). Otherwise an explicit
-    warning says what to do. Returns 0 when the container can write `probe`,
-    else 1.
+    to chown the checkout (root, or already its owner). A mount owned by the
+    container user (but not by us) cannot be chowned, yet needs no chown
+    either, so it is left alone and left to the write probe below. Anything
+    else raises `CheckoutError` with what to do, rather than letting CMake
+    fail later with a misleading permission error. Failure is always loud:
+    never continue silently and hope the container can write.
+
+    Handing over is *verified*, not assumed: a successful chown proves nothing
+    about the mount (a bind mount that was already mounted elsewhere keeps the
+    stale owner), so a container running as the container user must be able to
+    write both a probe file and the tracked paths in the container's own mount.
     """
     host_uid, host_gid = os.getuid(), os.getgid()
+    targets = [Path(mount) / path.relative_to(REPO_ROOT) for path in _tracked_paths()]
     if owner_uid is None:
-        owner_uid = _checkout_owner_uid()
-    if _checkout_transfer_command(host_uid, host_gid, owner_uid) is None:
-        return 0
-    if host_uid != 0 and owner_uid != host_uid:
+        owner_uid = _checkout_owner_uid(_project_mount(host_root, mount))
+    chown = _checkout_transfer_command(host_uid, host_gid, owner_uid)
+    if chown is not None:
+        if host_uid != 0 and owner_uid != host_uid and owner_uid != CONTAINER_UID:
+            source = _project_mount(host_root, mount)
+            raise CheckoutError(
+                f"{source} is owned by uid {owner_uid}, not by you (uid "
+                f"{host_uid}), so the container user (uid {CONTAINER_UID}) "
+                "cannot write the build tree. Run this command with sudo, or "
+                "use a checkout you own."
+            )
         print(
-            f"dev.py: WARNING: {REPO_ROOT} is owned by uid {owner_uid}, not "
-            f"by you (uid {host_uid}), so the container user (uid "
-            f"{CONTAINER_UID}) cannot write the build tree. Run this command "
-            "with sudo, or use a checkout you own.",
+            f"dev.py: giving the checkout to the container user "
+            f"{CONTAINER_UID}:{_container_gid(host_gid)} so its build tree is "
+            "writable.",
             file=sys.stderr,
         )
-        return 1
+        rc = run(chown)
+        if rc != 0:
+            raise CheckoutError(
+                f"could not give {REPO_ROOT} to uid {CONTAINER_UID}"
+            )
 
-    print(
-        f"dev.py: host uid:gid is {host_uid}:{host_gid}; giving the checkout "
-        f"to the container user {CONTAINER_UID}:{CONTAINER_GID} so its build "
-        "tree is writable.",
-        file=sys.stderr,
-    )
-    rc = run(_checkout_transfer_command(host_uid, host_gid, owner_uid))
-    if rc != 0:
-        return rc
-
-    # Verify rather than assume: a sandboxed environment can make chown report
-    # success without transferring anything. Writing the probe is exactly what
-    # the container will do (create CMake's build tree), so probe that instead
-    # of trusting the exit status and leaving a confusing CMake error.
-    try:
-        probe.parent.mkdir(parents=True, exist_ok=True)
-        probe.touch()
-        probe.unlink()
-    except OSError as error:
-        print(
-            f"dev.py: WARNING: could not write {probe} after chowning the "
-            f"checkout ({error}). The container user (uid {CONTAINER_UID}) "
-            "will not be able to create the build tree.",
-            file=sys.stderr,
+    # Verify with the access the container will actually have, whichever
+    # branch was taken above.
+    probe = Path(mount) / WRITE_PROBE
+    unwritable = _container_write_failure(probe, targets, mount)
+    if unwritable is not None:
+        raise CheckoutError(
+            f"the container user (uid {CONTAINER_UID}) still cannot write "
+            f"the project mount ({unwritable}), so it cannot create the build "
+            f"tree under {mount}. Check that {REPO_ROOT} is not a bind mount "
+            "left over from another owner."
         )
-        return 1
-    return 0
+
+
+def _container_gid(host_gid: int) -> int:
+    """Group the checkout is handed to alongside the container user. Pure.
+
+    The host user's own GID keeps them able to write the files they gave away.
+    Root (GID 0) is never used: it would leave the checkout group-root.
+    """
+    return host_gid if host_gid != 0 else CONTAINER_GID
 
 
 def _checkout_transfer_command(
@@ -308,17 +394,19 @@ def _checkout_transfer_command(
 ) -> list[str] | None:
     """`chown` the checkout to the container user, or None if unnecessary. Pure.
 
-    Returns None when the host user already is the container user (the normal
-    developer case). Otherwise the host user's own GID is kept as the group,
-    so handing ownership to uid 1000 does not lock the host user out of the
-    files it just gave away.
+    Returns None only when the mount already belongs to the container user,
+    which is the normal developer case. A mount owned by someone else must be
+    handed over even when the host user is uid 1000 itself: on a CI runner the
+    checkout belongs to uid 1001, and trusting the host uid alone left the
+    container unable to create `build_root/CMakeFiles/pkgRedirects`. The
+    hand-over keeps the host user's GID as the group, so it does not lock the
+    host user out.
     """
-    if host_uid == CONTAINER_UID:
+    if owner_uid == CONTAINER_UID:
         return None
-    gid = host_gid if host_gid != 0 else CONTAINER_GID
     return [
         "find", str(REPO_ROOT), "-xdev", "-exec",
-        "chown", f"{CONTAINER_UID}:{gid}", "{}", "+",
+        "chown", f"{CONTAINER_UID}:{_container_gid(host_gid)}", "{}", "+",
     ]
 
 
@@ -332,10 +420,12 @@ def compose_run(args: list[str]) -> int:
     """
     container_user = _container_user(os.getuid(), os.getgid())
     environment = _container_environment(container_user, os.environ)
-    if _command_writes_project(args[1:]):
-        rc = _reclaim_checkout(REPO_ROOT / ".dev-py-write-probe")
-        if rc != 0:
-            return rc
+    if _command_writes_project(args):
+        try:
+            _reclaim_checkout(HOST_ROOT, CONTAINER_PROJECT_ROOT)
+        except CheckoutError as error:
+            print(f"dev.py: {error}", file=sys.stderr)
+            return 1
     command = ["docker", "compose", "run",
                "--user", container_user,
                "--rm", "dev"]
@@ -363,7 +453,7 @@ def _command_writes_project(args: list[str]) -> bool:
     """Whether the re-executed `dev.py` command writes into the project. Pure.
 
     `args` is the argv being re-executed inside the container, i.e.
-    `dev.py` followed by the command name.
+    `dev.py` followed by the command name — exactly what `compose_run` gets.
     """
     return len(args) > 1 and args[1] in WRITING_COMMANDS
 

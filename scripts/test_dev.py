@@ -14,13 +14,15 @@ being checked rather than a copy.
 
 from __future__ import annotations
 
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 import io
 import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
 # Make `import dev` work regardless of the caller's cwd: add this script's
 # directory (scripts/) to sys.path, then import the module under test.
@@ -401,16 +403,68 @@ class ContainerRunTests(unittest.TestCase):
 
     def setUp(self):
         self.calls = []
+        self.reply = [0]  # exit status `run` reports (0 == success)
         self._original_run = dev.run
 
         def fake_run(cmd, cwd=dev.REPO_ROOT, env=None):
             self.calls.append((list(cmd), dict(env or {})))
-            return 0
+            return self.reply[0]
 
         dev.run = fake_run
 
     def tearDown(self):
         dev.run = self._original_run
+
+    @contextmanager
+    def _checkout(self, owner_uid: int, uid: int):
+        """A temp project mount owned by `owner_uid`, driven by host `uid`.
+
+        Patches the identity/ownership seams `_reclaim_checkout` reads, so the
+        CI case (a checkout the host user does not own, or a mount whose owner
+        is not the container user) is reproducible without Docker. `owner_uid`
+        is what the *mount* reports (the ownership the container is subject
+        to); the host's own view is deliberately different.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            tracked = root / "mcgowan"
+            tracked.mkdir()
+            (tracked / "fake.cpp").write_text("")
+            mount = root / "project"
+            mount.mkdir()
+            owner = type("Owner", (), {"st_uid": owner_uid})
+            with mock.patch.object(dev, "REPO_ROOT", root), mock.patch.object(
+                dev, "_tracked_paths", return_value=[tracked]
+            ), mock.patch.object(
+                dev, "_project_mount", return_value=mount
+            ), mock.patch.object(
+                Path, "stat", autospec=True, return_value=owner
+            ), mock.patch.object(
+                dev.os, "getuid", return_value=uid
+            ), mock.patch.object(dev.os, "getgid", return_value=uid):
+                yield tmp
+
+    def _reclaim(self, owner_uid: int, uid: int):
+        """Run `_reclaim_checkout` for a temp mount owned by `owner_uid`."""
+        with self._checkout(owner_uid=owner_uid, uid=uid):
+            dev._reclaim_checkout(dev.HOST_ROOT, dev.CONTAINER_PROJECT_ROOT)
+
+    def test_project_mount_maps_the_container_path_through_the_host_root(self):
+        # /project in the container is <HOST_ROOT>/project on the host.
+        self.assertEqual(
+            dev._project_mount(Path("/dev"), "/project"), Path("/dev/project")
+        )
+        self.assertEqual(
+            dev._project_mount(Path("/dev"), "/project/sub"),
+            Path("/dev/project/sub"),
+        )
+
+    def test_owner_is_read_through_the_mount_the_container_sees(self):
+        # The host's own view of the checkout can be stale (a bind mount keeps
+        # the owner it had when it was mounted), so only the mount point counts.
+        with self._checkout(owner_uid=1001, uid=1000):
+            mount = dev._project_mount(dev.HOST_ROOT, dev.CONTAINER_PROJECT_ROOT)
+            self.assertEqual(dev._checkout_owner_uid(mount), 1001)
 
     def test_matching_host_user_is_used_as_is(self):
         self.assertEqual(
@@ -459,7 +513,7 @@ class ContainerRunTests(unittest.TestCase):
         self.assertFalse(dev._command_writes_project(["dev.py"]))
 
     def test_matching_host_user_needs_no_chown(self):
-        # The normal developer case: host uid == container uid, nothing to do.
+        # The normal developer case: the mount already belongs to uid 1000.
         self.assertIsNone(
             dev._checkout_transfer_command(
                 dev.CONTAINER_UID, dev.CONTAINER_GID, dev.CONTAINER_UID
@@ -475,69 +529,109 @@ class ContainerRunTests(unittest.TestCase):
         self.assertIn(f"{dev.CONTAINER_UID}:1001", cmd)
         self.assertEqual(cmd[-1], "+")
 
+    def test_container_user_hostless_checkout_is_reclaimed(self):
+        # The CI shape: the host user is uid 1000 itself (matching the
+        # container), but the mount is owned by 1001. Skipping the chown on
+        # the host uid alone left CMake unable to create pkgRedirects.
+        cmd = dev._checkout_transfer_command(dev.CONTAINER_UID, 1000, 1001)
+        self.assertIsNotNone(cmd)
+        self.assertIn(f"{dev.CONTAINER_UID}:{dev.CONTAINER_GID}", cmd)
+
     def test_chown_from_root_does_not_leave_group_zero(self):
         # A sudo run must not make the checkout group root.
         cmd = dev._checkout_transfer_command(0, 0, 0)
         self.assertIn(f"{dev.CONTAINER_UID}:{dev.CONTAINER_GID}", cmd)
+        cmd = dev._checkout_transfer_command(0, 0, 1001)
+        self.assertIn(f"{dev.CONTAINER_UID}:{dev.CONTAINER_GID}", cmd)
 
     def test_non_owner_is_told_to_use_sudo(self):
-        # A checkout owned by a third party cannot be handed over; say so
-        # instead of letting CMake fail with a misleading permission error.
-        orig_uid = dev.os.getuid
-        dev.os.getuid = lambda: 1001
-        try:
-            with redirect_stderr(io.StringIO()) as err:
-                rc = dev._reclaim_checkout(dev.REPO_ROOT / "probe", 1002)
-        finally:
-            dev.os.getuid = orig_uid
-        self.assertEqual(rc, 1)
-        self.assertIn("WARNING", err.getvalue())
-        self.assertIn("sudo", err.getvalue())
+        # A checkout owned by a third party cannot be handed over. This must
+        # fail loudly (never silently continue), since CI once showed a
+        # warning path degrade to "no output, build anyway".
+        with self.assertRaises(dev.CheckoutError) as raised:
+            self._reclaim(owner_uid=1002, uid=1001)
+        self.assertIn("sudo", str(raised.exception))
         self.assertEqual(self.calls, [])
 
-    def test_owned_checkout_is_reclaimed(self):
+    def test_owned_checkout_is_reclaimed_and_verified(self):
         # The GitHub-runner case: we own it (uid 1001), the container is 1000.
-        orig_uid, orig_gid = dev.os.getuid, dev.os.getgid
-        dev.os.getuid = lambda: 1001
-        dev.os.getgid = lambda: 1001
-        try:
+        # The chown is followed by a probe run *as the container user*, since
+        # a successful chown says nothing about the bind mount.
+        with self._checkout(owner_uid=1001, uid=1001) as tmp:
             with redirect_stderr(io.StringIO()) as err:
-                dev._reclaim_checkout(dev.REPO_ROOT / "probe", 1001)
-        finally:
-            dev.os.getuid, dev.os.getgid = orig_uid, orig_gid
+                dev._reclaim_checkout(dev.HOST_ROOT, dev.CONTAINER_PROJECT_ROOT)
         self.assertIn("giving the checkout", err.getvalue())
-        self.assertEqual(self.calls[0][0][:4], [
-            "find", str(dev.REPO_ROOT), "-xdev", "-exec",
-        ])
+        chowns = [cmd for cmd, _ in self.calls if cmd[0] == "find"]
+        self.assertEqual(len(chowns), 1)
+        self.assertEqual(chowns[0][:4], ["find", str(tmp), "-xdev", "-exec"])
+        self.assertIn(f"{dev.CONTAINER_UID}:1001", chowns[0])
+        probes = [cmd for cmd, _ in self.calls if "compose" in cmd]
+        self.assertEqual(len(probes), 1)
+        self.assertIn(f"{dev.CONTAINER_UID}:{dev.CONTAINER_GID}", probes[0])
+        # The probe must write inside the container's mount, not host paths.
+        self.assertIn("/project/fake", probes[0][-1].replace("mcgowan", "fake"))
 
-    def test_unwritable_checkout_fails_before_docker_runs(self):
-        # chown can "succeed" in a sandbox and transfer nothing; the write
-        # probe catches that instead of leaving a confusing CMake error.
-        orig_uid, orig_gid = dev.os.getuid, dev.os.getgid
-        dev.os.getuid = lambda: 1001
-        dev.os.getgid = lambda: 1001
-        try:
-            with redirect_stderr(io.StringIO()) as err:
-                rc = dev._reclaim_checkout(dev.REPO_ROOT / "no-such-dir" /
-                                           "probe", 1001)
-        finally:
-            dev.os.getuid, dev.os.getgid = orig_uid, orig_gid
-        if rc == 0:
-            self.skipTest("host can write an arbitrary path")
-        self.assertIn("WARNING", err.getvalue())
+    def test_unwritable_checkout_raises_instead_of_continuing(self):
+        # chown can "succeed" and transfer nothing (a stale bind mount); the
+        # probe must turn that into a loud error, never a silent continue.
+        self.reply[0] = 1  # the probe fails
+        with redirect_stderr(io.StringIO()):
+            with self.assertRaises(dev.CheckoutError):
+                self._reclaim(owner_uid=1001, uid=1001)
+
+    def test_write_probe_touches_every_target_and_cleans_up(self):
+        targets = [Path("/project/mcgowan")]
+        script = dev._container_write_probe_script(
+            Path("/project/.probe"), targets
+        )
+        touch, _, remove = script.partition("&&")
+        self.assertTrue(touch.strip().startswith("touch "))
+        self.assertTrue(remove.strip().startswith("rm -f "))
+        for target in ("/project/.probe", "/project/mcgowan"):
+            self.assertIn(target, touch)
+            self.assertIn(target, remove)
+
+    def test_checkout_owned_by_the_container_user_needs_no_chown(self):
+        # A mount the container user owns cannot be chowned by us, but needs
+        # no chown: the write probe decides. Never fail here.
+        self._reclaim(owner_uid=dev.CONTAINER_UID, uid=1001)
+        self.assertEqual([cmd for cmd, _ in self.calls if cmd[0] == "find"], [])
+        self.assertEqual(len(self.calls), 1)  # just the probe
 
     def test_compose_run_reclaims_the_checkout_before_a_build(self):
-        self.assertEqual(dev.compose_run(["dev.py", "format"]), 0)
-        self.assertEqual(dev.compose_run(["dev.py", "shell", "ls"]), 0)
+        # The CI shape: the host user owns the checkout (uid 1001), the
+        # container is 1000, so the chown runs first and the probe verifies it.
+        with self._checkout(owner_uid=1001, uid=1001):
+            with redirect_stderr(io.StringIO()):
+                self.assertEqual(dev.compose_run(["dev.py", "format"]), 0)
         finds = [cmd for cmd, _ in self.calls if cmd[0] == "find"]
-        self.assertLessEqual(len(finds), 1)
-        self.assertEqual(self.calls[-1][0][:6], [
-            "docker", "compose", "run", "--user",
-            f"{dev.CONTAINER_UID}:{dev.CONTAINER_GID}", "--rm",
-        ])
+        self.assertEqual(len(finds), 1)
+        self.assertIn("compose", self.calls[1][0])  # probe, before the real run
+        self.assertEqual(self.calls[-1][0][-2:], ["dev.py", "format"])
+
+    def test_compose_run_skips_the_chown_when_not_writing(self):
+        # A checkout the container user owns: nothing to chown.
+        with self._checkout(owner_uid=dev.CONTAINER_UID, uid=1001):
+            with redirect_stderr(io.StringIO()):
+                self.assertEqual(dev.compose_run(["dev.py", "shell", "ls"]), 0)
+        self.assertEqual([cmd for cmd, _ in self.calls if cmd[0] == "find"], [])
+        self.assertEqual(len(self.calls), 1)
+
+    def test_compose_run_fails_before_building_an_unwritable_checkout(self):
+        # The container cannot write the mount: never start the build.
+        self.reply[0] = 1  # the probe container exits non-zero
+        with self._checkout(owner_uid=dev.CONTAINER_UID, uid=1001):
+            with redirect_stderr(io.StringIO()) as err:
+                self.assertEqual(dev.compose_run(["dev.py", "build"]), 1)
+        self.assertIn("cannot write the project mount", err.getvalue())
+        # Only the probe ran; the build itself was never started.
+        self.assertEqual(len(self.calls), 1)
+        self.assertIn("touch ", self.calls[0][0][-1])
 
     def test_compose_run_passes_user_and_environment(self):
-        self.assertEqual(dev.compose_run(["dev.py", "build"]), 0)
+        # A checkout the container user owns: no chown, only the probe.
+        with self._checkout(owner_uid=dev.CONTAINER_UID, uid=dev.CONTAINER_UID):
+            self.assertEqual(dev.compose_run(["dev.py", "build"]), 0)
         cmd, env = self.calls[-1]
         self.assertEqual(
             cmd[:6],

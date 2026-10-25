@@ -352,14 +352,28 @@ the toolchain needs:
 
 **Checkout ownership.** CMake writes its build tree inside the bind-mounted
 project, and a container cannot write into another user's directory however
-generous its mode bits are. `dev.py` therefore hands the checkout to the
-container user (`find … -exec chown 1000:$HOST_GID …`) before running a
-command that writes to it (`build`, `test`, `format*`, `flash`, `menuconfig`).
-On a normal host the user is already UID 1000, so nothing happens; on a GitHub
-Actions runner (checkout owned by UID 1001) ownership moves to `1000:1001`, so
-the host user keeps group access. If the checkout belongs to a third party and
-you are not root, `dev.py` fails with an explicit warning instead of letting
-CMake report "Unable to (re)create the private pkgRedirects directory".
+generous its mode bits are. `dev.py` therefore, before every command that
+writes to the project (`build`, `test`, `format*`, `flash`, `menuconfig`):
+
+1. Reads the owner **through the mount the container sees** — the host path
+   the mount's source is reachable at inside the container (`/project` is
+   `<HOST_ROOT>/project`, i.e. `/dev/project`, because the dev service also
+   mounts the host's `/`). A bind mount keeps the owner it had when it was
+   mounted, so the host's own view of the checkout can be stale.
+2. If that owner is not the container user, hands it over
+   (`find … -exec chown 1000:$HOST_GID …`; the host GID is kept so the host
+   user keeps group access, and GID 0 is never used). A checkout that belongs
+   to a third party and that you are not root for fails with an explicit
+   warning rather than letting CMake report "Unable to (re)create the private
+   pkgRedirects directory".
+3. **Verifies** the result in a throwaway container running as the container
+   user, which touches a probe file and every tracked path: a successful chown
+   proves nothing about the mount, and the host user's own access says nothing
+   about the container user's. If the probe fails, the build never starts.
+
+On a normal developer host (UID 1000 owning the checkout) only the probe runs,
+so this is a no-op there. On a GitHub Actions runner (checkout owned by UID
+1001) ownership moves to `1000:1001` before the build.
 
 Build artifacts under the bind-mounted `/project` are therefore owned by UID
 1000 even when your host UID differs, and the `dialout` group is joined for
