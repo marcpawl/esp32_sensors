@@ -109,6 +109,14 @@ services:
     # Run an interactive login shell by default.
     command: ["/bin/bash", "-l"]
 
+    # No entrypoint override, deliberately. The image runs
+    # /opt/esp/entrypoint.sh, which sources the ESP-IDF environment and then
+    # `exec "$@"`. docker-compose override commands (`docker compose run dev
+    # -c "..."`) and `--entrypoint sh` both make that exec a single argument,
+    # so a `-c` script is not run: `exec` looks for a file literally named
+    # `. $IDF_PATH/export.sh; cmd` and fails with exit 127. `docker compose
+    # run` (as dev.py uses it) keeps the image's entrypoint.
+
 volumes:
   idf-bash-history:
   idf-espressif-cache:

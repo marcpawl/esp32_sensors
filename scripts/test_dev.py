@@ -732,6 +732,17 @@ class ContainerRunTests(unittest.TestCase):
         self.assertEqual([cmd for cmd, _ in self.calls if cmd[0] == "find"], [])
         self.assertEqual(len(self.calls), 1)  # just the probe
 
+    def test_write_probe_runs_under_the_image_entrypoint(self):
+        # Regression: `--entrypoint sh` makes compose hand the `-c` script to
+        # the image entrypoint as ONE exec argument, so `exec` looked for a
+        # file literally named "touch … && rm -f …" (exit 127). The probe must
+        # be the command instead, so the entrypoint runs it normally.
+        self.reply[0] = 0
+        self._reclaim(owner_uid=dev.CONTAINER_UID, uid=1001, container_user="1000:1000")
+        probe = [cmd for cmd, _ in self.calls if "compose" in cmd][0]
+        self.assertNotIn("--entrypoint", probe)
+        self.assertEqual(probe[6:9], ["dev", "sh", "-c"])
+
     def test_compose_run_runs_as_the_host_user(self):
         # The GitHub-runner shape (uid 1001 owning the checkout): the
         # container runs as that user, so nothing is chowned and only the

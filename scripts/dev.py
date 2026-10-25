@@ -343,11 +343,16 @@ def _container_write_failure(
     the kernel can answer "can this uid write here"; the host user's own access
     says nothing about it, which is how the earlier host-side probe passed
     while the build failed.
+
+    The probe runs under the image's own entrypoint (`sh -c` as the command,
+    not `--entrypoint`), because compose turns an entrypoint override into a
+    single `exec` argument that is never run as a script (see
+    docker-compose.yml).
     """
     rc = run([
         "docker", "compose", "run", "--rm",
         "--user", container_user,
-        "--entrypoint", "sh", "dev", "-c",
+        "dev", "sh", "-c",
         _container_write_probe_script(probe, targets),
     ])
     if rc == 0:
