@@ -67,13 +67,17 @@ CONTAINER_UID = 1000
 CONTAINER_GID = 1000
 CONTAINER_HOME = "/home/dev"
 
-# Root under which the project is mounted inside the dev container, and the
-# host path that mount's *source* is reachable at inside the container (the
-# dev service also mounts the host's `/`, so `/project` is `<HOST_ROOT>/project`
-# there). A container cannot see its own bind-mount source any other way, and
-# only the source has the ownership the container is actually subject to.
+# Root under which the project is mounted inside the dev container.
 CONTAINER_PROJECT_ROOT = "/project"
-HOST_ROOT = Path("/dev")
+
+# Where the *source* of that mount is reachable from inside the container: the
+# dev service also mounts the host's `/` at `/dev`, so the checkout (host
+# `/project`) appears there as `<HOST_ROOT>/project`. A container cannot see
+# its own bind-mount source any other way, and the source carries the ownership
+# the container is subject to (the host's view of the checkout can be stale: a
+# bind mount keeps the owner it had when it was mounted). On the host this path
+# does not exist and is not used -- see `_project_mount`.
+HOST_ROOT = "/dev"
 
 # Probe file the container write check creates (and removes) in the checkout.
 WRITE_PROBE = ".dev-py-write-probe"
@@ -259,15 +263,23 @@ def _tracked_paths() -> list[Path]:
     return [REPO_ROOT / line for line in out.splitlines() if line]
 
 
-def _project_mount(host_root: Path, mount: str) -> Path:
-    """Host directory `mount` (e.g. `/project`) is bind-mounted from. Pure.
+def _project_mount(host_root: str, mount: str, repo_root: str | Path) -> Path:
+    """Path whose ownership is the one the container sees at `mount`. Pure.
 
-    A container cannot see its own bind-mount source, but the sources are all
-    under the host's `/`, which the dev service happens to mount at `/dev`, so
-    the source is the path with `host_root` in front: `/project` becomes
-    `<host_root>/project` on the host.
+    On the host, `mount` is not a local path at all: the checkout is at its
+    real location, `repo_root`. Only inside the container is `repo_root` the
+    mount itself (`/project`); there the source is reached as
+    `<host_root>/project` (`/dev/project`) through the host `/` mount. Which
+    side we are on therefore follows from where `repo_root` lives, not from
+    what happens to exist on disk (which is how a host run once looked for
+    `/dev/project`).
     """
-    return host_root / mount.lstrip("/")
+    repo_root, mount = Path(repo_root), Path(mount)
+    if not repo_root.is_relative_to(mount):
+        return repo_root
+    # `/project/x` under host root `/dev` is `/dev/project/x`: keep the whole
+    # absolute path, anchored at the host root.
+    return Path(host_root) / str(repo_root).lstrip("/")
 
 
 def _checkout_owner_uid(mount: Path) -> int:
@@ -281,13 +293,20 @@ def _checkout_owner_uid(mount: Path) -> int:
 
 
 def _container_write_probe_script(probe: Path, targets: list[Path]) -> str:
-    """Shell script that must be able to `touch` every target. Pure.
+    """Shell script that fails unless the container can write `targets`. Pure.
 
-    `probe` and `targets` are paths in the container. Everything is removed
-    again, so the probe leaves no trace and can run on every writing command.
+    `probe` and `targets` are container paths. CMake must be able to create
+    files *inside* each target directory, so the probe creates the fixed
+    `probe` file in each of them and removes it again. It never writes an
+    existing file (a probe that `touch`ed tracked files would leave them
+    modified) and the cleanup only ever removes the probe's own fixed path, so
+    it cannot delete anything else.
+
+    With no targets the script probes `probe` itself, so it is never empty.
     """
-    paths = [shlex.quote(path.as_posix()) for path in [*targets, probe]]
-    return f"touch {' '.join(paths)} && rm -f {' '.join(paths)}"
+    names = [Path(target) / Path(probe).name for target in targets]
+    probes = [shlex.quote(path.as_posix()) for path in names or [probe]]
+    return f"touch {' '.join(probes)} && rm -f {' '.join(probes)}"
 
 
 def _container_write_failure(
@@ -312,7 +331,7 @@ def _container_write_failure(
 
 
 def _reclaim_checkout(
-    host_root: Path, mount: str, owner_uid: int | None = None
+    host_root: str, mount: str, owner_uid: int | None = None
 ) -> None:
     """Make the project mount writable by the container user (host side).
 
@@ -342,13 +361,28 @@ def _reclaim_checkout(
     write both a probe file and the tracked paths in the container's own mount.
     """
     host_uid, host_gid = os.getuid(), os.getgid()
-    targets = [Path(mount) / path.relative_to(REPO_ROOT) for path in _tracked_paths()]
+    # The probe creates a file inside each tracked *directory* of the mount,
+    # so tracked files are skipped.
+    targets = [
+        path
+        for path in (
+            Path(mount) / path.relative_to(REPO_ROOT)
+            for path in _tracked_paths()
+        )
+        if path.is_dir()
+    ]
+    source = _project_mount(host_root, mount, REPO_ROOT)
     if owner_uid is None:
-        owner_uid = _checkout_owner_uid(_project_mount(host_root, mount))
+        try:
+            owner_uid = _checkout_owner_uid(source)
+        except OSError as error:
+            raise CheckoutError(
+                f"cannot read the owner of {source}, the local path behind the "
+                f"container's {mount} mount: {error}"
+            ) from error
     chown = _checkout_transfer_command(host_uid, host_gid, owner_uid)
     if chown is not None:
         if host_uid != 0 and owner_uid != host_uid and owner_uid != CONTAINER_UID:
-            source = _project_mount(host_root, mount)
             raise CheckoutError(
                 f"{source} is owned by uid {owner_uid}, not by you (uid "
                 f"{host_uid}), so the container user (uid {CONTAINER_UID}) "

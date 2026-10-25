@@ -355,11 +355,13 @@ project, and a container cannot write into another user's directory however
 generous its mode bits are. `dev.py` therefore, before every command that
 writes to the project (`build`, `test`, `format*`, `flash`, `menuconfig`):
 
-1. Reads the owner **through the mount the container sees** — the host path
-   the mount's source is reachable at inside the container (`/project` is
-   `<HOST_ROOT>/project`, i.e. `/dev/project`, because the dev service also
-   mounts the host's `/`). A bind mount keeps the owner it had when it was
-   mounted, so the host's own view of the checkout can be stale.
+1. Finds the local path behind the mount (`_project_mount`): on the host
+   that is the checkout itself; inside the container it is `/dev/project`,
+   because the dev service also mounts the host's `/` at `/dev` (`/project`
+   is `<HOST_ROOT>/project`). A bind mount keeps the owner it had when it was
+   mounted, so the host's own view of the checkout can be stale and only the
+   mount source counts. If that path cannot be read, the command fails with
+   an explicit error (never a traceback).
 2. If that owner is not the container user, hands it over
    (`find … -exec chown 1000:$HOST_GID …`; the host GID is kept so the host
    user keeps group access, and GID 0 is never used). A checkout that belongs
@@ -367,9 +369,12 @@ writes to the project (`build`, `test`, `format*`, `flash`, `menuconfig`):
    warning rather than letting CMake report "Unable to (re)create the private
    pkgRedirects directory".
 3. **Verifies** the result in a throwaway container running as the container
-   user, which touches a probe file and every tracked path: a successful chown
-   proves nothing about the mount, and the host user's own access says nothing
-   about the container user's. If the probe fails, the build never starts.
+   user, which creates and removes one probe file
+   (`.dev-py-write-probe`) inside each tracked *directory* of the mount: a
+   successful chown proves nothing about the mount, and the host user's own
+   access says nothing about the container user's. The probe never writes an
+   existing file and its cleanup only removes its own fixed path, so it cannot
+   damage the checkout. If the probe fails, the build never starts.
 
 On a normal developer host (UID 1000 owning the checkout) only the probe runs,
 so this is a no-op there. On a GitHub Actions runner (checkout owned by UID

@@ -18,6 +18,7 @@ from contextlib import contextmanager, redirect_stderr, redirect_stdout
 import io
 import os
 from pathlib import Path
+import stat
 import subprocess
 import sys
 import tempfile
@@ -432,7 +433,13 @@ class ContainerRunTests(unittest.TestCase):
             (tracked / "fake.cpp").write_text("")
             mount = root / "project"
             mount.mkdir()
-            owner = type("Owner", (), {"st_uid": owner_uid})
+            # Report every path as a directory so the tracked entries
+            # qualify as probe targets (`Path.is_dir` consults `stat`).
+            owner = type(
+                "Owner",
+                (),
+                {"st_uid": owner_uid, "st_mode": stat.S_IFDIR | 0o755},
+            )
             with mock.patch.object(dev, "REPO_ROOT", root), mock.patch.object(
                 dev, "_tracked_paths", return_value=[tracked]
             ), mock.patch.object(
@@ -449,22 +456,46 @@ class ContainerRunTests(unittest.TestCase):
         with self._checkout(owner_uid=owner_uid, uid=uid):
             dev._reclaim_checkout(dev.HOST_ROOT, dev.CONTAINER_PROJECT_ROOT)
 
-    def test_project_mount_maps_the_container_path_through_the_host_root(self):
-        # /project in the container is <HOST_ROOT>/project on the host.
+    def test_project_mount_translates_only_inside_the_container(self):
+        # Inside the container /project is reached as <HOST_ROOT>/project.
         self.assertEqual(
-            dev._project_mount(Path("/dev"), "/project"), Path("/dev/project")
+            dev._project_mount(dev.HOST_ROOT, "/project", Path("/project")),
+            Path("/dev/project"),
         )
+        # On the host that path does not exist: the source is the checkout,
+        # wherever it really lives (the CI failure: /dev/project not found).
         self.assertEqual(
-            dev._project_mount(Path("/dev"), "/project/sub"),
-            Path("/dev/project/sub"),
+            dev._project_mount(dev.HOST_ROOT, "/project", Path("/home/me/repo")),
+            Path("/home/me/repo"),
         )
 
     def test_owner_is_read_through_the_mount_the_container_sees(self):
         # The host's own view of the checkout can be stale (a bind mount keeps
         # the owner it had when it was mounted), so only the mount point counts.
         with self._checkout(owner_uid=1001, uid=1000):
-            mount = dev._project_mount(dev.HOST_ROOT, dev.CONTAINER_PROJECT_ROOT)
-            self.assertEqual(dev._checkout_owner_uid(mount), 1001)
+            source = dev._project_mount(
+                dev.HOST_ROOT, dev.CONTAINER_PROJECT_ROOT, dev.REPO_ROOT
+            )
+            self.assertEqual(dev._checkout_owner_uid(source), 1001)
+
+    def test_unreadable_source_fails_loudly_inside_the_container(self):
+        # Inside the container the source is `<host_root>/project`; if it
+        # cannot be read, that must raise a `CheckoutError` naming the
+        # directory to look at, not escape as a raw `FileNotFoundError`
+        # traceback (which is how the CI run once failed).
+        with tempfile.TemporaryDirectory() as tmp:
+            host_root = str(Path(tmp).resolve())
+            with mock.patch.object(
+                dev, "REPO_ROOT", Path("/project")
+            ), mock.patch.object(
+                dev, "_tracked_paths", return_value=[]
+            ), mock.patch.object(
+                dev, "_container_write_failure", return_value=None
+            ):
+                with self.assertRaises(dev.CheckoutError) as raised:
+                    dev._reclaim_checkout(host_root, "/project")
+        self.assertIn(f"{host_root}/project", str(raised.exception))
+        self.assertEqual(self.calls, [])
 
     def test_matching_host_user_is_used_as_is(self):
         self.assertEqual(
@@ -579,17 +610,32 @@ class ContainerRunTests(unittest.TestCase):
             with self.assertRaises(dev.CheckoutError):
                 self._reclaim(owner_uid=1001, uid=1001)
 
-    def test_write_probe_touches_every_target_and_cleans_up(self):
-        targets = [Path("/project/mcgowan")]
+    def test_write_probe_only_creates_and_removes_the_probe(self):
+        # It must never write an existing file, and its cleanup must never be
+        # able to delete anything but the probe itself (a probe that touched
+        # tracked files once left a checkout destroyed).
+        targets = [Path("/project/mcgowan"), Path("/project")]
         script = dev._container_write_probe_script(
             Path("/project/.probe"), targets
         )
-        touch, _, remove = script.partition("&&")
-        self.assertTrue(touch.strip().startswith("touch "))
-        self.assertTrue(remove.strip().startswith("rm -f "))
-        for target in ("/project/.probe", "/project/mcgowan"):
-            self.assertIn(target, touch)
-            self.assertIn(target, remove)
+        self.assertEqual(
+            script,
+            "touch /project/mcgowan/.probe /project/.probe && "
+            "rm -f /project/mcgowan/.probe /project/.probe",
+        )
+        touched = script.partition("&&")[0].split()[1:]
+        removed = script.partition("&&")[2].split()[2:]
+        self.assertEqual(touched, removed)
+        for path in touched:
+            self.assertTrue(path.endswith("/.probe"), path)
+
+    def test_write_probe_without_targets_probes_the_mount_root(self):
+        # Never emit `touch && rm -f`, which is a shell syntax error.
+        script = dev._container_write_probe_script(Path("/project/.probe"), [])
+        self.assertEqual(
+            script,
+            "touch /project/.probe && rm -f /project/.probe",
+        )
 
     def test_checkout_owned_by_the_container_user_needs_no_chown(self):
         # A mount the container user owns cannot be chowned by us, but needs

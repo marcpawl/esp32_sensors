@@ -143,15 +143,19 @@ IDF component submodules). `scripts/dev.py` sets all of these for you.
 It also makes sure the container can write the project before a command that
 writes into it, since the container cannot create its build tree inside a
 directory owned by someone else (CMake: "Unable to (re)create the private
-pkgRedirects directory"). It reads the owner through the mount the container
-sees (`/dev/project`), gives the checkout to `1000:$HOST_GID` when it is owned
-by someone else, and verifies the result with a throwaway container running as
-the container user. When your checkout is already owned by UID 1000 only the
+pkgRedirects directory"). It reads the owner of the mount's *source*, gives
+the checkout to `1000:$HOST_GID` when it is owned by someone else, and
+verifies the result with a throwaway container running as the container user
+which creates and removes one probe file in each tracked directory of the
+project. When your checkout is already owned by UID 1000 only the
 verification runs.
 
-The mount source is read at `<HOST_ROOT>/project` (`HOST_ROOT` is `/dev` in
-`dev.py`), which is where the dev service's second mount (`/dev:/dev`) exposes
-it. If you add a new `docker compose run --rm dev …` example to this document,
+On the host the source is the checkout itself, wherever it lives. Only inside
+the container is it read at `<HOST_ROOT>/project` (`HOST_ROOT` is `/dev` in
+`dev.py`), where the dev service's second mount (`/dev:/dev`) exposes it, so
+that mount must stay in `docker-compose.yml`.
+
+If you add a new `docker compose run --rm dev …` example to this document,
 always wrap it in `./scripts/dev.py shell …` (or run `scripts/dev.py build`,
 `flash`, …) instead of calling `docker compose run` by hand: a container that
 writes the project without `dev.py`'s ownership check is exactly how the CMake
