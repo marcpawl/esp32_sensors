@@ -98,6 +98,12 @@ CCACHE_DIR = ".cache/ccache"
 # `idf.py` is not on PATH.
 IDF_EXPORT = "$IDF_PATH/export.sh"
 
+# How the export script and the actual command are joined into one shell `-c`
+# string. A `;` is required: `.` takes every following word as an argument to
+# the script being sourced (`. a b c` sources `a` with arguments `b c`), so
+# `. $X cmd` would look for a script named `$X cmd` and never run the command.
+COMMAND_SEPARATOR = "; "
+
 FORMAT_ARGS = ("--dry-run", "--Werror")
 
 # The repo root is not an ESP-IDF project; it aggregates the subprojects
@@ -491,7 +497,7 @@ def _run_command(container_user: str, args: list[str]) -> list[str]:
     `.bashrc` (which sources the ESP-IDF export script) and `args` run as
     written. A uid the image does not know cannot read that home (it is
     `750`), so the ESP-IDF environment would silently go missing; such a user
-    sources the export script explicitly first. `args` are then the shell's
+    sources the export script explicitly, first. `args` are then the shell's
     child (no `exec`), just as the entrypoint's `exec "$@"` makes them.
     """
     uid, _ = _container_uid_gid(container_user)
@@ -502,7 +508,8 @@ def _run_command(container_user: str, args: list[str]) -> list[str]:
     ]
     if uid == CONTAINER_UID:
         return [*head, "dev", *args]
-    return [*head, "dev", "-c", f". {IDF_EXPORT} {shlex.join(args)}"]
+    script = f". {IDF_EXPORT}{COMMAND_SEPARATOR}{shlex.join(args)}"
+    return [*head, "dev", "-c", script]
 
 
 # Commands that write into the bind-mounted project from the container.

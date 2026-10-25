@@ -590,8 +590,17 @@ class ContainerRunTests(unittest.TestCase):
         self.assertEqual(cmd[7], "-c")
         self.assertEqual(
             cmd[8],
-            f". {dev.IDF_EXPORT} idf.py -C mcgowan build",
+            f". {dev.IDF_EXPORT}; idf.py -C mcgowan build",
         )
+
+    def test_other_user_script_separates_the_source_from_the_command(self):
+        # Regression: `.` treats every following word as an argument to the
+        # script being sourced, so `. $X cmd` looked for a script named
+        # "$X cmd" and the build died with exit 127 ("No such file or
+        # directory"). The command must be a separate statement.
+        script = dev._run_command("1001:1001", ["dev.py", "build"])[-1]
+        self.assertNotIn(f"{dev.IDF_EXPORT} dev.py", script)
+        self.assertIn(f"{dev.IDF_EXPORT}; dev.py build", script)
 
     def test_other_user_arguments_are_shell_quoted(self):
         # The arguments become a shell command line, so they must survive
@@ -738,7 +747,7 @@ class ContainerRunTests(unittest.TestCase):
             self.calls[-1][0],
             [
                 "docker", "compose", "run", "--user", "1001:1001", "--rm",
-                "dev", "-c", f". {dev.IDF_EXPORT} dev.py format",
+                "dev", "-c", f". {dev.IDF_EXPORT}; dev.py format",
             ],
         )
 
