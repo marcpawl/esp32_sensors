@@ -2,7 +2,7 @@
 
 ## Project Description
 
-This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its software specification (Rev 12). Firmware implementation is **in progress**: Configure mode is fully implemented; Run mode is scaffolded with the network paths (Wi-Fi station, batch upload, backoff) intentionally stubbed.
+This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its software specification (Rev 13). Firmware implementation is **in progress**: Configure mode is fully implemented; Run mode is scaffolded with the network paths (Wi-Fi station, batch upload, backoff) intentionally stubbed.
 
 **What it does:**
 - A solar-powered, battery-backed ESP32 samples three **DS18B20** thermometers on a shared **1-Wire bus**.
@@ -23,7 +23,7 @@ This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its s
 | Host OS | Linux Mint |
 | IDE | CLion 2026.2 |
 | Container runtime | Docker |
-| Container image | `espressif/idf:release-v6.1` |
+| Container image | `marcpawl/esp-idf:20261025` (prebuilt: `espressif/idf:release-v6.1` + project tooling) |
 | Source language | **C++26** (GNU extensions, `-std=gnu++26`) |
 | Target framework | ESP-IDF v6.1 |
 | Toolchain | GCC 15.2.0 (Xtensa `esp-15.2.0_20251204`, bundled with ESP-IDF v6.1) |
@@ -36,7 +36,7 @@ This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its s
 > - **Run mode — scaffolded/stubbed.** Real: boot self-test LEDs, battery read + hysteresis, sensor read with cached ROM IDs (first-boot scan), sample append to the RTC buffer, deep sleep. **Stubbed:** Wi-Fi station connect + cached fast-reconnect (§3.9), batch upload + payload wire-out (§9, payload is formatted and logged but not sent), exponential backoff (§3.7).
 > - **Host unit tests.** `test/` and `espidf-cpp-test/` build for the ESP-IDF `linux` target (Unity) and run via `scripts/dev.py test` (alias of `test-linux` / `build-espidf-cpp-test`). On-target tests for hardware-dependent code are planned.
 
-> **Toolchain note:** The host's locally installed ESP-IDF is **v6.1** with **Xtensa GCC 15.2.0** (`esp-15.2.0_20251204`), which matches the pinned Docker image `espressif/idf:release-v6.1` exactly. Keep both in sync: if you upgrade the host toolchain, update the pin in `Dockerfile`/`docker-compose.yml` and this document.
+> **Toolchain note:** The host's locally installed ESP-IDF is **v6.1** with **Xtensa GCC 15.2.0** (`esp-15.2.0_20251204`), which matches the pinned Docker image `marcpawl/esp-idf:20261025` exactly (it is built on `espressif/idf:release-v6.1`). Keep both in sync: if you upgrade the host toolchain, change the base image in `Dockerfile`, publish a new image under a **new** date-stamped tag (never move an existing tag), and bump the pin in `docker-compose.yml` + `scripts/dev.py` (`DEV_IMAGE`) and this document.
 
 ## Architecture Overview
 
@@ -68,7 +68,7 @@ Refer to `Specification.md` for the detailed contracts: operating modes, sample 
 
 ```
 esp32_sensors/
-├── Specification.md     # Authoritative software spec (Rev 12) — read this first
+├── Specification.md     # Authoritative software spec (Rev 13) — read this first
 ├── RELEASE_NOTES.md     # Human-readable release notes
 ├── CMakeLists.txt       # Root aggregator (plain CMake) — builds all subprojects
 ├── mcgowan/             # Firmware subproject (ESP32-S3, hal_board) -> mcgowan.bin
@@ -134,8 +134,8 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 - `mcgowan/sdkconfig.defaults` — the committed configuration intent (target, C++ exceptions/RTTI off, partition table, `-Os`). `mcgowan/sdkconfig` is generated from this and is **not** tracked.
 - `CMakeLists.txt` (root) — the generator-agnostic aggregator: one prefixed target per subproject invoking `idf.py -C <sub> -B <sub>/<build-dir>`. `-DSUBPROJECTS="mcgowan;test;espidf-cpp-test;donny"` (default: all) selects what is built.
 - `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash environment. Extend these (not ad-hoc `docker run`) when adding tooling. The compose `dev` service is also the target of the Dev Container (see below).
-- `.devcontainer/devcontainer.json` — the CLion / VS Code **Dev Container** definition. It **reuses the compose `dev` service** (it does not define its own image), so CLion builds/starts the same container the CLI uses. Edit `docker-compose.yml` for image/mount/user changes; edit `devcontainer.json` only for IDE-level wiring.
-- `scripts/dev.py` — the single container task runner (`build`, `flash`, `monitor`, `menuconfig`, `test`, `test-linux`, `self-check`, `format`, `format-check`, `format-check-staged`, `install-hooks`, `shell`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. `shell` is the preferred way to run a container command from the host: with no arguments it opens an interactive login shell, and with arguments it runs them in the container (e.g. `./scripts/dev.py shell ls -1d /`). The pre-commit hook (`.githooks/pre-commit`) delegates its check to `scripts/dev.py format-check-staged`. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
+- `.devcontainer/devcontainer.json` — the CLion / VS Code **Dev Container** definition. It **reuses the compose `dev` service** (it does not define its own image), so CLion pulls/starts the same container the CLI uses. Edit `docker-compose.yml` for image/mount/user changes; edit `devcontainer.json` only for IDE-level wiring.
+- `scripts/dev.py` — the single container task runner (`pull`, `image`, `build`, `flash`, `monitor`, `menuconfig`, `test`, `test-linux`, `self-check`, `format`, `format-check`, `format-check-staged`, `install-hooks`, `shell`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. `shell` is the preferred way to run a container command from the host: with no arguments it opens an interactive login shell, and with arguments it runs them in the container (e.g. `./scripts/dev.py shell ls -1d /`). The pre-commit hook (`.githooks/pre-commit`) delegates its check to `scripts/dev.py format-check-staged`. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
 - `scripts/test_dev.py` — host-side unit tests for `dev.py` itself (stdlib `unittest`, run by `scripts/dev.py self-check`). Imports `dev.py` in-process and covers its pure helpers — chiefly the command line `shell` builds (so shell syntax like pipes/semicolons is passed through verbatim) and `shell -C` path resolution.
 - `scripts/dev.py-completion.bash` — bash tab-completion for `scripts/dev.py`. Source it to complete subcommands (e.g. `./scripts/dev.py form<TAB>` → `format`, `format-check`, `format-check-staged`). It asks `dev.py complete <prefix>` for candidates, so the command list is defined in exactly one place.
 - `.idea/cmake.xml` / `.idea/runConfigurations/*.xml` — **committed** shared CLion configuration. `cmake.xml` defines the CMake profile used inside the Dev Container; the run configurations drive the build, test, format, flash, and shell tasks (six via `python3 scripts/dev.py`, one native CMake config for build/refactor). `.idea/workspace.xml` (local, git-ignored) holds per-machine state.
@@ -302,19 +302,21 @@ extern "C" void app_main(void);
 
 ## Development Workflow
 
-> **Important:** All builds run inside the ESP-IDF Docker environment. The image is defined by the committed `Dockerfile` + `docker-compose.yml`; use `docker compose run --rm dev <cmd>` rather than ad-hoc `docker run`. `sdkconfig` is generated (git-ignored) — edit `sdkconfig.defaults` instead when changing configuration intent.
+> **Important:** All builds run inside the ESP-IDF Docker environment. The environment is defined by the committed `Dockerfile` + `docker-compose.yml`, but the image itself is **prebuilt and pulled** (`marcpawl/esp-idf:20261025`); use `docker compose run --rm dev <cmd>` (or `./scripts/dev.py shell <cmd>`) rather than ad-hoc `docker run`. `sdkconfig` is generated (git-ignored) — edit `sdkconfig.defaults` instead when changing configuration intent.
 
 ### Development environment setup
 
-All builds run inside the official ESP-IDF Docker image to guarantee a reproducible toolchain (ESP-IDF v6.1, Xtensa GCC 15.2.0, CMake, Ninja, Python venv). The environment is defined by the committed `Dockerfile` + `docker-compose.yml`:
+All builds run inside the prebuilt ESP-IDF Docker image to guarantee a reproducible toolchain (ESP-IDF v6.1, Xtensa GCC 15.2.0, CMake, Ninja, Python venv). The image `marcpawl/esp-idf:20261025` is pinned in `docker-compose.yml`, is never moved, and is the same image CI pulls, so there is nothing to build locally:
 
 ```bash
-# From the repository root, build the dev image (first time or after Dockerfile edits)
-docker compose build
+# From the repository root, pull the pinned dev image (first time, or to refresh)
+./scripts/dev.py pull       # == docker pull marcpawl/esp-idf:20261025
 
 # Interactive shell with the ESP-IDF environment auto-sourced
 docker compose run --rm dev
 ```
+
+Only rebuild when the `Dockerfile` itself changes: `docker compose build` (rebuilds and tags it as the pinned image), then publish a **new** date-stamped tag and bump the pin in `docker-compose.yml` + `scripts/dev.py` (`DEV_IMAGE`). See `Developer.md` ("Updating / publishing the dev image").
 
 > **Preferred way to run a command in the container from the host.**
 > Use `./scripts/dev.py shell <command> [args...]` instead of ad-hoc
@@ -330,7 +332,11 @@ docker compose run --rm dev
 > ./scripts/dev.py shell "echo hi | wc -l"   # shell syntax works too
 > ```
 
-The container user is mapped to your host UID/GID, so build artifacts are not root-owned, and the `dialout` group is joined for serial access. Inside the container, ESP-IDF is already on the environment; if needed, source it manually:
+The container runs as **your own** UID/GID (`scripts/dev.py` passes `--user "$(id -u):$(id -g)"`), so build artifacts are owned by you and no chown or user-namespace remapping is involved; the `dialout` group is joined for serial access. `$HOME` is a directory that uid can actually write (see the next note), so ccache works.
+
+> **ccache and non-1000 uids.** A bind mount does not translate uids, so the container runs as the calling user rather than remapping it. The image's own user is uid 1000; any other uid (a normal host user, or GitHub's runner at 1001) has no passwd entry inside the image, so `$HOME` resolves to `/` and ccache fails with `ccache: error: Permission denied`. `scripts/dev.py` therefore exports `HOME=/tmp` and `CCACHE_DIR=/tmp/.cache/ccache` for any uid other than 1000 (uid 1000 keeps `/home/dev`). Keep this in mind if you add another `$HOME`-caching tool.
+
+Inside the container, ESP-IDF is already on the environment; if needed, source it manually:
 
 ```bash
 . $IDF_PATH/export.sh
@@ -339,15 +345,19 @@ The container user is mapped to your host UID/GID, so build artifacts are not ro
 ### CLion: work inside the container
 
 CLion 2026.2 is wired to the **same** compose `dev` service through a Dev
-Container, so the IDE builds/starts the container automatically ("starts if
-necessary") and the toolchain, CMake, Ninja, and the ESP-IDF Python venv all run
-**inside** it. No host-side ESP-IDF install is required.
+Container, so the IDE pulls the pinned image and starts the container
+automatically ("starts if necessary") and the toolchain, CMake, Ninja, and the
+ESP-IDF Python venv all run **inside** it. No host-side ESP-IDF install is
+required.
 
 - **Definition:** `.devcontainer/devcontainer.json` (reuses `docker-compose.yml`;
   it never defines its own image).
 - **Connect:** open the repo in CLion and accept the Dev Container prompt, or use
   *Remote Development → Dev Containers → docker-compose.yml → `dev`*. CLion
-  (re)builds the image if the `Dockerfile` changed and starts the service on demand.
+  pulls `marcpawl/esp-idf:20261025` if it is not cached and starts the service on
+  demand. Note that compose falls back to building the local `Dockerfile` if the
+  pull fails, so run `./scripts/dev.py pull` first if you want that failure to be
+  loud.
 - **Toolchain/CMake:** select the container as the remote host (SSH into the Dev
   Container). CLion configures and builds under its **own** CMake build
   directory, `/project/cmake-build-esp32s3` (from `.idea/cmake.xml`), so the IDE
@@ -416,6 +426,8 @@ enacted on the host.
 
 |platform|command|action|
 |===|===|===|
+|host|pull|Pull the pinned prebuilt dev image from the registry|
+|host|image|Build the dev image locally from the Dockerfile (not needed normally)|
 |both|build [SUBPROJECT...]|Build all subprojects via the root aggregator, or just the named ones (mcgowan, test, espidf-cpp-test, donny)|
 |both|build-espidf-cpp-test|Build the espidf_cpp unit tests for the ESP-IDF `linux` target|
 |both|test|Run the host unit test suites (alias of `test-linux`)|
@@ -429,7 +441,6 @@ enacted on the host.
 |both|format-check-staged|Check if staged code is formatted, non-zero exit if anything is unformatted |
 |both|shell|Run a bash command in the container (arguments after `shell` are executed); with no arguments, an interactive login shell|
 |both|complete|Print subcommands matching a prefix (internal; used by bash completion)|
-|host|image|Create the docker image|
 |host|install-hooks|install git commit hooks|
 
 ### Shell completion

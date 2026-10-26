@@ -2,10 +2,21 @@
 
 # ESP32 Solar-Powered Thermometer Logger — development container.
 #
+# NOTE: this image is normally NOT built. `docker-compose.yml` pins the
+# prebuilt, published image `marcpawl/esp-idf:20261025`, and both developers
+# and CI pull it. Build this Dockerfile only when changing it, then publish the
+# result under a NEW date-stamped tag (see Developer.md).
+#
 # Extends the official Espressif ESP-IDF image (v6.1) with a non-root user that
 # maps to the host UID/GID so that (a) files created by the build are owned by
 # the host user, and (b) the serial `dialout` group grants access to the ESP32
 # USB device for `idf.py flash monitor`.
+#
+# That non-root user is uid/gid 1000. The container itself is run as the
+# *calling* user (`scripts/dev.py` passes `--user "$(id -u):$(id -g)"`), so a
+# host user with a different uid still gets build artifacts it owns; for such a
+# uid `dev.py` also pins HOME/CCACHE_DIR, because it has no passwd entry here.
+# The UID/GID args below therefore only affect the (rare) rebuild.
 #
 # The base image ships an existing user `ubuntu` (UID/GID 1000) that is already
 # a member of `dialout`. We reuse it when it matches the requested UID/GID, and

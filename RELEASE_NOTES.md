@@ -27,6 +27,17 @@ Implemented
   types/concepts), `hal_board` (real GPIO drivers, linked by the firmware), and
   `hal_stub` (pin-free stubs, linked by the host tests).
 
+- Development environment: the dev container uses the **prebuilt, pinned**
+  image `marcpawl/esp-idf:20261025` (official ESP-IDF v6.1 plus `gh`, PyGithub,
+  and esp-clang). Developers and CI *pull* it instead of rebuilding it, so both
+  use an identical toolchain and a CI run no longer spends minutes building an
+  image. The tag is pinned in `docker-compose.yml` and `scripts/dev.py`
+  (`DEV_IMAGE`); `scripts/dev.py self-check` fails if the two drift.
+- The container runs as the **calling** user, so build artifacts are owned by
+  whoever ran the command (no `chown`). For uids other than the image's 1000 —
+  including GitHub's runner at 1001 — `scripts/dev.py` pins `HOME` and
+  `CCACHE_DIR`, fixing the `ccache: error: Permission denied` CI failure.
+
 Not yet implemented
 -------------------
 

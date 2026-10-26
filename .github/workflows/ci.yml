@@ -6,22 +6,32 @@ on:
   pull_request:
     branches: [ "v0.1" ]
 
+# The dev image is PREBUILT and pinned in docker-compose.yml
+# (`image: marcpawl/esp-idf:20261025`); CI pulls it instead of building it from
+# the Dockerfile, so a run does not spend minutes rebuilding a toolchain image
+# that never changes. Bump the tag in docker-compose.yml + scripts/dev.py
+# (`DEV_IMAGE`) — and only there — when a new image is published; `dev.py
+# self-check` fails if the two disagree.
 jobs:
   build-and-test:
+    # GitHub's runner user is uid 1001, not the image's 1000. `scripts/dev.py`
+    # runs the container as the *calling* user and pins HOME/CCACHE_DIR for it,
+    # so build artifacts are owned by the runner (no root-owned files) and
+    # ccache does not fail with "Permission denied".
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: build image
+      - name: Pull dev image
+        # Host-only: `docker pull` of the pinned tag. Not run inside a
+        # container, and not a build.
         run: |
-          python3 ./scripts/dev.py image
+          python3 ./scripts/dev.py pull
 
       - name: dev.py self-check
+        # No container and no Docker: runs the host stdlib unit tests.
         run: |
           python3 ./scripts/dev.py self-check
 

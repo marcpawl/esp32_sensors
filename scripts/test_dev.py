@@ -16,8 +16,10 @@ from __future__ import annotations
 
 from contextlib import redirect_stderr, redirect_stdout
 import io
+import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import unittest
@@ -217,6 +219,224 @@ class SubprojectBuildTests(unittest.TestCase):
                 f"_idf_subproject({project} ", root_cmake,
                 f"no {project}_build target in the root CMakeLists.txt",
             )
+
+
+class DevImageTests(unittest.TestCase):
+    """The pinned prebuilt image is wired up consistently.
+
+    The dev image is pulled, not built: `docker-compose.yml`, `dev.py`
+    (`DEV_IMAGE`) and CI must all name the same tag, or CI would run a
+    different toolchain than a developer does.
+    """
+
+    def test_dev_image_is_the_pinned_prebuilt_tag(self):
+        self.assertEqual(dev.DEV_IMAGE, "marcpawl/esp-idf:20261025")
+
+    def test_compose_pins_the_same_image(self):
+        compose = (dev.REPO_ROOT / "docker-compose.yml").read_text()
+        self.assertIn(f"image: {dev.DEV_IMAGE}", compose)
+
+    def test_compose_pulls_instead_of_rebuilding(self):
+        # `pull_policy: missing` fetches the pinned image from the registry; a
+        # `build:` section alone would let compose rebuild it silently.
+        compose = (dev.REPO_ROOT / "docker-compose.yml").read_text()
+        self.assertIn("pull_policy: missing", compose)
+
+    def test_ci_pulls_the_image_and_does_not_build_it(self):
+        ci = (dev.REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+        self.assertIn("dev.py pull", ci)
+        # Building the image in CI would defeat the pinned prebuilt image.
+        self.assertNotIn("dev.py image", ci)
+        self.assertNotIn("setup-buildx-action", ci)
+
+    def test_dockerfile_is_kept_so_the_image_can_be_rebuilt(self):
+        # The image is prebuilt, but the Dockerfile stays reproducible.
+        self.assertTrue((dev.REPO_ROOT / "Dockerfile").is_file())
+        compose = (dev.REPO_ROOT / "docker-compose.yml").read_text()
+        self.assertIn("dockerfile: Dockerfile", compose)
+
+    def test_pull_is_registered_and_host_only(self):
+        self.assertIn("pull", dev.COMMANDS)
+        self.assertIs(dev.COMMANDS["pull"], dev.cmd_pull)
+
+    def test_dev_image_tag_is_date_stamped(self):
+        # Published tags are date-stamped and never moved, so a rebuild is
+        # always published under a new tag rather than overwriting a pinned
+        # one that CI and every developer already reference.
+        repository, _, tag = dev.DEV_IMAGE.partition(":")
+        self.assertEqual(repository, "marcpawl/esp-idf")
+        self.assertRegex(tag, r"^\d{8}$")
+
+    def test_dockerfile_extends_the_official_espressif_image(self):
+        # The pinned image is the official ESP-IDF v6.1 image plus project
+        # tooling; AGENTS.md's toolchain note relies on this.
+        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        self.assertIn("FROM espressif/idf:release-v6.1", dockerfile)
+
+    def test_local_image_is_not_the_pinned_tag(self):
+        # `image` (a local rebuild) must not overwrite the pinned tag, which
+        # would silently swap the toolchain under a developer.
+        self.assertNotEqual(dev.LOCAL_IMAGE, dev.DEV_IMAGE)
+
+
+class DevContainerTests(unittest.TestCase):
+    """`.devcontainer/devcontainer.json` matches the prebuilt image.
+
+    The Dev Container reuses the compose service, so it must not contradict
+    what the pinned image provides: the image keeps its tools in /opt/esp (not
+    the classic per-user `~/.espressif`), and it already has the toolchain and
+    Python venv installed, so there is nothing to install at create time.
+    """
+
+    @staticmethod
+    def _strip_jsonc(text: str) -> str:
+        """Drop `//` comments and trailing commas so `json` can parse it.
+
+        `devcontainer.json` is JSONC. Only whole-line `//` comments are
+        stripped, which is all this file uses and all `//` inside string
+        values (there are none here) would break.
+        """
+        without_comments = re.sub(r"^\s*//.*$", "", text, flags=re.MULTILINE)
+        return re.sub(r",(\s*[}\]])", r"\1", without_comments)
+
+    def _devcontainer(self) -> dict:
+        """The parsed devcontainer.json (so assertions ignore comments)."""
+        path = dev.REPO_ROOT / ".devcontainer" / "devcontainer.json"
+        return json.loads(self._strip_jsonc(path.read_text()))
+
+    def test_tools_path_matches_the_image(self):
+        # The image sets IDF_TOOLS_PATH=/opt/esp; pointing IDE processes at
+        # ~/.espressif would make them look in an empty directory.
+        self.assertEqual(
+            self._devcontainer()["remoteEnv"]["IDF_TOOLS_PATH"],
+            "/opt/esp",
+        )
+
+    def test_does_not_reinstall_into_a_prebuilt_image(self):
+        # `install.sh` / `install-python-env` are baked into the image already;
+        # running them per container create only adds latency.
+        command = self._devcontainer()["postCreateCommand"]
+        self.assertNotIn("install-python-env", command)
+        self.assertNotIn("install.sh", command)
+
+    def test_post_create_verifies_the_toolchain(self):
+        # Whatever the create hook runs, it must fail loudly if the pinned
+        # image is missing or the ESP-IDF environment cannot be sourced.
+        self.assertIn("idf.py --version", self._devcontainer()["postCreateCommand"])
+
+    def test_uses_the_compose_dev_service(self):
+        # The Dev Container must not define its own image: it inherits the
+        # pinned one from docker-compose.yml.
+        text = self._devcontainer()
+        self.assertEqual(text["dockerComposeFile"], "../docker-compose.yml")
+        self.assertEqual(text["service"], "dev")
+        self.assertNotIn("image", text)
+        self.assertNotIn("build", text)
+
+
+class ContainerUserTests(unittest.TestCase):
+    """The container runs as the calling user, with a usable HOME.
+
+    A bind mount does not translate uids: whatever uid the container runs as is
+    the uid the host sees on the files it writes. So the container must run as
+    the calling user (no chown, no userns remapping), and a uid that has no
+    passwd entry inside the image needs HOME/CCACHE_DIR pinned, or ccache fails
+    with "ccache: error: Permission denied" (which is what broke GitHub CI,
+    whose runner is uid 1001).
+    """
+
+    def test_container_user_is_the_calling_user(self):
+        # Not the image's uid: the files the container writes land on the host
+        # with this uid, and they must belong to whoever ran the command.
+        self.assertEqual(
+            dev._container_user(),
+            f"{os.getuid()}:{os.getgid()}",
+        )
+
+    def test_image_user_keeps_the_image_home(self):
+        # uid 1000 owns /home/dev, so nothing is overridden and the persisted
+        # cache volume there keeps working.
+        self.assertEqual(dev._container_environment("1000:1000"), [])
+
+    def test_other_users_get_a_writable_home_and_ccache_dir(self):
+        # A GitHub runner (1001) has no passwd entry, so $HOME is "/" and
+        # ccache's cache dir becomes unusable.
+        self.assertEqual(
+            dev._container_environment("1001:1001"),
+            ["-e", "HOME=/tmp", "-e", "CCACHE_DIR=/tmp/.cache/ccache"],
+        )
+
+    def test_ccache_dir_is_inside_the_pinned_home(self):
+        flags = dev._container_environment("4242:4242")
+        home = flags[flags.index("HOME=/tmp")].split("=", 1)[1]
+        ccache = flags[flags.index("CCACHE_DIR=/tmp/.cache/ccache")]
+        self.assertTrue(ccache.split("=", 1)[1].startswith(f"{home}/"))
+
+    def test_compose_run_runs_as_the_calling_user(self):
+        calls = []
+        original = dev.run
+        try:
+            dev.run = lambda cmd, cwd=dev.REPO_ROOT: calls.append(list(cmd)) or 0
+            self.assertEqual(dev.compose_run(["dev.py", "build"]), 0)
+        finally:
+            dev.run = original
+        command = calls[0]
+        self.assertEqual(command[:4], ["docker", "compose", "run", "--user"])
+        self.assertEqual(command[4], dev._container_user())
+        self.assertIn("--rm", command)
+        # The re-executed command follows the service name.
+        self.assertEqual(command[-2:], ["dev.py", "build"])
+
+    def test_compose_run_passes_home_flags_before_the_service_name(self):
+        # Independent of the uid running the tests: force the CI (non-1000)
+        # environment so the `-e` flags are always present, then check they are
+        # compose options (before the service name), not part of the command.
+        calls = []
+        original_run, original_env = dev.run, dev._container_environment
+        try:
+            dev.run = lambda cmd, cwd=dev.REPO_ROOT: calls.append(list(cmd)) or 0
+            dev._container_environment = lambda user: ["-e", "HOME=/tmp"]
+            dev.compose_run(["dev.py", "build"])
+        finally:
+            dev.run, dev._container_environment = original_run, original_env
+        command = calls[0]
+        # Everything after the service name belongs to the command.
+        self.assertLess(command.index("-e"), command.index("dev"))
+        self.assertLess(command.index("--rm"), command.index("dev"))
+        self.assertEqual(command[command.index("dev") + 1:], ["dev.py", "build"])
+
+
+class SpecRevisionTests(unittest.TestCase):
+    """`Specification.md` is the source of truth; docs must cite its revision.
+
+    AGENTS.md names the spec revision in two places, and the spec's own change
+    history must end at that revision. They drifted before (the spec was at
+    Rev 12 while its readers assumed a later one), so this pins them together.
+    """
+
+    def _spec(self) -> str:
+        return (dev.REPO_ROOT / "Specification.md").read_text()
+
+    def _revision(self) -> int:
+        match = re.search(r"^\*\*Version:\*\* Rev (\d+)$", self._spec(), re.M)
+        self.assertIsNotNone(match, "Specification.md has no '**Version:** Rev N'")
+        return int(match.group(1))
+
+    def test_spec_header_and_change_history_agree(self):
+        # The last change-history row must be the revision in the header.
+        rows = re.findall(r"^\| (\d+) \| ", self._spec(), re.M)
+        self.assertTrue(rows, "Specification.md has no change-history table")
+        self.assertEqual(int(rows[-1]), self._revision())
+
+    def test_agents_cites_the_current_revision(self):
+        agents = (dev.REPO_ROOT / "AGENTS.md").read_text()
+        revision = self._revision()
+        self.assertIn(f"software specification (Rev {revision})", agents)
+        self.assertIn(f"Authoritative software spec (Rev {revision})", agents)
+
+    def test_spec_names_the_pinned_image(self):
+        # The spec's environment table must not contradict the pinned image.
+        self.assertIn(dev.DEV_IMAGE, self._spec())
 
 
 class CommandRegistryTests(unittest.TestCase):

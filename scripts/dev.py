@@ -9,7 +9,7 @@
 # specifics live in one place.
 #
 # Usage:
-#   scripts/dev.py [image|build|build-espidf-cpp-test|flash|monitor|\
+#   scripts/dev.py [pull|image|build|build-espidf-cpp-test|flash|monitor|\
 #                   menuconfig|test|test-linux|self-check|format|\
 #                   format-check|format-check-staged|install-hooks|shell]
 #   scripts/dev.py --help        # full help, including per-command details
@@ -49,8 +49,21 @@ ROOTS = (
 )
 EXTENSIONS = (".cpp", ".hpp", ".h", ".cc", ".cxx")
 
-# Docker dev image that ships the pinned clang-format version.
-DEV_IMAGE = "esp32-sensors-dev:latest"
+# Docker dev image: the prebuilt ESP-IDF v6.1 image plus this project's tooling
+# (gh, PyGithub, esp-clang). It is pinned in docker-compose.yml too; the tag is
+# never moved, so update it in both places (test_dev.py asserts they agree).
+# `LOCAL_IMAGE` is only what `image` (a local rebuild) produces, for trying out
+# Dockerfile changes.
+DEV_IMAGE = "marcpawl/esp-idf:20261025"
+LOCAL_IMAGE = "esp32-sensors-dev:local"
+
+# User baked into DEV_IMAGE, and where ccache lives under a writable HOME. A
+# container run as any *other* uid (a host user, or a CI runner whose uid is
+# 1001) has no passwd entry in the image, so `$HOME` would be unusable and
+# ccache would fail with "ccache: error: Permission denied". `compose_run`
+# therefore pins HOME (and CCACHE_DIR) explicitly.
+CONTAINER_UID = 1000
+HOME_CACHE_DIR = ".cache/ccache"
 
 FORMAT_ARGS = ("--dry-run", "--Werror")
 
@@ -144,9 +157,6 @@ def source_files():
 def run(cmd: list[str], cwd: Path | str = REPO_ROOT) -> int:
     """Run a command in `cwd` (default: repo root), inheriting stdio."""
 
-    # Add UID and GID to environment
-    uid = os.geteuid()
-    gid = os.getegid()
     env = os.environ.copy()
     env["UID"] = str(os.getuid())
     env["GID"] = str(os.getgid())
@@ -155,17 +165,54 @@ def run(cmd: list[str], cwd: Path | str = REPO_ROOT) -> int:
     return subprocess.run(cmd, env=env, cwd=cwd).returncode
 
 
+def _container_user() -> str:
+    """The `--user` value for the dev container: this process's uid/gid.
+
+    The container runs as the *calling* user, so every file it writes into the
+    bind-mounted project is owned by that user on the host. That is the whole
+    point: no chown, no root, no user-namespace remapping (a bind mount does
+    not translate uids, so the uid the container runs as is the uid the host
+    sees on the resulting files).
+
+    On CI the runner's uid is 1001, not the image's 1000, which has no passwd
+    entry in the image — see `_container_environment`.
+    """
+    return f"{os.getuid()}:{os.getgid()}"
+
+
+def _container_environment(container_user: str) -> list[str]:
+    """`compose run -e` flags giving `container_user` a usable `HOME`. Pure.
+
+    A uid with no passwd entry in the image (any host user other than 1000,
+    e.g. GitHub's runner at 1001) resolves `$HOME` to `/`, so tools that cache
+    in `$HOME` fail: ccache reports "ccache: error: Permission denied" and the
+    build dies. Point `HOME` (and thus ccache's cache) at world-writable `/tmp`
+    for such users, which needs no root and no image change.
+
+    The image's own user (uid 1000) owns `/home/dev`, so it is left alone and
+    keeps the persisted cache volume mounted there.
+    """
+    if int(container_user.partition(":")[0]) == CONTAINER_UID:
+        return []
+    return [
+        "-e", "HOME=/tmp",
+        "-e", f"CCACHE_DIR=/tmp/{HOME_CACHE_DIR}",
+    ]
+
+
 def compose_run(args: list[str]) -> int:
     """Run a command inside the `dev` service defined by docker-compose.yml.
 
     The service is created on demand and removed afterwards (--rm), matching
-    the documented `docker compose run --rm dev <cmd>` workflow.
+    the documented `docker compose run --rm dev <cmd>` workflow. The container
+    runs as the calling user (see `_container_user`) with a writable `HOME`
+    (see `_container_environment`).
     """
-    uid = os.geteuid()
-    gid = os.getegid()
+    container_user = _container_user()
     command = ["docker", "compose", "run",
-               "--user", f"{uid}:{gid}",
-               "--rm", "dev"] 
+               "--user", container_user,
+               *_container_environment(container_user),
+               "--rm", "dev"]
     command.extend(args)
     return run(command)
 
@@ -191,12 +238,21 @@ def git(*args: str) -> subprocess.CompletedProcess:
         text=True,
     )
 
+def cmd_pull() -> int:
+    """Pull the pinned prebuilt dev image from the registry."""
+    if is_in_container():
+        print("Image cannot be pulled while in container", file=sys.stderr)
+        return 1
+    return run(["docker", "pull", DEV_IMAGE])
+
+
 def cmd_image() -> int:
-    """Build the docker image"""
+    """Build the dev image locally from the Dockerfile (not needed normally)."""
     if is_in_container():
         print("Image cannot be built while in container", file=sys.stderr)
         return 1
-    return run(["docker", "compose", "build"])
+    return run(["docker", "build", "-t", LOCAL_IMAGE, "."])
+
 
 def _idf(project: str, build_dir: str, *args: str) -> list[str]:
     """`idf.py` argv for a subproject: run in its directory with its own build.
@@ -569,6 +625,7 @@ def cmd_format_check_staged() -> int:
 
 
 COMMANDS = {
+    "pull": cmd_pull,
     "image": cmd_image,
     "build": cmd_build,
     "build-espidf-cpp-test": cmd_build_espidf_cpp_test,
