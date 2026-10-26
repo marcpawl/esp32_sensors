@@ -3,12 +3,15 @@
 //
 // This REUSES the existing `dev` service from ../docker-compose.yml so that
 // the Dev Container and the documented `docker compose run --rm dev <cmd>`
-// workflow share one image, one container user (host UID/GID mapped), and the
+// workflow share one image, one container user (your host UID/GID), and the
 // same serial (/dev) passthrough. Do NOT add a duplicate service here — edit
 // docker-compose.yml instead.
 //
+// The service pins the PREBUILT image `marcpawl/esp-idf:20261025` (see
+// `image:`/`pull_policy:` in docker-compose.yml), so nothing is built locally.
+//
 // What this gives you in CLion:
-//   * CLion builds/pulls the image and starts the container automatically.
+//   * CLion pulls the image and starts the container automatically.
 //   * Toolchain, CMake, Ninja, and the ESP-IDF Python venv all run inside the
 //     container (see customizations / AGENTS.md).
 //   * CMake is configured over SSH through the Dev Container so the compiler,
@@ -27,25 +30,33 @@
   "overrideCommand": false,
   "shutdownAction": "stopCompose",
 
-  // CLion connects as the mapped host user (not root). This is intentional:
-  // the image is already built with the correct UID/GID so build artifacts
-  // are not root-owned on the host.
+  // The container runs as the mapped host user (see scripts/dev.py, which
+  // passes `--user "$(id -u):$(id -g)"`). `updateRemoteUserUID` stays false:
+  // it rewrites /etc/passwd inside the container at start-up, which is not
+  // needed here and would fight the image's own user.
   "updateRemoteUserUID": false,
   "remoteUser": "dev",
 
-  // ESP-IDF exports its whole toolchain (PATH, IDF_PATH, IDF_PYTHON_ENV_...)
-  // through $IDF_PATH/export.sh. Login shells source it via ~/.bashrc, but
-  // IDE-driven processes get a non-interactive environment, so source it
-  // explicitly here to make the toolchain visible to CMake/compilers/CLion.
+  // The image's /opt/esp/entrypoint.sh sources $IDF_PATH/export.sh, but
+  // IDE-driven processes (CMake, compilers, CLion itself) start without that
+  // entrypoint, so the toolchain directories must be exposed here explicitly.
+  //
+  // NOTE: this PATH mirrors what `$IDF_PATH/export.sh` produces for the
+  // PINNED image (marcpawl/esp-idf:20261025, which is built on
+  // espressif/idf:release-v6.1 with the tool versions below). It therefore
+  // only needs updating when the pinned tag is bumped — if `cmake` or
+  // `xtensa-esp-elf-gcc` cannot be found in the IDE after such a bump,
+  // re-derive the list by running, inside the container:
+  //   . $IDF_PATH/export.sh && echo $PATH | tr ':' '\n'
   "remoteEnv": {
     "IDF_PATH": "/opt/esp/idf",
-    "IDF_TOOLS_PATH": "/home/dev/.espressif",
+    "IDF_TOOLS_PATH": "/opt/esp",
     "HISTFILE": "/home/dev/.commandhistory/.bash_history",
-    "PATH": "/opt/esp/idf/components/espcoredump:/opt/esp/idf/components/partition_table:/opt/esp/idf/components/app_update:/opt/esp/tools/xtensa-esp-elf-gdb/17.1_20260402/xtensa-esp-elf-gdb/bin:/opt/esp/tools/riscv32-esp-elf-gdb/17.1_20260402/riscv32-esp-elf-gdb/bin:/opt/esp/tools/xtensa-esp-elf/esp-15.2.0_20251204/xtensa-esp-elf/bin:/opt/esp/tools/riscv32-esp-elf/esp-15.2.0_20251204/riscv32-esp-elf/bin:/opt/esp/tools/esp32ulp-elf/2.38_20240113/esp32ulp-elf/bin:/opt/esp/tools/cmake/4.0.3/bin:/opt/esp/tools/openocd-esp32/v0.12.0-esp32-20260831/openocd-esp32/bin:/opt/esp/tools/qemu-xtensa/esp_develop_9.2.2_20260417/qemu/bin:/opt/esp/tools/qemu-riscv32/esp_develop_9.2.2_20260417/qemu/bin:/opt/esp/tools/esp-clangd/esp-21.1.3_20260408/esp-clangd/bin:/opt/esp/python_env/idf6.1_py3.12_env/bin:/opt/esp/idf/tools:${containerEnv:PATH}"
+    "PATH": "/opt/esp/idf/components/espcoredump:/opt/esp/idf/components/partition_table:/opt/esp/idf/components/app_update:/opt/esp/tools/xtensa-esp-elf-gdb/17.1_20260402/xtensa-esp-elf-gdb/bin:/opt/esp/tools/riscv32-esp-elf-gdb/17.1_20260402/riscv32-esp-elf-gdb/bin:/opt/esp/tools/xtensa-esp-elf/esp-15.2.0_20251204/xtensa-esp-elf/bin:/opt/esp/tools/esp-clang/esp-21.1.3_20260408/esp-clang/bin:/opt/esp/tools/riscv32-esp-elf/esp-15.2.0_20251204/riscv32-esp-elf/bin:/opt/esp/tools/esp32ulp-elf/2.38_20240113/esp32ulp-elf/bin:/opt/esp/tools/cmake/4.0.3/bin:/opt/esp/tools/openocd-esp32/v0.12.0-esp32-20260831/openocd-esp32/bin:/opt/esp/tools/qemu-xtensa/esp_develop_9.2.2_20260417/qemu/bin:/opt/esp/tools/qemu-riscv32/esp_develop_9.2.2_20260417/qemu/bin:/opt/esp/tools/esp-clangd/esp-21.1.3_20260408/esp-clangd/bin:/opt/esp/python_env/idf6.1_py3.12_env/bin:/opt/esp/idf/tools:${containerEnv:PATH}"
   },
 
-  // The IDF PATH is prepended via a login shell so it is present for tools
-  // that are launched without sourcing export.sh first.
+  // The IDF environment is sourced through a login shell so it is present for
+  // tools that are launched without sourcing export.sh first.
   "containerEnv": {
     "BASH_ENV": "/home/dev/.bashrc"
   },
@@ -62,9 +73,12 @@
     }
   },
 
-  // `idf.py build` is the canonical entry point. Exposed so CLion / the
-  // Dev Containers CLI can run common tasks without a shell.
-  "postCreateCommand": "/opt/esp/idf/install.sh && /opt/esp/idf/tools/idf_tools.py install-python-env && . $IDF_PATH/export.sh &&  idf.py --version",
+  // Sanity-check the pinned image rather than installing anything: the
+  // toolchain and Python venv are already baked into `marcpawl/esp-idf`,
+  // so `install.sh` / `install-python-env` would just re-verify (and slow
+  // every container creation down). Printing `idf.py --version` fails loudly
+  // if the image is missing or the IDF env cannot be sourced.
+  "postCreateCommand": ". $IDF_PATH/export.sh && idf.py --version",
 
   // Match the compose user so the bind-mounted /dev serial nodes work.
   // (Group membership is granted via `group_add` in docker-compose.yml.)

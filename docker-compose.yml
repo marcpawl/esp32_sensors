@@ -1,15 +1,25 @@
 # ESP32 Solar-Powered Thermometer Logger — development environment.
 #
 # Usage:
-#   docker compose build
+#   docker compose pull                         # fetch the prebuilt dev image
 #   docker compose run --rm dev                 # interactive shell
 #   docker compose run --rm dev idf.py build    # run a single command
 #
+# --- Which image? ---------------------------------------------------------
+# `dev` uses the PREBUILT image `marcpawl/esp-idf:20261025`, which is the
+# official ESP-IDF v6.1 image plus this project's tooling (gh, PyGithub,
+# esp-clang). Pull it once with `docker compose pull`; do not rebuild it.
+# CI pulls the same tag, so developers and CI share one toolchain.
+#
+# The `build:` section below is kept only so the image can be rebuilt from the
+# committed `Dockerfile` when it changes (then publish a NEW date-stamped tag
+# and bump `image:` above). Building is not part of the normal workflow.
+#
 # --- CLion / Dev Containers ----------------------------------------------
 # The `dev` service below is also the target of `.devcontainer/devcontainer.json`,
-# so CLion ("From VCS" / "Open Dev Container") builds and starts this exact
-# container and runs the toolchain inside it. Keep both in sync: change the
-# image, mounts, or user here, not in the devcontainer file.
+# so CLion ("From VCS" / "Open Dev Container") pulls the same image and starts
+# this exact container and runs the toolchain inside it. Keep both in sync:
+# change the image, mounts, or user here, not in the devcontainer file.
 #
 # --- Flashing / monitoring the ESP32 -------------------------------------
 # The host `/dev` tree is bind-mounted into the container, so any USB serial
@@ -26,16 +36,27 @@
 
 services:
   dev:
+    # Prebuilt, pinned dev image (see "Which image?" above). `pull_policy:
+    # missing` pulls it from the registry when it is not cached locally, so a
+    # normal run never consults the `build:` section below. Note that compose
+    # falls back to that build if the pull itself fails (bad tag, registry
+    # outage), which is why CI runs `scripts/dev.py pull` as its own step
+    # first: that step fails loudly instead of quietly rebuilding a toolchain.
+    image: marcpawl/esp-idf:20261025
+    pull_policy: missing
+
+    # Kept so the image can be rebuilt from the committed Dockerfile (then
+    # tagged as `image:` above, i.e. `docker compose build`). NOT part of the
+    # normal workflow.
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        # Match the container user to your host user so build artifacts are
-        # not root-owned. Defaults are sensible for UID/GID 1000.
+        # User baked into the image. Keep these at 1000: they only matter when
+        # (re)building the image, and the image user owns /home/dev.
         UID: "${UID:-1000}"
         GID: "${GID:-1000}"
         DIALOUT_GID: "${DIALOUT_GID:-20}"
-    image: esp32-sensors-dev:latest
 
     # Interactive TTY so `idf.py monitor` and its menus work correctly.
     stdin_open: true
@@ -60,7 +81,13 @@ services:
       # non-root container user cannot create scratch files there. That breaks
       # CLion/Gateway deploys, which fail with
       # "open /tmp/cwmHostStatus<N>: permission denied".
-      # Persist shell history and the IDF component cache between runs.
+      # Persist shell history and scratch state between runs.
+      #
+      # NOTE: `idf-espressif-cache` (/home/dev/.espressif) is *not* where the
+      # image keeps its tools — the pinned image sets IDF_TOOLS_PATH=/opt/esp
+      # and bakes the whole toolchain in there, so this volume stays empty. It
+      # is kept only for the case where someone points IDF_TOOLS_PATH back at
+      # the classic per-user location.
       - idf-bash-history:/home/dev/.commandhistory
       - idf-espressif-cache:/home/dev/.espressif
 

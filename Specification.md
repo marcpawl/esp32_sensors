@@ -1,8 +1,8 @@
 # Software Specification: ESP32 Solar-Powered Thermometer Logger
 
-**Version:** Rev 12
+**Version:** Rev 13
 **Status:** Ready for implementation
-**Date:** 2026-09-27
+**Date:** 2026-10-25
 
 A solar-powered, battery-backed ESP32-S3 that samples three DS18B20 thermometers on a shared 1-Wire bus and uploads readings to a remote URL over WiFi at a configurable cadence. Behavior is controlled by a 3-position ON-OFF-ON switch (Configure / Off / Run). Between samples the device uses **deep sleep** to minimize power; the sample buffer and Wi-Fi connection cache live in **RTC memory** so they survive sleep and backoff reboots.
 
@@ -31,13 +31,102 @@ A solar-powered, battery-backed ESP32-S3 that samples three DS18B20 thermometers
 |---|---|
 | Host OS | Linux Mint |
 | Container runtime | Docker |
-| Container image | `espressif/idf:release-v6.1` |
+| Container image | `marcpawl/esp-idf:20261025` (prebuilt) |
 | Source language | **C++26** (GNU extensions, `-std=gnu++26`) |
 | Target framework | ESP-IDF v6.1 |
 
 ### Why This Image
 
-The `espressif/idf` Docker image is the officially supported build environment for ESP-IDF, containing the cross-compiler toolchain, CMake, Ninja, Python virtual environment, and all required packages for the specified ESP-IDF version. The `release-v6.1` tag tracks the `release/v6.1` branch of ESP-IDF, which receives ongoing bug-fix updates and is considered production-ready.
+`marcpawl/esp-idf:20261025` is the **prebuilt, published** development image.
+It extends the official `espressif/idf:release-v6.1` image (the officially
+supported build environment for ESP-IDF: cross-compiler toolchain, CMake,
+Ninja, Python virtual environment, and all required packages) with this
+project's tooling — `gh`, PyGithub, and esp-clang (which supplies the
+`clang-format` used by the pre-commit hook).
+
+The tag is **date-stamped and never moved**, and it is pinned in exactly two
+places: `docker-compose.yml` (`image:`) and `scripts/dev.py` (`DEV_IMAGE`).
+CI pulls the same tag, so developers and CI build with an identical toolchain,
+and a build never silently picks up a newer upstream image.
+
+To change the image, publish a **new** date-stamped tag rather than moving an
+existing one (see `Developer.md`, "Updating / publishing the dev image").
+`./scripts/dev.py self-check` fails if the two pins disagree.
+
+### Container Usage
+
+Developers and CI pull the image and run tasks through `scripts/dev.py`, which
+supplies the user mapping and environment flags described below:
+
+```bash
+# Pull the pinned image (host only; not run inside a container)
+./scripts/dev.py pull       # == docker pull marcpawl/esp-idf:20261025
+
+# Build the firmware, run the host tests, check formatting
+./scripts/dev.py build
+./scripts/dev.py test
+./scripts/dev.py format-check
+```
+
+An interactive shell with the ESP-IDF environment already sourced:
+
+```bash
+docker compose run --rm dev
+```
+
+The equivalent ad-hoc form, if a command must bypass `dev.py`:
+
+```bash
+docker run --rm -v $PWD:/project -w /project -u "$(id -u):$(id -g)" \
+  -e HOME=/tmp -e CCACHE_DIR=/tmp/.cache/ccache \
+  marcpawl/esp-idf:20261025 idf.py build
+```
+
+> **Docker note (Linux):** Your user must have access to the Docker daemon (typically via the `docker` group) and to the serial device (via the `dialout` group). Add with:
+> ```bash
+> sudo usermod -aG docker,dialout $USER
+> ```
+> then log out and back in.
+
+**File ownership and `HOME`:** A bind mount does not translate uids, so the
+container is run as the **calling** user (`--user "$(id -u):$(id -g)"`): every
+file it writes into the project is owned by that user on the host, with no
+`chown` and no user-namespace remapping.
+
+The image's own user is uid 1000, which owns `/home/dev`. Any other uid — a
+normal host user, or GitHub's runner at uid 1001 — has no passwd entry inside
+the image, so `$HOME` resolves to `/` and tools that cache there fail
+(`ccache: error: Permission denied`). `scripts/dev.py` therefore exports
+`HOME=/tmp` and `CCACHE_DIR=/tmp/.cache/ccache` for every uid except 1000;
+uid 1000 keeps `/home/dev` and its persisted cache volume.
+
+### CLion Configuration Notes
+
+**Dev Container:** CLion 2026.2 attaches to the same compose `dev` service via
+`.devcontainer/devcontainer.json` (which reuses `docker-compose.yml` and never
+defines its own image). CLion pulls the pinned image when it is not cached and
+starts the container on demand.
+
+- Point CLion at the standard Docker socket (`unix:///var/run/docker.sock`).
+- Select the `marcpawl/esp-idf:20261025` image (or open the repo as a Dev
+  Container, which takes it from `docker-compose.yml`).
+- CLion will run commands inside the container transparently.
+
+**ESP-IDF environment in CLion:** Inside the container, ESP-IDF's environment is
+already sourced by the image entrypoint, so the environment-file mechanism is
+typically unnecessary. IDE-driven processes (CMake, compilers, CLion itself) do
+not run that entrypoint, so `.devcontainer/devcontainer.json` exposes
+`IDF_PATH`, `IDF_TOOLS_PATH=/opt/esp`, and the toolchain `PATH` explicitly. The
+image keeps its tools under `/opt/esp` — **not** the classic per-user
+`~/.espressif`. If a new image is published, re-derive the `PATH` list from
+`. $IDF_PATH/export.sh && echo $PATH` inside the container.
+
+**Serial monitor in CLion:** The host `/dev` tree is bind-mounted into the
+container, so serial devices appear automatically (no `--device` flag needed);
+access is granted by the `dialout` group via `group_add`. Alternatively, use
+CLion's built-in terminal to run `idf.py monitor`.
+
+**Recommended workflow:** Use CLion for editing, code navigation, and CMake configuration; use CLion's built-in terminal (`Alt+F12`) for `idf.py` operations (build, flash, monitor, menuconfig) or run `scripts/dev.py` tasks from the Run toolbar.
 
 ### C++26 Configuration
 
@@ -48,62 +137,6 @@ For components that mix C and C++, ensure `app_main` is declared with C linkage:
 ```cpp
 extern "C" void app_main(void);
 ```
-
-### Container Usage
-
-**Build (non-interactive):**
-```bash
-docker run --rm -v $PWD:/project -w /project -u $UID \
-  -e HOME=/tmp \
-  espressif/idf:release-v6.1 idf.py build
-```
-
-**Interactive session (for menuconfig, debugging):**
-```bash
-docker run --rm -v $PWD:/project -w /project -u $UID \
-  -e HOME=/tmp -it \
-  espressif/idf:release-v6.1
-# Inside the container:
-idf.py menuconfig
-idf.py build
-```
-
-**Flashing and monitoring (Linux host):**
-
-```bash
-docker run --rm -v $PWD:/project -w /project -u $UID \
-  -e HOME=/tmp \
-  --device=/dev/ttyUSB0 \
-  espressif/idf:release-v6.1 idf.py -p /dev/ttyUSB0 flash monitor
-```
-
-> **Docker note (Linux):** Your user must have access to the Docker daemon (typically via the `docker` group) and to the serial device (via the `dialout` group). Add with:
-> ```bash
-> sudo usermod -aG docker,dialout $USER
-> ```
-> then log out and back in.
-
-**Git ownership workaround:**
-
-```bash
-docker run --rm -v $PWD:/project -w /project -u $UID \
-  -e HOME=/tmp -e IDF_GIT_SAFE_DIR='/project' \
-  espressif/idf:release-v6.1 idf.py build
-```
-
-### CLion Configuration Notes
-
-**Docker toolchain:** CLion's Docker toolchain integration is first-class and officially supported. Configure it under **Settings | Build, Execution, Deployment | Toolchains → Add → Docker**.
-
-- Point CLion at the standard Docker socket (`unix:///var/run/docker.sock`).
-- Select the `espressif/idf:release-v6.1` image.
-- CLion will build and run commands inside the container transparently.
-
-**ESP-IDF environment in CLion:** Inside the Docker container, ESP-IDF's environment is already sourced by the image entrypoint, so the environment-file mechanism is typically unnecessary. If CLion complains about missing `idf.py`, point its "Environment file" setting at `/opt/esp/idf/export.sh` (path inside the image) or leave it blank and rely on the container's entrypoint.
-
-**Serial monitor in CLion:** Pass the serial device through to the container with `--device=/dev/ttyUSB0` (add this to the CLion Docker toolchain's container options). Alternatively, use CLion's built-in terminal to run `idf.py monitor`.
-
-**Recommended workflow:** Use CLion for editing, code navigation, and CMake configuration; use CLion's built-in terminal (`Alt+F12`) for `idf.py` operations (build, flash, monitor, menuconfig).
 
 ### C++26 Feature Notes for Embedded
 
@@ -709,3 +742,4 @@ Panel ≈ 8 / 0.504 / 3 ≈ 5.3 mW
 | 10 | `saved_time` field added (non-editable, UTC, set on save via NTP). NTP server field added (default `time.nrc.ca`, confirmed valid). |
 | 11 | Development environment: Linux Mint, Podman, CLion 2026.2, `espressif/idf:release-v6.1`, C++26. |
 | 12 | Container runtime switched from Podman to **Docker**. |
+| 13 | Container image pinned to the prebuilt `marcpawl/esp-idf:20261025` (the official `espressif/idf:release-v6.1` image plus project tooling: `gh`, PyGithub, esp-clang), pulled by developers and CI rather than built locally. Container runs as the calling user (no chown); `HOME`/`CCACHE_DIR` are pinned for non-1000 uids so ccache works on CI (runner uid 1001). CLion attaches through the Dev Container. |
