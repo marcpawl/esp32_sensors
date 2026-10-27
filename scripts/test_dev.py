@@ -221,6 +221,64 @@ class SubprojectBuildTests(unittest.TestCase):
             )
 
 
+class IdfRunnerTests(unittest.TestCase):
+    """The aggregate targets reach `idf.py` through `scripts/idf.sh`.
+
+    The image's entrypoint sources `export.sh`, but nothing started *later*
+    (CLion's CMake/Ninja build in particular) inherits that environment, so a
+    bare `idf.py` there dies with "TypeError: ... got 'NoneType'" because
+    `ESP_IDF_VERSION` is unset. The CMake targets must therefore go through the
+    wrapper, which establishes the environment itself; see scripts/idf.sh.
+    """
+
+    RUNNER = "scripts/idf.sh"
+
+    def _runner(self) -> Path:
+        return dev.REPO_ROOT / self.RUNNER
+
+    def test_runner_exists_and_is_executable(self):
+        runner = self._runner()
+        self.assertTrue(runner.is_file(), f"missing {runner}")
+        self.assertTrue(
+            os.access(runner, os.X_OK),
+            f"runner is not executable: {runner}",
+        )
+
+    def test_runner_is_tracked_by_git(self):
+        tracked = subprocess.run(
+            ("git", "ls-files", "--", self.RUNNER),
+            cwd=dev.REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.splitlines()
+        self.assertIn(self.RUNNER, tracked)
+
+    def test_runner_establishes_the_environment_when_absent(self):
+        script = self._runner().read_text()
+        # idf.py needs both of these; export.sh is what provides them.
+        self.assertIn("IDF_PYTHON_ENV_PATH", script)
+        self.assertIn("ESP_IDF_VERSION", script)
+        self.assertIn("export.sh", script)
+        # ...and it must fail loudly rather than exec into a broken env.
+        self.assertIn("exit 1", script)
+
+    def test_runner_passes_the_command_through_unmodified(self):
+        script = self._runner().read_text()
+        self.assertIn('exec "$@"', script)
+
+    def test_aggregate_targets_use_the_runner(self):
+        # Every `<subproject>_build` target runs idf.py via the wrapper, never
+        # the bare binary: that is what makes an IDE-launched build work.
+        root_cmake = (dev.REPO_ROOT / "CMakeLists.txt").read_text()
+        self.assertIn("set(IDF_RUNNER", root_cmake)
+        self.assertIn('"${IDF_RUNNER}"', root_cmake)
+        # The runner is referenced from the shared helper, so no target can
+        # accidentally bypass it.
+        helper = root_cmake.split("function(_idf_subproject", 1)[1]
+        self.assertIn('"${IDF_RUNNER}"', helper.split("endfunction()", 1)[0])
+
+
 class DevImageTests(unittest.TestCase):
     """The pinned prebuilt image is wired up consistently.
 
