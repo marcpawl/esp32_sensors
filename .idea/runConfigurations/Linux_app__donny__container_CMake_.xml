@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Shared CLion run configuration for the linux-emulated application
+  (`donny/`).
+
+  A native CLion *CMake* run configuration (not a shell script): CLion builds
+  `donny.elf` from the "Linux app (donny)" profile in .idea/cmake.xml.
+  Selecting it makes that profile active, so the IDE's resolve configuration
+  is donny's `linux`-target one (hal_stub, host include paths).
+
+  `donny` links the same shared components as the firmware and the tests
+  (`components/espidf_cpp`, `components/logic`, `components/hal_stub`), so
+  having its profile enabled keeps those sources resolvable in a third,
+  consistent way.
+
+  TARGET_NAME and CONFIG_NAME must both exist: `donny.elf` is a target of
+  `donny/` and "Linux app (donny)" is a profile in .idea/cmake.xml.
+-->
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Linux app (donny, container CMake)" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="esp32_sensors" TARGET_NAME="donny.elf" CONFIG_NAME="Linux app (donny)" RUN_PATH="$CTest$">
+    <method v="2">
+      <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+    </method>
+  </configuration>
+</component>

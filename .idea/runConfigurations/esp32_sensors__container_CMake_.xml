@@ -1,36 +1,29 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Shared CLion run configuration: build the firmware via the root aggregator.
+  Shared CLion run configuration: build the firmware through CLion's own CMake
+  project model (the "Espressif ESP32-S3" profile in .idea/cmake.xml).
 
   This is a native CLion *CMake* run configuration (not a shell script), so
-  CLion drives the build through its own CMake project model. That is what
-  enables the Compile/Build actions for this project.
+  CLion drives the build from the CMake project it has configured. Building
+  through it is what makes the profile's compile database live, which is what
+  enables navigation and C++ refactorings for the firmware.
 
-  TARGET_NAME must be an actual target of the root aggregator (CMakeLists.txt
-  at the repo root). That project is `esp32_sensors_subprojects NONE` and it
-  defines exactly four custom targets, deliberately prefixed with their
-  subproject name:
+  TARGET_NAME is a real target of `mcgowan/` (ESP-IDF names executable
+  targets `<name>.elf`; `mcgowan.elf` produces mcgowan.bin as a side effect of
+  the `app`/all target). CONFIG_NAME must name an *existing* profile from
+  .idea/cmake.xml - it is the profile that supplies the build directory and
+  the toolchain, so a stale name here is another way to get "cannot find any
+  profile".
 
-      mcgowan_build        ESP32-S3 firmware (mcgowan.bin)
-      test_build           host unit tests (linux target)
-      espidf-cpp-test_build host tests for components/espidf_cpp (linux)
-      donny_build          linux-emulated application
+  The other subprojects are indexed through their own profiles (see
+  .idea/cmake.xml) and are built/run by the "Host unit tests (container)" and
+  "Build firmware (container)" configurations, which call scripts/dev.py.
 
-  There is no target called `esp32_sensors`, so a configuration naming one
-  cannot resolve and the build fails. TARGET_NAME below is `mcgowan_build`.
-  To build a different subproject, change it to one of the four names above.
-
-  The CMake build itself runs inside the Dev Container via the CMake profile
-  defined in .idea/cmake.xml (reused `dev` compose service, ESP-IDF v6.1).
-  Building on the host is not supported; the top-level CMakeLists.txt enforces
-  that only the container build proceeds.
-
-  Build directory is cmake-build-esp32s3/ (GENERATION_DIR in .idea/cmake.xml),
-  kept separate from mcgowan/build_esp32s3/ so CLion's CMake cache never
-  collides with the canonical idf.py build used by scripts/dev.py.
+  Building on the host is not supported; each subproject's CMakeLists.txt
+  enforces that only the container build proceeds.
 -->
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="esp32_sensors (container CMake)" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="esp32_sensors" TARGET_NAME="mcgowan_build" CONFIG_NAME="Espressif ESP32-S3" RUN_PATH="$CTest$">
+  <configuration default="false" name="esp32_sensors (container CMake)" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="esp32_sensors" TARGET_NAME="mcgowan.elf" CONFIG_NAME="Espressif ESP32-S3" RUN_PATH="$CTest$">
     <method v="2">
       <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
     </method>

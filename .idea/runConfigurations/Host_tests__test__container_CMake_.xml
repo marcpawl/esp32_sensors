@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Shared CLion run configuration for the host unit tests (`test/`).
+
+  A native CLion *CMake* run configuration (not a shell script): CLion builds
+  `esp32_sensors_tests.elf` from the "Host tests (test)" profile in
+  .idea/cmake.xml. Selecting this configuration also makes that profile the
+  active one, so the IDE's resolve configuration - and therefore navigation,
+  hovers and C++ refactorings - is the `linux`-target view of the code
+  (hal_stub rather than hal_board, host include paths, no Xtensa defines).
+
+  This configuration *builds* the tests. To actually run them, use "Host unit
+  tests (container)", which calls `scripts/dev.py test` and reports the Unity
+  results; this one exists so the test project is indexed and buildable from
+  the IDE like the firmware is.
+
+  TARGET_NAME and CONFIG_NAME must both exist: `esp32_sensors_tests.elf` is a
+  target of `test/`, and "Host tests (test)" is a profile in .idea/cmake.xml.
+-->
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Host tests (test, container CMake)" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="esp32_sensors" TARGET_NAME="esp32_sensors_tests.elf" CONFIG_NAME="Host tests (test)" RUN_PATH="$CTest$">
+    <method v="2">
+      <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+    </method>
+  </configuration>
+</component>
