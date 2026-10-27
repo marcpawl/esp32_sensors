@@ -1,21 +1,41 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Shared CLion run configuration: build the esp32_sensors CMake target.
+  Shared CLion run configuration: build the firmware through CLion's own CMake
+  project model (the "Espressif ESP32-S3" profile in .idea/cmake.xml).
 
   This is a native CLion *CMake* run configuration (not a shell script), so
-  CLion drives the build through its own CMake project model. That is what
-  enables the Compile/Build actions and C++ refactorings (rename, change
-  signature, ...) for this project.
+  CLion drives the build from the CMake project it has configured. Building
+  through it is what makes the profile's compile database live, which is what
+  enables navigation and C++ refactorings for the firmware.
 
-  The CMake build itself runs inside the Dev Container via the CMake profile
-  defined in .idea/cmake.xml (reused `dev` compose service, ESP-IDF v6.1).
-  Building on the host is not supported; the top-level CMakeLists.txt enforces
-  that only the container build proceeds.
+  TARGET_NAME must be a target of the CMake project named by PROJECT_NAME -
+  that is, of the ROOT aggregator, not of `mcgowan/`. The root only defines
+  `<subproject>_build` custom targets (`mcgowan_build`, `test_build`, ...),
+  which shell out to `idf.py`; ESP-IDF's `<name>.elf` targets belong to the
+  subprojects' own CMake projects and are invisible here. Naming
+  `mcgowan.elf` therefore fails with "cannot find target". `mcgowan_build`
+  builds the firmware (producing mcgowan.bin) via idf.py, and the ELF
+  targets of the other subprojects are not reachable from this project at
+  all - build those with their own `*_build` target or scripts/dev.py.
+  CONFIG_NAME must name an *existing* profile from .idea/cmake.xml - it is
+  the profile that supplies the build directory and the toolchain, so a
+  stale name here is another way to get "cannot find any profile".
 
-  Build directory is build_esp32s3/, matching scripts/dev.py and .gitignore.
+  The other subprojects are indexed through their own profiles (see
+  .idea/cmake.xml) and are built/run by the "Host unit tests (container)" and
+  "Build firmware (container)" configurations, which call scripts/dev.py.
+
+  Building on the host is not supported; each subproject's CMakeLists.txt
+  enforces that only the container build proceeds.
+  PROJECT_NAME must be the root CMake project's name
+  (`esp32_sensors_subprojects`, from the root `project()`): a CMake run
+  configuration is bound to one CMake project, and a stale name here is another
+  way to get "cannot find any profile"/target. CLion rewrites this attribute
+  whenever it re-resolves the project, so keep it correct rather than letting
+  the IDE discover it for you.
 -->
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="esp32_sensors (container CMake)" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="esp32_sensors" TARGET_NAME="esp32_sensors" CONFIG_NAME="Espressif ESP32-S3" RUN_PATH="$CTest$">
+  <configuration default="false" name="esp32_sensors (container CMake)" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="esp32_sensors_subprojects" TARGET_NAME="mcgowan_build" CONFIG_NAME="Espressif ESP32-S3" RUN_PATH="$CTest$">
     <method v="2">
       <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
     </method>

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Shared CLion run configuration for the host unit tests (`test/`).
+
+  A native CLion *CMake* run configuration (not a shell script): CLion builds
+  `test_build` (the root aggregator's target that runs `idf.py build` in
+  `test/`) from the "Host tests (test)" profile in .idea/cmake.xml. Selecting
+  this configuration also makes that profile the active one, so the IDE's
+  resolve configuration - and therefore navigation, hovers and C++
+  refactorings - is the `linux`-target view of the code (hal_stub rather than
+  hal_board, host include paths, no Xtensa defines).
+
+  This configuration *builds* the tests. To actually run them, use "Host unit
+  tests (container)", which calls `scripts/dev.py test` and reports the Unity
+  results; this one exists so the test project is buildable from the IDE.
+
+  TARGET_NAME must be a target of the CMake project named by PROJECT_NAME -
+  that is, of the ROOT aggregator, not of `test/`. The root only defines
+  `<subproject>_build` custom targets, so `test_build` is the reachable name
+  and `esp32_sensors_tests.elf` (an ESP-IDF target of `test/`'s own CMake
+  project) is not; naming the ELF fails with "cannot find target".
+  CONFIG_NAME must name an *existing* profile from .idea/cmake.xml.
+  PROJECT_NAME must be the root CMake project's name
+  (`esp32_sensors_subprojects`, from the root `project()`): a CMake run
+  configuration is bound to one CMake project, and a stale name here is another
+  way to get "cannot find any profile"/target. CLion rewrites this attribute
+  whenever it re-resolves the project, so keep it correct rather than letting
+  the IDE discover it for you.
+-->
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Host tests (test, container CMake)" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="esp32_sensors_subprojects" TARGET_NAME="test_build" CONFIG_NAME="Host tests (test)" RUN_PATH="$CTest$">
+    <method v="2">
+      <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+    </method>
+  </configuration>
+</component>

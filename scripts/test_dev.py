@@ -221,6 +221,160 @@ class SubprojectBuildTests(unittest.TestCase):
             )
 
 
+class IdfRunnerTests(unittest.TestCase):
+    """The aggregate targets reach `idf.py` through `scripts/idf.sh`.
+
+    The image's entrypoint sources `export.sh`, but nothing started *later*
+    (CLion's CMake/Ninja build in particular) inherits that environment, so a
+    bare `idf.py` there dies with "TypeError: ... got 'NoneType'" because
+    `ESP_IDF_VERSION` is unset. The CMake targets must therefore go through the
+    wrapper, which establishes the environment itself; see scripts/idf.sh.
+    """
+
+    RUNNER = "scripts/idf.sh"
+
+    def _runner(self) -> Path:
+        return dev.REPO_ROOT / self.RUNNER
+
+    def test_runner_exists_and_is_executable(self):
+        runner = self._runner()
+        self.assertTrue(runner.is_file(), f"missing {runner}")
+        self.assertTrue(
+            os.access(runner, os.X_OK),
+            f"runner is not executable: {runner}",
+        )
+
+    def test_runner_is_tracked_by_git(self):
+        tracked = subprocess.run(
+            ("git", "ls-files", "--", self.RUNNER),
+            cwd=dev.REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.splitlines()
+        self.assertIn(self.RUNNER, tracked)
+
+    def test_runner_establishes_the_environment_when_absent(self):
+        script = self._runner().read_text()
+        # idf.py needs both of these; export.sh is what provides them.
+        self.assertIn("IDF_PYTHON_ENV_PATH", script)
+        self.assertIn("ESP_IDF_VERSION", script)
+        self.assertIn("export.sh", script)
+        # ...and it must fail loudly rather than exec into a broken env.
+        self.assertIn("exit 1", script)
+
+    def test_runner_passes_the_command_through_unmodified(self):
+        script = self._runner().read_text()
+        self.assertIn('exec "$@"', script)
+
+    def test_aggregate_targets_use_the_runner(self):
+        # Every `<subproject>_build` target runs idf.py via the wrapper, never
+        # the bare binary: that is what makes an IDE-launched build work.
+        root_cmake = (dev.REPO_ROOT / "CMakeLists.txt").read_text()
+        self.assertIn("set(IDF_RUNNER", root_cmake)
+        self.assertIn('"${IDF_RUNNER}"', root_cmake)
+        # The runner is referenced from the shared helper, so no target can
+        # accidentally bypass it.
+        helper = root_cmake.split("function(_idf_subproject", 1)[1]
+        self.assertIn('"${IDF_RUNNER}"', helper.split("endfunction()", 1)[0])
+
+
+class ClionRunConfigurationTests(unittest.TestCase):
+    """CLion CMake run configurations name the root CMake project.
+
+    A CMake run configuration is bound to one CMake project by
+    `PROJECT_NAME`, which must be the name the root `project()` declares.
+    The committed value went stale when the firmware moved into `mcgowan/`
+    and the root became `project(esp32_sensors_subprojects NONE)`; a stale
+    name is one of the ways CLion reports "cannot find any profile" / no
+    target. CLion rewrites the attribute itself once it resolves the project,
+    which is why leaving it stale is a latent breakage rather than a fix.
+
+    Only `PROJECT_NAME` is checked: the comments and the trailing newline are
+    also lost on a CLion rewrite, and the tracked copies are the ones that
+    should keep them.
+    """
+
+    def _root_project_name(self) -> str:
+        """The single `project()` name declared by the root CMakeLists.txt."""
+        root_cmake = (dev.REPO_ROOT / "CMakeLists.txt").read_text()
+        names = re.findall(r"^project\(\s*([A-Za-z0-9_]+)", root_cmake, re.M)
+        self.assertEqual(
+            len(names), 1, f"root CMakeLists.txt declares project() {names}"
+        )
+        return names[0]
+
+    def _cmake_run_configurations(self):
+        """(filename, element) for every CMake run configuration."""
+        import xml.etree.ElementTree as ET
+
+        directory = dev.REPO_ROOT / ".idea" / "runConfigurations"
+        self.assertTrue(directory.is_dir(), f"missing {directory}")
+        found = []
+        for path in sorted(directory.glob("*.xml")):
+            root = ET.parse(path).getroot()
+            for configuration in root.iter("configuration"):
+                if configuration.get("type") == "CMakeRunConfiguration":
+                    found.append((path.name, configuration))
+        self.assertTrue(found, "no CMake run configurations found")
+        return found
+
+    def test_every_cmake_run_configuration_names_the_root_project(self):
+        expected = self._root_project_name()
+        for name, configuration in self._cmake_run_configurations():
+            with self.subTest(configuration=name):
+                self.assertEqual(configuration.get("PROJECT_NAME"), expected)
+
+    def test_cmake_run_configurations_name_an_existing_profile(self):
+        # CONFIG_NAME selects the profile that supplies the build directory and
+        # toolchain, so a name that is not in .idea/cmake.xml fails the run.
+        cmake_xml = (dev.REPO_ROOT / ".idea" / "cmake.xml").read_text()
+        profiles = set(re.findall(r'PROFILE_NAME="([^"]+)"', cmake_xml))
+        self.assertTrue(profiles, ".idea/cmake.xml declares no profiles")
+        for name, configuration in self._cmake_run_configurations():
+            with self.subTest(configuration=name):
+                self.assertIn(configuration.get("CONFIG_NAME"), profiles)
+
+    def _root_targets(self) -> set[str]:
+        """Targets the root aggregator defines.
+
+        A CMake run configuration resolves TARGET_NAME against the project in
+        PROJECT_NAME, which is the root aggregator - not against the
+        subproject whose sources are being built. The root declares one
+        `add_custom_target(<sub>_build)` per subproject (via
+        `_idf_subproject`) and nothing else, so those `*_build` names are the
+        only ones resolvable from a run configuration.
+        """
+        root_cmake = (dev.REPO_ROOT / "CMakeLists.txt").read_text()
+        # `add_custom_target(${sub}_build ALL ...)` is the one target statement.
+        self.assertIn("add_custom_target(${sub}_build", root_cmake)
+        # The concrete names come from the `_idf_subproject(<name> ...)` calls.
+        return {
+            f"{sub}_build"
+            for sub in re.findall(
+                r"^\s*_idf_subproject\(\s*([A-Za-z0-9_-]+)", root_cmake, re.M
+            )
+        }
+
+    def test_cmake_run_configurations_name_an_existing_root_target(self):
+        # Regression: the configurations used to name the subprojects' ESP-IDF
+        # ELF targets (mcgowan.elf, donny.elf, ...). Those belong to the
+        # subprojects' own CMake projects, so they are invisible from the root
+        # aggregator that PROJECT_NAME binds to, and CLion fails with
+        # "cannot find target" instead of building.
+        root = self._root_targets()
+        self.assertTrue(root, "root CMakeLists.txt defines no *_build targets")
+        for name, configuration in self._cmake_run_configurations():
+            with self.subTest(configuration=name):
+                self.assertIn(
+                    configuration.get("TARGET_NAME"),
+                    root,
+                    f"{name}: TARGET_NAME "
+                    f"{configuration.get('TARGET_NAME')!r} is not a target of "
+                    f"{configuration.get('PROJECT_NAME')!r} (has {sorted(root)})",
+                )
+
+
 class DevImageTests(unittest.TestCase):
     """The pinned prebuilt image is wired up consistently.
 

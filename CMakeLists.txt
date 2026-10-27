@@ -46,6 +46,15 @@ if(NOT DEFINED ENV{IDF_PATH} OR NOT EXISTS "$ENV{IDF_PATH}/export.sh")
         "IDF_PATH is not set; run this inside the ESP-IDF dev container.")
 endif()
 
+# Every idf.py invocation below goes through scripts/idf.sh, which establishes
+# the ESP-IDF environment when the caller did not inherit it. That matters
+# because this project is configured and built by CLion in the same container:
+# the IDE's processes get the bare container environment (IDF_PATH and
+# IDF_TOOLS_PATH, but none of the variables export.sh derives), and idf.py
+# aborts with "TypeError: ... got 'NoneType'" on an unset ESP_IDF_VERSION
+# before it touches the project. See scripts/idf.sh for the details.
+set(IDF_RUNNER "${CMAKE_CURRENT_SOURCE_DIR}/scripts/idf.sh")
+
 project(esp32_sensors_subprojects NONE)
 
 # Which subprojects to build. Default: all of them.
@@ -63,7 +72,10 @@ foreach(sub IN LISTS SUBPROJECTS)
     endif()
 endforeach()
 
-# idf.py and its Python environment live in IDF_PATH/tools.
+# idf.py and its Python environment live in IDF_PATH/tools. Putting it on PATH
+# here is a convenience for interactive use of this build tree; the targets do
+# not depend on it, because scripts/idf.sh adds it (and the rest of the ESP-IDF
+# environment) itself.
 set(ENV{PATH} "$ENV{IDF_PATH}/tools:$ENV{PATH}")
 
 # One `<subproject>_build` target per subproject. It runs idf.py in the
@@ -75,7 +87,11 @@ set(ENV{PATH} "$ENV{IDF_PATH}/tools:$ENV{PATH}")
 # words because `;` is CMake's list separator; the invocations are `;`-separated
 # in turn. One target per subproject keeps its name unique.
 function(_idf_subproject sub build_dir)
+    # idf.py is run through scripts/idf.sh rather than directly: the wrapper
+    # guarantees the ESP-IDF environment, which an IDE-launched build does not
+    # inherit (see the IDF_RUNNER comment above).
     set(common
+        "${IDF_RUNNER}"
         idf.py
         -C "${CMAKE_CURRENT_SOURCE_DIR}/${sub}"
         -B "${CMAKE_CURRENT_SOURCE_DIR}/${sub}/${build_dir}"
