@@ -16,9 +16,15 @@
 
   TARGET_NAME and CONFIG_NAME must both exist: `esp32_sensors_tests.elf` is a
   target of `test/`, and "Host tests (test)" is a profile in .idea/cmake.xml.
+  PROJECT_NAME must be the root CMake project's name
+  (`esp32_sensors_subprojects`, from the root `project()`): a CMake run
+  configuration is bound to one CMake project, and a stale name here is another
+  way to get "cannot find any profile"/target. CLion rewrites this attribute
+  whenever it re-resolves the project, so keep it correct rather than letting
+  the IDE discover it for you.
 -->
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Host tests (test, container CMake)" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="esp32_sensors" TARGET_NAME="esp32_sensors_tests.elf" CONFIG_NAME="Host tests (test)" RUN_PATH="$CTest$">
+  <configuration default="false" name="Host tests (test, container CMake)" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="esp32_sensors_subprojects" TARGET_NAME="esp32_sensors_tests.elf" CONFIG_NAME="Host tests (test)" RUN_PATH="$CTest$">
     <method v="2">
       <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
     </method>

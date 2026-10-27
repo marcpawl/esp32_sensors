@@ -279,6 +279,63 @@ class IdfRunnerTests(unittest.TestCase):
         self.assertIn('"${IDF_RUNNER}"', helper.split("endfunction()", 1)[0])
 
 
+class ClionRunConfigurationTests(unittest.TestCase):
+    """CLion CMake run configurations name the root CMake project.
+
+    A CMake run configuration is bound to one CMake project by
+    `PROJECT_NAME`, which must be the name the root `project()` declares.
+    The committed value went stale when the firmware moved into `mcgowan/`
+    and the root became `project(esp32_sensors_subprojects NONE)`; a stale
+    name is one of the ways CLion reports "cannot find any profile" / no
+    target. CLion rewrites the attribute itself once it resolves the project,
+    which is why leaving it stale is a latent breakage rather than a fix.
+
+    Only `PROJECT_NAME` is checked: the comments and the trailing newline are
+    also lost on a CLion rewrite, and the tracked copies are the ones that
+    should keep them.
+    """
+
+    def _root_project_name(self) -> str:
+        """The single `project()` name declared by the root CMakeLists.txt."""
+        root_cmake = (dev.REPO_ROOT / "CMakeLists.txt").read_text()
+        names = re.findall(r"^project\(\s*([A-Za-z0-9_]+)", root_cmake, re.M)
+        self.assertEqual(
+            len(names), 1, f"root CMakeLists.txt declares project() {names}"
+        )
+        return names[0]
+
+    def _cmake_run_configurations(self):
+        """(filename, element) for every CMake run configuration."""
+        import xml.etree.ElementTree as ET
+
+        directory = dev.REPO_ROOT / ".idea" / "runConfigurations"
+        self.assertTrue(directory.is_dir(), f"missing {directory}")
+        found = []
+        for path in sorted(directory.glob("*.xml")):
+            root = ET.parse(path).getroot()
+            for configuration in root.iter("configuration"):
+                if configuration.get("type") == "CMakeRunConfiguration":
+                    found.append((path.name, configuration))
+        self.assertTrue(found, "no CMake run configurations found")
+        return found
+
+    def test_every_cmake_run_configuration_names_the_root_project(self):
+        expected = self._root_project_name()
+        for name, configuration in self._cmake_run_configurations():
+            with self.subTest(configuration=name):
+                self.assertEqual(configuration.get("PROJECT_NAME"), expected)
+
+    def test_cmake_run_configurations_name_an_existing_profile(self):
+        # CONFIG_NAME selects the profile that supplies the build directory and
+        # toolchain, so a name that is not in .idea/cmake.xml fails the run.
+        cmake_xml = (dev.REPO_ROOT / ".idea" / "cmake.xml").read_text()
+        profiles = set(re.findall(r'PROFILE_NAME="([^"]+)"', cmake_xml))
+        self.assertTrue(profiles, ".idea/cmake.xml declares no profiles")
+        for name, configuration in self._cmake_run_configurations():
+            with self.subTest(configuration=name):
+                self.assertIn(configuration.get("CONFIG_NAME"), profiles)
+
+
 class DevImageTests(unittest.TestCase):
     """The pinned prebuilt image is wired up consistently.
 

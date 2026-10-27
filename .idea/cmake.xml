@@ -82,6 +82,23 @@
   uses Ninja. GENERATION_OPTIONS also pins -DCMAKE_BUILD_TYPE=Debug so the
   compile database carries debug info and CLion's default CONFIG_NAME=Debug
   matches a configuration that actually exists.
+
+  KNOWN LIMITATION: the profiles above do NOT actually configure their
+  subproject yet, so the code model they were meant to provide does not
+  exist. GENERATION_DIR is only the *build* directory; the *source* directory
+  comes from the single CMake workspace, .idea/misc.xml
+  (CMakeWorkspace PROJECT_DIR="$PROJECT_DIR$"), which is the repo root for
+  every profile. Observed after a clean CLion rebuild: all four
+  cmake-build-* trees record CMAKE_HOME_DIRECTORY=/project, none contains a
+  compile_commands.json, each one's codemodel names project
+  `esp32_sensors_subprojects`, and the only targets are the four aggregate
+  custom targets (donny_build, espidf-cpp-test_build, mcgowan_build,
+  test_build) - all of type UTILITY, i.e. no compilable translation units. A
+  profile has no per-profile source directory, so fixing this means opening
+  the subprojects as separate CLion projects, or giving CLion a merged
+  compile_commands.json for the root. Until then, navigation and refactorings
+  are not driven by these profiles; `scripts/dev.py build` remains the way to
+  build everything.
 -->
 <project version="4">
   <component name="CMakeSharedSettings">

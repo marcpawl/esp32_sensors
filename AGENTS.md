@@ -140,7 +140,7 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 - `scripts/idf.sh` — runs a command (normally `idf.py`) with the ESP-IDF environment established, sourcing `$IDF_PATH/export.sh` when `IDF_PYTHON_ENV_PATH`/`ESP_IDF_VERSION` are absent. The image's entrypoint sources `export.sh` for the container's own command only; anything started later — notably the CMake/Ninja build CLion spawns — inherits a bare environment, where `idf.py` dies with `TypeError: expected string or bytes-like object, got 'NoneType'` (`Version.coerce(os.getenv('ESP_IDF_VERSION'))`). So the root aggregator's targets invoke `idf.py` through this wrapper (`set(IDF_RUNNER ...)` in `CMakeLists.txt`), which makes `cmake --build build_root` correct however it was started. `BASH_ENV` cannot substitute: bash sources it only for non-interactive shells and the image's `~/.bashrc` returns early for those. The wrapper is idempotent — it execs the command directly when the variables are already present — and exits non-zero when `IDF_PATH` is not an ESP-IDF checkout.
 - `scripts/test_dev.py` — host-side unit tests for `dev.py` itself (stdlib `unittest`, run by `scripts/dev.py self-check`). Imports `dev.py` in-process and covers its pure helpers — chiefly the command line `shell` builds (so shell syntax like pipes/semicolons is passed through verbatim) and `shell -C` path resolution. It also pins the `scripts/idf.sh` contract (`IdfRunnerTests`): the wrapper exists, is executable, is tracked by git, establishes the environment, passes the command through unmodified, and is used by the root aggregator's per-subproject helper.
 - `scripts/dev.py-completion.bash` — bash tab-completion for `scripts/dev.py`. Source it to complete subcommands (e.g. `./scripts/dev.py form<TAB>` → `format`, `format-check`, `format-check-staged`). It asks `dev.py complete <prefix>` for candidates, so the command list is defined in exactly one place.
-- `.idea/cmake.xml` / `.idea/runConfigurations/*.xml` — **committed** shared CLion configuration. `cmake.xml` defines one CMake profile per subproject, so each subproject is indexed and buildable inside the Dev Container; the run configurations drive the build, test, format, flash, and shell tasks (six via `python3 scripts/dev.py`, four native CMake configs — one per profile — for build/refactor). `.idea/workspace.xml` (local, git-ignored) holds per-machine state.
+- `.idea/cmake.xml` / `.idea/runConfigurations/*.xml` — **committed** shared CLion configuration. `cmake.xml` defines one CMake profile per subproject, so each subproject is indexed and buildable inside the Dev Container; the run configurations drive the build, test, format, flash, and shell tasks (six via `python3 scripts/dev.py`, four native CMake configs — one per profile — for build/refactor). `.idea/workspace.xml` (local, git-ignored) holds per-machine state. **Known limitation:** those profiles do not yet give the code model they were designed for. `GENERATION_DIR` is only the build directory; the source directory comes from the single CMake workspace in `.idea/misc.xml` (the repo root), so all four `cmake-build-*` trees configure the root aggregator (`CMAKE_HOME_DIRECTORY=/project`), contain no `compile_commands.json`, and expose only the four aggregate targets as `UTILITY` targets. Navigation/refactorings are therefore not driven by them; `scripts/dev.py build` is the way to build everything. Fixing it needs either one CLion project per subproject or a merged `compile_commands.json` at the root. **CLion rewrites these XML files from its in-memory model**: it drops XML comments and the trailing newline, and it restores the real `PROJECT_NAME` (`esp32_sensors_subprojects`, the root `project()` name) whenever it has resolved the project. Do not commit its wholesale rewrite — keep the comments and edit only the attribute that genuinely changed.
 - `LICENSE` — GPL-3.0.
 - `RELEASE_NOTES.md` — human-readable release notes; keep the "Implemented" / "Not yet implemented" split honest as milestones land.
 
@@ -382,6 +382,22 @@ required.
   notably `hal_board` (Xtensa) vs `hal_stub` (host/linux). The active profile is
   chosen by the run configuration's `CONFIG_NAME`.
 
+  > **Verified reality (2026-10-27): the profiles do not deliver that yet.**
+  > `GENERATION_DIR` sets only the *build* directory; the *source* directory is
+  > the single CMake workspace in `.idea/misc.xml`
+  > (`CMakeWorkspace PROJECT_DIR="$PROJECT_DIR$"`), which is the repo root for
+  > every profile. After a clean CLion rebuild all four `cmake-build-*` trees
+  > recorded `CMAKE_HOME_DIRECTORY=/project`, none contained a
+  > `compile_commands.json`, and each codemodel named project
+  > `esp32_sensors_subprojects` with only the four aggregate custom targets —
+  > all `UTILITY`, i.e. no compilable translation units. So all four profiles
+  > build the same root aggregator, `-DIDF_TARGET=...` is unused by
+  > `project(... NONE)`, and CLion gets no code model from them. Fixing it
+  > needs either one CLion project per subproject or a merged
+  > `compile_commands.json` exposed at the root. Until then `scripts/dev.py
+  > build` is the way to build, and navigation/refactorings are not driven by
+  > these profiles.
+
 > Editing the image, mounts, or user? Change `docker-compose.yml` (and `Dockerfile`),
 > **not** `devcontainer.json`. The Dev Container deliberately inherits everything
 > from the compose service so the CLI and the IDE cannot drift apart.
@@ -392,13 +408,18 @@ Eight shared run configurations are committed under `.idea/runConfigurations/`
 (and mirrored in the local `.idea/workspace.xml`). Six call `scripts/dev.py`,
 so a single script is the source of truth for container commands — run them
 from the CLion Run/Debug toolbar. The other two kinds are native CLion **CMake**
-run configurations: the four below (one per subproject profile) drive CLion's
-own CMake project model, which is what makes the compile database live and
-therefore what enables code navigation and C++ **refactorings**:
+run configurations: the four below (one per subproject profile) are meant to
+drive CLion's own CMake project model, which is what would make the compile
+database live and therefore enable code navigation and C++ **refactorings** —
+but see the "Verified reality" note above: they currently all configure the
+root aggregator and produce no compile database, so today they only build.
+`PROJECT_NAME` in each must match the root `project()` name,
+`esp32_sensors_subprojects`; CLion rewrites it to that once it has resolved the
+project, so a stale value there is a symptom, not a fix.
 
 | Run configuration | Kind | What it does |
 |---|---|---|
-| esp32_sensors (container CMake) | CMake | Builds `mcgowan.elf` via the `Espressif ESP32-S3` profile; indexes the firmware for refactorings |
+| esp32_sensors (container CMake) | CMake | Builds the `mcgowan_build` aggregate target via the `Espressif ESP32-S3` profile; intended (not yet achieved) to index the firmware for refactorings |
 | Host tests (test, container CMake) | CMake | Builds `esp32_sensors_tests.elf` via the `Host tests (test)` profile |
 | Host tests (espidf-cpp-test, container CMake) | CMake | Builds `esp32_sensors_espidf_cpp_tests.elf` via the `Host tests (espidf-cpp-test)` profile |
 | Linux app (donny, container CMake) | CMake | Builds `donny.elf` via the `Linux app (donny)` profile |
