@@ -30,8 +30,10 @@
   profile". Edit the profile in Settings | Build, Execution, Deployment |
   CMake, or update the attributes above - never reintroduce the old names.
   In particular a profile has NO "generation directory" of the *source*
-  project - it has no way to point CMake at a subdirectory. That is why there
-  is one profile per subproject: each profile IS that subproject.
+  project - it has no way to point CMake at a subdirectory. See the KNOWN
+  LIMITATION at the end of this comment for what that means in practice: the
+  profiles are meant to be one per subproject, but today every one of them
+  configures the repo root instead.
 
   ONE PROFILE PER SUBPROJECT (code model / refactoring)
   ======================================================

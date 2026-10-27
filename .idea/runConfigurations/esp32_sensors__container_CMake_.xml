@@ -8,12 +8,18 @@
   through it is what makes the profile's compile database live, which is what
   enables navigation and C++ refactorings for the firmware.
 
-  TARGET_NAME is a real target of `mcgowan/` (ESP-IDF names executable
-  targets `<name>.elf`; `mcgowan.elf` produces mcgowan.bin as a side effect of
-  the `app`/all target). CONFIG_NAME must name an *existing* profile from
-  .idea/cmake.xml - it is the profile that supplies the build directory and
-  the toolchain, so a stale name here is another way to get "cannot find any
-  profile".
+  TARGET_NAME must be a target of the CMake project named by PROJECT_NAME -
+  that is, of the ROOT aggregator, not of `mcgowan/`. The root only defines
+  `<subproject>_build` custom targets (`mcgowan_build`, `test_build`, ...),
+  which shell out to `idf.py`; ESP-IDF's `<name>.elf` targets belong to the
+  subprojects' own CMake projects and are invisible here. Naming
+  `mcgowan.elf` therefore fails with "cannot find target". `mcgowan_build`
+  builds the firmware (producing mcgowan.bin) via idf.py, and the ELF
+  targets of the other subprojects are not reachable from this project at
+  all - build those with their own `*_build` target or scripts/dev.py.
+  CONFIG_NAME must name an *existing* profile from .idea/cmake.xml - it is
+  the profile that supplies the build directory and the toolchain, so a
+  stale name here is another way to get "cannot find any profile".
 
   The other subprojects are indexed through their own profiles (see
   .idea/cmake.xml) and are built/run by the "Host unit tests (container)" and
@@ -29,7 +35,7 @@
   the IDE discover it for you.
 -->
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="esp32_sensors (container CMake)" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="esp32_sensors_subprojects" TARGET_NAME="mcgowan.elf" CONFIG_NAME="Espressif ESP32-S3" RUN_PATH="$CTest$">
+  <configuration default="false" name="esp32_sensors (container CMake)" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="esp32_sensors_subprojects" TARGET_NAME="mcgowan_build" CONFIG_NAME="Espressif ESP32-S3" RUN_PATH="$CTest$">
     <method v="2">
       <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
     </method>

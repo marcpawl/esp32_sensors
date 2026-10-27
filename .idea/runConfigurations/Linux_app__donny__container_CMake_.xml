@@ -4,7 +4,8 @@
   (`donny/`).
 
   A native CLion *CMake* run configuration (not a shell script): CLion builds
-  `donny.elf` from the "Linux app (donny)" profile in .idea/cmake.xml.
+  `donny_build` (the root aggregator's target that runs `idf.py build` in
+  `donny/`) from the "Linux app (donny)" profile in .idea/cmake.xml.
   Selecting it makes that profile active, so the IDE's resolve configuration
   is donny's `linux`-target one (hal_stub, host include paths).
 
@@ -13,8 +14,12 @@
   having its profile enabled keeps those sources resolvable in a third,
   consistent way.
 
-  TARGET_NAME and CONFIG_NAME must both exist: `donny.elf` is a target of
-  `donny/` and "Linux app (donny)" is a profile in .idea/cmake.xml.
+  TARGET_NAME must be a target of the CMake project named by PROJECT_NAME -
+  that is, of the ROOT aggregator, not of `donny/`. The root only defines
+  `<subproject>_build` custom targets, so `donny_build` is the reachable name
+  and `donny.elf` (an ESP-IDF target of donny's own CMake project) is not;
+  naming the ELF fails with "cannot find target". CONFIG_NAME must name an
+  *existing* profile from .idea/cmake.xml.
   PROJECT_NAME must be the root CMake project's name
   (`esp32_sensors_subprojects`, from the root `project()`): a CMake run
   configuration is bound to one CMake project, and a stale name here is another
@@ -23,7 +28,7 @@
   the IDE discover it for you.
 -->
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Linux app (donny, container CMake)" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="esp32_sensors_subprojects" TARGET_NAME="donny.elf" CONFIG_NAME="Linux app (donny)" RUN_PATH="$CTest$">
+  <configuration default="false" name="Linux app (donny, container CMake)" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="esp32_sensors_subprojects" TARGET_NAME="donny_build" CONFIG_NAME="Linux app (donny)" RUN_PATH="$CTest$">
     <method v="2">
       <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
     </method>

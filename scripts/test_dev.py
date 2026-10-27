@@ -335,6 +335,45 @@ class ClionRunConfigurationTests(unittest.TestCase):
             with self.subTest(configuration=name):
                 self.assertIn(configuration.get("CONFIG_NAME"), profiles)
 
+    def _root_targets(self) -> set[str]:
+        """Targets the root aggregator defines.
+
+        A CMake run configuration resolves TARGET_NAME against the project in
+        PROJECT_NAME, which is the root aggregator - not against the
+        subproject whose sources are being built. The root declares one
+        `add_custom_target(<sub>_build)` per subproject (via
+        `_idf_subproject`) and nothing else, so those `*_build` names are the
+        only ones resolvable from a run configuration.
+        """
+        root_cmake = (dev.REPO_ROOT / "CMakeLists.txt").read_text()
+        # `add_custom_target(${sub}_build ALL ...)` is the one target statement.
+        self.assertIn("add_custom_target(${sub}_build", root_cmake)
+        # The concrete names come from the `_idf_subproject(<name> ...)` calls.
+        return {
+            f"{sub}_build"
+            for sub in re.findall(
+                r"^\s*_idf_subproject\(\s*([A-Za-z0-9_-]+)", root_cmake, re.M
+            )
+        }
+
+    def test_cmake_run_configurations_name_an_existing_root_target(self):
+        # Regression: the configurations used to name the subprojects' ESP-IDF
+        # ELF targets (mcgowan.elf, donny.elf, ...). Those belong to the
+        # subprojects' own CMake projects, so they are invisible from the root
+        # aggregator that PROJECT_NAME binds to, and CLion fails with
+        # "cannot find target" instead of building.
+        root = self._root_targets()
+        self.assertTrue(root, "root CMakeLists.txt defines no *_build targets")
+        for name, configuration in self._cmake_run_configurations():
+            with self.subTest(configuration=name):
+                self.assertIn(
+                    configuration.get("TARGET_NAME"),
+                    root,
+                    f"{name}: TARGET_NAME "
+                    f"{configuration.get('TARGET_NAME')!r} is not a target of "
+                    f"{configuration.get('PROJECT_NAME')!r} (has {sorted(root)})",
+                )
+
 
 class DevImageTests(unittest.TestCase):
     """The pinned prebuilt image is wired up consistently.

@@ -4,7 +4,8 @@
   (`espidf-cpp-test/`).
 
   A native CLion *CMake* run configuration (not a shell script): CLion builds
-  `esp32_sensors_espidf_cpp_tests.elf` from the "Host tests (espidf-cpp-test)"
+  `espidf-cpp-test_build` (the root aggregator's target that runs `idf.py
+  build` in `espidf-cpp-test/`) from the "Host tests (espidf-cpp-test)"
   profile in .idea/cmake.xml. Selecting it makes that profile active, so the
   IDE's resolve configuration for `components/espidf_cpp` is the `linux`-target
   one - which is what its tests and the linux app assume.
@@ -12,8 +13,13 @@
   This configuration *builds* the tests. To run them use "Host unit tests
   (container)" (`scripts/dev.py test`), which also covers this suite.
 
-  TARGET_NAME and CONFIG_NAME must both exist: the ELF target is defined by
-  `espidf-cpp-test/` and the profile name must match .idea/cmake.xml.
+  TARGET_NAME must be a target of the CMake project named by PROJECT_NAME -
+  that is, of the ROOT aggregator, not of `espidf-cpp-test/`. The root only
+  defines `<subproject>_build` custom targets, so `espidf-cpp-test_build` is
+  the reachable name and `esp32_sensors_espidf_cpp_tests.elf` (an ESP-IDF
+  target of the subproject's own CMake project) is not; naming the ELF fails
+  with "cannot find target". CONFIG_NAME must name an *existing* profile from
+  .idea/cmake.xml.
   PROJECT_NAME must be the root CMake project's name
   (`esp32_sensors_subprojects`, from the root `project()`): a CMake run
   configuration is bound to one CMake project, and a stale name here is another
@@ -22,7 +28,7 @@
   the IDE discover it for you.
 -->
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Host tests (espidf-cpp-test, container CMake)" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="esp32_sensors_subprojects" TARGET_NAME="esp32_sensors_espidf_cpp_tests.elf" CONFIG_NAME="Host tests (espidf-cpp-test)" RUN_PATH="$CTest$">
+  <configuration default="false" name="Host tests (espidf-cpp-test, container CMake)" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="esp32_sensors_subprojects" TARGET_NAME="espidf-cpp-test_build" CONFIG_NAME="Host tests (espidf-cpp-test)" RUN_PATH="$CTest$">
     <method v="2">
       <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
     </method>
