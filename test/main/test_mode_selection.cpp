@@ -1,10 +1,11 @@
-// Tests for the mode-sense pole mapping (`mode_selection.hpp`, §3.1-§3.3).
+// Tests for the mode-sense pole mapping (`logic/mode_selection.hpp`,
+// §3.1-§3.3).
 //
 // The board exposes the 3-position ON-OFF-ON switch as two independent push
 // buttons — one per mode-sense pole — so the DPDT interpretation is logic. It
-// lives in a pure, `constexpr`, ESP-IDF-free header precisely so it can be
-// tested here without hardware: the stub board's `set()` is not needed, the
-// pole states are passed in directly.
+// lives in a pure, `constexpr`, ESP-IDF-free header in the `logic` component
+// precisely so it can be tested here without hardware: the stub board's `set()`
+// is not needed, the pole states are passed in directly.
 //
 // A healthy switch energizes at most one sense pole, so every one of the four
 // combinations is covered: left (Configure), right (Run), center (Off), and
@@ -15,7 +16,7 @@
 // NOLINTEND
 
 #include "logic/mode.hpp"
-#include "mode_selection.hpp"
+#include "logic/mode_selection.hpp"
 #include "unity.h"
 
 namespace {

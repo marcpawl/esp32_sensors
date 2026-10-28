@@ -148,8 +148,8 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 
 | Area | Files |
 |---|---|
-| Entry point | `main.cpp` (`extern "C" void app_main`), `constants.hpp`, `mode.hpp` |
-| Mode switching | `mode_selection.hpp` (the pure `mode_from_buttons()` mapping), `main.cpp` (`read_mode()` applies the reboot-on-fault policy) |
+| Entry point | `main.cpp` (`extern "C" void app_main`), `constants.hpp` |
+| Mode switching | `main.cpp` (`read_mode()` reads the poles and applies the reboot-on-fault policy); the mapping itself is `logic/mode_selection.hpp` |
 | Sensors | `onewire_bus.cpp` (bit-banged 1-Wire), `ds18b20.cpp`, `sensor_manager.cpp`, `sensor.hpp` |
 | RTC state / buffer | `rtc_state.cpp` (`RTC_DATA_ATTR` state block), `rtc_buffer.cpp` (FIFO) |
 | Power / battery | `battery_monitor.cpp`, `power_manager.cpp`, `power_source.cpp` |
@@ -158,9 +158,11 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 | Run mode | `run_mode.cpp` (stubbed network path), `ntp_client.cpp` |
 | Payload | `payload.cpp`, `temp_format.cpp`, `rom_id.cpp` (ROM-ID hex) |
 
-The LED task (`led_task.hpp`) and the operating modes (`mode.hpp`) are **not**
-in `mcgowan/src/`: they are board-independent logic and live in the `logic`
-component (see below), included as `logic/led_task.hpp` and `logic/mode.hpp`.
+The LED task (`led_task.hpp`) and the operating modes and their pole mapping
+(`mode.hpp`, `mode_selection.hpp`) are **not** in `mcgowan/src/`: they are
+board-independent logic and live in the `logic` component (see below),
+included as `logic/led_task.hpp`, `logic/mode.hpp` and
+`logic/mode_selection.hpp`.
 
 **HAL components (`components/`).** Hardware-specific drivers live in reusable
 ESP-IDF components rather than in `mcgowan/src/`, so host tests can swap them
@@ -263,10 +265,11 @@ implementation, and the headers are included with the `logic/` prefix:
 |---|---|
 | `logic/led_task.hpp` | `thermo::LedState`, `thermo::ledtask::*` (`Step`, `CycleSteps`, `LedRunner<Board>`), `thermo::LedTask<Board>` — the LED status task built on `espidf_cpp::Task` |
 | `logic/mode.hpp` | `thermo::Mode` (`kOff` / `kConfigure` / `kRun`) and `thermo::to_string(Mode)` — the operating modes (§3), board-independent vocabulary |
+| `logic/mode_selection.hpp` | `thermo::ModeSelection` (`std::optional<Mode>`) and `thermo::mode_from_buttons(ButtonState config, ButtonState run)` — the pure, `constexpr` mapping from the two mode-sense poles to a mode, reporting a both-poles-on miswire as `std::nullopt` |
 
 `logic/mode.hpp` is deliberately dependency-free (only `<cstdint>`), so the
-firmware, the host tests, and the firmware's `mode_selection.hpp` can all name
-the operating modes without pulling in a board.
+firmware, the host tests, and `logic/mode_selection.hpp` can all name the
+operating modes without pulling in a board.
 
 `LedRunner` and `LedTask` take a `std::shared_ptr<Board>` (never a null one) and
 share the board with the caller instead of owning it, so the caller can keep
@@ -292,8 +295,8 @@ also listed in `set(COMPONENTS main hal_stub logic)` so it is built for `linux`
 **Host-testable modules.** `temp_format.cpp`, `payload.cpp`, `app_config.cpp`,
 `rom_id.cpp`, and `rtc_buffer.cpp` are deliberately free of chip-specific
 ESP-IDF dependencies so they build for the `linux` target and are covered by
-`test/`. The header-only `mode_selection.hpp` is the same idea applied to the
-mode-sense poles: it depends only on `hal/push_button_types.hpp` (for
+`test/`. The header-only `logic/mode_selection.hpp` is the same idea applied to
+the mode-sense poles: it depends only on `hal/push_button_types.hpp` (for
 `ButtonState`) and `logic/mode.hpp`, and is `constexpr`, so
 `test/main/test_mode_selection.cpp` exercises it directly and covers all four
 pole combinations — including the both-on hardware fault, which the header

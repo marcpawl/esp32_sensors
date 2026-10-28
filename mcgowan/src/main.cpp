@@ -21,7 +21,7 @@
 #include "hal/push_button.hpp"
 #include "logic/led_task.hpp"
 #include "logic/mode.hpp"
-#include "mode_selection.hpp"
+#include "logic/mode_selection.hpp"
 #include "reboot.hpp"
 #include "rtc_state.hpp"
 #include "run_mode.hpp"
@@ -31,8 +31,8 @@ namespace {
 constexpr const char* kTag = "app_main";
 
 // Reads the two mode-sense poles and maps them to a mode (§3). The mapping
-// itself is pure and host-tested (`mode_selection.hpp`); this wrapper only
-// turns its hardware-fault result into the firmware's fail-loudly policy.
+// itself is pure and host-tested (`logic/mode_selection.hpp`); this wrapper
+// only turns its hardware-fault result into the firmware's fail-loudly policy.
 thermo::Mode read_mode(thermo::hal::Board& board) {
     const thermo::ModeSelection selection = thermo::mode_from_buttons(
         board.config_button().read(), board.run_button().read());
