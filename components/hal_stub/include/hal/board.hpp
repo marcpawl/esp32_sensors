@@ -26,7 +26,6 @@
 #include "hal/led.hpp"
 #include "hal/onewire.hpp"
 #include "hal/push_button.hpp"
-#include "hal/switch.hpp"
 
 namespace thermo::hal {
 
@@ -101,13 +100,6 @@ class Board {
         return run_button_;
     }
 
-    // The 3-position mode switch (stub; pins via set_pins()).
-    [[nodiscard]] Switch& mode_switch() noexcept { return mode_switch_; }
-
-    [[nodiscard]] Switch const& mode_switch() const noexcept {
-        return mode_switch_;
-    }
-
     // The WiFi radio (stub; state via ap_running() / station_running(),
     // configuration via ap_config() / station_config()).
     [[nodiscard]] WifiRadio& wifi() noexcept { return wifi_; }
@@ -122,7 +114,6 @@ class Board {
     PushButton button_;
     PushButton config_button_;
     PushButton run_button_;
-    Switch mode_switch_;
     WifiRadio wifi_;
 };
 

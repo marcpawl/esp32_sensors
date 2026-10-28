@@ -9,9 +9,8 @@
 // `<hal/board.hpp>` unchanged.
 //
 // The board owns one instance of each HAL device (chip temperature, 1-Wire bus,
-// green/red LEDs, push button, mode-sense buttons, mode switch) and exposes
-// them. It carries no behaviour of its own beyond delegating `init_all()` to
-// the devices.
+// green/red LEDs, push button, mode-sense buttons) and exposes them. It carries
+// no behaviour of its own beyond delegating `init_all()` to the devices.
 #pragma once
 
 // NOLINTBEGIN
@@ -25,7 +24,6 @@
 #include "hal/led.hpp"
 #include "hal/onewire.hpp"
 #include "hal/push_button.hpp"
-#include "hal/switch.hpp"
 #include "hal/wifi.hpp"
 
 namespace thermo::hal {
@@ -100,13 +98,6 @@ class Board {
         return run_button_;
     }
 
-    // The 3-position mode switch.
-    [[nodiscard]] Switch& mode_switch() noexcept { return mode_switch_; }
-
-    [[nodiscard]] Switch const& mode_switch() const noexcept {
-        return mode_switch_;
-    }
-
     // The WiFi radio (§3.2, §3.9). Initialized by init_all(), but neither
     // interface is started: the caller decides when to bring the AP (§3.2) or
     // the station (§3.9) up.
@@ -122,7 +113,6 @@ class Board {
     PushButton button_;
     PushButton config_button_;
     PushButton run_button_;
-    Switch mode_switch_;
     WifiRadio wifi_;
 };
 
