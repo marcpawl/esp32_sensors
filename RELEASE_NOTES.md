@@ -20,6 +20,11 @@ Implemented
 - Host-based unit tests for the pure-logic modules (`temp_format`, `payload`,
   `app_config` validation, `rom_id`, `rtc_buffer`) running on the ESP-IDF
   `linux` target.
+- The mode-sense pole mapping (`mode_selection.hpp`) is pure, `constexpr`, and
+  ESP-IDF-free: it maps the two pole states to Configure / Off / Run and
+  reports a both-poles-on miswire as `std::nullopt`, so
+  `test_mode_selection.cpp` covers all four combinations on the host. The
+  firmware's reboot-on-fault policy stays in `main.cpp`.
 - Unit tests for the pin-free `hal_stub` push button
   (`test_hal_push_button.cpp`), including the `set()` control the mode-sense
   poles use.

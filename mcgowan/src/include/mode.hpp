@@ -1,4 +1,8 @@
 // Operating modes selected by the 3-position ON-OFF-ON switch (§3).
+//
+// The switch itself is not a HAL device: the board exposes its two mode-sense
+// poles as independent push buttons, and `mode_selection.hpp` maps that pair
+// onto these values.
 #pragma once
 
 // NOLINTBEGIN

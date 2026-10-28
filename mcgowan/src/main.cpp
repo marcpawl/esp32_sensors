@@ -21,6 +21,7 @@
 #include "hal/push_button.hpp"
 #include "logic/led_task.hpp"
 #include "mode.hpp"
+#include "mode_selection.hpp"
 #include "reboot.hpp"
 #include "rtc_state.hpp"
 #include "run_mode.hpp"
@@ -29,26 +30,19 @@ namespace {
 
 constexpr const char* kTag = "app_main";
 
-// Maps the two mode-sense button states onto an operating mode (§3). A healthy
-// 3-position ON-OFF-ON switch energizes at most one pole, so both-poles-on is a
-// hardware fault: fail loudly rather than guess a mode. Both poles released is
-// the center (Off) position.
-thermo::Mode mode_from_buttons(thermo::hal::ButtonState config,
-                               thermo::hal::ButtonState run) {
-    const bool config_on = config == thermo::hal::ButtonState::kOn;
-    const bool run_on = run == thermo::hal::ButtonState::kOn;
-    if (config_on && !run_on) {
-        return thermo::Mode::kConfigure;
+// Reads the two mode-sense poles and maps them to a mode (§3). The mapping
+// itself is pure and host-tested (`mode_selection.hpp`); this wrapper only
+// turns its hardware-fault result into the firmware's fail-loudly policy.
+thermo::Mode read_mode(thermo::hal::Board& board) {
+    const thermo::ModeSelection selection = thermo::mode_from_buttons(
+        board.config_button().read(), board.run_button().read());
+    if (!selection.has_value()) {
+        // Both poles energized: the switch is miswired or shorted. Fail loudly
+        // rather than guess a mode.
+        ESP_LOGE(kTag, "switch fault: both sense pins on");
+        thermo::reboot();
     }
-    if (!config_on && run_on) {
-        return thermo::Mode::kRun;
-    }
-    if (!config_on && !run_on) {
-        return thermo::Mode::kOff;
-    }
-    // Both poles energized: the switch is miswired or shorted.
-    ESP_LOGE(kTag, "switch fault: both sense pins on");
-    thermo::reboot();
+    return *selection;
 }
 
 // Initializes NVS, erasing and retrying if the partition is full or had a
@@ -78,8 +72,7 @@ extern "C" void app_main(void) {
         std::make_shared<thermo::hal::Board>(thermo::hal::Board::create({}));
     ESP_ERROR_CHECK(board->init_all());
 
-    const thermo::Mode mode = mode_from_buttons(board->config_button().read(),
-                                                board->run_button().read());
+    const thermo::Mode mode = read_mode(*board);
     ESP_LOGI(kTag, "boot: mode=%s", thermo::to_string(mode));
 
     // The LED task drives the LEDs through the board, so it is independent of

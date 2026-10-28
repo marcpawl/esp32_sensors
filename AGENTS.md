@@ -149,7 +149,7 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 | Area | Files |
 |---|---|
 | Entry point | `main.cpp` (`extern "C" void app_main`), `constants.hpp`, `mode.hpp` |
-| Mode switching | `main.cpp` (`mode_from_buttons()` maps the `config_button` / `run_button` states to `Mode`), `mode.hpp` |
+| Mode switching | `mode_selection.hpp` (the pure `mode_from_buttons()` mapping), `main.cpp` (`read_mode()` applies the reboot-on-fault policy) |
 | Sensors | `onewire_bus.cpp` (bit-banged 1-Wire), `ds18b20.cpp`, `sensor_manager.cpp`, `sensor.hpp` |
 | RTC state / buffer | `rtc_state.cpp` (`RTC_DATA_ATTR` state block), `rtc_buffer.cpp` (FIFO) |
 | Power / battery | `battery_monitor.cpp`, `power_manager.cpp`, `power_source.cpp` |
@@ -287,8 +287,15 @@ also listed in `set(COMPONENTS main hal_stub logic)` so it is built for `linux`
 **Host-testable modules.** `temp_format.cpp`, `payload.cpp`, `app_config.cpp`,
 `rom_id.cpp`, and `rtc_buffer.cpp` are deliberately free of chip-specific
 ESP-IDF dependencies so they build for the `linux` target and are covered by
-`test/`. The HAL's `hal_stub` component (the pin-free buttons, LEDs,
-1-Wire bus, chip-temperature sensor, WiFi radio, and aggregate board) is
+`test/`. The header-only `mode_selection.hpp` is the same idea applied to the
+mode-sense poles: it depends only on `hal/push_button_types.hpp` (for
+`ButtonState`) and is `constexpr`, so `test/main/test_mode_selection.cpp`
+exercises it directly and covers all four pole combinations — including the
+both-on hardware fault, which the header reports as `std::nullopt` instead of
+rebooting. `main.cpp`'s `read_mode()` is the thin wrapper that turns that
+`std::nullopt` into the firmware's fail-loudly `reboot()`. The HAL's `hal_stub`
+component (the pin-free buttons, LEDs, 1-Wire bus, chip-temperature sensor,
+WiFi radio, and aggregate board) is
 likewise built for the `linux` target and covered by `test/main/test_hal_*.cpp`.
 **Keep it that way** — put pure logic in these files and hardware/IDF calls
 behind them.
@@ -540,8 +547,9 @@ There are two test suites, both runnable from the host via `scripts/dev.py`:
 
 - **Host-based unit tests** live in `test/` and run on the ESP-IDF `linux`
   target with Unity — no hardware needed. They cover the pure-logic modules
-  (`temp_format`, `payload`, `app_config` validation, `rom_id`, `rtc_buffer`) and
-  the `hal_stub` components (`test_hal_push_button.cpp` exercises the pin-free
+  (`temp_format`, `payload`, `app_config` validation, `rom_id`, `rtc_buffer`,
+  and the `mode_selection` pole mapping) and the `hal_stub` components
+  (`test_hal_push_button.cpp` exercises the pin-free
   push button — including the `set()` control the mode-sense poles use;
   `test_hal_wifi.cpp` covers the WiFi radio stub, and
   `test_hal_board.cpp` covers the aggregate board — including that

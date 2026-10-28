@@ -6,6 +6,11 @@
 # not depend on chip-specific IDF drivers are listed here; hardware-facing code
 # (1-Wire GPIO, Wi-Fi, HTTPS) is covered by on-target tests instead.
 #
+# Header-only modules need no `sut_srcs` entry — they are included directly by
+# the test sources. `mode.hpp` / `mode_selection.hpp` are the example: the
+# mode-sense pole mapping is pure and `constexpr`, so `test_mode_selection.cpp`
+# exercises the real header with no extra source.
+#
 # The pin-free HAL stubs (hal_stub's led, push button, onewire bus,
 # chip temperature, wifi radio, and the aggregate board) are host-testable too
 # and are pulled in via PRIV_REQUIRES below; test_hal_led.cpp,
@@ -31,6 +36,7 @@ set(test_srcs
     "test_config_page.cpp"
     "test_rom_id.cpp"
     "test_rtc_buffer.cpp"
+    "test_mode_selection.cpp"
     "test_hal_led.cpp"
     "test_hal_push_button.cpp"
     "test_hal_onewire.cpp"
