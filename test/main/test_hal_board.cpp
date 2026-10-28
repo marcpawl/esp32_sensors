@@ -55,6 +55,8 @@ constexpr BoardPins kPins{
     .green_name = "Green",
     .red_name = "Red",
     .button = 0,
+    .config_button = 1,
+    .run_button = 2,
     .switch_first = 1,
     .switch_third = 2,
 };
@@ -79,6 +81,8 @@ TEST_CASE("hal board: BoardPins defaults to the board pin map (§2.4)",
     TEST_ASSERT_EQUAL(thermo::pins::kRedLed, def.red_led);
     TEST_ASSERT_EQUAL(thermo::pins::kConfig, def.switch_first);
     TEST_ASSERT_EQUAL(thermo::pins::kRun, def.switch_third);
+    TEST_ASSERT_EQUAL(thermo::pins::kConfig, def.config_button);
+    TEST_ASSERT_EQUAL(thermo::pins::kRun, def.run_button);
 
     // A default-constructed board still initializes and works (the stub
     // ignores the pins, but this proves `create({})` is usable).
@@ -157,6 +161,33 @@ TEST_CASE("hal board: button() is a live stub device", "[hal_board]") {
                       static_cast<int>(b.button().read()));
 }
 
+TEST_CASE("hal board: config_button() is a live, independent stub device",
+          "[hal_board]") {
+    Board b = make_board();
+    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
+                      static_cast<int>(b.config_button().read()));
+    b.config_button().set(ButtonState::kOn);
+    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOn),
+                      static_cast<int>(b.config_button().read()));
+    // The mode-sense buttons and the plain button are separate devices.
+    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
+                      static_cast<int>(b.run_button().read()));
+    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
+                      static_cast<int>(b.button().read()));
+}
+
+TEST_CASE("hal board: run_button() is a live, independent stub device",
+          "[hal_board]") {
+    Board b = make_board();
+    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
+                      static_cast<int>(b.run_button().read()));
+    b.run_button().set(ButtonState::kOn);
+    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOn),
+                      static_cast<int>(b.run_button().read()));
+    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
+                      static_cast<int>(b.config_button().read()));
+}
+
 TEST_CASE("hal board: mode_switch() is a live stub device", "[hal_board]") {
     Board b = make_board();
     // Default reading is the Third position (first off, third on).
@@ -205,6 +236,10 @@ TEST_CASE("hal board: const accessors yield const device references",
     TEST_ASSERT_EQUAL(2500, b.chip_temperature().read());
     TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
                       static_cast<int>(b.button().read()));
+    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
+                      static_cast<int>(b.config_button().read()));
+    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
+                      static_cast<int>(b.run_button().read()));
     // The 1-Wire stub defaults to the three example sensors from §5.1.3.
     TEST_ASSERT_EQUAL(3, b.one_wire().read().size());
     TEST_ASSERT_EQUAL(static_cast<int>(LedState::kOff),

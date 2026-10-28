@@ -85,6 +85,22 @@ class Board {
 
     [[nodiscard]] PushButton const& button() const noexcept { return button_; }
 
+    // The Configure-mode sense button (stub; state via set()).
+    [[nodiscard]] PushButton& config_button() noexcept {
+        return config_button_;
+    }
+
+    [[nodiscard]] PushButton const& config_button() const noexcept {
+        return config_button_;
+    }
+
+    // The Run-mode sense button (stub; state via set()).
+    [[nodiscard]] PushButton& run_button() noexcept { return run_button_; }
+
+    [[nodiscard]] PushButton const& run_button() const noexcept {
+        return run_button_;
+    }
+
     // The 3-position mode switch (stub; pins via set_pins()).
     [[nodiscard]] Switch& mode_switch() noexcept { return mode_switch_; }
 
@@ -104,6 +120,8 @@ class Board {
     Led green_;
     Led red_;
     PushButton button_;
+    PushButton config_button_;
+    PushButton run_button_;
     Switch mode_switch_;
     WifiRadio wifi_;
 };

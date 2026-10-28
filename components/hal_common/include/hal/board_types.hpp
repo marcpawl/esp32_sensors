@@ -62,6 +62,11 @@ struct BoardPins {
     // Push-button input pin. The reference board has no dedicated button, so
     // this defaults to 0 and callers should set it explicitly if wired.
     int button = 0;
+    // Mode-selection push buttons, one per mode pole. ESP-IDF has no direct
+    // notion of the 3-position (DPST) switch, so the board reports each pole
+    // as an independent button; mapping the pair to a mode is logic (§3.1).
+    int config_button = pins::kConfig;
+    int run_button = pins::kRun;
     // 3-position mode switch sense pins (the two outer poles).
     int switch_first = pins::kConfig;
     int switch_third = pins::kRun;
@@ -90,6 +95,10 @@ concept BoardLike =
         { const_board.red() } -> std::same_as<Led const&>;
         { board.button() } -> std::same_as<PushButton&>;
         { const_board.button() } -> std::same_as<PushButton const&>;
+        { board.config_button() } -> std::same_as<PushButton&>;
+        { const_board.config_button() } -> std::same_as<PushButton const&>;
+        { board.run_button() } -> std::same_as<PushButton&>;
+        { const_board.run_button() } -> std::same_as<PushButton const&>;
         { board.mode_switch() } -> std::same_as<Switch&>;
         { const_board.mode_switch() } -> std::same_as<Switch const&>;
         { board.wifi() } -> std::same_as<WifiRadio&>;
