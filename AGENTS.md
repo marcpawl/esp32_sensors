@@ -79,7 +79,7 @@ esp32_sensors/
 │   └── src/             #   C++26 sources + include/ — see module map below
 ├── components/          # Reusable ESP-IDF components (see "HAL" section)
 │   ├── espidf_cpp/      # C++ wrappers over ESP-IDF/FreeRTOS (Task, queue, handles, ...)
-│   ├── logic/           # Board-independent application logic (led_task.hpp)
+│   ├── logic/           # Board-independent application logic (led_task.hpp, mode.hpp)
 │   ├── hal_common/      # Shared, header-only HAL vocabulary (types/concepts)
 │   ├── hal_board/       # Real, GPIO-backed HAL (linked by mcgowan)
 │   └── hal_stub/        # Pin-free HAL stub (linked by host tests)
@@ -158,9 +158,9 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 | Run mode | `run_mode.cpp` (stubbed network path), `ntp_client.cpp` |
 | Payload | `payload.cpp`, `temp_format.cpp`, `rom_id.cpp` (ROM-ID hex) |
 
-The LED task (`led_task.hpp`) is **not** in `mcgowan/src/`: it is board-independent
-logic and lives in the `logic` component (see below), included as
-`logic/led_task.hpp`.
+The LED task (`led_task.hpp`) and the operating modes (`mode.hpp`) are **not**
+in `mcgowan/src/`: they are board-independent logic and live in the `logic`
+component (see below), included as `logic/led_task.hpp` and `logic/mode.hpp`.
 
 **HAL components (`components/`).** Hardware-specific drivers live in reusable
 ESP-IDF components rather than in `mcgowan/src/`, so host tests can swap them
@@ -262,6 +262,11 @@ implementation, and the headers are included with the `logic/` prefix:
 | Header | Provides |
 |---|---|
 | `logic/led_task.hpp` | `thermo::LedState`, `thermo::ledtask::*` (`Step`, `CycleSteps`, `LedRunner<Board>`), `thermo::LedTask<Board>` — the LED status task built on `espidf_cpp::Task` |
+| `logic/mode.hpp` | `thermo::Mode` (`kOff` / `kConfigure` / `kRun`) and `thermo::to_string(Mode)` — the operating modes (§3), board-independent vocabulary |
+
+`logic/mode.hpp` is deliberately dependency-free (only `<cstdint>`), so the
+firmware, the host tests, and the firmware's `mode_selection.hpp` can all name
+the operating modes without pulling in a board.
 
 `LedRunner` and `LedTask` take a `std::shared_ptr<Board>` (never a null one) and
 share the board with the caller instead of owning it, so the caller can keep
@@ -289,14 +294,14 @@ also listed in `set(COMPONENTS main hal_stub logic)` so it is built for `linux`
 ESP-IDF dependencies so they build for the `linux` target and are covered by
 `test/`. The header-only `mode_selection.hpp` is the same idea applied to the
 mode-sense poles: it depends only on `hal/push_button_types.hpp` (for
-`ButtonState`) and is `constexpr`, so `test/main/test_mode_selection.cpp`
-exercises it directly and covers all four pole combinations — including the
-both-on hardware fault, which the header reports as `std::nullopt` instead of
-rebooting. `main.cpp`'s `read_mode()` is the thin wrapper that turns that
-`std::nullopt` into the firmware's fail-loudly `reboot()`. The HAL's `hal_stub`
-component (the pin-free buttons, LEDs, 1-Wire bus, chip-temperature sensor,
-WiFi radio, and aggregate board) is
-likewise built for the `linux` target and covered by `test/main/test_hal_*.cpp`.
+`ButtonState`) and `logic/mode.hpp`, and is `constexpr`, so
+`test/main/test_mode_selection.cpp` exercises it directly and covers all four
+pole combinations — including the both-on hardware fault, which the header
+reports as `std::nullopt` instead of rebooting. `main.cpp`'s `read_mode()` is
+the thin wrapper that turns that `std::nullopt` into the firmware's fail-loudly
+`reboot()`. The HAL's `hal_stub` component (the pin-free buttons, LEDs, 1-Wire
+bus, chip-temperature sensor, WiFi radio, and aggregate board) is likewise built
+for the `linux` target and covered by `test/main/test_hal_*.cpp`.
 **Keep it that way** — put pure logic in these files and hardware/IDF calls
 behind them.
 

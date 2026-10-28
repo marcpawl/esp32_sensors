@@ -19,7 +19,7 @@
 #include <optional>
 
 #include "hal/push_button_types.hpp"
-#include "mode.hpp"
+#include "logic/mode.hpp"
 
 namespace thermo {
 

@@ -24,7 +24,9 @@ Implemented
   ESP-IDF-free: it maps the two pole states to Configure / Off / Run and
   reports a both-poles-on miswire as `std::nullopt`, so
   `test_mode_selection.cpp` covers all four combinations on the host. The
-  firmware's reboot-on-fault policy stays in `main.cpp`.
+  firmware's reboot-on-fault policy stays in `main.cpp`. `thermo::Mode` itself
+  moved to the shared `logic` component (`logic/mode.hpp`), where it is
+  board-independent vocabulary available to the firmware and the tests alike.
 - Unit tests for the pin-free `hal_stub` push button
   (`test_hal_push_button.cpp`), including the `set()` control the mode-sense
   poles use.

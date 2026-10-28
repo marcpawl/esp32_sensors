@@ -20,7 +20,7 @@
 #include "hal/board.hpp"
 #include "hal/push_button.hpp"
 #include "logic/led_task.hpp"
-#include "mode.hpp"
+#include "logic/mode.hpp"
 #include "mode_selection.hpp"
 #include "reboot.hpp"
 #include "rtc_state.hpp"

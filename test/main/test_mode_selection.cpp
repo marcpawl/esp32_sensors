@@ -14,7 +14,7 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
-#include "mode.hpp"
+#include "logic/mode.hpp"
 #include "mode_selection.hpp"
 #include "unity.h"
 

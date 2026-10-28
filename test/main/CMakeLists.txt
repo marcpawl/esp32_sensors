@@ -7,7 +7,7 @@
 # (1-Wire GPIO, Wi-Fi, HTTPS) is covered by on-target tests instead.
 #
 # Header-only modules need no `sut_srcs` entry — they are included directly by
-# the test sources. `mode.hpp` / `mode_selection.hpp` are the example: the
+# the test sources. `logic/mode.hpp` / `mode_selection.hpp` are the example: the
 # mode-sense pole mapping is pure and `constexpr`, so `test_mode_selection.cpp`
 # exercises the real header with no extra source.
 #

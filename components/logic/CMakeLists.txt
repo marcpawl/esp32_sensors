@@ -1,9 +1,10 @@
 # logic: hardware-independent application logic.
 #
-# Holds behaviour that is not tied to a specific board: the LED status task
-# (`logic/led_task.hpp`) and, as it grows, the rest of the logic shared by the
-# firmware and the host tests. It depends only on `espidf_cpp` and the HAL
-# *vocabulary* (`hal_common`), so the same code links into:
+# Holds behaviour and vocabulary that is not tied to a specific board: the LED
+# status task (`logic/led_task.hpp`), the operating modes (`logic/mode.hpp`)
+# and, as it grows, the rest of the logic shared by the firmware and the host
+# tests. It depends only on `espidf_cpp` and the HAL *vocabulary*
+# (`hal_common`), so the same code links into:
 #
 #   * `mcgowan/` — production firmware, driving the GPIO-backed `hal::Board`
 #                  from `hal_board`.
