@@ -61,9 +61,10 @@ struct BoardPins {
     // Push-button input pin. The reference board has no dedicated button, so
     // this defaults to 0 and callers should set it explicitly if wired.
     int button = 0;
-    // Mode-selection push buttons, one per mode pole. ESP-IDF has no direct
-    // notion of the 3-position (DPST) switch, so the board reports each pole
-    // as an independent button; mapping the pair to a mode is logic (§3.1).
+    // Mode-selection push buttons, one per mode-sense pole. ESP-IDF has no
+    // direct notion of the 3-position (DPDT) switch, so the board reports each
+    // sense pole as an independent button; mapping the pair to a mode is logic
+    // (§3.1).
     int config_button = pins::kConfig;
     int run_button = pins::kRun;
 };

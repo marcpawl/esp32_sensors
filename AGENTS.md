@@ -43,7 +43,7 @@ This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its s
 The intended system architecture (per `Specification.md`) is a single ESP-IDF firmware application running on an ESP32 with the following subsystems:
 
 - **Sensor layer** — 1-Wire bus driver reading three DS18B20 temperature sensors.
-- **Mode controller** — reads the 3-position switch to select Configure / Off / Run.
+- **Mode controller** — reads the two mode-sense poles of the 3-position switch (`config_button()` / `run_button()`) to select Configure / Off / Run.
 - **Sample buffer** — in **RTC memory only**; accumulates readings across deep-sleep cycles.
 - **WiFi / uploader** — connects to WiFi, uploads batched payloads to a remote URL, with connection caching and backoff.
 - **Power manager** — drives deep sleep between samples to meet the hourly power budget.
@@ -149,13 +149,13 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 | Area | Files |
 |---|---|
 | Entry point | `main.cpp` (`extern "C" void app_main`), `constants.hpp`, `mode.hpp` |
-| Mode switching | `main.cpp` maps the `config_button` / `run_button` states to `Mode`; `led_manager.cpp` |
+| Mode switching | `main.cpp` (`mode_from_buttons()` maps the `config_button` / `run_button` states to `Mode`), `mode.hpp` |
 | Sensors | `onewire_bus.cpp` (bit-banged 1-Wire), `ds18b20.cpp`, `sensor_manager.cpp`, `sensor.hpp` |
 | RTC state / buffer | `rtc_state.cpp` (`RTC_DATA_ATTR` state block), `rtc_buffer.cpp` (FIFO) |
-| Power / battery | `battery_monitor.cpp` |
+| Power / battery | `battery_monitor.cpp`, `power_manager.cpp`, `power_source.cpp` |
 | Config | `app_config.cpp` (validation), `app_config_store.cpp` (NVS) |
 | Configure mode | `configure_mode.cpp`, `wifi_ap.cpp`, `https_server.cpp`, `config_page.cpp`, `certs/self_signed_cert.cpp` |
-| Run mode | `run_mode.cpp` (stubbed network path), `ntp_server.cpp` |
+| Run mode | `run_mode.cpp` (stubbed network path), `ntp_client.cpp` |
 | Payload | `payload.cpp`, `temp_format.cpp`, `rom_id.cpp` (ROM-ID hex) |
 
 The LED task (`led_task.hpp`) is **not** in `mcgowan/src/`: it is board-independent
@@ -197,13 +197,13 @@ The HAL is **semantics-free**: `PushButton::read()` returns `ButtonState::kOn`
 while the button is pressed and `kOff` while it is released, and interpreting a
 press (edge detection, debouncing, hold timing) is the caller's job.
 
-**The mode switch is not a HAL device.** ESP-IDF has no direct notion of a DPST
-switch, so the board models each of its two poles as an independent
-`PushButton` — `board.config_button()` and `board.run_button()` — and the
-DPST knowledge (both poles on is a hardware fault, both off is the center/Off
-position, one of them selects Configure or Run) lives in the logic layer. The
-stub's `PushButton::set()` simulates presses, so bad hardware is reproducible in
-tests.
+**The mode switch is not a HAL device.** ESP-IDF has no direct notion of a
+DPDT switch, so the board models each of its two mode-sense poles as an
+independent `PushButton` — `board.config_button()` and `board.run_button()` —
+and the DPDT knowledge (both poles on is a hardware fault, both off is the
+center/Off position, one of them selects Configure or Run) lives in the logic
+layer. The stub's `PushButton::set()` simulates presses, so bad hardware is
+reproducible in tests.
 
 The WiFi radio (§3.2, §3.9) follows the same header pair: `hal/wifi_types.hpp`
 (`hal_common`) defines `AccessPointConfig`, `StationConfig`,

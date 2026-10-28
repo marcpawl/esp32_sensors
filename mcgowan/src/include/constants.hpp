@@ -1,9 +1,11 @@
 // Application-wide constants: timing and limits.
-// Values follow Specification.md Rev 12 (§2, §3, §4, §7).
+// Values follow Specification.md Rev 13 (§2, §3, §4, §7).
 //
-// The GPIO assignment (§2.4) now lives in `hal_common` (`hal/pin_map.hpp`,
+// The GPIO assignment (§2.4) lives in `hal_common` (`hal/pin_map.hpp`,
 // namespace `thermo::pins`) so the firmware and the HAL `BoardPins` defaults
-// share one definition; it is re-exported here for existing callers.
+// share one definition. It is re-exported here because several firmware
+// sources (`battery_monitor.cpp`, `configure_mode.cpp`, `run_mode.cpp`) reach
+// `thermo::pins::` through this header.
 #pragma once
 
 // NOLINTBEGIN

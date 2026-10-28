@@ -27,7 +27,7 @@ Implemented
   types/concepts), `hal_board` (real GPIO drivers, linked by the firmware), and
   `hal_stub` (pin-free stubs, linked by the host tests). The 3-position mode
   switch is modelled as two independent push buttons (`config_button()` /
-  `run_button()`) because ESP-IDF has no direct DPST support; interpreting the
+  `run_button()`) because ESP-IDF has no direct DPDT support; interpreting the
   pair is left to the logic layer.
 
 - Development environment: the dev container uses the **prebuilt, pinned**
