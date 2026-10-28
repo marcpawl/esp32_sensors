@@ -1,7 +1,7 @@
 // Firmware entry point.
 //
-// Reads the 3-position switch, initializes NVS + RTC state, then dispatches to
-// Configure mode (implemented) or Run mode (stubbed) per §3.
+// Reads the mode-selection buttons, initializes NVS + RTC state, then
+// dispatches to Configure mode (implemented) or Run mode (stubbed) per §3.
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "esp_err.h"
@@ -17,9 +17,8 @@
 #include "app_config.hpp"
 #include "app_config_store.hpp"
 #include "configure_mode.hpp"
-#include "constants.hpp"
 #include "hal/board.hpp"
-#include "hal/switch.hpp"
+#include "hal/push_button.hpp"
 #include "logic/led_task.hpp"
 #include "mode.hpp"
 #include "reboot.hpp"
@@ -30,17 +29,21 @@ namespace {
 
 constexpr const char* kTag = "app_main";
 
-// Maps the raw switch pin states onto an operating mode (§3). A healthy
-// 3-position ON-OFF-ON switch energizes at most one pole, so both-pins-on and
-// both-pins-off are hardware faults: fail loudly rather than guess a mode.
-thermo::Mode mode_from_pins(thermo::hal::Pins pins) {
-    if (pins.first_on() && !pins.third_on()) {
+// Maps the two mode-sense button states onto an operating mode (§3). A healthy
+// 3-position ON-OFF-ON switch energizes at most one pole, so both-poles-on is a
+// hardware fault: fail loudly rather than guess a mode. Both poles released is
+// the center (Off) position.
+thermo::Mode mode_from_buttons(thermo::hal::ButtonState config,
+                               thermo::hal::ButtonState run) {
+    const bool config_on = config == thermo::hal::ButtonState::kOn;
+    const bool run_on = run == thermo::hal::ButtonState::kOn;
+    if (config_on && !run_on) {
         return thermo::Mode::kConfigure;
     }
-    if (!pins.first_on() && pins.third_on()) {
+    if (!config_on && run_on) {
         return thermo::Mode::kRun;
     }
-    if (!pins.first_on() && !pins.third_on()) {
+    if (!config_on && !run_on) {
         return thermo::Mode::kOff;
     }
     // Both poles energized: the switch is miswired or shorted.
@@ -67,21 +70,21 @@ extern "C" void app_main(void) {
     ESP_ERROR_CHECK(init_nvs());
     thermo::rtc_state_init();
 
-    thermo::hal::Switch mode_switch(thermo::pins::kConfig, thermo::pins::kRun);
-    ESP_ERROR_CHECK(mode_switch.init());
+    // The board is created first because the mode-sense buttons are read
+    // through it. It is shared: `LedTask` holds a `std::shared_ptr` to it
+    // instead of owning it, so it cannot be destroyed while the task still
+    // uses it.
+    auto board =
+        std::make_shared<thermo::hal::Board>(thermo::hal::Board::create({}));
+    ESP_ERROR_CHECK(board->init_all());
 
-    const thermo::Mode mode = mode_from_pins(mode_switch.read());
+    const thermo::Mode mode = mode_from_buttons(board->config_button().read(),
+                                                board->run_button().read());
     ESP_LOGI(kTag, "boot: mode=%s", thermo::to_string(mode));
 
     // The LED task drives the LEDs through the board, so it is independent of
     // the concrete board implementation (hal_board on target, hal_stub in the
-    // host tests). Bring the board up before starting the task.
-    //
-    // The board is shared: `LedTask` holds a `std::shared_ptr` to it instead of
-    // owning it, so it cannot be destroyed while the task still uses it.
-    auto board =
-        std::make_shared<thermo::hal::Board>(thermo::hal::Board::create({}));
-    ESP_ERROR_CHECK(board->init_all());
+    // host tests).
     thermo::LedTask led_task(board);
 
     switch (mode) {

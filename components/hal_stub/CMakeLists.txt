@@ -1,7 +1,7 @@
 # hal_stub: stub hardware abstractions for host tests.
 #
-# Exposes the same `hal/switch.hpp`, `hal/led.hpp`, `hal/push_button.hpp`,
-# `hal/onewire.hpp`, `hal/chip_temperature.hpp`, and `hal/wifi.hpp` as
+# Exposes the same `hal/led.hpp`, `hal/push_button.hpp`, `hal/onewire.hpp`,
+# `hal/chip_temperature.hpp`, and `hal/wifi.hpp` as
 # `hal_board` (plus `hal/board.hpp`) but with deterministic, side-effect-free
 # implementations that need no real hardware. The host tests (`test/`) depend
 # on this component instead of `hal_board`; a project must depend on exactly
@@ -12,14 +12,13 @@
 # driver-backed `WifiRadioBoard`.
 #
 # Like `hal_board`, it depends on the header-only `hal_common` component for the
-# shared device vocabulary (`PinState`, `Pins`, `SwitchLike`, `LedState`,
-# `LedLike`, `PushButtonLike`, `OneWireLike`, `ChipTemperatureLike`,
+# shared device vocabulary (`ButtonState`, `PushButtonLike`, `LedState`,
+# `LedLike`, `OneWireLike`, `ChipTemperatureLike`,
 # `AccessPointConfig`, `StationConfig`, `WifiRadioLike`, `BoardPins`,
 # `BoardLike`).
 
 idf_component_register(
     SRCS
-        "switch_stub.cpp"
         "led_stub.cpp"
         "push_button_stub.cpp"
         "onewire_stub.cpp"

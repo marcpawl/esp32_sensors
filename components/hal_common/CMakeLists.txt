@@ -1,10 +1,10 @@
 # hal_common: shared, implementation-free HAL vocabulary.
 #
 # Header-only component defining the types common to every HAL device
-# implementation (the switch's `PinState`, `Pins`, and `SwitchLike`; the LED's
-# `LedState` and `LedLike`; the 1-Wire bus's `OneWireLike`; the WiFi radio's
-# `AccessPointConfig`, `StationConfig`, and `WifiRadioLike`; and the chip
-# temperature sensor's `ChipTemperatureLike`). It carries no hardware
+# implementation (the push button's `ButtonState` and `PushButtonLike`; the
+# LED's `LedState` and `LedLike`; the 1-Wire bus's `OneWireLike`; the WiFi
+# radio's `AccessPointConfig`, `StationConfig`, and `WifiRadioLike`; and the
+# chip temperature sensor's `ChipTemperatureLike`). It carries no hardware
 # dependency, so both `hal_board` and `hal_stub` can require it and the shared
 # definitions live in exactly one place.
 #
