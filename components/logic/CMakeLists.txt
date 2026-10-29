@@ -1,11 +1,13 @@
 # logic: hardware-independent application logic.
 #
 # Holds behaviour and vocabulary that is not tied to a specific board: the LED
-# status task (`logic/led_task.hpp`), the operating modes and their mapping
-# from the mode-sense poles (`logic/mode.hpp`, `logic/mode_selection.hpp`) and,
-# as it grows, the rest of the logic shared by the firmware and the host tests.
-# It depends only on `espidf_cpp` and the HAL *vocabulary* (`hal_common`), so
-# the same code links into:
+# status task (`logic/led_task.hpp`), the transmission gate
+# (`logic/led_manager.hpp`), the fixed capacities (`logic/limits.hpp`), the
+# operating modes and their mapping from the mode-sense poles
+# (`logic/mode.hpp`, `logic/mode_selection.hpp`) and, as it grows, the rest of
+# the logic shared by the firmware and the host tests. It depends only on
+# `espidf_cpp` and the HAL *vocabulary* (`hal_common`), so the same code links
+# into:
 #
 #   * `mcgowan/` — production firmware, driving the GPIO-backed `hal::Board`
 #                  from `hal_board`.

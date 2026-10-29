@@ -28,6 +28,12 @@ Implemented
   firmware's reboot-on-fault policy stays in `main.cpp`. `thermo::Mode` itself
   moved to the shared `logic` component (`logic/mode.hpp`), where it is
   board-independent vocabulary available to the firmware and the tests alike.
+  The battery-hysteresis transmission gate `thermo::TxState` moved there too
+  (`logic/led_manager.hpp`), so firmware code can name it without reaching
+  into a board. The fixed capacities (`thermo::limits::kSensorCount`,
+  `thermo::limits::kMaxBufferRecords`) moved as well (`logic/limits.hpp`), so
+  the sample buffer, the payload, and the sensor layer share one definition
+  with the host tests.
 - Unit tests for the pin-free `hal_stub` push button
   (`test_hal_push_button.cpp`), including the `set()` control the mode-sense
   poles use.

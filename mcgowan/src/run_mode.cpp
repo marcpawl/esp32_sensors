@@ -34,6 +34,7 @@
 #include "app_config_store.hpp"
 #include "battery_monitor.hpp"
 #include "constants.hpp"
+#include "logic/limits.hpp"
 #include "payload.hpp"
 #include "rtc_state.hpp"
 #include "sensor.hpp"

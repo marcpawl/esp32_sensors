@@ -13,7 +13,7 @@
 #include <cstdint>
 
 #include "app_config.hpp"
-#include "led_manager.hpp"  // TxState
+#include "logic/led_manager.hpp"  // TxState
 
 namespace thermo {
 class BatteryMonitor {

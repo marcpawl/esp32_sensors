@@ -79,7 +79,7 @@ esp32_sensors/
 │   └── src/             #   C++26 sources + include/ — see module map below
 ├── components/          # Reusable ESP-IDF components (see "HAL" section)
 │   ├── espidf_cpp/      # C++ wrappers over ESP-IDF/FreeRTOS (Task, queue, handles, ...)
-│   ├── logic/           # Board-independent application logic (led_task.hpp, mode.hpp)
+│   ├── logic/           # Board-independent application logic (led_task.hpp, led_manager.hpp, mode.hpp)
 │   ├── hal_common/      # Shared, header-only HAL vocabulary (types/concepts)
 │   ├── hal_board/       # Real, GPIO-backed HAL (linked by mcgowan)
 │   └── hal_stub/        # Pin-free HAL stub (linked by host tests)
@@ -263,13 +263,17 @@ implementation, and the headers are included with the `logic/` prefix:
 
 | Header | Provides |
 |---|---|
+| `logic/led_manager.hpp` | `thermo::TxState` (`kTxOk` / `kTxInhibited`) — the §3.6 battery-hysteresis transmission gate; board-independent vocabulary, dependency-free (only `<cstdint>`) |
+| `logic/limits.hpp` | `thermo::limits::kSensorCount` (3) and `thermo::limits::kMaxBufferRecords` (256) — the fixed capacities shared by the sample buffer, the payload, and the sensor layer (§2.1, §4.1, §4.2); dependency-free (only `<cstddef>`) |
 | `logic/led_task.hpp` | `thermo::LedState`, `thermo::ledtask::*` (`Step`, `CycleSteps`, `LedRunner<Board>`), `thermo::LedTask<Board>` — the LED status task built on `espidf_cpp::Task` |
 | `logic/mode.hpp` | `thermo::Mode` (`kOff` / `kConfigure` / `kRun`) and `thermo::to_string(Mode)` — the operating modes (§3), board-independent vocabulary |
 | `logic/mode_selection.hpp` | `thermo::ModeSelection` (`std::optional<Mode>`) and `thermo::mode_from_buttons(ButtonState config, ButtonState run)` — the pure, `constexpr` mapping from the two mode-sense poles to a mode, reporting a both-poles-on miswire as `std::nullopt` |
 
-`logic/mode.hpp` is deliberately dependency-free (only `<cstdint>`), so the
-firmware, the host tests, and `logic/mode_selection.hpp` can all name the
-operating modes without pulling in a board.
+`logic/mode.hpp`, `logic/led_manager.hpp`, and `logic/limits.hpp` are
+deliberately dependency-free (only `<cstdint>` / `<cstddef>`), so the firmware,
+the host tests, and `logic/mode_selection.hpp` can all name the operating
+modes, the transmission gate, and the fixed capacities without pulling in a
+board.
 
 `LedRunner` and `LedTask` take a `std::shared_ptr<Board>` (never a null one) and
 share the board with the caller instead of owning it, so the caller can keep

@@ -11,8 +11,8 @@
 
 #include <cstdint>
 
-#include "constants.hpp"
-#include "led_manager.hpp"  // TxState
+#include "logic/led_manager.hpp"  // TxState
+#include "logic/limits.hpp"       // kSensorCount, kMaxBufferRecords
 #include "sensor.hpp"
 
 namespace thermo {

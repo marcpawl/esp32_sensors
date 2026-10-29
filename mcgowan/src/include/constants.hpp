@@ -1,11 +1,15 @@
-// Application-wide constants: timing and limits.
-// Values follow Specification.md Rev 13 (§2, §3, §4, §7).
+// Application-wide constants: timing and the NVS namespace.
+// Values follow Specification.md Rev 13 (§3, §5, §7).
 //
 // The GPIO assignment (§2.4) lives in `hal_common` (`hal/pin_map.hpp`,
 // namespace `thermo::pins`) so the firmware and the HAL `BoardPins` defaults
 // share one definition. It is re-exported here because several firmware
 // sources (`battery_monitor.cpp`, `configure_mode.cpp`, `run_mode.cpp`) reach
 // `thermo::pins::` through this header.
+//
+// The fixed capacities (`thermo::limits::kSensorCount`,
+// `thermo::limits::kMaxBufferRecords`) are board-independent and shared with
+// the host tests, so they live in the `logic` component (`logic/limits.hpp`).
 #pragma once
 
 // NOLINTBEGIN
@@ -13,23 +17,9 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
-#include <cstddef>
 #include <cstdint>
 
 #include "hal/pin_map.hpp"  // thermo::pins::{kWireBus, kRedLed, ...} (§2.4)
-
-namespace thermo::limits {
-
-constexpr std::size_t kSensorCount = 3;  // Three DS18B20 on the shared bus.
-
-// §4.1 record is ~12-18 bytes; §4.2 RTC slow memory yields ~450 samples.
-// Caps are deliberately conservative to keep the RTC struct small.
-constexpr std::size_t kMaxBufferRecords = 256;
-
-// The DS18B20 ROM-ID byte count lives with the type in `hal_common`
-// (`hal/ds18b20_types.hpp`: `thermo::hal::kRomIdBytes`).
-
-}  // namespace thermo::limits
 
 namespace thermo::timing {
 

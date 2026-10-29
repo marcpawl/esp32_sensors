@@ -11,7 +11,7 @@
 
 #include <cstring>
 
-#include "constants.hpp"
+#include "logic/limits.hpp"
 #include "rtc_state.hpp"
 #include "temp_format.hpp"
 #include "unity.h"
