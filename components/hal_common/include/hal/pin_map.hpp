@@ -6,7 +6,7 @@
 // definition — rather than each layer hard-coding its own numbers — keeps the
 // firmware, the HAL defaults, and the spec (§2.4) from drifting apart.
 //
-// Values follow Specification.md Rev 12 §2.4 (GPIO 34 is input-only, so the
+// Values follow Specification.md Rev 13 §2.4 (GPIO 34 is input-only, so the
 // battery divider must keep its input below ~2.5 V at maximum battery voltage).
 #pragma once
 

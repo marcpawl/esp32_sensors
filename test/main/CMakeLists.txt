@@ -6,12 +6,18 @@
 # not depend on chip-specific IDF drivers are listed here; hardware-facing code
 # (1-Wire GPIO, Wi-Fi, HTTPS) is covered by on-target tests instead.
 #
-# The pin-free HAL stubs (hal_stub's switch, led, push button, onewire bus,
-# chip temperature, and the aggregate board) are host-testable too and are
-# pulled in via PRIV_REQUIRES below; test_hal_switch.cpp, test_hal_led.cpp,
+# Header-only modules need no `sut_srcs` entry — they are included directly by
+# the test sources. `logic/mode.hpp` / `logic/mode_selection.hpp` are the
+# example: the mode-sense pole mapping is pure and `constexpr`, so
+# `test_mode_selection.cpp` exercises the real headers with no extra source.
+#
+# The pin-free HAL stubs (hal_stub's led, push button, onewire bus,
+# chip temperature, wifi radio, and the aggregate board) are host-testable too
+# and are pulled in via PRIV_REQUIRES below; test_hal_led.cpp,
 # test_hal_push_button.cpp, test_hal_onewire.cpp, test_hal_chip_temperature.cpp,
-# and test_hal_board.cpp exercise them. test_led_runner.cpp instantiates the
-# templated LedRunner<Board> against the stub board.
+# test_hal_wifi.cpp, and test_hal_board.cpp exercise them.
+# test_led_runner.cpp instantiates the templated LedRunner<Board> against the
+# stub board.
 #
 # The LED task itself lives in the shared `logic` component
 # (`components/logic/include/logic/led_task.hpp`), not in `mcgowan/src/`, so
@@ -30,7 +36,7 @@ set(test_srcs
     "test_config_page.cpp"
     "test_rom_id.cpp"
     "test_rtc_buffer.cpp"
-    "test_hal_switch.cpp"
+    "test_mode_selection.cpp"
     "test_hal_led.cpp"
     "test_hal_push_button.cpp"
     "test_hal_onewire.cpp"

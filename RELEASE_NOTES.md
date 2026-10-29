@@ -20,12 +20,23 @@ Implemented
 - Host-based unit tests for the pure-logic modules (`temp_format`, `payload`,
   `app_config` validation, `rom_id`, `rtc_buffer`) running on the ESP-IDF
   `linux` target.
-- Unit tests for the pin-free `hal_stub` mode switch (`test_hal_switch.cpp`):
-  construction/`init()`, the default reading, `set_pins()` round-trips, bad
-  hardware simulation, and the `SwitchLike` contract.
+- The mode-sense pole mapping (`logic/mode_selection.hpp`) is pure,
+  `constexpr`, and ESP-IDF-free: it maps the two pole states to
+  Configure / Off / Run and
+  reports a both-poles-on miswire as `std::nullopt`, so
+  `test_mode_selection.cpp` covers all four combinations on the host. The
+  firmware's reboot-on-fault policy stays in `main.cpp`. `thermo::Mode` itself
+  moved to the shared `logic` component (`logic/mode.hpp`), where it is
+  board-independent vocabulary available to the firmware and the tests alike.
+- Unit tests for the pin-free `hal_stub` push button
+  (`test_hal_push_button.cpp`), including the `set()` control the mode-sense
+  poles use.
 - A swappable hardware abstraction layer (`components/`): `hal_common` (shared
   types/concepts), `hal_board` (real GPIO drivers, linked by the firmware), and
-  `hal_stub` (pin-free stubs, linked by the host tests).
+  `hal_stub` (pin-free stubs, linked by the host tests). The 3-position mode
+  switch is modelled as two independent push buttons (`config_button()` /
+  `run_button()`) because ESP-IDF has no direct DPDT support; interpreting the
+  pair is left to the logic layer.
 
 - Development environment: the dev container uses the **prebuilt, pinned**
   image `marcpawl/esp-idf:20261025` (official ESP-IDF v6.1 plus `gh`, PyGithub,

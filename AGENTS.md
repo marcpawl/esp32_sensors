@@ -43,7 +43,7 @@ This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its s
 The intended system architecture (per `Specification.md`) is a single ESP-IDF firmware application running on an ESP32 with the following subsystems:
 
 - **Sensor layer** — 1-Wire bus driver reading three DS18B20 temperature sensors.
-- **Mode controller** — reads the 3-position switch to select Configure / Off / Run.
+- **Mode controller** — reads the two mode-sense poles of the 3-position switch (`config_button()` / `run_button()`) to select Configure / Off / Run.
 - **Sample buffer** — in **RTC memory only**; accumulates readings across deep-sleep cycles.
 - **WiFi / uploader** — connects to WiFi, uploads batched payloads to a remote URL, with connection caching and backoff.
 - **Power manager** — drives deep sleep between samples to meet the hourly power budget.
@@ -79,7 +79,7 @@ esp32_sensors/
 │   └── src/             #   C++26 sources + include/ — see module map below
 ├── components/          # Reusable ESP-IDF components (see "HAL" section)
 │   ├── espidf_cpp/      # C++ wrappers over ESP-IDF/FreeRTOS (Task, queue, handles, ...)
-│   ├── logic/           # Board-independent application logic (led_task.hpp)
+│   ├── logic/           # Board-independent application logic (led_task.hpp, mode.hpp)
 │   ├── hal_common/      # Shared, header-only HAL vocabulary (types/concepts)
 │   ├── hal_board/       # Real, GPIO-backed HAL (linked by mcgowan)
 │   └── hal_stub/        # Pin-free HAL stub (linked by host tests)
@@ -148,19 +148,21 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 
 | Area | Files |
 |---|---|
-| Entry point | `main.cpp` (`extern "C" void app_main`), `constants.hpp`, `mode.hpp` |
-| Mode switching | `main.cpp` maps `hal::Switch` pin states to `Mode`; `led_manager.cpp` |
+| Entry point | `main.cpp` (`extern "C" void app_main`), `constants.hpp` |
+| Mode switching | `main.cpp` (`read_mode()` reads the poles and applies the reboot-on-fault policy); the mapping itself is `logic/mode_selection.hpp` |
 | Sensors | `onewire_bus.cpp` (bit-banged 1-Wire), `ds18b20.cpp`, `sensor_manager.cpp`, `sensor.hpp` |
 | RTC state / buffer | `rtc_state.cpp` (`RTC_DATA_ATTR` state block), `rtc_buffer.cpp` (FIFO) |
-| Power / battery | `battery_monitor.cpp` |
+| Power / battery | `battery_monitor.cpp`, `power_manager.cpp`, `power_source.cpp` |
 | Config | `app_config.cpp` (validation), `app_config_store.cpp` (NVS) |
 | Configure mode | `configure_mode.cpp`, `wifi_ap.cpp`, `https_server.cpp`, `config_page.cpp`, `certs/self_signed_cert.cpp` |
-| Run mode | `run_mode.cpp` (stubbed network path), `ntp_server.cpp` |
+| Run mode | `run_mode.cpp` (stubbed network path), `ntp_client.cpp` |
 | Payload | `payload.cpp`, `temp_format.cpp`, `rom_id.cpp` (ROM-ID hex) |
 
-The LED task (`led_task.hpp`) is **not** in `mcgowan/src/`: it is board-independent
-logic and lives in the `logic` component (see below), included as
-`logic/led_task.hpp`.
+The LED task (`led_task.hpp`) and the operating modes and their pole mapping
+(`mode.hpp`, `mode_selection.hpp`) are **not** in `mcgowan/src/`: they are
+board-independent logic and live in the `logic` component (see below),
+included as `logic/led_task.hpp`, `logic/mode.hpp` and
+`logic/mode_selection.hpp`.
 
 **HAL components (`components/`).** Hardware-specific drivers live in reusable
 ESP-IDF components rather than in `mcgowan/src/`, so host tests can swap them
@@ -174,29 +176,36 @@ for deterministic stubs. The HAL is split into one shared component plus two
 | `hal_stub` | `.cpp` | host tests (`test/`, `espidf-cpp-test/`), linux app (`donny/`) | pin-free, software-driven stubs |
 
 `hal_common` is **implementation-free**: it defines the vocabulary but no
-concrete `Switch` class, so both implementations can require it without
+concrete device class, so both implementations can require it without
 duplication. `hal_board` and `hal_stub` are mutually exclusive — a project
 links exactly one.
 
 The interface for each HAL device is a header pair: the shared vocabulary in
-`hal_common` (e.g. `hal/switch_types.hpp`) plus a per-implementation header of
-the same name (e.g. `hal/switch.hpp`) that includes it and adds the concrete
-class. For the 3-position mode switch:
+`hal_common` (e.g. `hal/push_button_types.hpp`) plus a per-implementation header
+of the same name (e.g. `hal/push_button.hpp`) that includes it and adds the
+concrete class. For the push button:
 
-- `hal/switch_types.hpp` (`hal_common`) defines `thermo::hal::PinState`,
-  `thermo::hal::Pins`, and the `thermo::hal::SwitchLike` concept — the single
-  definition of the shared types.
-- `hal/switch.hpp` (`hal_board` and `hal_stub`, one each) defines
-  `thermo::hal::Switch` with an identical public interface (same ctor, inline
-  `create()` factory, `init()`, `read()`). Each `static_assert`s
-  `SwitchLike<Switch>`, so the two implementations cannot drift from the shared
-  contract (or from each other).
+- `hal/push_button_types.hpp` (`hal_common`) defines
+  `thermo::hal::ButtonState`, `thermo::hal::ButtonCallback`,
+  `thermo::hal::ButtonHandler`, and the `thermo::hal::PushButtonLike` concept —
+  the single definition of the shared types.
+- `hal/push_button.hpp` (`hal_board` and `hal_stub`, one each) defines
+  `thermo::hal::PushButton` with an identical public interface (same ctor, inline
+  `create()` factory, `init()`, `read()`, `set_interrupt()`). Each `static_assert`s
+  `PushButtonLike<PushButton>`, so the two implementations cannot drift from the
+  shared contract (or from each other).
 
-The HAL is **semantics-free**: `Switch::read()` returns the raw `Pins` (one
-`PinState` per sense pole), and mapping pin states to Configure / Off / Run is
-the caller's job (`mcgowan/src/main.cpp`). Reporting both poles lets the caller detect
-bad hardware (both-pins-on / both-pins-off), which the switch stub can simulate
-via `set_pins()`.
+The HAL is **semantics-free**: `PushButton::read()` returns `ButtonState::kOn`
+while the button is pressed and `kOff` while it is released, and interpreting a
+press (edge detection, debouncing, hold timing) is the caller's job.
+
+**The mode switch is not a HAL device.** ESP-IDF has no direct notion of a
+DPDT switch, so the board models each of its two mode-sense poles as an
+independent `PushButton` — `board.config_button()` and `board.run_button()` —
+and the DPDT knowledge (both poles on is a hardware fault, both off is the
+center/Off position, one of them selects Configure or Run) lives in the logic
+layer. The stub's `PushButton::set()` simulates presses, so bad hardware is
+reproducible in tests.
 
 The WiFi radio (§3.2, §3.9) follows the same header pair: `hal/wifi_types.hpp`
 (`hal_common`) defines `AccessPointConfig`, `StationConfig`,
@@ -255,6 +264,12 @@ implementation, and the headers are included with the `logic/` prefix:
 | Header | Provides |
 |---|---|
 | `logic/led_task.hpp` | `thermo::LedState`, `thermo::ledtask::*` (`Step`, `CycleSteps`, `LedRunner<Board>`), `thermo::LedTask<Board>` — the LED status task built on `espidf_cpp::Task` |
+| `logic/mode.hpp` | `thermo::Mode` (`kOff` / `kConfigure` / `kRun`) and `thermo::to_string(Mode)` — the operating modes (§3), board-independent vocabulary |
+| `logic/mode_selection.hpp` | `thermo::ModeSelection` (`std::optional<Mode>`) and `thermo::mode_from_buttons(ButtonState config, ButtonState run)` — the pure, `constexpr` mapping from the two mode-sense poles to a mode, reporting a both-poles-on miswire as `std::nullopt` |
+
+`logic/mode.hpp` is deliberately dependency-free (only `<cstdint>`), so the
+firmware, the host tests, and `logic/mode_selection.hpp` can all name the
+operating modes without pulling in a board.
 
 `LedRunner` and `LedTask` take a `std::shared_ptr<Board>` (never a null one) and
 share the board with the caller instead of owning it, so the caller can keep
@@ -280,9 +295,16 @@ also listed in `set(COMPONENTS main hal_stub logic)` so it is built for `linux`
 **Host-testable modules.** `temp_format.cpp`, `payload.cpp`, `app_config.cpp`,
 `rom_id.cpp`, and `rtc_buffer.cpp` are deliberately free of chip-specific
 ESP-IDF dependencies so they build for the `linux` target and are covered by
-`test/`. The HAL's `hal_stub` component (the pin-free switch, LEDs, button,
-1-Wire bus, chip-temperature sensor, WiFi radio, and aggregate board) is
-likewise built for the `linux` target and covered by `test/main/test_hal_*.cpp`.
+`test/`. The header-only `logic/mode_selection.hpp` is the same idea applied to
+the mode-sense poles: it depends only on `hal/push_button_types.hpp` (for
+`ButtonState`) and `logic/mode.hpp`, and is `constexpr`, so
+`test/main/test_mode_selection.cpp` exercises it directly and covers all four
+pole combinations — including the both-on hardware fault, which the header
+reports as `std::nullopt` instead of rebooting. `main.cpp`'s `read_mode()` is
+the thin wrapper that turns that `std::nullopt` into the firmware's fail-loudly
+`reboot()`. The HAL's `hal_stub` component (the pin-free buttons, LEDs, 1-Wire
+bus, chip-temperature sensor, WiFi radio, and aggregate board) is likewise built
+for the `linux` target and covered by `test/main/test_hal_*.cpp`.
 **Keep it that way** — put pure logic in these files and hardware/IDF calls
 behind them.
 
@@ -533,12 +555,14 @@ There are two test suites, both runnable from the host via `scripts/dev.py`:
 
 - **Host-based unit tests** live in `test/` and run on the ESP-IDF `linux`
   target with Unity — no hardware needed. They cover the pure-logic modules
-  (`temp_format`, `payload`, `app_config` validation, `rom_id`, `rtc_buffer`) and
-  the `hal_stub` components (`test_hal_switch.cpp` exercises the pin-free mode
-  switch: `create()`/`init()`, the default reading, `set_pins()` round-trips, and
-  bad-hardware simulation; `test_hal_wifi.cpp` covers the WiFi radio stub, and
-  `test_hal_board.cpp` covers the aggregate board — including that `wifi()` is
-  wired up and that `init_all()` initializes but does not start the radio).
+  (`temp_format`, `payload`, `app_config` validation, `rom_id`, `rtc_buffer`,
+  and the `mode_selection` pole mapping) and the `hal_stub` components
+  (`test_hal_push_button.cpp` exercises the pin-free
+  push button — including the `set()` control the mode-sense poles use;
+  `test_hal_wifi.cpp` covers the WiFi radio stub, and
+  `test_hal_board.cpp` covers the aggregate board — including that
+  `config_button()` / `run_button()` / `wifi()` are wired up and that
+  `init_all()` initializes but does not start the radio).
 - **On-target tests** are planned for hardware-dependent code (1-Wire/DS18B20
   reads, deep-sleep wake, Wi-Fi upload).
 - Keep hardware interactions behind thin interfaces so business logic remains
@@ -634,7 +658,7 @@ The test case should fork and exec the "_assert" program with the name of the te
   CaseSensitive`, `IncludeBlocks: Preserve`) sorts each group but does not
   reorder across the blank lines, so the groups must be laid out by hand.
   Write includes fully qualified (`"esp_log.h"`, `"freertos/FreeRTOS.h"`,
-  `"hal/switch.hpp"`) so the group is unambiguous:
+  `"hal/push_button.hpp"`) so the group is unambiguous:
 
   ```cpp
   #include "sensor.hpp"
@@ -652,7 +676,7 @@ The test case should fork and exec the "_assert" program with the name of the te
   #include <cstring>
   #include <sys/types.h>
 
-  #include "hal/switch.hpp"
+  #include "hal/push_button.hpp"
   ```
 
   clang-format inserts the blank line after `#pragma GCC diagnostic pop`

@@ -1,4 +1,12 @@
 // Operating modes selected by the 3-position ON-OFF-ON switch (§3).
+//
+// Part of the `logic` component: `Mode` describes the application's operating
+// point, not any particular board, so the firmware, the host tests, and any
+// other consumer share one definition.
+//
+// The switch itself is not a HAL device: the board exposes its two mode-sense
+// poles as independent push buttons, and `logic/mode_selection.hpp` maps that
+// pair onto these values.
 #pragma once
 
 // NOLINTBEGIN

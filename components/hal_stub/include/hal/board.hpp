@@ -26,7 +26,6 @@
 #include "hal/led.hpp"
 #include "hal/onewire.hpp"
 #include "hal/push_button.hpp"
-#include "hal/switch.hpp"
 
 namespace thermo::hal {
 
@@ -85,11 +84,20 @@ class Board {
 
     [[nodiscard]] PushButton const& button() const noexcept { return button_; }
 
-    // The 3-position mode switch (stub; pins via set_pins()).
-    [[nodiscard]] Switch& mode_switch() noexcept { return mode_switch_; }
+    // The Configure-mode sense button (stub; state via set()).
+    [[nodiscard]] PushButton& config_button() noexcept {
+        return config_button_;
+    }
 
-    [[nodiscard]] Switch const& mode_switch() const noexcept {
-        return mode_switch_;
+    [[nodiscard]] PushButton const& config_button() const noexcept {
+        return config_button_;
+    }
+
+    // The Run-mode sense button (stub; state via set()).
+    [[nodiscard]] PushButton& run_button() noexcept { return run_button_; }
+
+    [[nodiscard]] PushButton const& run_button() const noexcept {
+        return run_button_;
     }
 
     // The WiFi radio (stub; state via ap_running() / station_running(),
@@ -104,7 +112,8 @@ class Board {
     Led green_;
     Led red_;
     PushButton button_;
-    Switch mode_switch_;
+    PushButton config_button_;
+    PushButton run_button_;
     WifiRadio wifi_;
 };
 

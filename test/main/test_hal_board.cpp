@@ -1,15 +1,14 @@
 // Tests for the stub aggregate Board (`hal_stub`).
 //
 // The Board is a convenience aggregate: it owns one stub device per HAL device
-// (chip temperature, 1-Wire bus, green/red LEDs, push button, mode switch) and
+// (chip temperature, 1-Wire bus, green/red LEDs, push buttons, WiFi radio) and
 // exposes them. These tests cover the *aggregate* contract — construction from
 // `BoardPins`, `init_all()`, that each accessor returns a live, usable device,
 // and that the underlying stub controls (`set_sensors()`, `set()`,
-// `set_pins()`, `set_celsius()`, `write()`) remain reachable through the board.
+// `set_celsius()`, `write()`) remain reachable through the board.
 // The devices' own behaviour is covered by their dedicated tests
-// (test_hal_switch.cpp, test_hal_led.cpp, test_hal_push_button.cpp,
-// test_hal_onewire.cpp, test_hal_chip_temperature.cpp); here we only verify the
-// wiring.
+// (test_hal_led.cpp, test_hal_push_button.cpp, test_hal_onewire.cpp,
+// test_hal_chip_temperature.cpp); here we only verify the wiring.
 //
 // They run on the ESP-IDF `linux` target with Unity and link the pin-free
 // `hal_stub` component (never `hal_board`). Every device is deterministic, so
@@ -29,7 +28,6 @@
 #include "hal/onewire.hpp"
 #include "hal/pin_map.hpp"
 #include "hal/push_button.hpp"
-#include "hal/switch.hpp"
 #include "hal/wifi.hpp"
 #include "unity.h"
 
@@ -42,8 +40,6 @@ using thermo::hal::BoardPins;
 using thermo::hal::ButtonState;
 using thermo::hal::copy_text;
 using thermo::hal::LedState;
-using thermo::hal::Pins;
-using thermo::hal::PinState;
 using thermo::hal::StationConfig;
 
 // Pin numbers are irrelevant to the stub, but every device takes them for
@@ -55,8 +51,8 @@ constexpr BoardPins kPins{
     .green_name = "Green",
     .red_name = "Red",
     .button = 0,
-    .switch_first = 1,
-    .switch_third = 2,
+    .config_button = 1,
+    .run_button = 2,
 };
 
 Board make_board() {
@@ -77,8 +73,8 @@ TEST_CASE("hal board: BoardPins defaults to the board pin map (§2.4)",
     TEST_ASSERT_EQUAL(thermo::pins::kWireBus, def.one_wire);
     TEST_ASSERT_EQUAL(thermo::pins::kGreenLed, def.green_led);
     TEST_ASSERT_EQUAL(thermo::pins::kRedLed, def.red_led);
-    TEST_ASSERT_EQUAL(thermo::pins::kConfig, def.switch_first);
-    TEST_ASSERT_EQUAL(thermo::pins::kRun, def.switch_third);
+    TEST_ASSERT_EQUAL(thermo::pins::kConfig, def.config_button);
+    TEST_ASSERT_EQUAL(thermo::pins::kRun, def.run_button);
 
     // A default-constructed board still initializes and works (the stub
     // ignores the pins, but this proves `create({})` is usable).
@@ -157,16 +153,31 @@ TEST_CASE("hal board: button() is a live stub device", "[hal_board]") {
                       static_cast<int>(b.button().read()));
 }
 
-TEST_CASE("hal board: mode_switch() is a live stub device", "[hal_board]") {
+TEST_CASE("hal board: config_button() is a live, independent stub device",
+          "[hal_board]") {
     Board b = make_board();
-    // Default reading is the Third position (first off, third on).
-    const Pins def = b.mode_switch().read();
-    TEST_ASSERT_FALSE(def.first_on());
-    TEST_ASSERT_TRUE(def.third_on());
+    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
+                      static_cast<int>(b.config_button().read()));
+    b.config_button().set(ButtonState::kOn);
+    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOn),
+                      static_cast<int>(b.config_button().read()));
+    // The mode-sense buttons and the plain button are separate devices.
+    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
+                      static_cast<int>(b.run_button().read()));
+    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
+                      static_cast<int>(b.button().read()));
+}
 
-    const Pins first{PinState::kOn, PinState::kOff};
-    b.mode_switch().set_pins(first);
-    TEST_ASSERT_TRUE(b.mode_switch().read() == first);
+TEST_CASE("hal board: run_button() is a live, independent stub device",
+          "[hal_board]") {
+    Board b = make_board();
+    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
+                      static_cast<int>(b.run_button().read()));
+    b.run_button().set(ButtonState::kOn);
+    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOn),
+                      static_cast<int>(b.run_button().read()));
+    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
+                      static_cast<int>(b.config_button().read()));
 }
 
 TEST_CASE("hal board: wifi() is a live stub device", "[hal_board]") {
@@ -205,14 +216,16 @@ TEST_CASE("hal board: const accessors yield const device references",
     TEST_ASSERT_EQUAL(2500, b.chip_temperature().read());
     TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
                       static_cast<int>(b.button().read()));
+    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
+                      static_cast<int>(b.config_button().read()));
+    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
+                      static_cast<int>(b.run_button().read()));
     // The 1-Wire stub defaults to the three example sensors from §5.1.3.
     TEST_ASSERT_EQUAL(3, b.one_wire().read().size());
     TEST_ASSERT_EQUAL(static_cast<int>(LedState::kOff),
                       static_cast<int>(b.green().state()));
     TEST_ASSERT_EQUAL(static_cast<int>(LedState::kOff),
                       static_cast<int>(b.red().state()));
-    const Pins p = b.mode_switch().read();
-    TEST_ASSERT_FALSE(p.first_on());
     // The radio was inited by init_all(); neither interface is running, so the
     // const observation accessors are meaningful.
     TEST_ASSERT_TRUE(b.wifi().initialized());

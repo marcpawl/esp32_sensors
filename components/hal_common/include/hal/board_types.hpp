@@ -34,7 +34,6 @@
 #include "hal/onewire.hpp"
 #include "hal/pin_map.hpp"
 #include "hal/push_button.hpp"
-#include "hal/switch.hpp"
 #include "hal/wifi.hpp"
 
 namespace thermo::hal {
@@ -62,9 +61,12 @@ struct BoardPins {
     // Push-button input pin. The reference board has no dedicated button, so
     // this defaults to 0 and callers should set it explicitly if wired.
     int button = 0;
-    // 3-position mode switch sense pins (the two outer poles).
-    int switch_first = pins::kConfig;
-    int switch_third = pins::kRun;
+    // Mode-selection push buttons, one per mode-sense pole. ESP-IDF has no
+    // direct notion of the 3-position (DPDT) switch, so the board reports each
+    // sense pole as an independent button; mapping the pair to a mode is logic
+    // (§3.1).
+    int config_button = pins::kConfig;
+    int run_button = pins::kRun;
 };
 
 // Concept: a board type that owns one of each HAL device and exposes them
@@ -90,8 +92,10 @@ concept BoardLike =
         { const_board.red() } -> std::same_as<Led const&>;
         { board.button() } -> std::same_as<PushButton&>;
         { const_board.button() } -> std::same_as<PushButton const&>;
-        { board.mode_switch() } -> std::same_as<Switch&>;
-        { const_board.mode_switch() } -> std::same_as<Switch const&>;
+        { board.config_button() } -> std::same_as<PushButton&>;
+        { const_board.config_button() } -> std::same_as<PushButton const&>;
+        { board.run_button() } -> std::same_as<PushButton&>;
+        { const_board.run_button() } -> std::same_as<PushButton const&>;
         { board.wifi() } -> std::same_as<WifiRadio&>;
         { const_board.wifi() } -> std::same_as<WifiRadio const&>;
     };
