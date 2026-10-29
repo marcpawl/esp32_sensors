@@ -15,7 +15,12 @@
 # shared device vocabulary (`ButtonState`, `PushButtonLike`, `LedState`,
 # `LedLike`, `OneWireLike`, `ChipTemperatureLike`,
 # `AccessPointConfig`, `StationConfig`, `WifiRadioLike`, `BoardPins`,
-# `BoardLike`).
+# `BoardLike`) and the deep-sleep vocabulary (`WakeCause`, `WakeCauses`,
+# `wake_cause_bit()`, `woke_from()`).
+#
+# Deep sleep (§3.8) needs no ESP-IDF dependency here: the stub records the
+# request, arms the timer wake the real board would produce, and reports it,
+# entirely in software.
 
 idf_component_register(
     SRCS

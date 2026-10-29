@@ -13,7 +13,13 @@
 # Both depend on the header-only `hal_common` component for the shared device
 # vocabulary (`ButtonState`, `PushButtonLike`, `LedState`, `LedLike`,
 # `OneWireLike`, `ChipTemperatureLike`, `AccessPointConfig`, `StationConfig`,
-# `WifiRadioLike`, `BoardPins`, `BoardLike`).
+# `WifiRadioLike`, `BoardPins`, `BoardLike`) and the deep-sleep vocabulary
+# (`WakeCause`, `WakeCauses`, `wake_cause_bit()`, `woke_from()`).
+#
+# `esp_hw_support` is a public requirement because deep sleep (§3.8) is part of
+# the board interface: `board.cpp` calls `esp_sleep_enable_timer_wakeup()` /
+# `esp_deep_sleep_start()` and `esp_sleep_get_wakeup_causes()`, which live
+# there.
 
 idf_component_register(
     SRCS
@@ -29,6 +35,8 @@ idf_component_register(
         hal_common
         esp_driver_gpio
         esp_driver_tsens
+        # Deep sleep (§3.8): `esp_sleep_*` (also the owner of esp_sleep.h).
+        esp_hw_support
     # WiFi (SoftAP + station): driver, netif glue, and event loop.
     PRIV_REQUIRES
         esp_wifi

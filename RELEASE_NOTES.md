@@ -50,6 +50,20 @@ Implemented
   `run_button()`) because ESP-IDF has no direct DPDT support; interpreting the
   pair is left to the logic layer.
 
+- Deep sleep (§3.8) is a board-level operation rather than a HAL device, since
+  it powers the whole board down: `BoardLike` requires
+  `deep_sleep_start(std::chrono::seconds)` and `sleep_get_wakeup_causes()`.
+  `hal_board` calls `esp_sleep_enable_timer_wakeup()` + `esp_deep_sleep_start()`
+  and returns ESP-IDF's wake-cause bitmap; `hal_stub` records the requested
+  duration (`last_deep_sleep()`), arms the timer wake the next boot would
+  report, and returns, while `set_wakeup_causes()` lets a test model any other
+  wake — so the sleep/backoff decision becomes host-testable. The shared
+  vocabulary (`WakeCause`, `WakeCauses`,
+  `wake_cause_bit()`, `woke_from()`) lives in `hal_common`'s
+  `hal/sleep_types.hpp` and stays free of ESP-IDF dependencies, which the
+  `linux` target requires: `esp_sleep.h` is not self-contained there and the
+  port links no `sleep_modes.c`.
+
 - Development environment: the dev container uses the **prebuilt, pinned**
   image `marcpawl/esp-idf:20261025` (official ESP-IDF v6.1 plus `gh`, PyGithub,
   and esp-clang). Developers and CI *pull* it instead of rebuilding it, so both

@@ -226,6 +226,34 @@ or the station — the caller decides (Configure mode starts the AP, Run mode
 starts the station). Reach the stub controls through the board, e.g.
 `board.wifi().start_ap(cfg)` / `board.wifi().ap_running()`.
 
+**Deep sleep is on the board, not a HAL device.** There is no third sleep
+implementation to swap in, and sleeping powers down the *whole* board rather
+than a peripheral, so `BoardLike` requires the two board-wide operations
+directly: `deep_sleep_start(std::chrono::seconds)` (§3.8) and
+`sleep_get_wakeup_causes()`. The vocabulary is in `hal/sleep_types.hpp`
+(`hal_common`) — `WakeCause`, `WakeCauses`, `wake_cause_bit()`, `woke_from()` —
+and is deliberately dependency-free (only `<cstdint>`): `esp_sleep.h` is not
+self-contained on the `linux` target (it includes `hal/gpio_types.h`, which is
+not on the include path of a project that links no GPIO driver), and the ESP-IDF
+linux port registers no `sleep_modes.c`, so `esp_sleep_get_wakeup_causes()` is
+unlinkable there.
+
+`WakeCause` names ESP-IDF's `esp_sleep_source_t` **bit positions**
+(`kUndefined` = 0, `kTimer` = 4) so the hardware board passes the ESP-IDF bitmap
+straight through; `board.cpp` `static_assert`s that the values still line up.
+The wake cause is a bitmap because several sources can fire at once.
+
+`hal_board` calls `esp_sleep_enable_timer_wakeup()` + `esp_deep_sleep_start()`
+(the §3.8 pair) and `deep_sleep_start()` is `[[noreturn]]` there. `hal_stub`
+records the duration (`last_deep_sleep()`), arms the wake the real board would
+produce — `deep_sleep_start()` sets the cause to `WakeCause::kTimer` — and
+**returns**. A fresh stub reports a cold boot
+(`wake_cause_bit(WakeCause::kUndefined)`), and `set_wakeup_causes()` overrides
+either, so a test can simulate any wake. The `BoardLike` concept can therefore
+only require that the call is *well-formed* — not `[[noreturn]]` — and no caller
+may rely on sleep returning. That asymmetry is deliberate: it is what makes the
+sleep/backoff decision host-testable.
+
 Because `hal_board` and `hal_stub` would otherwise be discovered together (both
 live under the project's default `components/` search path), each project
 excludes the *other* via `EXCLUDE_COMPONENTS` in its top-level `CMakeLists.txt`
@@ -568,8 +596,10 @@ There are two test suites, both runnable from the host via `scripts/dev.py`:
   push button — including the `set()` control the mode-sense poles use;
   `test_hal_wifi.cpp` covers the WiFi radio stub, and
   `test_hal_board.cpp` covers the aggregate board — including that
-  `config_button()` / `run_button()` / `wifi()` are wired up and that
-  `init_all()` initializes but does not start the radio).
+  `config_button()` / `run_button()` / `wifi()` are wired up, that
+  `init_all()` initializes but does not start the radio, and that
+  `deep_sleep_start()` records the duration while `sleep_get_wakeup_causes()` /
+  `set_wakeup_causes()` model the next boot's wake cause).
 - **On-target tests** are planned for hardware-dependent code (1-Wire/DS18B20
   reads, deep-sleep wake, Wi-Fi upload).
 - Keep hardware interactions behind thin interfaces so business logic remains
