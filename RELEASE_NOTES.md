@@ -16,7 +16,10 @@ Implemented
   and LED semantics.
 - Run mode (partial): boot self-test LEDs, battery read with hysteresis,
   sensor reads using cached ROM IDs (with a first-boot scan), sample append
-  to the RTC-memory buffer, and deep sleep between samples.
+  to the RTC-memory buffer, and deep sleep between samples. The RTC block's
+  sample buffer and cached ROM IDs are `static_vector`s, so each carries its
+  own element count instead of a separate `buffer_len` / `rom_count` counter
+  that could drift out of step with the data (§8).
 - Host-based unit tests for the pure-logic modules (`temp_format`, `payload`,
   `app_config` validation, `rom_id`, `rtc_buffer`) running on the ESP-IDF
   `linux` target.

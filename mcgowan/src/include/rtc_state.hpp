@@ -7,16 +7,21 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
-#include <array>
-
 #include <cstdint>
+#include <type_traits>
 
-#include "logic/led_manager.hpp"  // TxState
-#include "logic/limits.hpp"       // kSensorCount, kMaxBufferRecords
-#include "logic/temp_format.hpp"  // kTempNull
-#include "sensor.hpp"
+#include "espidf_cpp/static_vector.hpp"  // static_vector
+#include "hal/ds18b20_types.hpp"         // RomId
+#include "logic/led_manager.hpp"         // TxState
+#include "logic/limits.hpp"              // kSensorCount, kMaxBufferRecords
+#include "logic/temp_format.hpp"         // kTempNull
 
 namespace thermo {
+
+// `RomId` is defined in the shared, implementation-free `hal_common` component;
+// re-export it into `thermo` as `sensor.hpp` does, so the RTC state names it
+// without pulling in the 1-Wire driver header.
+using thermo::hal::RomId;
 
 // One buffered sample record (§4.1). Fixed-size and trivially copyable so it
 // can live in RTC memory. Layout: 4 + 2 + 2 + 2 + 2 = 12 bytes, no padding,
@@ -42,18 +47,28 @@ struct WifiCache {
 };
 
 // The complete RTC-resident application state (§8).
+//
+// The buffer and the cached ROM IDs are `static_vector`s: their length travels
+// with the data instead of living in separate `buffer_len` / `rom_count`
+// counters, so the two can never disagree (a mismatched counter would make the
+// device read or upload stale RTC bytes). Storage stays inline, so the whole
+// block is still a plain, trivially copyable POD suitable for `RTC_DATA_ATTR`.
 struct RtcState {
     std::uint32_t boot_count = 0;
     std::uint8_t fail_count = 0;
     std::uint8_t tx_state = static_cast<std::uint8_t>(TxState::kTxOk);
-    std::array<SampleRecord, limits::kMaxBufferRecords> buffer = {};
-    std::uint16_t buffer_len = 0;
+    espidf_cpp::static_vector<SampleRecord, limits::kMaxBufferRecords> buffer{};
     std::uint32_t next_sample_at = 0;
-    std::array<RomId, limits::kSensorCount> rom_ids = {};
-    std::uint8_t rom_count = 0;
+    espidf_cpp::static_vector<RomId, limits::kSensorCount> rom_ids{};
     WifiCache wifi = {};
     std::uint8_t last_upload_ok = 0;
 };
+
+// RTC memory is restored verbatim from the previous boot, so the block is
+// copied with a byte blit (and lives in a hardware-retained section): it must
+// stay trivially copyable, and it must not own any out-of-line storage.
+static_assert(std::is_trivially_copyable_v<RtcState>,
+              "RtcState must be trivially copyable to live in RTC memory");
 
 // Obtains the single RTC-resident state.
 RtcState& rtc_state();

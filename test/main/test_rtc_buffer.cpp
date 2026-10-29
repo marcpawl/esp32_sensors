@@ -9,7 +9,7 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
-#include <cstring>
+#include <type_traits>
 
 #include "logic/limits.hpp"
 #include "logic/temp_format.hpp"
@@ -22,6 +22,7 @@ using thermo::rtc_wifi_cache_clear;
 using thermo::RtcState;
 using thermo::SampleRecord;
 using thermo::limits::kMaxBufferRecords;
+using thermo::limits::kSensorCount;
 
 namespace {
 
@@ -47,17 +48,49 @@ TEST_CASE("rtc: SampleRecord layout is stable at 12 bytes", "[rtc_buffer]") {
     TEST_ASSERT_EQUAL_UINT(4, alignof(SampleRecord));
 }
 
+TEST_CASE("rtc: RtcState stays trivially copyable", "[rtc_buffer]") {
+    // §8: the block is restored verbatim from RTC memory, so it is copied with
+    // a byte blit. Adding a member with an out-of-line copy (heap storage, a
+    // custom copy constructor, a vtable) would silently break that.
+    TEST_ASSERT_TRUE(std::is_trivially_copyable_v<RtcState>);
+}
+
+// --- Cached ROM IDs (§3.4, §8) ---------------------------------------------
+
+TEST_CASE("rtc: rom_ids holds up to kSensorCount ids", "[rtc_buffer]") {
+    RtcState st{};
+    TEST_ASSERT_EQUAL_size_t(0, st.rom_ids.size());
+    TEST_ASSERT_EQUAL_size_t(kSensorCount, st.rom_ids.capacity());
+
+    for (std::size_t i = 0; i < kSensorCount; ++i) {
+        thermo::hal::RomId rom{};
+        rom.bytes[7] = static_cast<std::uint8_t>(i);
+        TEST_ASSERT_TRUE(st.rom_ids.try_push_back(rom));
+    }
+    TEST_ASSERT_EQUAL_size_t(kSensorCount, st.rom_ids.size());
+
+    // A fourth id does not fit: the cache is sized by §2.1's sensor count.
+    thermo::hal::RomId extra{};
+    TEST_ASSERT_FALSE(st.rom_ids.try_push_back(extra));
+    TEST_ASSERT_EQUAL_size_t(kSensorCount, st.rom_ids.size());
+
+    // The stored ids are intact and in insertion order.
+    for (std::size_t i = 0; i < kSensorCount; ++i) {
+        TEST_ASSERT_EQUAL_UINT8(i, st.rom_ids[i].bytes[7]);
+    }
+}
+
 // --- Appending --------------------------------------------------------------
 
-TEST_CASE("rtc: push appends and increments buffer_len", "[rtc_buffer]") {
+TEST_CASE("rtc: push appends and grows the buffer", "[rtc_buffer]") {
     RtcState st{};
-    TEST_ASSERT_EQUAL_UINT16(0, st.buffer_len);
+    TEST_ASSERT_EQUAL_size_t(0, st.buffer.size());
 
     rtc_buffer_push(st, make_record(10, 3800, 100));
-    TEST_ASSERT_EQUAL_UINT16(1, st.buffer_len);
+    TEST_ASSERT_EQUAL_size_t(1, st.buffer.size());
 
     rtc_buffer_push(st, make_record(20, 3810, 200));
-    TEST_ASSERT_EQUAL_UINT16(2, st.buffer_len);
+    TEST_ASSERT_EQUAL_size_t(2, st.buffer.size());
 
     TEST_ASSERT_EQUAL_UINT32(10, st.buffer[0].age_base);
     TEST_ASSERT_EQUAL_UINT32(20, st.buffer[1].age_base);
@@ -87,7 +120,7 @@ TEST_CASE("rtc: buffer fills to capacity exactly", "[rtc_buffer]") {
         rtc_buffer_push(st, make_record(static_cast<std::uint32_t>(i), 3000,
                                         static_cast<std::int16_t>(i)));
     }
-    TEST_ASSERT_EQUAL_UINT16(kMaxBufferRecords, st.buffer_len);
+    TEST_ASSERT_EQUAL_size_t(kMaxBufferRecords, st.buffer.size());
     // Oldest at index 0, newest at the end.
     TEST_ASSERT_EQUAL_UINT32(0, st.buffer[0].age_base);
     TEST_ASSERT_EQUAL_UINT32(kMaxBufferRecords - 1,
@@ -103,7 +136,7 @@ TEST_CASE("rtc: overflow evicts the oldest sample (FIFO)", "[rtc_buffer]") {
     // One more sample: capacity is unchanged and the oldest (age 0) is gone.
     rtc_buffer_push(st, make_record(9999, 3000, 0));
 
-    TEST_ASSERT_EQUAL_UINT16(kMaxBufferRecords, st.buffer_len);
+    TEST_ASSERT_EQUAL_size_t(kMaxBufferRecords, st.buffer.size());
     TEST_ASSERT_EQUAL_UINT32(1, st.buffer[0].age_base);  // was index 1
     TEST_ASSERT_EQUAL_UINT32(9999, st.buffer[kMaxBufferRecords - 1].age_base);
 }
@@ -114,7 +147,7 @@ TEST_CASE("rtc: continued pushes stay at capacity and keep newest",
     for (std::uint32_t i = 0; i < kMaxBufferRecords * 2; ++i) {
         rtc_buffer_push(st, make_record(i, 3000, 0));
     }
-    TEST_ASSERT_EQUAL_UINT16(kMaxBufferRecords, st.buffer_len);
+    TEST_ASSERT_EQUAL_size_t(kMaxBufferRecords, st.buffer.size());
     // After 2x capacity pushes, the buffer holds the last kMax records.
     TEST_ASSERT_EQUAL_UINT32(kMaxBufferRecords, st.buffer[0].age_base);
     TEST_ASSERT_EQUAL_UINT32(kMaxBufferRecords * 2 - 1,
@@ -141,16 +174,16 @@ TEST_CASE("rtc: overflow preserves field integrity", "[rtc_buffer]") {
 
 // --- Clearing ---------------------------------------------------------------
 
-TEST_CASE("rtc: clear resets buffer_len but not capacity", "[rtc_buffer]") {
+TEST_CASE("rtc: clear empties the buffer but keeps capacity", "[rtc_buffer]") {
     RtcState st{};
     rtc_buffer_push(st, make_record(1, 3000, 1));
     rtc_buffer_push(st, make_record(2, 3000, 2));
     rtc_buffer_clear(st);
-    TEST_ASSERT_EQUAL_UINT16(0, st.buffer_len);
+    TEST_ASSERT_EQUAL_size_t(0, st.buffer.size());
 
     // The buffer is reusable after a clear.
     rtc_buffer_push(st, make_record(3, 3000, 3));
-    TEST_ASSERT_EQUAL_UINT16(1, st.buffer_len);
+    TEST_ASSERT_EQUAL_size_t(1, st.buffer.size());
     TEST_ASSERT_EQUAL_UINT32(3, st.buffer[0].age_base);
 }
 

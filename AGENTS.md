@@ -2,7 +2,7 @@
 
 ## Project Description
 
-This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its software specification (Rev 13). Firmware implementation is **in progress**: Configure mode is fully implemented; Run mode is scaffolded with the network paths (Wi-Fi station, batch upload, backoff) intentionally stubbed.
+This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its software specification (Rev 14). Firmware implementation is **in progress**: Configure mode is fully implemented; Run mode is scaffolded with the network paths (Wi-Fi station, batch upload, backoff) intentionally stubbed.
 
 **What it does:**
 - A solar-powered, battery-backed ESP32 samples three **DS18B20** thermometers on a shared **1-Wire bus**.
@@ -68,7 +68,7 @@ Refer to `Specification.md` for the detailed contracts: operating modes, sample 
 
 ```
 esp32_sensors/
-├── Specification.md     # Authoritative software spec (Rev 13) — read this first
+├── Specification.md     # Authoritative software spec (Rev 14) — read this first
 ├── RELEASE_NOTES.md     # Human-readable release notes
 ├── CMakeLists.txt       # Root aggregator (plain CMake) — builds all subprojects
 ├── mcgowan/             # Firmware subproject (ESP32-S3, hal_board) -> mcgowan.bin
@@ -151,7 +151,7 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 | Entry point | `main.cpp` (`extern "C" void app_main`), `constants.hpp` |
 | Mode switching | `main.cpp` (`read_mode()` reads the poles and applies the reboot-on-fault policy); the mapping itself is `logic/mode_selection.hpp` |
 | Sensors | `onewire_bus.cpp` (bit-banged 1-Wire), `ds18b20.cpp`, `sensor_manager.cpp`, `sensor.hpp` |
-| RTC state / buffer | `rtc_state.cpp` (`RTC_DATA_ATTR` state block), `rtc_buffer.cpp` (FIFO) |
+| RTC state / buffer | `rtc_state.cpp` (`RTC_DATA_ATTR` state block), `rtc_buffer.cpp` (FIFO); `RtcState`'s `buffer` / `rom_ids` are `espidf_cpp::static_vector`s that carry their own counts |
 | Power / battery | `battery_monitor.cpp`, `power_manager.cpp`, `power_source.cpp` |
 | Config | `app_config.cpp` (validation), `app_config_store.cpp` (NVS) |
 | Configure mode | `configure_mode.cpp`, `wifi_ap.cpp`, `https_server.cpp`, `config_page.cpp`, `certs/self_signed_cert.cpp` |
