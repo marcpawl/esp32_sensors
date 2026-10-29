@@ -48,7 +48,6 @@ set(test_srcs
 
 # Production sources under test (paths are relative to this component dir).
 set(sut_srcs
-    "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/temp_format.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/payload.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/app_config.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/config_page.cpp"

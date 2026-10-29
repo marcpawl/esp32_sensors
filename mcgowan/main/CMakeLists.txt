@@ -28,7 +28,6 @@ idf_component_register(
         "${mcgowan_src}/sensor_manager.cpp"
         "${mcgowan_src}/rtc_state.cpp"
         "${mcgowan_src}/rtc_buffer.cpp"
-        "${mcgowan_src}/temp_format.cpp"
         "${mcgowan_src}/payload.cpp"
         "${mcgowan_src}/configure_mode.cpp"
         "${mcgowan_src}/https_server.cpp"

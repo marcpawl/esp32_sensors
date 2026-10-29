@@ -13,6 +13,7 @@
 
 #include "logic/led_manager.hpp"  // TxState
 #include "logic/limits.hpp"       // kSensorCount, kMaxBufferRecords
+#include "logic/temp_format.hpp"  // kTempNull
 #include "sensor.hpp"
 
 namespace thermo {

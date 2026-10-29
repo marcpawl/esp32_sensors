@@ -35,6 +35,7 @@
 #include "battery_monitor.hpp"
 #include "constants.hpp"
 #include "logic/limits.hpp"
+#include "logic/temp_format.hpp"
 #include "payload.hpp"
 #include "rtc_state.hpp"
 #include "sensor.hpp"

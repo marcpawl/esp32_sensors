@@ -12,7 +12,7 @@
 
 #include <string>
 
-#include "temp_format.hpp"
+#include "logic/temp_format.hpp"
 #include "unity.h"
 
 using thermo::format_temp_c_x100;

@@ -12,8 +12,8 @@
 #include <cstring>
 
 #include "logic/limits.hpp"
+#include "logic/temp_format.hpp"
 #include "rtc_state.hpp"
-#include "temp_format.hpp"
 #include "unity.h"
 
 using thermo::rtc_buffer_clear;

@@ -79,7 +79,7 @@ esp32_sensors/
 │   └── src/             #   C++26 sources + include/ — see module map below
 ├── components/          # Reusable ESP-IDF components (see "HAL" section)
 │   ├── espidf_cpp/      # C++ wrappers over ESP-IDF/FreeRTOS (Task, queue, handles, ...)
-│   ├── logic/           # Board-independent application logic (led_task.hpp, led_manager.hpp, mode.hpp)
+│   ├── logic/           # Board-independent application logic (temp_format, limits, led_manager, mode*, led_task)
 │   ├── hal_common/      # Shared, header-only HAL vocabulary (types/concepts)
 │   ├── hal_board/       # Real, GPIO-backed HAL (linked by mcgowan)
 │   └── hal_stub/        # Pin-free HAL stub (linked by host tests)
@@ -156,7 +156,7 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 | Config | `app_config.cpp` (validation), `app_config_store.cpp` (NVS) |
 | Configure mode | `configure_mode.cpp`, `wifi_ap.cpp`, `https_server.cpp`, `config_page.cpp`, `certs/self_signed_cert.cpp` |
 | Run mode | `run_mode.cpp` (stubbed network path), `ntp_client.cpp` |
-| Payload | `payload.cpp`, `temp_format.cpp`, `rom_id.cpp` (ROM-ID hex) |
+| Payload | `payload.cpp`, `rom_id.cpp` (ROM-ID hex); the temperature formatter and `kTempNull` are `logic/temp_format.hpp` |
 
 The LED task (`led_task.hpp`) and the operating modes and their pole mapping
 (`mode.hpp`, `mode_selection.hpp`) are **not** in `mcgowan/src/`: they are
@@ -268,12 +268,13 @@ implementation, and the headers are included with the `logic/` prefix:
 | `logic/led_task.hpp` | `thermo::LedState`, `thermo::ledtask::*` (`Step`, `CycleSteps`, `LedRunner<Board>`), `thermo::LedTask<Board>` — the LED status task built on `espidf_cpp::Task` |
 | `logic/mode.hpp` | `thermo::Mode` (`kOff` / `kConfigure` / `kRun`) and `thermo::to_string(Mode)` — the operating modes (§3), board-independent vocabulary |
 | `logic/mode_selection.hpp` | `thermo::ModeSelection` (`std::optional<Mode>`) and `thermo::mode_from_buttons(ButtonState config, ButtonState run)` — the pure, `constexpr` mapping from the two mode-sense poles to a mode, reporting a both-poles-on miswire as `std::nullopt` |
+| `logic/temp_format.hpp` / `src/temp_format.cpp` | `thermo::kTempNull` (the int16 `0x8000` sensor-failure sentinel) and `thermo::format_temp_c_x100()` — centred-hundredths formatting for the config UI and the payload (§4.2, §9); no ESP-IDF dependency |
 
-`logic/mode.hpp`, `logic/led_manager.hpp`, and `logic/limits.hpp` are
-deliberately dependency-free (only `<cstdint>` / `<cstddef>`), so the firmware,
-the host tests, and `logic/mode_selection.hpp` can all name the operating
-modes, the transmission gate, and the fixed capacities without pulling in a
-board.
+`logic/mode.hpp`, `logic/led_manager.hpp`, `logic/limits.hpp`, and
+`logic/temp_format.hpp` are deliberately dependency-free (only `<cstdint>` /
+`<cstddef>`), so the firmware, the host tests, and `logic/mode_selection.hpp`
+can all name the operating modes, the transmission gate, the fixed capacities,
+and the temperature sentinel without pulling in a board.
 
 `LedRunner` and `LedTask` take a `std::shared_ptr<Board>` (never a null one) and
 share the board with the caller instead of owning it, so the caller can keep
@@ -282,8 +283,8 @@ with `std::make_shared<Board>(Board::create(pins))` and call `init_all()`
 before starting the task. The HAL itself is unchanged: `Board` stays
 non-copyable and movable.
 
-Layout: `include/logic/` for public headers, `src/` for `.cpp` files (none yet —
-the component is header-only). **New `.cpp` files must be added to the `SRCS`
+Layout: `include/logic/` for public headers, `src/` for `.cpp` files
+(`src/temp_format.cpp` so far). **New `.cpp` files must be added to the `SRCS`
 list in `components/logic/CMakeLists.txt`**; consumers only need
 `REQUIRES logic` (firmware `mcgowan/main`) or
 `PRIV_REQUIRES logic` (host tests `test/main`), so adding sources there does not
@@ -294,12 +295,14 @@ decides the hardware: `mcgowan` links `hal_board` (GPIO), `test` links
 `hal_stub` (pin-free). The component deliberately requires neither, since those
 two are mutually exclusive per project. In the `test/` project the component is
 also listed in `set(COMPONENTS main hal_stub logic)` so it is built for `linux`
-(the restrict-to-`main` set would otherwise drop it once it has `.cpp` files).
+(the restrict-to-`main` set would otherwise drop it now that it has `.cpp`
+files).
 
-**Host-testable modules.** `temp_format.cpp`, `payload.cpp`, `app_config.cpp`,
-`rom_id.cpp`, and `rtc_buffer.cpp` are deliberately free of chip-specific
-ESP-IDF dependencies so they build for the `linux` target and are covered by
-`test/`. The header-only `logic/mode_selection.hpp` is the same idea applied to
+**Host-testable modules.** The `logic` component's `temp_format.cpp`,
+`payload.cpp`, `app_config.cpp`, `rom_id.cpp`, and `rtc_buffer.cpp` are
+deliberately free of chip-specific ESP-IDF dependencies so they build for the
+`linux` target and are covered by `test/`. The header-only
+`logic/mode_selection.hpp` is the same idea applied to
 the mode-sense poles: it depends only on `hal/push_button_types.hpp` (for
 `ButtonState`) and `logic/mode.hpp`, and is `constexpr`, so
 `test/main/test_mode_selection.cpp` exercises it directly and covers all four
@@ -559,7 +562,7 @@ There are two test suites, both runnable from the host via `scripts/dev.py`:
 
 - **Host-based unit tests** live in `test/` and run on the ESP-IDF `linux`
   target with Unity — no hardware needed. They cover the pure-logic modules
-  (`temp_format`, `payload`, `app_config` validation, `rom_id`, `rtc_buffer`,
+  (`temp_format`, `limits`, `led_manager`, `payload`, `app_config` validation, `rom_id`, `rtc_buffer`,
   and the `mode_selection` pole mapping) and the `hal_stub` components
   (`test_hal_push_button.cpp` exercises the pin-free
   push button — including the `set()` control the mode-sense poles use;

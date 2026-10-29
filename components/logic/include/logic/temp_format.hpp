@@ -1,7 +1,10 @@
-// Temperature serialization (§9.3).
+// Temperature serialization (§9.3) and the "no reading" sentinel (§4.1).
 //
-// Kept free of ESP-IDF dependencies so the rounding and formatting rules can
-// be unit-tested on the host target.
+// Part of the `logic` component: the rounding/formatting rules and the
+// `kTempNull` sentinel are application vocabulary shared by the sample buffer,
+// the payload builder, and the host tests, not a property of any particular
+// board. The component has no ESP-IDF dependency, so both the firmware and the
+// `linux`-target tests use the same implementation.
 #pragma once
 
 // NOLINTBEGIN

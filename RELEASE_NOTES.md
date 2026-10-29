@@ -33,7 +33,10 @@ Implemented
   into a board. The fixed capacities (`thermo::limits::kSensorCount`,
   `thermo::limits::kMaxBufferRecords`) moved as well (`logic/limits.hpp`), so
   the sample buffer, the payload, and the sensor layer share one definition
-  with the host tests.
+  with the host tests. The temperature formatter and its `kTempNull`
+  sensor-failure sentinel moved there too (`logic/temp_format.hpp`, with a
+  `src/temp_format.cpp` implementing the formatter), so the config UI, the
+  payload, and the RTC sample defaults share one ESP-IDF-free definition.
 - Unit tests for the pin-free `hal_stub` push button
   (`test_hal_push_button.cpp`), including the `set()` control the mode-sense
   poles use.
