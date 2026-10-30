@@ -4,9 +4,12 @@
 # status task (`logic/led_task.hpp`), the transmission gate
 # (`logic/led_manager.hpp`), the fixed capacities (`logic/limits.hpp`), the
 # temperature serialization and its "no reading" sentinel
-# (`logic/temp_format.hpp`), the operating modes and their mapping from the
-# mode-sense poles (`logic/mode.hpp`, `logic/mode_selection.hpp`) and, as it
-# grows, the rest of the logic shared by the firmware and the host tests. It
+# (`logic/temp_format.hpp`), the RTC state's shape and buffer operations
+# (`logic/rtc_state.hpp`, `src/rtc_buffer.cpp` — the `RTC_DATA_ATTR` storage
+# itself is firmware-only, in `mcgowan/src/rtc_storage.cpp`), the operating
+# modes and their mapping from the mode-sense poles (`logic/mode.hpp`,
+# `logic/mode_selection.hpp`) and, as it grows, the rest of the logic shared by
+# the firmware and the host tests. It
 # depends only on `espidf_cpp` and the HAL *vocabulary* (`hal_common`), so the
 # same code links into:
 #
@@ -30,6 +33,7 @@
 idf_component_register(
     SRCS
         "src/temp_format.cpp"
+        "src/rtc_buffer.cpp"
     INCLUDE_DIRS
         "include"
     REQUIRES

@@ -1,5 +1,19 @@
-// RTC-memory layout and helpers (§8). All state here survives deep sleep and
-// backoff reboots, but is lost on power removal.
+// RTC-memory layout and the sample-buffer operations (§4, §8).
+//
+// Part of the `logic` component: the *shape* of the retained state and the
+// buffer semantics are board-independent, so the firmware and the host tests
+// share one definition. What is *not* here is the storage itself — placing a
+// block in RTC slow memory (`RTC_DATA_ATTR`) and asking the hardware why the
+// last wake happened are firmware concerns, and live in the firmware's
+// `rtc_storage.hpp` / `rtc_storage.cpp`.
+//
+// Keeping the split this way is what makes the buffer host-testable: nothing
+// in this header touches ESP-IDF (no `esp_attr.h`, no `esp_sleep.h`), so it
+// builds for the `linux` target, where `RTC_DATA_ATTR` expands to a
+// compile-time failure and the sleep API is unlinkable.
+//
+// The state here survives deep sleep and backoff reboots, but is lost on power
+// removal (§4.3).
 #pragma once
 
 // NOLINTBEGIN
@@ -70,17 +84,13 @@ struct RtcState {
 static_assert(std::is_trivially_copyable_v<RtcState>,
               "RtcState must be trivially copyable to live in RTC memory");
 
-// Obtains the single RTC-resident state.
-RtcState& rtc_state();
-
-// Prepares the RTC state for this boot. Must be called once, early in app_main,
-// before any other rtc_* function. On a cold boot (power-on or a reset that is
-// not a deep-sleep wake) the block is zeroed and its counters reset; on a
-// deep-sleep wake the retained contents are preserved.
-void rtc_state_init();
-
-// True when the current boot followed a deep-sleep wake.
-bool rtc_woke_from_deep_sleep();
+// Prepares `st` for a cold boot: clears everything deterministic. The buffer
+// and the caches are intentionally lost on power removal (§4.3).
+//
+// The caller decides *whether* this boot is cold (on the firmware that is
+// `rtc_state_init()` in `rtc_storage.hpp`, which asks the board for the wake
+// cause), so this stays a pure, host-testable function.
+void rtc_state_reset(RtcState& st);
 
 // Appends a sample, evicting the oldest on overflow (§4.2 FIFO).
 void rtc_buffer_push(RtcState& st, const SampleRecord& rec);

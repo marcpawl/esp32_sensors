@@ -19,13 +19,14 @@
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "esp_log.h"
-#include "esp_sleep.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #pragma GCC diagnostic pop
 // NOLINTEND
 
+#include <chrono>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -36,7 +37,7 @@
 #include "logic/limits.hpp"
 #include "logic/temp_format.hpp"
 #include "payload.hpp"
-#include "rtc_state.hpp"
+#include "rtc_storage.hpp"
 #include "sensor.hpp"
 
 namespace thermo {
@@ -114,18 +115,10 @@ bool stub_upload(const Config& cfg, RtcState& st,
     return false;
 }
 
-// Enters deep sleep for `seconds` (§3.8).
-void deep_sleep_for(std::uint32_t seconds) {
-    ESP_LOGI(kTag, "deep sleep for %u s", static_cast<unsigned>(seconds));
-    esp_sleep_enable_timer_wakeup(static_cast<std::uint64_t>(seconds) *
-                                  1000000ULL);
-    esp_deep_sleep_start();
-}
-
 }  // namespace
 
 template<hal::BoardLike Board>
-[[noreturn]] void run_mode_cycle(LedTask<Board>& led_task) {
+[[noreturn]] void run_mode_cycle(Board& board, LedTask<Board>& led_task) {
     RtcState& st = rtc_state();
     st.boot_count++;
 
@@ -229,12 +222,19 @@ template<hal::BoardLike Board>
     // §8: track absolute next sample time (drift avoidance).
     st.next_sample_at += sleep_s;
 
-    deep_sleep_for(sleep_s);  // Does not return.
+    // §3.8: the board owns deep sleep, so this is the same call on the real
+    // board and on the stub (which records it and returns).
+    ESP_LOGI(kTag, "deep sleep for %u s", static_cast<unsigned>(sleep_s));
+    board.deep_sleep_start(std::chrono::seconds{sleep_s});
+
+    // Only reachable if sleep is disabled for debugging (§3.8): the cycle is
+    // one wake's worth of work, so running it again is pointless.
     abort();
 }
 
-[[noreturn]] void run_mode_cycle(LedTask<hal::Board>& led_task) {
-    run_mode_cycle<hal::Board>(led_task);
+[[noreturn]] void run_mode_cycle(hal::Board& board,
+                                 LedTask<hal::Board>& led_task) {
+    run_mode_cycle<hal::Board>(board, led_task);
 }
 
 }  // namespace thermo

@@ -11,13 +11,15 @@
 
 #include <type_traits>
 
+#include "logic/led_manager.hpp"
 #include "logic/limits.hpp"
+#include "logic/rtc_state.hpp"
 #include "logic/temp_format.hpp"
-#include "rtc_state.hpp"
 #include "unity.h"
 
 using thermo::rtc_buffer_clear;
 using thermo::rtc_buffer_push;
+using thermo::rtc_state_reset;
 using thermo::rtc_wifi_cache_clear;
 using thermo::RtcState;
 using thermo::SampleRecord;
@@ -53,6 +55,49 @@ TEST_CASE("rtc: RtcState stays trivially copyable", "[rtc_buffer]") {
     // a byte blit. Adding a member with an out-of-line copy (heap storage, a
     // custom copy constructor, a vtable) would silently break that.
     TEST_ASSERT_TRUE(std::is_trivially_copyable_v<RtcState>);
+}
+
+// --- Cold-boot reset (§8) ---------------------------------------------------
+
+TEST_CASE("rtc: state reset clears everything a cold boot must not keep",
+          "[rtc_buffer]") {
+    // §8: retained state is only valid across a deep-sleep wake. A power cycle
+    // must start clean, or a stale buffer/cache from the previous power-on
+    // would be uploaded.
+    RtcState st{};
+    st.boot_count = 42;
+    st.fail_count = 3;
+    st.tx_state = static_cast<std::uint8_t>(thermo::TxState::kTxInhibited);
+    st.next_sample_at = 999;
+    st.last_upload_ok = 0;
+    st.wifi.valid = 1;
+    st.wifi.channel = 6;
+    rtc_buffer_push(st, make_record(1, 3000, 1));
+    st.rom_ids.try_push_back(thermo::hal::RomId{});
+
+    rtc_state_reset(st);
+
+    TEST_ASSERT_EQUAL_UINT32(0, st.boot_count);
+    TEST_ASSERT_EQUAL_UINT8(0, st.fail_count);
+    TEST_ASSERT_EQUAL_UINT32(0, st.next_sample_at);
+    TEST_ASSERT_EQUAL_UINT8(0, st.last_upload_ok);
+    TEST_ASSERT_EQUAL_size_t(0, st.buffer.size());
+    TEST_ASSERT_EQUAL_size_t(0, st.rom_ids.size());
+    TEST_ASSERT_EQUAL_UINT8(0, st.wifi.valid);
+    TEST_ASSERT_EQUAL_UINT8(0, st.wifi.channel);
+    // A cold boot always transmits: a retained inhibition must not survive.
+    TEST_ASSERT_EQUAL_UINT8(static_cast<std::uint8_t>(thermo::TxState::kTxOk),
+                            st.tx_state);
+}
+
+TEST_CASE("rtc: state reset leaves the block reusable", "[rtc_buffer]") {
+    RtcState st{};
+    rtc_buffer_push(st, make_record(1, 3000, 1));
+    rtc_state_reset(st);
+
+    rtc_buffer_push(st, make_record(2, 3000, 2));
+    TEST_ASSERT_EQUAL_size_t(1, st.buffer.size());
+    TEST_ASSERT_EQUAL_UINT32(2, st.buffer[0].age_base);
 }
 
 // --- Cached ROM IDs (§3.4, §8) ---------------------------------------------

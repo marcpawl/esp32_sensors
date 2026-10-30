@@ -23,7 +23,7 @@
 #include "logic/mode.hpp"
 #include "logic/mode_selection.hpp"
 #include "reboot.hpp"
-#include "rtc_state.hpp"
+#include "rtc_storage.hpp"
 #include "run_mode.hpp"
 
 namespace {
@@ -62,15 +62,18 @@ esp_err_t init_nvs() {
 
 extern "C" void app_main(void) {
     ESP_ERROR_CHECK(init_nvs());
-    thermo::rtc_state_init();
 
-    // The board is created first because the mode-sense buttons are read
-    // through it. It is shared: `LedTask` holds a `std::shared_ptr` to it
-    // instead of owning it, so it cannot be destroyed while the task still
-    // uses it.
+    // The board is created first because both the boot policy and the
+    // mode-sense buttons go through it: `rtc_state_init()` asks it why the last
+    // wake happened (§3.8) and `read_mode()` reads the switch poles. It is
+    // shared: `LedTask` holds a `std::shared_ptr` to it instead of owning it,
+    // so it cannot be destroyed while the task still uses it.
     auto board =
         std::make_shared<thermo::hal::Board>(thermo::hal::Board::create({}));
     ESP_ERROR_CHECK(board->init_all());
+
+    // Cold boot clears the retained block; a deep-sleep wake keeps it (§8).
+    thermo::rtc_state_init(*board);
 
     const thermo::Mode mode = read_mode(*board);
     ESP_LOGI(kTag, "boot: mode=%s", thermo::to_string(mode));
@@ -89,7 +92,7 @@ extern "C" void app_main(void) {
             // Run mode executes one cycle, then deep-sleeps (does not return).
             // If it does return (e.g. sleep disabled for debugging), loop.
             while (true) {
-                thermo::run_mode_cycle(led_task);
+                thermo::run_mode_cycle(*board, led_task);
             }
             break;
 

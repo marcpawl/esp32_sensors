@@ -1,10 +1,10 @@
 // RTC sample-buffer operations (§4).
 //
-// Separated from rtc_state.cpp so the FIFO semantics can be unit-tested on the
-// host target: rtc_state.cpp pulls in esp_sleep.h (deep-sleep wake detection),
-// which is unavailable for the ESP-IDF `linux` target, whereas the buffer
-// operations below are pure and dependency-free.
-#include "rtc_state.hpp"
+// Part of the `logic` component, so the FIFO semantics run in the firmware and
+// in the host tests from one definition. The storage (the `RTC_DATA_ATTR`
+// block) is deliberately not here: it belongs to the firmware, in
+// `rtc_storage.cpp`.
+#include "logic/rtc_state.hpp"
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #pragma GCC diagnostic pop
@@ -13,6 +13,14 @@
 #include <cstddef>
 
 namespace thermo {
+
+void rtc_state_reset(RtcState& st) {
+    st = RtcState();
+    // `tx_state`'s default already repairs this, but say it plainly: a cold
+    // boot always transmits, so a retained inhibition cannot survive a power
+    // cycle.
+    st.tx_state = static_cast<std::uint8_t>(TxState::kTxOk);
+}
 
 void rtc_buffer_push(RtcState& st, const SampleRecord& rec) {
     if (!st.buffer.full()) {

@@ -20,6 +20,18 @@ Implemented
   sample buffer and cached ROM IDs are `static_vector`s, so each carries its
   own element count instead of a separate `buffer_len` / `rom_count` counter
   that could drift out of step with the data (§8).
+- The RTC state is split so its logic is host-testable. `logic/rtc_state.hpp`
+  and `logic/src/rtc_buffer.cpp` (in the shared `logic` component) own the
+  block's *shape* and every operation on it — FIFO append/eviction, clear,
+  Wi-Fi cache invalidation, and the cold-boot `rtc_state_reset()`. Only the two
+  things that cannot be host-tested stay in the firmware, in
+  `mcgowan/src/rtc_storage.{hpp,cpp}`: the single `RTC_DATA_ATTR` block (which
+  expands to a failing static assert on the `linux` target) and the per-boot
+  policy `rtc_state_init(board)`. That policy asks the board for the wake cause
+  rather than calling `esp_sleep_get_wakeup_causes()` directly, so the stub
+  board can model any wake; the cold-boot half it delegates to,
+  `rtc_state_reset()`, is host-tested. Run mode now sleeps through the board
+  (`board.deep_sleep_start(...)`) instead of calling `esp_deep_sleep_start()`.
 - Host-based unit tests for the pure-logic modules (`temp_format`, `payload`,
   `app_config` validation, `rom_id`, `rtc_buffer`) running on the ESP-IDF
   `linux` target.
