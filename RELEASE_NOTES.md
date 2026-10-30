@@ -52,6 +52,11 @@ Implemented
   sensor-failure sentinel moved there too (`logic/temp_format.hpp`, with a
   `src/temp_format.cpp` implementing the formatter), so the config UI, the
   payload, and the RTC sample defaults share one ESP-IDF-free definition.
+  The Configure-mode self-signed certificate moved there as well
+  (`logic/self_signed_cert.hpp`, `src/self_signed_cert.cpp`, formerly
+  `mcgowan/src/certs/self_signed_cert.cpp`), so the PEM data and its
+  `server_cert_len()` / `server_key_len()` helpers are shared, ESP-IDF-free
+  vocabulary rather than firmware-only files buried in a `certs/` subdirectory.
 - Unit tests for the pin-free `hal_stub` push button
   (`test_hal_push_button.cpp`), including the `set()` control the mode-sense
   poles use.

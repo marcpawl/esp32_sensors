@@ -154,7 +154,7 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 | RTC state / buffer | `rtc_storage.cpp` (the `RTC_DATA_ATTR` block + `rtc_state()`) and `rtc_storage.hpp` (`rtc_state_init(board)`, which asks the board's wake cause whether the retained block survives). The block's *shape*, the FIFO, the cold-boot reset and the Wi-Fi-cache clear are board-independent and live in `logic/rtc_state.hpp` / `logic/src/rtc_buffer.cpp`; `RtcState`'s `buffer` / `rom_ids` are `espidf_cpp::static_vector`s that carry their own counts |
 | Power / battery | `battery_monitor.cpp`, `power_manager.cpp`, `power_source.cpp` |
 | Config | `app_config.cpp` (validation), `app_config_store.cpp` (NVS) |
-| Configure mode | `configure_mode.cpp`, `wifi_ap.cpp`, `https_server.cpp`, `config_page.cpp`, `certs/self_signed_cert.cpp` |
+| Configure mode | `configure_mode.cpp`, `wifi_ap.cpp`, `https_server.cpp`, `config_page.cpp`; the self-signed certificate is `logic/self_signed_cert.hpp` |
 | Run mode | `run_mode.cpp` (stubbed network path), `ntp_client.cpp` |
 | Payload | `payload.cpp`, `rom_id.cpp` (ROM-ID hex); the temperature formatter and `kTempNull` are `logic/temp_format.hpp` |
 
@@ -331,7 +331,7 @@ before starting the task. The HAL itself is unchanged: `Board` stays
 non-copyable and movable.
 
 Layout: `include/logic/` for public headers, `src/` for `.cpp` files
-(`src/temp_format.cpp`, `src/rtc_buffer.cpp`). **New `.cpp` files must be added to the `SRCS`
+(`src/temp_format.cpp`, `src/rtc_buffer.cpp`, `src/self_signed_cert.cpp`). **New `.cpp` files must be added to the `SRCS`
 list in `components/logic/CMakeLists.txt`**; consumers only need
 `REQUIRES logic` (firmware `mcgowan/main`) or
 `PRIV_REQUIRES logic` (host tests `test/main`), so adding sources there does not

@@ -8,8 +8,9 @@
 # (`logic/rtc_state.hpp`, `src/rtc_buffer.cpp` — the `RTC_DATA_ATTR` storage
 # itself is firmware-only, in `mcgowan/src/rtc_storage.cpp`), the operating
 # modes and their mapping from the mode-sense poles (`logic/mode.hpp`,
-# `logic/mode_selection.hpp`) and, as it grows, the rest of the logic shared by
-# the firmware and the host tests. It
+# `logic/mode_selection.hpp`), the Configure-mode self-signed TLS certificate
+# (`logic/self_signed_cert.hpp`, `src/self_signed_cert.cpp`) and, as it grows,
+# the rest of the logic shared by the firmware and the host tests. It
 # depends only on `espidf_cpp` and the HAL *vocabulary* (`hal_common`), so the
 # same code links into:
 #
@@ -34,6 +35,7 @@ idf_component_register(
     SRCS
         "src/temp_format.cpp"
         "src/rtc_buffer.cpp"
+        "src/self_signed_cert.cpp"
     INCLUDE_DIRS
         "include"
     REQUIRES

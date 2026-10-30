@@ -35,7 +35,6 @@ idf_component_register(
         "${mcgowan_src}/ntp_client.cpp"
         "${mcgowan_src}/run_mode.cpp"
         "${mcgowan_src}/reboot.cpp"
-        "${mcgowan_src}/certs/self_signed_cert.cpp"
     INCLUDE_DIRS
         "${mcgowan_src}/include"
     REQUIRES
