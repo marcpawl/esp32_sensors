@@ -7,7 +7,7 @@
 
 #include <cstddef>
 
-#include "temp_format.hpp"  // format_temp_c_x100, kTempNull
+#include "logic/temp_format.hpp"  // format_temp_c_x100, kTempNull
 
 namespace thermo::payload {
 namespace {

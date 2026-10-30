@@ -2,7 +2,7 @@
 
 ## Project Description
 
-This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its software specification (Rev 13). Firmware implementation is **in progress**: Configure mode is fully implemented; Run mode is scaffolded with the network paths (Wi-Fi station, batch upload, backoff) intentionally stubbed.
+This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its software specification (Rev 14). Firmware implementation is **in progress**: Configure mode is fully implemented; Run mode is scaffolded with the network paths (Wi-Fi station, batch upload, backoff) intentionally stubbed.
 
 **What it does:**
 - A solar-powered, battery-backed ESP32 samples three **DS18B20** thermometers on a shared **1-Wire bus**.
@@ -68,7 +68,7 @@ Refer to `Specification.md` for the detailed contracts: operating modes, sample 
 
 ```
 esp32_sensors/
-├── Specification.md     # Authoritative software spec (Rev 13) — read this first
+├── Specification.md     # Authoritative software spec (Rev 14) — read this first
 ├── RELEASE_NOTES.md     # Human-readable release notes
 ├── CMakeLists.txt       # Root aggregator (plain CMake) — builds all subprojects
 ├── mcgowan/             # Firmware subproject (ESP32-S3, hal_board) -> mcgowan.bin
@@ -79,7 +79,7 @@ esp32_sensors/
 │   └── src/             #   C++26 sources + include/ — see module map below
 ├── components/          # Reusable ESP-IDF components (see "HAL" section)
 │   ├── espidf_cpp/      # C++ wrappers over ESP-IDF/FreeRTOS (Task, queue, handles, ...)
-│   ├── logic/           # Board-independent application logic (led_task.hpp, mode.hpp)
+│   ├── logic/           # Board-independent application logic (temp_format, limits, led_manager, mode*, led_task)
 │   ├── hal_common/      # Shared, header-only HAL vocabulary (types/concepts)
 │   ├── hal_board/       # Real, GPIO-backed HAL (linked by mcgowan)
 │   └── hal_stub/        # Pin-free HAL stub (linked by host tests)
@@ -151,12 +151,12 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 | Entry point | `main.cpp` (`extern "C" void app_main`), `constants.hpp` |
 | Mode switching | `main.cpp` (`read_mode()` reads the poles and applies the reboot-on-fault policy); the mapping itself is `logic/mode_selection.hpp` |
 | Sensors | `onewire_bus.cpp` (bit-banged 1-Wire), `ds18b20.cpp`, `sensor_manager.cpp`, `sensor.hpp` |
-| RTC state / buffer | `rtc_state.cpp` (`RTC_DATA_ATTR` state block), `rtc_buffer.cpp` (FIFO) |
+| RTC state / buffer | `rtc_storage.cpp` (the `RTC_DATA_ATTR` block + `rtc_state()`) and `rtc_storage.hpp` (`rtc_state_init(board)`, which asks the board's wake cause whether the retained block survives). The block's *shape*, the FIFO, the cold-boot reset and the Wi-Fi-cache clear are board-independent and live in `logic/rtc_state.hpp` / `logic/src/rtc_buffer.cpp`; `RtcState`'s `buffer` / `rom_ids` are `espidf_cpp::static_vector`s that carry their own counts |
 | Power / battery | `battery_monitor.cpp`, `power_manager.cpp`, `power_source.cpp` |
 | Config | `app_config.cpp` (validation), `app_config_store.cpp` (NVS) |
 | Configure mode | `configure_mode.cpp`, `wifi_ap.cpp`, `https_server.cpp`, `config_page.cpp`, `certs/self_signed_cert.cpp` |
 | Run mode | `run_mode.cpp` (stubbed network path), `ntp_client.cpp` |
-| Payload | `payload.cpp`, `temp_format.cpp`, `rom_id.cpp` (ROM-ID hex) |
+| Payload | `payload.cpp`, `rom_id.cpp` (ROM-ID hex); the temperature formatter and `kTempNull` are `logic/temp_format.hpp` |
 
 The LED task (`led_task.hpp`) and the operating modes and their pole mapping
 (`mode.hpp`, `mode_selection.hpp`) are **not** in `mcgowan/src/`: they are
@@ -226,6 +226,37 @@ or the station — the caller decides (Configure mode starts the AP, Run mode
 starts the station). Reach the stub controls through the board, e.g.
 `board.wifi().start_ap(cfg)` / `board.wifi().ap_running()`.
 
+**Deep sleep is on the board, not a HAL device.** There is no third sleep
+implementation to swap in, and sleeping powers down the *whole* board rather
+than a peripheral, so `BoardLike` requires the two board-wide operations
+directly: `deep_sleep_start(std::chrono::seconds)` (§3.8) and
+`sleep_get_wakeup_causes()`. The vocabulary is in `hal/sleep_types.hpp`
+(`hal_common`) — `WakeCause`, `WakeCauses`, `wake_cause_bit()`, `woke_from()` —
+and is deliberately dependency-free (only `<cstdint>`): `esp_sleep.h` is not
+self-contained on the `linux` target (it includes `hal/gpio_types.h`, which is
+not on the include path of a project that links no GPIO driver), and the ESP-IDF
+linux port registers no `sleep_modes.c`, so `esp_sleep_get_wakeup_causes()` is
+unlinkable there.
+
+`WakeCause` names ESP-IDF's `esp_sleep_source_t` **bit positions**
+(`kUndefined` = 0, `kTimer` = 4) so the hardware board passes the ESP-IDF bitmap
+straight through; `board.cpp` `static_assert`s that the values still line up.
+The wake cause is a bitmap because several sources can fire at once.
+
+`hal_board` calls `esp_sleep_enable_timer_wakeup()` + `esp_deep_sleep_start()`
+(the §3.8 pair) and `deep_sleep_start()` is `[[noreturn]]` there. `hal_stub`
+records the duration (`last_deep_sleep()`), arms the wake the real board would
+produce — `deep_sleep_start()` sets the cause to `WakeCause::kTimer` — and
+**returns**. A fresh stub reports a cold boot
+(`wake_cause_bit(WakeCause::kUndefined)`), and `set_wakeup_causes()` overrides
+either, so a test can simulate any wake. The `BoardLike` concept can therefore
+only require that the call is *well-formed* — not `[[noreturn]]` — and no caller
+may rely on sleep returning. That asymmetry is deliberate: it is what makes the
+sleep/backoff decision host-testable. Run mode now sleeps through the board
+(`board.deep_sleep_start(std::chrono::seconds{sleep_s})`), and the RTC boot
+policy does the same in reverse: `rtc_state_init(board)` asks
+`sleep_get_wakeup_causes()` whether the retained block survives this boot.
+
 Because `hal_board` and `hal_stub` would otherwise be discovered together (both
 live under the project's default `components/` search path), each project
 excludes the *other* via `EXCLUDE_COMPONENTS` in its top-level `CMakeLists.txt`
@@ -263,13 +294,34 @@ implementation, and the headers are included with the `logic/` prefix:
 
 | Header | Provides |
 |---|---|
+| `logic/led_manager.hpp` | `thermo::TxState` (`kTxOk` / `kTxInhibited`) — the §3.6 battery-hysteresis transmission gate; board-independent vocabulary, dependency-free (only `<cstdint>`) |
+| `logic/limits.hpp` | `thermo::limits::kSensorCount` (3) and `thermo::limits::kMaxBufferRecords` (256) — the fixed capacities shared by the sample buffer, the payload, and the sensor layer (§2.1, §4.1, §4.2); dependency-free (only `<cstddef>`) |
 | `logic/led_task.hpp` | `thermo::LedState`, `thermo::ledtask::*` (`Step`, `CycleSteps`, `LedRunner<Board>`), `thermo::LedTask<Board>` — the LED status task built on `espidf_cpp::Task` |
 | `logic/mode.hpp` | `thermo::Mode` (`kOff` / `kConfigure` / `kRun`) and `thermo::to_string(Mode)` — the operating modes (§3), board-independent vocabulary |
 | `logic/mode_selection.hpp` | `thermo::ModeSelection` (`std::optional<Mode>`) and `thermo::mode_from_buttons(ButtonState config, ButtonState run)` — the pure, `constexpr` mapping from the two mode-sense poles to a mode, reporting a both-poles-on miswire as `std::nullopt` |
+| `logic/temp_format.hpp` / `src/temp_format.cpp` | `thermo::kTempNull` (the int16 `0x8000` sensor-failure sentinel) and `thermo::format_temp_c_x100()` — centred-hundredths formatting for the config UI and the payload (§4.2, §9); no ESP-IDF dependency |
+| `logic/rtc_state.hpp` / `src/rtc_buffer.cpp` | `thermo::SampleRecord`, `thermo::WifiCache`, `thermo::RtcState` (the §8 retained block's *shape*) plus the buffer operations `rtc_buffer_push()` / `rtc_buffer_clear()`, the cold-boot `rtc_state_reset()`, and `rtc_wifi_cache_clear()` (§3.10, §4.2). Storage is **not** here: the `RTC_DATA_ATTR` block and the wake-cause policy are firmware-only (`mcgowan/src/rtc_storage.{hpp,cpp}`), because `RTC_DATA_ATTR` fails to compile on `linux` and the sleep API is unlinkable there |
 
-`logic/mode.hpp` is deliberately dependency-free (only `<cstdint>`), so the
-firmware, the host tests, and `logic/mode_selection.hpp` can all name the
-operating modes without pulling in a board.
+`logic/mode.hpp`, `logic/led_manager.hpp`, `logic/limits.hpp`, and
+`logic/temp_format.hpp` are deliberately dependency-free (only `<cstdint>` /
+`<cstddef>`), so the firmware, the host tests, and `logic/mode_selection.hpp`
+can all name the operating modes, the transmission gate, the fixed capacities,
+and the temperature sentinel without pulling in a board.
+
+The RTC state is **split** between the two components, and the split is the
+point. `logic/rtc_state.hpp` + `logic/src/rtc_buffer.cpp` own the block's shape
+and every operation on it (append/FIFO eviction, clear, cold-boot reset, Wi-Fi
+cache clear), so those run in the firmware and the host tests from one
+definition. The firmware-only half — `mcgowan/src/rtc_storage.hpp` /
+`rtc_storage.cpp` — owns the two things that cannot be host-tested: the single
+`RTC_DATA_ATTR` block (which expands to a failing static assert on `linux`)
+and the per-boot policy `rtc_state_init(board)`, which clears the block only
+when `woke_from(board.sleep_get_wakeup_causes(), WakeCause::kTimer)` is false.
+The wake question goes through the board rather than calling
+`esp_sleep_get_wakeup_causes()` directly, so the stub board can model any wake;
+the policy itself is still firmware-only (it reads `rtc_state()`, which needs
+the `RTC_DATA_ATTR` block), while the cold-boot half it delegates to —
+`rtc_state_reset()` — is host-tested in `test_rtc_buffer.cpp`.
 
 `LedRunner` and `LedTask` take a `std::shared_ptr<Board>` (never a null one) and
 share the board with the caller instead of owning it, so the caller can keep
@@ -278,8 +330,8 @@ with `std::make_shared<Board>(Board::create(pins))` and call `init_all()`
 before starting the task. The HAL itself is unchanged: `Board` stays
 non-copyable and movable.
 
-Layout: `include/logic/` for public headers, `src/` for `.cpp` files (none yet —
-the component is header-only). **New `.cpp` files must be added to the `SRCS`
+Layout: `include/logic/` for public headers, `src/` for `.cpp` files
+(`src/temp_format.cpp`, `src/rtc_buffer.cpp`). **New `.cpp` files must be added to the `SRCS`
 list in `components/logic/CMakeLists.txt`**; consumers only need
 `REQUIRES logic` (firmware `mcgowan/main`) or
 `PRIV_REQUIRES logic` (host tests `test/main`), so adding sources there does not
@@ -290,12 +342,14 @@ decides the hardware: `mcgowan` links `hal_board` (GPIO), `test` links
 `hal_stub` (pin-free). The component deliberately requires neither, since those
 two are mutually exclusive per project. In the `test/` project the component is
 also listed in `set(COMPONENTS main hal_stub logic)` so it is built for `linux`
-(the restrict-to-`main` set would otherwise drop it once it has `.cpp` files).
+(the restrict-to-`main` set would otherwise drop it now that it has `.cpp`
+files).
 
-**Host-testable modules.** `temp_format.cpp`, `payload.cpp`, `app_config.cpp`,
-`rom_id.cpp`, and `rtc_buffer.cpp` are deliberately free of chip-specific
-ESP-IDF dependencies so they build for the `linux` target and are covered by
-`test/`. The header-only `logic/mode_selection.hpp` is the same idea applied to
+**Host-testable modules.** The `logic` component's `temp_format.cpp`,
+`rtc_buffer.cpp`, `payload.cpp`, `app_config.cpp`, and `rom_id.cpp` are
+deliberately free of chip-specific ESP-IDF dependencies so they build for the
+`linux` target and are covered by `test/`. The header-only
+`logic/mode_selection.hpp` is the same idea applied to
 the mode-sense poles: it depends only on `hal/push_button_types.hpp` (for
 `ButtonState`) and `logic/mode.hpp`, and is `constexpr`, so
 `test/main/test_mode_selection.cpp` exercises it directly and covers all four
@@ -555,14 +609,17 @@ There are two test suites, both runnable from the host via `scripts/dev.py`:
 
 - **Host-based unit tests** live in `test/` and run on the ESP-IDF `linux`
   target with Unity — no hardware needed. They cover the pure-logic modules
-  (`temp_format`, `payload`, `app_config` validation, `rom_id`, `rtc_buffer`,
-  and the `mode_selection` pole mapping) and the `hal_stub` components
+  (`temp_format`, `limits`, `led_manager`, `payload`, `app_config` validation,
+  `rom_id`, `rtc_buffer` — including the cold-boot `rtc_state_reset()`, and the
+  `mode_selection` pole mapping) and the `hal_stub` components
   (`test_hal_push_button.cpp` exercises the pin-free
   push button — including the `set()` control the mode-sense poles use;
   `test_hal_wifi.cpp` covers the WiFi radio stub, and
   `test_hal_board.cpp` covers the aggregate board — including that
-  `config_button()` / `run_button()` / `wifi()` are wired up and that
-  `init_all()` initializes but does not start the radio).
+  `config_button()` / `run_button()` / `wifi()` are wired up, that
+  `init_all()` initializes but does not start the radio, and that
+  `deep_sleep_start()` records the duration while `sleep_get_wakeup_causes()` /
+  `set_wakeup_causes()` model the next boot's wake cause).
 - **On-target tests** are planned for hardware-dependent code (1-Wire/DS18B20
   reads, deep-sleep wake, Wi-Fi upload).
 - Keep hardware interactions behind thin interfaces so business logic remains

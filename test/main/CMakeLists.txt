@@ -22,8 +22,11 @@
 # The LED task itself lives in the shared `logic` component
 # (`components/logic/include/logic/led_task.hpp`), not in `mcgowan/src/`, so
 # the tests include it as `logic/led_task.hpp` and pull the component in via
-# PRIV_REQUIRES below. It is header-only today; any .cpp files added to `logic`
-# are compiled by that component, not listed here.
+# PRIV_REQUIRES below. The same goes for the RTC state and its buffer
+# operations (`logic/rtc_state.hpp`, `logic/src/rtc_buffer.cpp`): they are
+# compiled by the `logic` component, so `test_rtc_buffer.cpp` includes
+# `logic/rtc_state.hpp` and lists no RTC source in `sut_srcs`. Every .cpp file
+# in `logic` is compiled by that component, not listed here.
 #
 # WHOLE_ARCHIVE is required so the TEST_CASE registrations in the test sources
 # are linked into the final executable even though nothing references them.
@@ -48,13 +51,11 @@ set(test_srcs
 
 # Production sources under test (paths are relative to this component dir).
 set(sut_srcs
-    "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/temp_format.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/payload.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/app_config.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/config_page.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/power_source.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/rom_id.cpp"
-    "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/rtc_buffer.cpp"
 )
 
 idf_component_register(

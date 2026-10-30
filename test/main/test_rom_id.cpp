@@ -10,7 +10,6 @@
 
 #include <string>
 
-#include "constants.hpp"
 #include "sensor.hpp"
 #include "unity.h"
 

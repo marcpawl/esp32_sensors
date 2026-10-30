@@ -1,8 +1,9 @@
 // DS18B20 ROM-ID formatting and parsing (§5.1.3, §6.1).
 //
 // Kept free of ESP-IDF dependencies so the hex round-trip and validation rules
-// can be unit-tested on the host target — the same rationale as temp_format.cpp
-// and payload.cpp. The 1-Wire transport itself lives in onewire_bus.cpp.
+// can be unit-tested on the host target — the same rationale as
+// `logic/temp_format.cpp` and payload.cpp. The 1-Wire transport itself lives in
+// onewire_bus.cpp.
 //
 // `RomId` is defined in the shared `hal_common` component
 // (`hal/ds18b20_types.hpp`); its textual helpers are implemented here.

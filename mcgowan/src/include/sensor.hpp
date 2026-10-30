@@ -16,9 +16,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "constants.hpp"
 #include "hal/ds18b20_types.hpp"  // RomId, DS18B20Reading
-#include "temp_format.hpp"        // kTempNull, format_temp_c_x100
 
 namespace thermo {
 

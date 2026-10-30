@@ -18,14 +18,18 @@ namespace thermo {
 // Executes exactly one Run-mode wake cycle: sample, buffer, (maybe) upload,
 // then deep sleep. Because deep sleep reboots the MCU, this function does not
 // normally return.
-// `led_task` drives the LED indication for the cycle. `Board` is the board
-// type the LED task runs on (`hal::BoardLike`).
+//
+// `board` is the board to sample and to sleep; `led_task` drives the LED
+// indication for the cycle. Both must already be initialized, and `led_task`
+// must be running on the same board (it shares it, so the two may be used
+// concurrently). `Board` is any `hal::BoardLike` type.
 template<hal::BoardLike Board>
-[[noreturn]] void run_mode_cycle(LedTask<Board>& led_task);
+[[noreturn]] void run_mode_cycle(Board& board, LedTask<Board>& led_task);
 
 // Entry point used by `app_main`: runs one cycle on the board the firmware
 // links in (`hal_board` on target, `hal_stub` in the host tests). Defined
 // in run_mode.cpp.
-[[noreturn]] void run_mode_cycle(LedTask<hal::Board>& led_task);
+[[noreturn]] void run_mode_cycle(hal::Board& board,
+                                 LedTask<hal::Board>& led_task);
 
 }  // namespace thermo

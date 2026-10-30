@@ -19,14 +19,14 @@
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "esp_log.h"
-#include "esp_sleep.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #pragma GCC diagnostic pop
 // NOLINTEND
 
-#include <algorithm>
+#include <chrono>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -34,8 +34,10 @@
 #include "app_config_store.hpp"
 #include "battery_monitor.hpp"
 #include "constants.hpp"
+#include "logic/limits.hpp"
+#include "logic/temp_format.hpp"
 #include "payload.hpp"
-#include "rtc_state.hpp"
+#include "rtc_storage.hpp"
 #include "sensor.hpp"
 
 namespace thermo {
@@ -68,9 +70,8 @@ SampleRecord make_record(std::uint32_t age_base, std::uint16_t batt_mv,
 // builder (§9.1). Sensor order is fixed by the record layout (§4.1).
 std::vector<payload::NamedSample> collect_batch(const RtcState& st) {
     std::vector<payload::NamedSample> out;
-    out.reserve(st.buffer_len);
-    for (std::size_t i = 0; i < st.buffer_len; ++i) {
-        const SampleRecord& rec = st.buffer[i];
+    out.reserve(st.buffer.size());
+    for (const SampleRecord& rec : st.buffer) {
         payload::NamedSample sample{};
         sample.age_s = rec.age_base;
         sample.batt_mv = rec.batt_mv;
@@ -109,23 +110,15 @@ bool stub_upload(const Config& cfg, RtcState& st,
         cfg.dev_name, names_for(cfg, readings), batch);
     ESP_LOGW(kTag,
              "STUB: %u samples to '%s' not uploaded. Payload (%u bytes): %s",
-             static_cast<unsigned>(st.buffer_len), cfg.dest_url.c_str(),
+             static_cast<unsigned>(st.buffer.size()), cfg.dest_url.c_str(),
              static_cast<unsigned>(json.size()), json.c_str());
     return false;
-}
-
-// Enters deep sleep for `seconds` (§3.8).
-void deep_sleep_for(std::uint32_t seconds) {
-    ESP_LOGI(kTag, "deep sleep for %u s", static_cast<unsigned>(seconds));
-    esp_sleep_enable_timer_wakeup(static_cast<std::uint64_t>(seconds) *
-                                  1000000ULL);
-    esp_deep_sleep_start();
 }
 
 }  // namespace
 
 template<hal::BoardLike Board>
-[[noreturn]] void run_mode_cycle(LedTask<Board>& led_task) {
+[[noreturn]] void run_mode_cycle(Board& board, LedTask<Board>& led_task) {
     RtcState& st = rtc_state();
     st.boot_count++;
 
@@ -137,7 +130,7 @@ template<hal::BoardLike Board>
     ESP_LOGI(kTag, "Run mode boot #%u (fail_count=%u, buffered=%u)",
              static_cast<unsigned>(st.boot_count),
              static_cast<unsigned>(st.fail_count),
-             static_cast<unsigned>(st.buffer_len));
+             static_cast<unsigned>(st.buffer.size()));
 
     // --- Battery + hysteresis (§3.6) ---
     BatteryMonitor battery(cfg);
@@ -160,20 +153,18 @@ template<hal::BoardLike Board>
 
     // Prefer cached ROM IDs (§3.4: no bus scan on wake). On first boot the
     // cache is empty and SensorManager scans, then we retain the result.
-    std::vector<RomId> cached;
-    for (std::size_t i = 0; i < st.rom_count && i < limits::kSensorCount; ++i) {
-        cached.push_back(st.rom_ids[i]);
-    }
+    std::vector<RomId> cached(st.rom_ids.begin(), st.rom_ids.end());
     std::vector<RomId> discovered;
     const auto readings = sensors.read_all(cached, &discovered);
-    if (st.rom_count == 0 && !discovered.empty()) {
-        st.rom_count = static_cast<std::uint8_t>(
-            std::min<std::size_t>(discovered.size(), limits::kSensorCount));
-        for (std::size_t i = 0; i < st.rom_count; ++i) {
-            st.rom_ids[i] = discovered[i];
+    if (st.rom_ids.empty() && !discovered.empty()) {
+        st.rom_ids.clear();
+        for (const RomId& rom : discovered) {
+            if (!st.rom_ids.try_push_back(rom)) {
+                break;  // §2.1: at most kSensorCount sensors are logged.
+            }
         }
         ESP_LOGI(kTag, "cached %u ROM IDs",
-                 static_cast<unsigned>(st.rom_count));
+                 static_cast<unsigned>(st.rom_ids.size()));
     }
 
     const std::uint32_t age_s =
@@ -183,7 +174,7 @@ template<hal::BoardLike Board>
 
     // --- Upload decision (§3.4 step 4, §3.5) ---
     const bool tx_allowed = tx_state == TxState::kTxOk;
-    const bool batch_ready = st.buffer_len >= cfg.batch_size;
+    const bool batch_ready = st.buffer.size() >= cfg.batch_size;
 
     if (!tx_allowed) {
         ESP_LOGI(kTag, "TX inhibited (batt %u mV)",
@@ -231,12 +222,19 @@ template<hal::BoardLike Board>
     // §8: track absolute next sample time (drift avoidance).
     st.next_sample_at += sleep_s;
 
-    deep_sleep_for(sleep_s);  // Does not return.
+    // §3.8: the board owns deep sleep, so this is the same call on the real
+    // board and on the stub (which records it and returns).
+    ESP_LOGI(kTag, "deep sleep for %u s", static_cast<unsigned>(sleep_s));
+    board.deep_sleep_start(std::chrono::seconds{sleep_s});
+
+    // Only reachable if sleep is disabled for debugging (§3.8): the cycle is
+    // one wake's worth of work, so running it again is pointless.
     abort();
 }
 
-[[noreturn]] void run_mode_cycle(LedTask<hal::Board>& led_task) {
-    run_mode_cycle<hal::Board>(led_task);
+[[noreturn]] void run_mode_cycle(hal::Board& board,
+                                 LedTask<hal::Board>& led_task) {
+    run_mode_cycle<hal::Board>(board, led_task);
 }
 
 }  // namespace thermo

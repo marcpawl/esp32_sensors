@@ -9,6 +9,7 @@
 #include <ctime>
 
 #include "constants.hpp"
+#include "logic/temp_format.hpp"  // format_temp_c_x100
 
 namespace thermo::config_page {
 namespace {

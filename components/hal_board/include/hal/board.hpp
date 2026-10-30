@@ -10,7 +10,9 @@
 //
 // The board owns one instance of each HAL device (chip temperature, 1-Wire bus,
 // green/red LEDs, push button, mode-sense buttons) and exposes them. It carries
-// no behaviour of its own beyond delegating `init_all()` to the devices.
+// no behaviour of its own beyond delegating `init_all()` to the devices, plus
+// deep sleep (§3.8), which belongs to the board rather than to a peripheral
+// because it powers the whole board down.
 #pragma once
 
 // NOLINTBEGIN
@@ -19,11 +21,14 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
+#include <chrono>
+
 #include "hal/board_types.hpp"
 #include "hal/chip_temperature.hpp"
 #include "hal/led.hpp"
 #include "hal/onewire.hpp"
 #include "hal/push_button.hpp"
+#include "hal/sleep_types.hpp"
 #include "hal/wifi.hpp"
 
 namespace thermo::hal {
@@ -104,6 +109,20 @@ class Board {
     [[nodiscard]] WifiRadio& wifi() noexcept { return wifi_; }
 
     [[nodiscard]] WifiRadio const& wifi() const noexcept { return wifi_; }
+
+    // Enters deep sleep for `duration` (§3.8): enables the RTC timer as the
+    // wake source and then sleeps, so the next boot happens `duration` later.
+    //
+    // Does not return: `esp_deep_sleep_start()` restarts the MCU, and this
+    // function is therefore `[[noreturn]]` here even though `BoardLike` can
+    // only require that it is callable (the stub must return). Callers may not
+    // rely on control coming back.
+    [[noreturn]] void deep_sleep_start(std::chrono::seconds duration) noexcept;
+
+    // The wake sources that caused the last wake from sleep (§3.8), as the
+    // ESP-IDF bitmap. Consulted on boot; a cold boot reports only
+    // `WakeCause::kUndefined`.
+    [[nodiscard]] WakeCauses sleep_get_wakeup_causes() const noexcept;
 
   private:
     ChipTemperature chip_temperature_;

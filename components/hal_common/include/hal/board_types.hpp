@@ -16,7 +16,9 @@
 //
 // The board is a convenience aggregate: it owns one instance of each HAL
 // device and exposes them. It adds no behaviour of its own beyond delegating
-// `init_all()` to the devices' `init()`; the semantics of each device live in
+// `init_all()` to the devices' `init()` and owning the two board-wide
+// operations that are not a peripheral — entering deep sleep (§3.8) and
+// reporting why the last wake happened; the semantics of each device live in
 // that device's own HAL.
 #pragma once
 
@@ -26,6 +28,7 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
+#include <chrono>
 #include <concepts>
 #include <type_traits>
 
@@ -34,6 +37,7 @@
 #include "hal/onewire.hpp"
 #include "hal/pin_map.hpp"
 #include "hal/push_button.hpp"
+#include "hal/sleep_types.hpp"
 #include "hal/wifi.hpp"
 
 namespace thermo::hal {
@@ -75,11 +79,26 @@ struct BoardPins {
 //
 // The accessors are declared for both a mutable and a const `Board`, so callers
 // can reach a device's `read()` (and, for stubs, its `set_*()`) through either.
+//
+// Deep sleep (§3.8) is part of the contract, not a device accessor: it is the
+// board that powers down, so the board owns both halves of it — sleeping for a
+// duration (`deep_sleep_start()`) and reporting why the last wake happened
+// (`sleep_get_wakeup_causes()`). See `hal/sleep_types.hpp` for the wake-cause
+// vocabulary.
+//
+// The concept can only require that `deep_sleep_start()` is *callable*. On the
+// hardware board it never returns (`esp_deep_sleep_start()` is `[[noreturn]]`);
+// the stub must return, so a host test can carry on and assert the recorded
+// request. `[[noreturn]]` is deliberately not part of the contract, and no
+// caller may rely on the sleep returning.
 template<typename T>
 concept BoardLike =
-    std::is_class_v<T> && requires(T& board, T const& const_board) {
+    std::is_class_v<T> &&
+    requires(T& board, T const& const_board, std::chrono::seconds duration) {
         { T::create(BoardPins{}) } -> std::same_as<T>;
         { board.init_all() } -> std::same_as<esp_err_t>;
+        { board.deep_sleep_start(duration) } -> std::same_as<void>;
+        { const_board.sleep_get_wakeup_causes() } -> std::same_as<WakeCauses>;
         { board.chip_temperature() } -> std::same_as<ChipTemperature&>;
         {
             const_board.chip_temperature()

@@ -1,6 +1,6 @@
 # Software Specification: ESP32 Solar-Powered Thermometer Logger
 
-**Version:** Rev 13
+**Version:** Rev 14
 **Status:** Ready for implementation
 **Date:** 2026-10-25
 
@@ -580,16 +580,22 @@ Red indicates that samples are not being sent.
 | `boot_count` | u32 | Diagnostics |
 | `fail_count` | u8 | Consecutive upload failures |
 | `tx_state` | u8 | `TX_OK` / `TX_INHIBITED` |
-| `buffer` | array | Sample records |
-| `buffer_len` | u16 | Valid record count |
+| `buffer` | `static_vector<SampleRecord, 256>` | Sample records; the valid count is the container's own size |
 | `next_sample_at` | u32 | Absolute time of next sample |
-| `rom_ids[3]` | 8 B × 3 | Cached DS18B20 ROM IDs |
-| `rom_count` | u8 | Number of cached ROM IDs |
+| `rom_ids` | `static_vector<RomId, 3>` | Cached DS18B20 ROM IDs; the valid count is the container's own size |
 | `wifi.bssid` | 6 B | Cached AP BSSID |
 | `wifi.channel` | u8 | Cached Wi-Fi channel |
 | `wifi.ip` | u32 | Cached IP address |
 | `wifi.valid` | u8 | Cache validity flag |
 | `last_upload_ok` | u8 | Diagnostics |
+
+The buffer and the cached ROM IDs are fixed-capacity vectors with **inline**
+storage, so each carries its own element count instead of a separate
+`buffer_len` / `rom_count` counter. That removes the possibility of a count
+disagreeing with the data it describes — a mismatched counter would make the
+device read or upload stale RTC bytes after a firmware update changed the
+layout. The whole block stays trivially copyable, so it is still restored
+verbatim from the previous boot.
 
 ---
 
@@ -743,3 +749,4 @@ Panel ≈ 8 / 0.504 / 3 ≈ 5.3 mW
 | 11 | Development environment: Linux Mint, Podman, CLion 2026.2, `espressif/idf:release-v6.1`, C++26. |
 | 12 | Container runtime switched from Podman to **Docker**. |
 | 13 | Container image pinned to the prebuilt `marcpawl/esp-idf:20261025` (the official `espressif/idf:release-v6.1` image plus project tooling: `gh`, PyGithub, esp-clang), pulled by developers and CI rather than built locally. Container runs as the calling user (no chown); `HOME`/`CCACHE_DIR` are pinned for non-1000 uids so ccache works on CI (runner uid 1001). CLion attaches through the Dev Container. |
+| 14 | §8 RTC layout: `buffer` and `rom_ids` are fixed-capacity vectors with inline storage that carry their own element counts, so the separate `buffer_len` / `rom_count` counters are removed. The block remains trivially copyable and is still restored verbatim across deep sleep. |

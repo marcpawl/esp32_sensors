@@ -16,7 +16,7 @@
 
 #include <cstdint>
 
-#include "constants.hpp"
+#include "logic/limits.hpp"
 
 namespace thermo::payload {
 

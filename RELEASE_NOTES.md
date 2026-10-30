@@ -16,7 +16,22 @@ Implemented
   and LED semantics.
 - Run mode (partial): boot self-test LEDs, battery read with hysteresis,
   sensor reads using cached ROM IDs (with a first-boot scan), sample append
-  to the RTC-memory buffer, and deep sleep between samples.
+  to the RTC-memory buffer, and deep sleep between samples. The RTC block's
+  sample buffer and cached ROM IDs are `static_vector`s, so each carries its
+  own element count instead of a separate `buffer_len` / `rom_count` counter
+  that could drift out of step with the data (§8).
+- The RTC state is split so its logic is host-testable. `logic/rtc_state.hpp`
+  and `logic/src/rtc_buffer.cpp` (in the shared `logic` component) own the
+  block's *shape* and every operation on it — FIFO append/eviction, clear,
+  Wi-Fi cache invalidation, and the cold-boot `rtc_state_reset()`. Only the two
+  things that cannot be host-tested stay in the firmware, in
+  `mcgowan/src/rtc_storage.{hpp,cpp}`: the single `RTC_DATA_ATTR` block (which
+  expands to a failing static assert on the `linux` target) and the per-boot
+  policy `rtc_state_init(board)`. That policy asks the board for the wake cause
+  rather than calling `esp_sleep_get_wakeup_causes()` directly, so the stub
+  board can model any wake; the cold-boot half it delegates to,
+  `rtc_state_reset()`, is host-tested. Run mode now sleeps through the board
+  (`board.deep_sleep_start(...)`) instead of calling `esp_deep_sleep_start()`.
 - Host-based unit tests for the pure-logic modules (`temp_format`, `payload`,
   `app_config` validation, `rom_id`, `rtc_buffer`) running on the ESP-IDF
   `linux` target.
@@ -28,6 +43,15 @@ Implemented
   firmware's reboot-on-fault policy stays in `main.cpp`. `thermo::Mode` itself
   moved to the shared `logic` component (`logic/mode.hpp`), where it is
   board-independent vocabulary available to the firmware and the tests alike.
+  The battery-hysteresis transmission gate `thermo::TxState` moved there too
+  (`logic/led_manager.hpp`), so firmware code can name it without reaching
+  into a board. The fixed capacities (`thermo::limits::kSensorCount`,
+  `thermo::limits::kMaxBufferRecords`) moved as well (`logic/limits.hpp`), so
+  the sample buffer, the payload, and the sensor layer share one definition
+  with the host tests. The temperature formatter and its `kTempNull`
+  sensor-failure sentinel moved there too (`logic/temp_format.hpp`, with a
+  `src/temp_format.cpp` implementing the formatter), so the config UI, the
+  payload, and the RTC sample defaults share one ESP-IDF-free definition.
 - Unit tests for the pin-free `hal_stub` push button
   (`test_hal_push_button.cpp`), including the `set()` control the mode-sense
   poles use.
@@ -37,6 +61,20 @@ Implemented
   switch is modelled as two independent push buttons (`config_button()` /
   `run_button()`) because ESP-IDF has no direct DPDT support; interpreting the
   pair is left to the logic layer.
+
+- Deep sleep (§3.8) is a board-level operation rather than a HAL device, since
+  it powers the whole board down: `BoardLike` requires
+  `deep_sleep_start(std::chrono::seconds)` and `sleep_get_wakeup_causes()`.
+  `hal_board` calls `esp_sleep_enable_timer_wakeup()` + `esp_deep_sleep_start()`
+  and returns ESP-IDF's wake-cause bitmap; `hal_stub` records the requested
+  duration (`last_deep_sleep()`), arms the timer wake the next boot would
+  report, and returns, while `set_wakeup_causes()` lets a test model any other
+  wake — so the sleep/backoff decision becomes host-testable. The shared
+  vocabulary (`WakeCause`, `WakeCauses`,
+  `wake_cause_bit()`, `woke_from()`) lives in `hal_common`'s
+  `hal/sleep_types.hpp` and stays free of ESP-IDF dependencies, which the
+  `linux` target requires: `esp_sleep.h` is not self-contained there and the
+  port links no `sleep_modes.c`.
 
 - Development environment: the dev container uses the **prebuilt, pinned**
   image `marcpawl/esp-idf:20261025` (official ESP-IDF v6.1 plus `gh`, PyGithub,

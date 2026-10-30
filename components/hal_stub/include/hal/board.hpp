@@ -12,7 +12,11 @@
 // observation accessors are reachable through the board's accessors (e.g.
 // `board().one_wire().set_sensors(...)`, `board().wifi().ap_running()`), so a
 // test can drive and inspect the whole board deterministically
-// without hardware.
+// without hardware. Deep sleep (§3.8) is stubbed the same way: instead of
+// powering the board down, `deep_sleep_start()` records the requested duration,
+// arms the wake cause the real board would wake from (`WakeCause::kTimer`), and
+// returns, so a test can follow one sleep cycle into the next boot. A test
+// wanting a different wake overrides it with `set_wakeup_causes()`.
 #pragma once
 
 // NOLINTBEGIN
@@ -21,11 +25,18 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
+#include <chrono>
+#include <optional>
+
+#include <cstdint>
+
 #include "hal/board_types.hpp"
 #include "hal/chip_temperature.hpp"
 #include "hal/led.hpp"
 #include "hal/onewire.hpp"
 #include "hal/push_button.hpp"
+#include "hal/sleep_types.hpp"
+#include "hal/wifi.hpp"
 
 namespace thermo::hal {
 
@@ -106,6 +117,39 @@ class Board {
 
     [[nodiscard]] WifiRadio const& wifi() const noexcept { return wifi_; }
 
+    // --- Deep sleep (§3.8) -------------------------------------------------
+
+    // Stubbed deep sleep: records `duration`, arms the wake cause the real
+    // board would wake from, and returns, so a test can carry on and assert
+    // what the firmware asked for. Nothing is powered down and no state is
+    // reset — it is the caller's job to act on the wake cause.
+    //
+    // Because `hal_board` enables the RTC timer as the wake source
+    // (`esp_sleep_enable_timer_wakeup()`), the stub models the wake that
+    // follows as a timer wake: after this call,
+    // `sleep_get_wakeup_causes()` reports `WakeCause::kTimer`. A test that
+    // needs a different wake (e.g. a cold boot, or several sources at once)
+    // overrides it with `set_wakeup_causes()`.
+    void deep_sleep_start(std::chrono::seconds duration) noexcept;
+
+    // The wake causes the current boot reports. Starts as a cold boot
+    // (`WakeCause::kUndefined`, which is what ESP-IDF reports while running
+    // normally) and becomes `WakeCause::kTimer` once `deep_sleep_start()` has
+    // been called; `set_wakeup_causes()` overrides either.
+    [[nodiscard]] WakeCauses sleep_get_wakeup_causes() const noexcept;
+
+    // Sets the wake causes reported by `sleep_get_wakeup_causes()` (stub only;
+    // not part of the concept). Pass `0` for "no cause known" and
+    // `wake_cause_bit(WakeCause::kUndefined)` for a cold boot. Call it after
+    // `deep_sleep_start()` to simulate a wake other than the timer.
+    void set_wakeup_causes(WakeCauses causes) noexcept;
+
+    // The duration most recently passed to `deep_sleep_start()`, or
+    // `std::nullopt` if it has not been called (stub only; not part of the
+    // concept).
+    [[nodiscard]] std::optional<std::chrono::seconds> last_deep_sleep()
+        const noexcept;
+
   private:
     ChipTemperature chip_temperature_;
     OneWire one_wire_;
@@ -115,6 +159,12 @@ class Board {
     PushButton config_button_;
     PushButton run_button_;
     WifiRadio wifi_;
+    // Wake causes reported by `sleep_get_wakeup_causes()`. A fresh stub
+    // models a cold boot, which is what the real board reports while running
+    // normally.
+    WakeCauses wakeup_causes_ = wake_cause_bit(WakeCause::kUndefined);
+    // Duration last passed to `deep_sleep_start()`, if any.
+    std::optional<std::chrono::seconds> last_deep_sleep_;
 };
 
 static_assert(BoardLike<Board>, "Board must satisfy the BoardLike concept");

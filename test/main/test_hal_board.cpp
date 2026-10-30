@@ -4,9 +4,10 @@
 // (chip temperature, 1-Wire bus, green/red LEDs, push buttons, WiFi radio) and
 // exposes them. These tests cover the *aggregate* contract — construction from
 // `BoardPins`, `init_all()`, that each accessor returns a live, usable device,
-// and that the underlying stub controls (`set_sensors()`, `set()`,
-// `set_celsius()`, `write()`) remain reachable through the board.
-// The devices' own behaviour is covered by their dedicated tests
+// that the underlying stub controls (`set_sensors()`, `set()`,
+// `set_celsius()`, `write()`) remain reachable through the board, and the
+// board-wide deep sleep (§3.8). The devices' own behaviour is covered by their
+// dedicated tests
 // (test_hal_led.cpp, test_hal_push_button.cpp, test_hal_onewire.cpp,
 // test_hal_chip_temperature.cpp); here we only verify the wiring.
 //
@@ -18,8 +19,12 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
+#include <chrono>
 #include <concepts>
+#include <utility>
 #include <vector>
+
+#include <cstdint>
 
 #include "hal/board.hpp"
 #include "hal/board_types.hpp"
@@ -28,6 +33,7 @@
 #include "hal/onewire.hpp"
 #include "hal/pin_map.hpp"
 #include "hal/push_button.hpp"
+#include "hal/sleep_types.hpp"
 #include "hal/wifi.hpp"
 #include "unity.h"
 
@@ -41,6 +47,10 @@ using thermo::hal::ButtonState;
 using thermo::hal::copy_text;
 using thermo::hal::LedState;
 using thermo::hal::StationConfig;
+using thermo::hal::wake_cause_bit;
+using thermo::hal::WakeCause;
+using thermo::hal::WakeCauses;
+using thermo::hal::woke_from;
 
 // Pin numbers are irrelevant to the stub, but every device takes them for
 // interface parity with the GPIO-backed implementation.
@@ -206,6 +216,90 @@ TEST_CASE("hal board: wifi() is a live stub device", "[hal_board]") {
     TEST_ASSERT_TRUE(b.wifi().station_running());
 }
 
+// --- Deep sleep (§3.8) ------------------------------------------------------
+
+TEST_CASE("hal board: a fresh stub reports a cold boot, not a wake",
+          "[hal_board]") {
+    const Board b = make_board();
+    // ESP-IDF reports BIT(ESP_SLEEP_WAKEUP_UNDEFINED) while running normally,
+    // so the stub models a cold boot the same way.
+    TEST_ASSERT_EQUAL_UINT32(wake_cause_bit(WakeCause::kUndefined),
+                             b.sleep_get_wakeup_causes());
+    TEST_ASSERT_TRUE(
+        woke_from(b.sleep_get_wakeup_causes(), WakeCause::kUndefined));
+    TEST_ASSERT_FALSE(
+        woke_from(b.sleep_get_wakeup_causes(), WakeCause::kTimer));
+    // Nothing has been asked for yet.
+    TEST_ASSERT_FALSE(b.last_deep_sleep().has_value());
+}
+
+TEST_CASE("hal board: deep_sleep_start() records the duration and returns",
+          "[hal_board]") {
+    Board b = make_board();
+
+    // The stub returns (the hardware board does not), which is what makes the
+    // sleep/backoff decision host-testable.
+    b.deep_sleep_start(std::chrono::seconds{60});
+    TEST_ASSERT_TRUE(b.last_deep_sleep().has_value());
+    TEST_ASSERT_EQUAL(60, b.last_deep_sleep()->count());
+
+    // A later request overwrites the earlier one.
+    b.deep_sleep_start(std::chrono::seconds{3600});
+    TEST_ASSERT_EQUAL(3600, b.last_deep_sleep()->count());
+
+    // Sleeping arms the wake the real board would see: it enables the RTC
+    // timer (§3.8), so the next boot reports a timer wake.
+    TEST_ASSERT_EQUAL_UINT32(wake_cause_bit(WakeCause::kTimer),
+                             b.sleep_get_wakeup_causes());
+    TEST_ASSERT_TRUE(woke_from(b.sleep_get_wakeup_causes(), WakeCause::kTimer));
+    TEST_ASSERT_FALSE(
+        woke_from(b.sleep_get_wakeup_causes(), WakeCause::kUndefined));
+}
+
+TEST_CASE("hal board: set_wakeup_causes() overrides the modelled wake",
+          "[hal_board]") {
+    Board b = make_board();
+
+    // Before any sleep the board is running normally, i.e. a cold boot.
+    b.set_wakeup_causes(wake_cause_bit(WakeCause::kUndefined));
+    TEST_ASSERT_EQUAL_UINT32(wake_cause_bit(WakeCause::kUndefined),
+                             b.sleep_get_wakeup_causes());
+    TEST_ASSERT_FALSE(
+        woke_from(b.sleep_get_wakeup_causes(), WakeCause::kTimer));
+
+    // A test can also force a wake without sleeping first.
+    b.set_wakeup_causes(wake_cause_bit(WakeCause::kTimer));
+    TEST_ASSERT_TRUE(woke_from(b.sleep_get_wakeup_causes(), WakeCause::kTimer));
+
+    // Wake causes are a bitmap: several sources can fire at once.
+    b.set_wakeup_causes(wake_cause_bit(WakeCause::kTimer) |
+                        wake_cause_bit(WakeCause::kUndefined));
+    TEST_ASSERT_TRUE(woke_from(b.sleep_get_wakeup_causes(), WakeCause::kTimer));
+    TEST_ASSERT_TRUE(
+        woke_from(b.sleep_get_wakeup_causes(), WakeCause::kUndefined));
+
+    // ...but sleeping again re-arms the timer wake the board would produce.
+    b.deep_sleep_start(std::chrono::seconds{5});
+    TEST_ASSERT_EQUAL_UINT32(wake_cause_bit(WakeCause::kTimer),
+                             b.sleep_get_wakeup_causes());
+
+    b.set_wakeup_causes(0);
+    TEST_ASSERT_EQUAL_UINT32(0, b.sleep_get_wakeup_causes());
+}
+
+TEST_CASE("hal board: the wake-cause vocabulary is a bit per wake source",
+          "[hal_board]") {
+    // One bit per source, in the position named by the enumerator, so the
+    // hardware board can pass ESP-IDF's `BIT(ESP_SLEEP_WAKEUP_*)` bitmap
+    // through unchanged.
+    TEST_ASSERT_EQUAL_UINT32(1u << 0, wake_cause_bit(WakeCause::kUndefined));
+    TEST_ASSERT_EQUAL_UINT32(1u << 4, wake_cause_bit(WakeCause::kTimer));
+    // `kTimer` is ESP_SLEEP_WAKEUP_TIMER (4) in ESP-IDF, and `kUndefined` is
+    // 0; `board.cpp` asserts the same thing on the hardware side.
+    static_assert(static_cast<std::uint32_t>(WakeCause::kUndefined) == 0);
+    static_assert(static_cast<std::uint32_t>(WakeCause::kTimer) == 4);
+}
+
 // --- The board exposes the const accessors too ------------------------------
 
 TEST_CASE("hal board: const accessors yield const device references",
@@ -239,5 +333,14 @@ TEST_CASE("hal board: stub Board models BoardLike", "[hal_board]") {
     static_assert(thermo::hal::BoardLike<Board>);
     // create() must return the same concrete type (part of the concept).
     static_assert(std::same_as<decltype(Board::create(kPins)), Board>);
+    // Deep sleep is part of the contract, so the concept covers it. The stub
+    // returns from it while the hardware board does not, which is why the
+    // concept only requires that the call is well-formed.
+    static_assert(std::same_as<decltype(std::declval<Board&>().deep_sleep_start(
+                                   std::chrono::seconds{1})),
+                               void>);
+    static_assert(std::same_as<decltype(std::declval<Board const&>()
+                                            .sleep_get_wakeup_causes()),
+                               WakeCauses>);
     TEST_ASSERT_EQUAL(ESP_OK, make_board().init_all());
 }
