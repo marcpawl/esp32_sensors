@@ -17,6 +17,7 @@
 #include "config_page.hpp"
 #include "constants.hpp"
 #include "https_server.hpp"
+#include "logic/rom_id.hpp"  // rom_id_from_hex, rom_id_to_hex
 #include "ntp_client.hpp"
 #include "power_manager.hpp"
 #include "sensor.hpp"
@@ -38,7 +39,7 @@ ScanSnapshot make_snapshot(Config& cfg, SensorManager& sensors,
     // table is empty (fresh device), SensorManager performs a bus scan.
     std::vector<RomId> roms;
     for (const auto& m : cfg.mappings) {
-        if (auto rom = RomId::from_hex(m.rom)) {
+        if (auto rom = rom_id_from_hex(m.rom)) {
             roms.push_back(*rom);
         }
     }
@@ -50,7 +51,7 @@ ScanSnapshot make_snapshot(Config& cfg, SensorManager& sensors,
     // in the config page (§5.1.3).
     if (roms.empty() && !discovered.empty()) {
         for (const auto& rom : discovered) {
-            cfg.mappings.push_back({rom.to_hex(), rom.to_hex()});
+            cfg.mappings.push_back({rom_id_to_hex(rom), rom_id_to_hex(rom)});
         }
     }
     return snap;

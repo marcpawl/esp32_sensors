@@ -52,6 +52,21 @@ Implemented
   sensor-failure sentinel moved there too (`logic/temp_format.hpp`, with a
   `src/temp_format.cpp` implementing the formatter), so the config UI, the
   payload, and the RTC sample defaults share one ESP-IDF-free definition.
+  The Configure-mode self-signed certificate moved there as well
+  (`logic/self_signed_cert.hpp`, `src/self_signed_cert.cpp`, formerly
+  `mcgowan/src/certs/self_signed_cert.cpp`), so the PEM data and its
+  `server_cert_len()` / `server_key_len()` helpers are shared, ESP-IDF-free
+  vocabulary rather than firmware-only files buried in a `certs/` subdirectory.
+  ROM-ID hex formatting moved there too, but as **free functions** rather than
+  members: `rom_id_to_hex()` / `rom_id_from_hex()` now live in
+  `logic/rom_id.hpp` + `src/rom_id.cpp` (formerly `mcgowan/src/rom_id.cpp`),
+  leaving `hal::RomId` in `hal_common` as pure data — the HAL keeps the type,
+  the logic layer owns its textual representation.
+  The §9 upload payload builder moved there as well (`logic/payload.hpp`,
+  `src/payload.cpp`, formerly `mcgowan/src/payload.{hpp,cpp}`): its only
+  dependencies were `logic/limits.hpp` and `logic/temp_format.hpp`, so it is
+  now compiled once by the component and shared by the firmware, the host
+  tests, and the (forthcoming) uploader.
 - Unit tests for the pin-free `hal_stub` push button
   (`test_hal_push_button.cpp`), including the `set()` control the mode-sense
   poles use.

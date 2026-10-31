@@ -7,7 +7,7 @@
 //       -addext "subjectAltName=DNS:esp32-thermo.local,IP:192.168.4.1"
 //
 // This is a DEVELOPMENT certificate; replace before production deployment.
-#include "self_signed_cert.hpp"
+#include "logic/self_signed_cert.hpp"
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #pragma GCC diagnostic pop

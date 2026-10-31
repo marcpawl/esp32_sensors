@@ -1,8 +1,10 @@
 // Batched-upload payload formatting (§9).
 //
-// This module is deliberately free of ESP-IDF dependencies so that it can be
-// built and unit-tested on the host target. All formatting rules come from
-// §9.1 (structure) and §9.3 (temperature serialization).
+// Part of the `logic` component: the wire contract with the remote collector is
+// board-independent, so the firmware and the host tests share one
+// implementation. Deliberately free of ESP-IDF dependencies so it builds for
+// the `linux` target. All formatting rules come from §9.1 (structure) and
+// §9.3 (temperature serialization).
 #pragma once
 
 // NOLINTBEGIN

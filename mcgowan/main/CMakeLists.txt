@@ -23,11 +23,9 @@ idf_component_register(
         "${mcgowan_src}/power_manager.cpp"
         "${mcgowan_src}/power_source.cpp"
         "${mcgowan_src}/onewire_bus.cpp"
-        "${mcgowan_src}/rom_id.cpp"
         "${mcgowan_src}/ds18b20.cpp"
         "${mcgowan_src}/sensor_manager.cpp"
         "${mcgowan_src}/rtc_storage.cpp"
-        "${mcgowan_src}/payload.cpp"
         "${mcgowan_src}/configure_mode.cpp"
         "${mcgowan_src}/https_server.cpp"
         "${mcgowan_src}/config_page.cpp"
@@ -35,7 +33,6 @@ idf_component_register(
         "${mcgowan_src}/ntp_client.cpp"
         "${mcgowan_src}/run_mode.cpp"
         "${mcgowan_src}/reboot.cpp"
-        "${mcgowan_src}/certs/self_signed_cert.cpp"
     INCLUDE_DIRS
         "${mcgowan_src}/include"
     REQUIRES

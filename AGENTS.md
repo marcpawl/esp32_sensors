@@ -79,7 +79,7 @@ esp32_sensors/
 │   └── src/             #   C++26 sources + include/ — see module map below
 ├── components/          # Reusable ESP-IDF components (see "HAL" section)
 │   ├── espidf_cpp/      # C++ wrappers over ESP-IDF/FreeRTOS (Task, queue, handles, ...)
-│   ├── logic/           # Board-independent application logic (temp_format, limits, led_manager, mode*, led_task)
+│   ├── logic/           # Board-independent application logic (temp_format, rom_id, payload, limits, led_manager, mode*, led_task, self_signed_cert)
 │   ├── hal_common/      # Shared, header-only HAL vocabulary (types/concepts)
 │   ├── hal_board/       # Real, GPIO-backed HAL (linked by mcgowan)
 │   └── hal_stub/        # Pin-free HAL stub (linked by host tests)
@@ -154,9 +154,9 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 | RTC state / buffer | `rtc_storage.cpp` (the `RTC_DATA_ATTR` block + `rtc_state()`) and `rtc_storage.hpp` (`rtc_state_init(board)`, which asks the board's wake cause whether the retained block survives). The block's *shape*, the FIFO, the cold-boot reset and the Wi-Fi-cache clear are board-independent and live in `logic/rtc_state.hpp` / `logic/src/rtc_buffer.cpp`; `RtcState`'s `buffer` / `rom_ids` are `espidf_cpp::static_vector`s that carry their own counts |
 | Power / battery | `battery_monitor.cpp`, `power_manager.cpp`, `power_source.cpp` |
 | Config | `app_config.cpp` (validation), `app_config_store.cpp` (NVS) |
-| Configure mode | `configure_mode.cpp`, `wifi_ap.cpp`, `https_server.cpp`, `config_page.cpp`, `certs/self_signed_cert.cpp` |
+| Configure mode | `configure_mode.cpp`, `wifi_ap.cpp`, `https_server.cpp`, `config_page.cpp`; the self-signed certificate is `logic/self_signed_cert.hpp` |
 | Run mode | `run_mode.cpp` (stubbed network path), `ntp_client.cpp` |
-| Payload | `payload.cpp`, `rom_id.cpp` (ROM-ID hex); the temperature formatter and `kTempNull` are `logic/temp_format.hpp` |
+| Payload | `payload.cpp`; the temperature formatter and `kTempNull` are `logic/temp_format.hpp`, and ROM-ID hex is `logic/rom_id.hpp` |
 
 The LED task (`led_task.hpp`) and the operating modes and their pole mapping
 (`mode.hpp`, `mode_selection.hpp`) are **not** in `mcgowan/src/`: they are
@@ -300,6 +300,8 @@ implementation, and the headers are included with the `logic/` prefix:
 | `logic/mode.hpp` | `thermo::Mode` (`kOff` / `kConfigure` / `kRun`) and `thermo::to_string(Mode)` — the operating modes (§3), board-independent vocabulary |
 | `logic/mode_selection.hpp` | `thermo::ModeSelection` (`std::optional<Mode>`) and `thermo::mode_from_buttons(ButtonState config, ButtonState run)` — the pure, `constexpr` mapping from the two mode-sense poles to a mode, reporting a both-poles-on miswire as `std::nullopt` |
 | `logic/temp_format.hpp` / `src/temp_format.cpp` | `thermo::kTempNull` (the int16 `0x8000` sensor-failure sentinel) and `thermo::format_temp_c_x100()` — centred-hundredths formatting for the config UI and the payload (§4.2, §9); no ESP-IDF dependency |
+| `logic/rom_id.hpp` / `src/rom_id.cpp` | `thermo::rom_id_to_hex()` and `thermo::rom_id_from_hex()` — the free functions that render a `thermo::hal::RomId` as the 16-character uppercase hex key of §5.1.3 / §6.1 and parse one back (`std::nullopt` on a wrong length or a non-hex character). Free functions, not members: `RomId` in `hal_common` stays pure data. No ESP-IDF dependency |
+| `logic/payload.hpp` / `src/payload.cpp` | `thermo::payload::NamedSample` and `thermo::payload::build_batch_json()` — the §9.1 upload document (key names, ordering, `batch_size`, JSON escaping) built from the buffered records; the temperatures go through `logic/temp_format.hpp`. No ESP-IDF dependency |
 | `logic/rtc_state.hpp` / `src/rtc_buffer.cpp` | `thermo::SampleRecord`, `thermo::WifiCache`, `thermo::RtcState` (the §8 retained block's *shape*) plus the buffer operations `rtc_buffer_push()` / `rtc_buffer_clear()`, the cold-boot `rtc_state_reset()`, and `rtc_wifi_cache_clear()` (§3.10, §4.2). Storage is **not** here: the `RTC_DATA_ATTR` block and the wake-cause policy are firmware-only (`mcgowan/src/rtc_storage.{hpp,cpp}`), because `RTC_DATA_ATTR` fails to compile on `linux` and the sleep API is unlinkable there |
 
 `logic/mode.hpp`, `logic/led_manager.hpp`, `logic/limits.hpp`, and
@@ -331,7 +333,8 @@ before starting the task. The HAL itself is unchanged: `Board` stays
 non-copyable and movable.
 
 Layout: `include/logic/` for public headers, `src/` for `.cpp` files
-(`src/temp_format.cpp`, `src/rtc_buffer.cpp`). **New `.cpp` files must be added to the `SRCS`
+(`src/temp_format.cpp`, `src/rtc_buffer.cpp`, `src/self_signed_cert.cpp`,
+`src/rom_id.cpp`). **New `.cpp` files must be added to the `SRCS`
 list in `components/logic/CMakeLists.txt`**; consumers only need
 `REQUIRES logic` (firmware `mcgowan/main`) or
 `PRIV_REQUIRES logic` (host tests `test/main`), so adding sources there does not
@@ -346,9 +349,10 @@ also listed in `set(COMPONENTS main hal_stub logic)` so it is built for `linux`
 files).
 
 **Host-testable modules.** The `logic` component's `temp_format.cpp`,
-`rtc_buffer.cpp`, `payload.cpp`, `app_config.cpp`, and `rom_id.cpp` are
-deliberately free of chip-specific ESP-IDF dependencies so they build for the
-`linux` target and are covered by `test/`. The header-only
+`rtc_buffer.cpp`, `rom_id.cpp`, and `payload.cpp`, together with
+`mcgowan/src`'s `app_config.cpp`, are deliberately free of chip-specific
+ESP-IDF dependencies so they build for the `linux` target and are covered by
+`test/`. The header-only
 `logic/mode_selection.hpp` is the same idea applied to
 the mode-sense poles: it depends only on `hal/push_button_types.hpp` (for
 `ButtonState`) and `logic/mode.hpp`, and is `constexpr`, so

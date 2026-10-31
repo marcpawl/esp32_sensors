@@ -18,7 +18,7 @@
 #include "app_config_store.hpp"
 #include "config_page.hpp"
 #include "constants.hpp"
-#include "self_signed_cert.hpp"
+#include "logic/self_signed_cert.hpp"
 
 namespace thermo {
 namespace {

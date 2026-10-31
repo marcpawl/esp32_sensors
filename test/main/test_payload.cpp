@@ -13,8 +13,8 @@
 
 #include <cstring>
 
+#include "logic/payload.hpp"
 #include "logic/temp_format.hpp"
-#include "payload.hpp"
 #include "unity.h"
 
 using thermo::kTempNull;
