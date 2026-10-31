@@ -1,11 +1,13 @@
 # hal_stub: stub hardware abstractions for host tests.
 #
 # Exposes the same `hal/led.hpp`, `hal/push_button.hpp`, `hal/onewire.hpp`,
-# `hal/chip_temperature.hpp`, and `hal/wifi.hpp` as
-# `hal_board` (plus `hal/board.hpp`) but with deterministic, side-effect-free
-# implementations that need no real hardware. The host tests (`test/`) depend
-# on this component instead of `hal_board`; a project must depend on exactly
-# one of the two.
+# `hal/chip_temperature.hpp`, and `hal/wifi.hpp` as `hal_board`, plus the
+# aggregate board as `hal/board_stub.hpp` (class `BoardStub`) where `hal_board`
+# offers `hal/board.hpp` (class `Board`). The stub's class has its own name so
+# a project can tell which implementation it linked; code that must work with
+# either takes the `hal::BoardLike` template parameter. The host tests
+# (`test/`) depend on this component instead of `hal_board`; a project must
+# depend on exactly one of the two.
 #
 # `hal/wifi.hpp` exposes `WifiRadio` (the `<hal/wifi.hpp>` alias) as the
 # software-driven `WifiRadioStub`, where `hal_board` aliases it to the

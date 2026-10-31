@@ -1,4 +1,4 @@
-// Deterministic, pin-free aggregate Board stub for the host tests.
+// Deterministic, pin-free aggregate `BoardStub` for the host tests.
 //
 // Constructs one `hal_stub` device per board device and initializes them in a
 // fixed order. Every stub `init()` is a no-op that succeeds, so `init_all()`
@@ -14,11 +14,11 @@
 #include <chrono>
 #include <optional>
 
-#include "hal/board.hpp"
+#include "hal/board_stub.hpp"
 
 namespace thermo::hal {
 
-Board::Board(BoardPins pins) noexcept
+BoardStub::BoardStub(BoardPins pins) noexcept
     : chip_temperature_(),
       one_wire_(OneWire::create(pins.one_wire)),
       green_(Led::create(pins.green_led, pins.green_name)),
@@ -28,7 +28,7 @@ Board::Board(BoardPins pins) noexcept
       run_button_(PushButton::create(pins.run_button)),
       wifi_(WifiRadio::create()) {}
 
-esp_err_t Board::init_all() noexcept {
+esp_err_t BoardStub::init_all() noexcept {
     if (esp_err_t err = chip_temperature_.init(); err != ESP_OK) {
         return err;
     }
@@ -53,7 +53,7 @@ esp_err_t Board::init_all() noexcept {
     return wifi_.init();
 }
 
-void Board::deep_sleep_start(std::chrono::seconds duration) noexcept {
+void BoardStub::deep_sleep_start(std::chrono::seconds duration) noexcept {
     last_deep_sleep_ = duration;
     // The real board arms the RTC timer as its only wake source (§3.8), so the
     // boot that follows is a timer wake. Model that here, so a test can sleep
@@ -61,15 +61,16 @@ void Board::deep_sleep_start(std::chrono::seconds duration) noexcept {
     wakeup_causes_ = wake_cause_bit(WakeCause::kTimer);
 }
 
-WakeCauses Board::sleep_get_wakeup_causes() const noexcept {
+WakeCauses BoardStub::sleep_get_wakeup_causes() const noexcept {
     return wakeup_causes_;
 }
 
-void Board::set_wakeup_causes(WakeCauses causes) noexcept {
+void BoardStub::set_wakeup_causes(WakeCauses causes) noexcept {
     wakeup_causes_ = causes;
 }
 
-std::optional<std::chrono::seconds> Board::last_deep_sleep() const noexcept {
+std::optional<std::chrono::seconds> BoardStub::last_deep_sleep()
+    const noexcept {
     return last_deep_sleep_;
 }
 

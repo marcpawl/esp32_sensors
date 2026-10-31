@@ -1,12 +1,19 @@
-// Hardware abstraction: the aggregate Board, deterministic, pin-free stub for
-// the host tests.
+// Hardware abstraction: the aggregate `BoardStub`, deterministic, pin-free stub
+// for the host tests.
 //
 // The shared board vocabulary (`BoardPins`, `BoardLike`) lives in the
 // header-only `hal_common` component (`hal/board_types.hpp`); this header adds
-// the concrete `Board` class whose devices are the `hal_stub` implementations.
-// `hal_board` provides an identical `Board` (same inline `create()` factory,
-// `init_all()`, and accessors) whose devices are the real, GPIO-backed ones, so
-// a project can link either one and include `<hal/board.hpp>` unchanged.
+// the concrete `BoardStub` class whose devices are the `hal_stub`
+// implementations. `hal_board` provides its own `Board` with the same shape
+// (inline `create()` factory, `init_all()`, and accessors) whose devices are
+// the real, GPIO-backed ones.
+//
+// The stub's class is deliberately named `BoardStub` rather than `Board`: the
+// two HAL implementations are mutually exclusive, so giving the stub its own
+// name lets a project name the implementation it actually linked instead of
+// relying on which `hal/board*.hpp` happened to be on the include path. Code
+// that must work with either keeps taking the `hal::BoardLike` template
+// parameter (`logic/led_task.hpp`).
 //
 // Because every device is a `hal_stub` device, their `set_*()` controls and
 // observation accessors are reachable through the board's accessors (e.g.
@@ -41,25 +48,25 @@
 namespace thermo::hal {
 
 // Owns every stub HAL device on the board.
-class Board {
+class BoardStub {
   public:
     // `pins` describes the wiring; see `BoardPins`. The stub ignores the pin
     // numbers but keeps the LED labels for logging. Constructs the devices but
     // does not touch any hardware — call init_all() for that.
-    explicit Board(BoardPins pins) noexcept;
+    explicit BoardStub(BoardPins pins) noexcept;
 
-    Board(Board const&) = delete;
-    // Movable so `create()` (and containers/factories) can hand a Board back by
-    // value without needing guaranteed copy elision.
-    Board(Board&&) noexcept = default;
-    ~Board() noexcept = default;
-    Board& operator=(Board const&) = delete;
-    Board& operator=(Board&&) = delete;
+    BoardStub(BoardStub const&) = delete;
+    // Movable so `create()` (and containers/factories) can hand a BoardStub
+    // back by value without needing guaranteed copy elision.
+    BoardStub(BoardStub&&) noexcept = default;
+    ~BoardStub() noexcept = default;
+    BoardStub& operator=(BoardStub const&) = delete;
+    BoardStub& operator=(BoardStub&&) = delete;
 
     // Builds a board for the given wiring. Same signature for the hardware and
     // stub implementations; call init_all() before using the devices.
-    [[nodiscard]] static Board create(BoardPins pins) noexcept {
-        return Board(pins);
+    [[nodiscard]] static BoardStub create(BoardPins pins) noexcept {
+        return BoardStub(pins);
     }
 
     // Initializes every device (all no-ops for the stub), returning the first
@@ -167,6 +174,7 @@ class Board {
     std::optional<std::chrono::seconds> last_deep_sleep_;
 };
 
-static_assert(BoardLike<Board>, "Board must satisfy the BoardLike concept");
+static_assert(BoardLike<BoardStub>,
+              "BoardStub must satisfy the BoardLike concept");
 
 }  // namespace thermo::hal

@@ -1,15 +1,15 @@
-// Tests for the stub aggregate Board (`hal_stub`).
+// Tests for the stub aggregate `BoardStub` (`hal_stub`).
 //
-// The Board is a convenience aggregate: it owns one stub device per HAL device
-// (chip temperature, 1-Wire bus, green/red LEDs, push buttons, WiFi radio) and
-// exposes them. These tests cover the *aggregate* contract — construction from
-// `BoardPins`, `init_all()`, that each accessor returns a live, usable device,
-// that the underlying stub controls (`set_sensors()`, `set()`,
-// `set_celsius()`, `write()`) remain reachable through the board, and the
-// board-wide deep sleep (§3.8). The devices' own behaviour is covered by their
-// dedicated tests
-// (test_hal_led.cpp, test_hal_push_button.cpp, test_hal_onewire.cpp,
-// test_hal_chip_temperature.cpp); here we only verify the wiring.
+// `BoardStub` is a convenience aggregate: it owns one stub device per HAL
+// device (chip temperature, 1-Wire bus, green/red LEDs, push buttons, WiFi
+// radio) and exposes them. These tests cover the *aggregate* contract —
+// construction from `BoardPins`, `init_all()`, that each accessor returns a
+// live, usable device, that the underlying stub controls (`set_sensors()`,
+// `set()`, `set_celsius()`, `write()`) remain reachable through the board, and
+// the board-wide deep sleep (§3.8). The devices' own behaviour is covered by
+// their dedicated tests (test_hal_led.cpp, test_hal_push_button.cpp,
+// test_hal_onewire.cpp, test_hal_chip_temperature.cpp); here we only verify the
+// wiring.
 //
 // They run on the ESP-IDF `linux` target with Unity and link the pin-free
 // `hal_stub` component (never `hal_board`). Every device is deterministic, so
@@ -26,7 +26,7 @@
 
 #include <cstdint>
 
-#include "hal/board.hpp"
+#include "hal/board_stub.hpp"
 #include "hal/board_types.hpp"
 #include "hal/chip_temperature.hpp"
 #include "hal/led.hpp"
@@ -41,8 +41,8 @@ namespace {
 
 // Convenience aliases for the shared HAL vocabulary.
 using thermo::hal::AccessPointConfig;
-using thermo::hal::Board;
 using thermo::hal::BoardPins;
+using thermo::hal::BoardStub;
 using thermo::hal::ButtonState;
 using thermo::hal::copy_text;
 using thermo::hal::LedState;
@@ -65,8 +65,8 @@ constexpr BoardPins kPins{
     .run_button = 2,
 };
 
-Board make_board() {
-    Board b = Board::create(kPins);
+BoardStub make_board() {
+    BoardStub b = BoardStub::create(kPins);
     b.init_all();
     return b;
 }
@@ -88,12 +88,12 @@ TEST_CASE("hal board: BoardPins defaults to the board pin map (§2.4)",
 
     // A default-constructed board still initializes and works (the stub
     // ignores the pins, but this proves `create({})` is usable).
-    Board b = Board::create({});
+    BoardStub b = BoardStub::create({});
     TEST_ASSERT_EQUAL(ESP_OK, b.init_all());
 }
 
 TEST_CASE("hal board: create() returns a usable, inited board", "[hal_board]") {
-    Board b = Board::create(kPins);
+    BoardStub b = BoardStub::create(kPins);
     // init_all() always succeeds for the stub (every device init is a no-op).
     TEST_ASSERT_EQUAL(ESP_OK, b.init_all());
     // Each accessor returns a live device.
@@ -103,7 +103,7 @@ TEST_CASE("hal board: create() returns a usable, inited board", "[hal_board]") {
 
 TEST_CASE("hal board: init_all() is idempotent and returns ESP_OK",
           "[hal_board]") {
-    Board b = make_board();
+    BoardStub b = make_board();
     TEST_ASSERT_EQUAL(ESP_OK, b.init_all());
     TEST_ASSERT_EQUAL(ESP_OK, b.init_all());
 }
@@ -112,14 +112,14 @@ TEST_CASE("hal board: init_all() is idempotent and returns ESP_OK",
 
 TEST_CASE("hal board: chip_temperature() is a live stub device",
           "[hal_board]") {
-    Board b = make_board();
+    BoardStub b = make_board();
     TEST_ASSERT_EQUAL(2500, b.chip_temperature().read());  // default 25.00 °C
     b.chip_temperature().set_celsius(3150);
     TEST_ASSERT_EQUAL(3150, b.chip_temperature().read());
 }
 
 TEST_CASE("hal board: one_wire() is a live stub device", "[hal_board]") {
-    Board b = make_board();
+    BoardStub b = make_board();
     // The stub starts with the three example sensors from §5.1.3.
     TEST_ASSERT_EQUAL(3, b.one_wire().read().size());
 
@@ -133,7 +133,7 @@ TEST_CASE("hal board: one_wire() is a live stub device", "[hal_board]") {
 
 TEST_CASE("hal board: green() and red() are distinct, live stub devices",
           "[hal_board]") {
-    Board b = make_board();
+    BoardStub b = make_board();
     TEST_ASSERT_EQUAL(static_cast<int>(LedState::kOff),
                       static_cast<int>(b.green().state()));
     TEST_ASSERT_EQUAL(static_cast<int>(LedState::kOff),
@@ -155,7 +155,7 @@ TEST_CASE("hal board: green() and red() are distinct, live stub devices",
 }
 
 TEST_CASE("hal board: button() is a live stub device", "[hal_board]") {
-    Board b = make_board();
+    BoardStub b = make_board();
     TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
                       static_cast<int>(b.button().read()));
     b.button().set(ButtonState::kOn);
@@ -165,7 +165,7 @@ TEST_CASE("hal board: button() is a live stub device", "[hal_board]") {
 
 TEST_CASE("hal board: config_button() is a live, independent stub device",
           "[hal_board]") {
-    Board b = make_board();
+    BoardStub b = make_board();
     TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
                       static_cast<int>(b.config_button().read()));
     b.config_button().set(ButtonState::kOn);
@@ -180,7 +180,7 @@ TEST_CASE("hal board: config_button() is a live, independent stub device",
 
 TEST_CASE("hal board: run_button() is a live, independent stub device",
           "[hal_board]") {
-    Board b = make_board();
+    BoardStub b = make_board();
     TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
                       static_cast<int>(b.run_button().read()));
     b.run_button().set(ButtonState::kOn);
@@ -191,7 +191,7 @@ TEST_CASE("hal board: run_button() is a live, independent stub device",
 }
 
 TEST_CASE("hal board: wifi() is a live stub device", "[hal_board]") {
-    Board b = make_board();
+    BoardStub b = make_board();
     // init_all() initializes the radio but starts neither interface.
     TEST_ASSERT_TRUE(b.wifi().initialized());
     TEST_ASSERT_FALSE(b.wifi().ap_running());
@@ -220,7 +220,7 @@ TEST_CASE("hal board: wifi() is a live stub device", "[hal_board]") {
 
 TEST_CASE("hal board: a fresh stub reports a cold boot, not a wake",
           "[hal_board]") {
-    const Board b = make_board();
+    const BoardStub b = make_board();
     // ESP-IDF reports BIT(ESP_SLEEP_WAKEUP_UNDEFINED) while running normally,
     // so the stub models a cold boot the same way.
     TEST_ASSERT_EQUAL_UINT32(wake_cause_bit(WakeCause::kUndefined),
@@ -235,7 +235,7 @@ TEST_CASE("hal board: a fresh stub reports a cold boot, not a wake",
 
 TEST_CASE("hal board: deep_sleep_start() records the duration and returns",
           "[hal_board]") {
-    Board b = make_board();
+    BoardStub b = make_board();
 
     // The stub returns (the hardware board does not), which is what makes the
     // sleep/backoff decision host-testable.
@@ -258,7 +258,7 @@ TEST_CASE("hal board: deep_sleep_start() records the duration and returns",
 
 TEST_CASE("hal board: set_wakeup_causes() overrides the modelled wake",
           "[hal_board]") {
-    Board b = make_board();
+    BoardStub b = make_board();
 
     // Before any sleep the board is running normally, i.e. a cold boot.
     b.set_wakeup_causes(wake_cause_bit(WakeCause::kUndefined));
@@ -304,7 +304,7 @@ TEST_CASE("hal board: the wake-cause vocabulary is a bit per wake source",
 
 TEST_CASE("hal board: const accessors yield const device references",
           "[hal_board]") {
-    const Board b = make_board();
+    const BoardStub b = make_board();
     // Reading through a const board is well-formed (proves the const overloads
     // exist and return the const-qualified device types).
     TEST_ASSERT_EQUAL(2500, b.chip_temperature().read());
@@ -329,17 +329,18 @@ TEST_CASE("hal board: const accessors yield const device references",
 
 // --- The stub satisfies the shared concept ---------------------------------
 
-TEST_CASE("hal board: stub Board models BoardLike", "[hal_board]") {
-    static_assert(thermo::hal::BoardLike<Board>);
+TEST_CASE("hal board: stub BoardStub models BoardLike", "[hal_board]") {
+    static_assert(thermo::hal::BoardLike<BoardStub>);
     // create() must return the same concrete type (part of the concept).
-    static_assert(std::same_as<decltype(Board::create(kPins)), Board>);
+    static_assert(std::same_as<decltype(BoardStub::create(kPins)), BoardStub>);
     // Deep sleep is part of the contract, so the concept covers it. The stub
     // returns from it while the hardware board does not, which is why the
     // concept only requires that the call is well-formed.
-    static_assert(std::same_as<decltype(std::declval<Board&>().deep_sleep_start(
-                                   std::chrono::seconds{1})),
-                               void>);
-    static_assert(std::same_as<decltype(std::declval<Board const&>()
+    static_assert(
+        std::same_as<decltype(std::declval<BoardStub&>().deep_sleep_start(
+                         std::chrono::seconds{1})),
+                     void>);
+    static_assert(std::same_as<decltype(std::declval<BoardStub const&>()
                                             .sleep_get_wakeup_causes()),
                                WakeCauses>);
     TEST_ASSERT_EQUAL(ESP_OK, make_board().init_all());
