@@ -19,6 +19,7 @@
 #include "configure_mode.hpp"
 #include "hal/board.hpp"
 #include "hal/push_button.hpp"
+#include "logic/application.hpp"
 #include "logic/led_task.hpp"
 #include "logic/mode.hpp"
 #include "logic/mode_selection.hpp"
@@ -30,6 +31,7 @@ namespace {
 
 constexpr const char* kTag = "app_main";
 
+#if 0
 // Reads the two mode-sense poles and maps them to a mode (§3). The mapping
 // itself is pure and host-tested (`logic/mode_selection.hpp`); this wrapper
 // only turns its hardware-fault result into the firmware's fail-loudly policy.
@@ -57,12 +59,10 @@ esp_err_t init_nvs() {
     }
     return err;
 }
-
+#endif
 }  // namespace
 
 extern "C" void app_main(void) {
-    ESP_ERROR_CHECK(init_nvs());
-
     // The board is created first because both the boot policy and the
     // mode-sense buttons go through it: `rtc_state_init()` asks it why the last
     // wake happened (§3.8) and `read_mode()` reads the switch poles. It is
@@ -71,6 +71,12 @@ extern "C" void app_main(void) {
     auto board =
         std::make_shared<thermo::hal::Board>(thermo::hal::Board::create({}));
     ESP_ERROR_CHECK(board->init_all());
+
+    thermo::Application<typeof(*board)> app(board);
+    app.application_main();
+
+#if 0
+    ESP_ERROR_CHECK(init_nvs());
 
     // Cold boot clears the retained block; a deep-sleep wake keeps it (§8).
     thermo::rtc_state_init(*board);
@@ -103,4 +109,5 @@ extern "C" void app_main(void) {
             ESP_LOGI(kTag, "Off position (no power path); idling");
             break;
     }
+#endif
 }

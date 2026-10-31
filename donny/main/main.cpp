@@ -18,11 +18,11 @@
 
 #include "hal/board_stub.hpp"
 #include "hal/board_types.hpp"
+#include "logic/application.hpp"
 
 namespace {
 
 constexpr char kTag[] = "donny";
-constexpr TickType_t kSpinPeriod = pdMS_TO_TICKS(60 * 1000);
 
 }  // namespace
 
@@ -38,7 +38,6 @@ extern "C" void app_main(void) {
     ESP_ERROR_CHECK(board->init_all());
     ESP_LOGI(kTag, "board initialized");
 
-    while (true) {
-        vTaskDelay(kSpinPeriod);
-    }
+    thermo::Application<typeof(*board)> app(board);
+    app.application_main();
 }
