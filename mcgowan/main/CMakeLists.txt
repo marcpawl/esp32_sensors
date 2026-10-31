@@ -26,7 +26,6 @@ idf_component_register(
         "${mcgowan_src}/ds18b20.cpp"
         "${mcgowan_src}/sensor_manager.cpp"
         "${mcgowan_src}/rtc_storage.cpp"
-        "${mcgowan_src}/payload.cpp"
         "${mcgowan_src}/configure_mode.cpp"
         "${mcgowan_src}/https_server.cpp"
         "${mcgowan_src}/config_page.cpp"

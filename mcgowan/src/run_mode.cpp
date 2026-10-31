@@ -35,9 +35,9 @@
 #include "battery_monitor.hpp"
 #include "constants.hpp"
 #include "logic/limits.hpp"
+#include "logic/payload.hpp"
 #include "logic/rom_id.hpp"  // rom_id_to_hex
 #include "logic/temp_format.hpp"
-#include "payload.hpp"
 #include "rtc_storage.hpp"
 #include "sensor.hpp"
 

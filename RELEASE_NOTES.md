@@ -62,6 +62,11 @@ Implemented
   `logic/rom_id.hpp` + `src/rom_id.cpp` (formerly `mcgowan/src/rom_id.cpp`),
   leaving `hal::RomId` in `hal_common` as pure data — the HAL keeps the type,
   the logic layer owns its textual representation.
+  The §9 upload payload builder moved there as well (`logic/payload.hpp`,
+  `src/payload.cpp`, formerly `mcgowan/src/payload.{hpp,cpp}`): its only
+  dependencies were `logic/limits.hpp` and `logic/temp_format.hpp`, so it is
+  now compiled once by the component and shared by the firmware, the host
+  tests, and the (forthcoming) uploader.
 - Unit tests for the pin-free `hal_stub` push button
   (`test_hal_push_button.cpp`), including the `set()` control the mode-sense
   poles use.

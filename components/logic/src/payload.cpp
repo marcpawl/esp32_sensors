@@ -1,5 +1,12 @@
 // Batched-upload payload formatting (§9).
-#include "payload.hpp"
+//
+// Part of the `logic` component so the firmware and the host tests share one
+// implementation; free of ESP-IDF dependencies, so it builds for the `linux`
+// target (the same rationale as `logic/src/temp_format.cpp`). The temperature
+// serialization itself is `logic/temp_format.hpp`; this file owns only the
+// §9.1 document structure and the JSON escaping.
+#include "logic/payload.hpp"
+
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #pragma GCC diagnostic pop
