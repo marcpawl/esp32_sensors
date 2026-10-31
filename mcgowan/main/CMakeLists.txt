@@ -23,7 +23,6 @@ idf_component_register(
         "${mcgowan_src}/power_manager.cpp"
         "${mcgowan_src}/power_source.cpp"
         "${mcgowan_src}/onewire_bus.cpp"
-        "${mcgowan_src}/rom_id.cpp"
         "${mcgowan_src}/ds18b20.cpp"
         "${mcgowan_src}/sensor_manager.cpp"
         "${mcgowan_src}/rtc_storage.cpp"

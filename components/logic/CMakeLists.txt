@@ -36,6 +36,7 @@ idf_component_register(
         "src/temp_format.cpp"
         "src/rtc_buffer.cpp"
         "src/self_signed_cert.cpp"
+        "src/rom_id.cpp"
     INCLUDE_DIRS
         "include"
     REQUIRES

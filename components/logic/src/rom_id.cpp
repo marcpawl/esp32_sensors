@@ -1,12 +1,13 @@
 // DS18B20 ROM-ID formatting and parsing (§5.1.3, §6.1).
 //
-// Kept free of ESP-IDF dependencies so the hex round-trip and validation rules
-// can be unit-tested on the host target — the same rationale as
-// `logic/temp_format.cpp` and payload.cpp. The 1-Wire transport itself lives in
-// onewire_bus.cpp.
-//
-// `RomId` is defined in the shared `hal_common` component
-// (`hal/ds18b20_types.hpp`); its textual helpers are implemented here.
+// Part of the `logic` component so the firmware and the host tests share one
+// implementation; free of ESP-IDF dependencies, so it builds for the `linux`
+// target. The ROM ID *type* is the HAL's data (`thermo::hal::RomId`, from
+// `hal_common`'s `hal/ds18b20_types.hpp`); the textual conversions are
+// application behaviour and are plain functions here rather than members.
+// The 1-Wire transport itself lives in the firmware's `onewire_bus.cpp`.
+#include "logic/rom_id.hpp"
+
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #pragma GCC diagnostic pop
@@ -14,24 +15,22 @@
 
 #include <cstdio>
 
-#include "hal/ds18b20_types.hpp"
+namespace thermo {
 
-namespace thermo::hal {
-
-std::string RomId::to_hex() const {
+std::string rom_id_to_hex(const hal::RomId& rom) {
     // 8 bytes -> 16 uppercase hex chars, no separator.
-    char buf[18];
-    for (std::size_t i = 0; i < bytes.size(); ++i) {
-        std::snprintf(buf + i * 2, 3, "%02X", bytes[i]);
+    char buf[2 * hal::kRomIdBytes + 1];
+    for (std::size_t i = 0; i < rom.bytes.size(); ++i) {
+        std::snprintf(buf + i * 2, 3, "%02X", rom.bytes[i]);
     }
-    buf[16] = '\0';
+    buf[2 * hal::kRomIdBytes] = '\0';
     return buf;
 }
 
-std::optional<RomId> RomId::from_hex(std::string_view hex) {
-    RomId id{};
+std::optional<hal::RomId> rom_id_from_hex(std::string_view hex) {
+    hal::RomId id{};
     // ROM IDs are always exactly 16 hex characters.
-    if (hex.size() != 16) {
+    if (hex.size() != 2 * hal::kRomIdBytes) {
         return std::nullopt;
     }
     auto nibble = [](char c) -> int {
@@ -57,4 +56,4 @@ std::optional<RomId> RomId::from_hex(std::string_view hex) {
     return id;
 }
 
-}  // namespace thermo::hal
+}  // namespace thermo

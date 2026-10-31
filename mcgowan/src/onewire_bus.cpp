@@ -156,7 +156,4 @@ bool OneWireBus::crc8_ok(const std::uint8_t* data, std::size_t len) {
     return crc8(data, len) == data[len];
 }
 
-// NOTE: RomId::to_hex / RomId::from_hex live in rom_id.cpp so they can be
-// unit-tested on the host target without pulling in the GPIO driver.
-
 }  // namespace thermo

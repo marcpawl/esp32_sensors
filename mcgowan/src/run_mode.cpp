@@ -35,6 +35,7 @@
 #include "battery_monitor.hpp"
 #include "constants.hpp"
 #include "logic/limits.hpp"
+#include "logic/rom_id.hpp"  // rom_id_to_hex
 #include "logic/temp_format.hpp"
 #include "payload.hpp"
 #include "rtc_storage.hpp"
@@ -90,7 +91,7 @@ std::vector<std::string> names_for(
          ++i) {
         std::string name;
         for (const auto& mapping : cfg.mappings) {
-            if (mapping.rom == readings[i].rom.to_hex()) {
+            if (mapping.rom == rom_id_to_hex(readings[i].rom)) {
                 name = mapping.name;
                 break;
             }

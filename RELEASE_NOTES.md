@@ -57,6 +57,11 @@ Implemented
   `mcgowan/src/certs/self_signed_cert.cpp`), so the PEM data and its
   `server_cert_len()` / `server_key_len()` helpers are shared, ESP-IDF-free
   vocabulary rather than firmware-only files buried in a `certs/` subdirectory.
+  ROM-ID hex formatting moved there too, but as **free functions** rather than
+  members: `rom_id_to_hex()` / `rom_id_from_hex()` now live in
+  `logic/rom_id.hpp` + `src/rom_id.cpp` (formerly `mcgowan/src/rom_id.cpp`),
+  leaving `hal::RomId` in `hal_common` as pure data — the HAL keeps the type,
+  the logic layer owns its textual representation.
 - Unit tests for the pin-free `hal_stub` push button
   (`test_hal_push_button.cpp`), including the `set()` control the mode-sense
   poles use.

@@ -55,7 +55,6 @@ set(sut_srcs
     "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/app_config.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/config_page.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/power_source.cpp"
-    "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/rom_id.cpp"
 )
 
 idf_component_register(

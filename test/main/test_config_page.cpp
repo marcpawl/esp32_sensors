@@ -19,6 +19,7 @@
 #include "app_config.hpp"
 #include "config_page.hpp"
 #include "https_server.hpp"
+#include "logic/rom_id.hpp"
 #include "power_source.hpp"
 #include "sensor.hpp"
 #include "unity.h"
@@ -26,6 +27,7 @@
 using thermo::Config;
 using thermo::DS18B20Reading;
 using thermo::PowerSource;
+using thermo::rom_id_to_hex;
 using thermo::RomId;
 using thermo::ScanSnapshot;
 using thermo::config_page::render_scan_json;
@@ -155,7 +157,7 @@ TEST_CASE("scan json: sensor name defaults to the ROM id", "[config_page]") {
 
     const std::string json = render_scan_json(cfg, scan);
 
-    const std::string rom = rom_with_byte(0x01).to_hex();
+    const std::string rom = rom_id_to_hex(rom_with_byte(0x01));
     const std::string expected = "{ \"rom\": \"" + rom + "\", \"name\": \"" +
                                  rom + "\", \"temp_c\": 23.5 }";
     TEST_ASSERT_NOT_NULL(strstr(json.c_str(), expected.c_str()));
@@ -165,7 +167,7 @@ TEST_CASE("scan json: mapped name overrides the ROM id", "[config_page]") {
     const RomId rom = rom_with_byte(0x02);
 
     Config cfg{};
-    cfg.mappings.push_back({rom.to_hex(), "greenhouse"});
+    cfg.mappings.push_back({rom_id_to_hex(rom), "greenhouse"});
 
     ScanSnapshot scan{};
     scan.power_source = PowerSource::kSolarBattery;
@@ -174,7 +176,7 @@ TEST_CASE("scan json: mapped name overrides the ROM id", "[config_page]") {
 
     const std::string json = render_scan_json(cfg, scan);
 
-    const std::string expected = "{ \"rom\": \"" + rom.to_hex() +
+    const std::string expected = "{ \"rom\": \"" + rom_id_to_hex(rom) +
                                  "\", \"name\": \"greenhouse\", "
                                  "\"temp_c\": -4.4 }";
     TEST_ASSERT_NOT_NULL(strstr(json.c_str(), expected.c_str()));
@@ -198,7 +200,7 @@ TEST_CASE("scan json: names are html-escaped", "[config_page]") {
     const RomId rom = rom_with_byte(0x04);
 
     Config cfg{};
-    cfg.mappings.push_back({rom.to_hex(), "<b>&\"'</b>"});
+    cfg.mappings.push_back({rom_id_to_hex(rom), "<b>&\"'</b>"});
 
     ScanSnapshot scan{};
     scan.power_source = PowerSource::kSolarBattery;
@@ -222,9 +224,9 @@ TEST_CASE("scan json: multiple sensors are comma-separated", "[config_page]") {
     const std::string json = render_scan_json(cfg, scan);
 
     const std::string first =
-        "\"rom\": \"" + rom_with_byte(0x05).to_hex() + "\"";
+        "\"rom\": \"" + rom_id_to_hex(rom_with_byte(0x05)) + "\"";
     const std::string second =
-        "\"rom\": \"" + rom_with_byte(0x06).to_hex() + "\"";
+        "\"rom\": \"" + rom_id_to_hex(rom_with_byte(0x06)) + "\"";
 
     const std::size_t a = json.find(first);
     const std::size_t b = json.find(second);
