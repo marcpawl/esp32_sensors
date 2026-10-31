@@ -16,7 +16,7 @@
 
 #include <memory>
 
-#include "hal/board.hpp"
+#include "hal/board_stub.hpp"
 #include "hal/board_types.hpp"
 
 namespace {
@@ -31,10 +31,10 @@ extern "C" void app_main(void) {
 
     // The board is shared: it is heap-allocated and held by a `std::shared_ptr`
     // so it can be handed to the LED task (`logic/led_task.hpp` takes a
-    // `std::shared_ptr<Board>` and does not own it) without the board being
-    // destroyed while the task still uses it.
-    auto board =
-        std::make_shared<thermo::hal::Board>(thermo::hal::Board::create({}));
+    // `std::shared_ptr<Board>` for any `hal::BoardLike` board and does not own
+    // it) without the board being destroyed while the task still uses it.
+    auto board = std::make_shared<thermo::hal::BoardStub>(
+        thermo::hal::BoardStub::create({}));
     ESP_ERROR_CHECK(board->init_all());
     ESP_LOGI(kTag, "board initialized");
 

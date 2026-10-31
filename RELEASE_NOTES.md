@@ -76,6 +76,15 @@ Implemented
   switch is modelled as two independent push buttons (`config_button()` /
   `run_button()`) because ESP-IDF has no direct DPDT support; interpreting the
   pair is left to the logic layer.
+- The two aggregate boards are named for the implementation they belong to:
+  `hal_board`'s `hal::Board` (`hal/board.hpp`) and `hal_stub`'s
+  `hal::BoardStub` (`hal/board_stub.hpp`, formerly `hal/board.hpp`). A project
+  therefore names the board it actually linked instead of depending on which
+  `hal/board.hpp` happened to be on the include path. Board-independent code
+  is unaffected: it takes the `hal::BoardLike` template parameter
+  (`logic/led_task.hpp`), and the LED-cycle table plus its full-`LedState`
+  coverage checks are now free functions (`thermo::ledtask::led_cycles()` /
+  `has_cycle()`) so they assert without naming a board.
 
 - Deep sleep (§3.8) is a board-level operation rather than a HAL device, since
   it powers the whole board down: `BoardLike` requires

@@ -27,7 +27,6 @@
 
 #include "espidf_cpp/one_message_queue.hpp"
 #include "espidf_cpp/task.hpp"
-#include "hal/board.hpp"
 #include "hal/board_types.hpp"
 
 namespace thermo {
@@ -88,6 +87,72 @@ CycleSteps(LedState state, Args...) -> CycleSteps<sizeof...(Args)>;
 using Cycle = std::variant<CycleSteps<1>, CycleSteps<2>>;
 using Cycles = std::array<Cycle, 9>;
 
+// The table, built entirely at compile time. Returned by value (the
+// constructing function is `constexpr`), which avoids referencing the nested
+// constructors from an in-class static member initializer.
+//
+// A free function rather than a member of `LedRunner`: the table does not
+// depend on the board, so making it board-free lets the coverage checks below
+// assert it without naming any concrete board type.
+[[nodiscard]] constexpr Cycles led_cycles() noexcept {
+    return {
+        CycleSteps{LedState::kOff,
+                   Step{std::chrono::hours{1}, RedLed::Off, GreenLed::Off}},
+
+        CycleSteps{
+            LedState::kBoot,
+            Step{std::chrono::milliseconds{20}, RedLed::On, GreenLed::On},
+            Step{std::chrono::milliseconds{20}, RedLed::On, GreenLed::Off}},
+
+        CycleSteps{LedState::kConfig,
+                   Step{std::chrono::hours{1}, RedLed::On, GreenLed::On}},
+
+        CycleSteps{
+            LedState::kConfig_save,
+            Step{std::chrono::milliseconds{50}, RedLed::On, GreenLed::Off},
+            Step{std::chrono::milliseconds{50}, RedLed::On, GreenLed::On}},
+
+        CycleSteps{
+            LedState::kConfig_reset,
+            Step{std::chrono::milliseconds{10}, RedLed::On, GreenLed::Off},
+            Step{std::chrono::milliseconds{10}, RedLed::On, GreenLed::On}},
+
+        CycleSteps{LedState::kRun,
+                   Step{std::chrono::hours{1}, RedLed::Off, GreenLed::On}},
+        CycleSteps{
+            LedState::kRun_battery_low,
+            Step{std::chrono::milliseconds{500}, RedLed::On, GreenLed::Off},
+            Step{std::chrono::milliseconds{500}, RedLed::On, GreenLed::On}},
+
+        CycleSteps{
+            LedState::kRun_uploading,
+            Step{std::chrono::milliseconds{100}, RedLed::Off, GreenLed::Off},
+            Step{std::chrono::milliseconds{100}, RedLed::Off, GreenLed::On}},
+        CycleSteps{
+            LedState::kRun_upload_error,
+            Step{std::chrono::milliseconds{100}, RedLed::On, GreenLed::Off},
+            Step{std::chrono::milliseconds{100}, RedLed::On, GreenLed::On}},
+    };
+}
+
+// Whether the compile-time table contains a cycle for `state`. Free, like the
+// table, so it can be checked without a board. A missing entry would otherwise
+// abort at runtime in `lookup_cycle`.
+[[nodiscard]] constexpr bool has_cycle(LedState state) noexcept {
+    constexpr Cycles kTable = led_cycles();
+    for (const Cycle& cycle : kTable) {
+        const bool match = std::visit(
+            [state](const auto& steps) noexcept {
+                return steps.state_ == state;
+            },
+            cycle);
+        if (match) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /** Turns on and off the LEDs.
  *
  * The LEDs are driven through the board, so the runner is independent of how
@@ -126,73 +191,6 @@ class LedRunner {
     // Task body: waits for state messages and applies them. `[[noreturn]]`,
     // as required by `espidf_cpp::Task<Runner>`.
     [[noreturn]] void run() noexcept;
-
-  private:
-    // The table, built entirely at compile time. Returned by value (the
-    // constructing function is `constexpr`), which avoids referencing the
-    // nested constructors from an in-class static member initializer.
-    static constexpr Cycles cycles() noexcept {
-        return {
-            CycleSteps{LedState::kOff,
-                       Step{std::chrono::hours{1}, RedLed::Off, GreenLed::Off}},
-
-            CycleSteps{
-                LedState::kBoot,
-                Step{std::chrono::milliseconds{20}, RedLed::On, GreenLed::On},
-                Step{std::chrono::milliseconds{20}, RedLed::On, GreenLed::Off}},
-
-            CycleSteps{LedState::kConfig,
-                       Step{std::chrono::hours{1}, RedLed::On, GreenLed::On}},
-
-            CycleSteps{
-                LedState::kConfig_save,
-                Step{std::chrono::milliseconds{50}, RedLed::On, GreenLed::Off},
-                Step{std::chrono::milliseconds{50}, RedLed::On, GreenLed::On}},
-
-            CycleSteps{
-                LedState::kConfig_reset,
-                Step{std::chrono::milliseconds{10}, RedLed::On, GreenLed::Off},
-                Step{std::chrono::milliseconds{10}, RedLed::On, GreenLed::On}},
-
-            CycleSteps{LedState::kRun,
-                       Step{std::chrono::hours{1}, RedLed::Off, GreenLed::On}},
-            CycleSteps{
-                LedState::kRun_battery_low,
-                Step{std::chrono::milliseconds{500}, RedLed::On, GreenLed::Off},
-                Step{std::chrono::milliseconds{500}, RedLed::On, GreenLed::On}},
-
-            CycleSteps{LedState::kRun_uploading,
-                       Step{std::chrono::milliseconds{100}, RedLed::Off,
-                            GreenLed::Off},
-                       Step{std::chrono::milliseconds{100}, RedLed::Off,
-                            GreenLed::On}},
-            CycleSteps{
-                LedState::kRun_upload_error,
-                Step{std::chrono::milliseconds{100}, RedLed::On, GreenLed::Off},
-                Step{std::chrono::milliseconds{100}, RedLed::On, GreenLed::On}},
-        };
-    }
-
-  public:
-    // Whether the compile-time table contains a cycle for `state`. Defined
-    // after `cycles()` (which it calls in a constant expression) and exposed so
-    // that translation units can `static_assert` full `LedState` coverage ---
-    // see the coverage checks at the end of this file. A missing entry would
-    // otherwise abort at runtime in `lookup_cycle`.
-    [[nodiscard]] static constexpr bool has_cycle(LedState state) noexcept {
-        constexpr Cycles kTable = cycles();
-        for (const Cycle& cycle : kTable) {
-            const bool match = std::visit(
-                [state](const auto& steps) noexcept {
-                    return steps.state_ == state;
-                },
-                cycle);
-            if (match) {
-                return true;
-            }
-        }
-        return false;
-    }
 
   private:
     // Change the LEDs to the modes indicated. The board and its LED devices
@@ -252,9 +250,10 @@ template<hal::BoardLike Board>
 
 template<hal::BoardLike Board>
 Cycle const& LedRunner<Board>::lookup_cycle(LedState state) const noexcept {
-    // `cycles()` returns by value, so bind it to a function-local static to
-    // give the table (and thus the returned reference) static storage duration.
-    static constexpr Cycles kTable = cycles();
+    // `led_cycles()` returns by value, so bind it to a function-local static
+    // to give the table (and thus the returned reference) static storage
+    // duration.
+    static constexpr Cycles kTable = led_cycles();
     const auto it = std::find_if(kTable.begin(), kTable.end(),
                                  [state](const Cycle& cycle) noexcept {
                                      return std::visit(
@@ -313,15 +312,15 @@ template<std::size_t N>
 
 // Every `LedState` must have a cycle in the table, or `lookup_cycle` would
 // abort at runtime. Assert coverage at compile time for each enumerator.
-static_assert(LedRunner<hal::Board>::has_cycle(LedState::kOff));
-static_assert(LedRunner<hal::Board>::has_cycle(LedState::kBoot));
-static_assert(LedRunner<hal::Board>::has_cycle(LedState::kConfig));
-static_assert(LedRunner<hal::Board>::has_cycle(LedState::kConfig_save));
-static_assert(LedRunner<hal::Board>::has_cycle(LedState::kConfig_reset));
-static_assert(LedRunner<hal::Board>::has_cycle(LedState::kRun));
-static_assert(LedRunner<hal::Board>::has_cycle(LedState::kRun_battery_low));
-static_assert(LedRunner<hal::Board>::has_cycle(LedState::kRun_uploading));
-static_assert(LedRunner<hal::Board>::has_cycle(LedState::kRun_upload_error));
+static_assert(has_cycle(LedState::kOff));
+static_assert(has_cycle(LedState::kBoot));
+static_assert(has_cycle(LedState::kConfig));
+static_assert(has_cycle(LedState::kConfig_save));
+static_assert(has_cycle(LedState::kConfig_reset));
+static_assert(has_cycle(LedState::kRun));
+static_assert(has_cycle(LedState::kRun_battery_low));
+static_assert(has_cycle(LedState::kRun_uploading));
+static_assert(has_cycle(LedState::kRun_upload_error));
 }  // namespace ledtask
 
 /** FreeRTOS task that runs a `LedRunner<Board>`.

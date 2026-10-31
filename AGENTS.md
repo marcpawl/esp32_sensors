@@ -219,12 +219,24 @@ is rejected with `ESP_ERR_INVALID_ARG`; callers must not start it. The stub
 adds observation accessors (`initialized()`, `ap_running()`,
 `station_running()`, `ap_config()`, `station_config()`), useful in tests.
 
-**The aggregate `Board` owns one of every device**, including the WiFi radio:
+**The aggregate board owns one of every device**, including the WiFi radio:
 `BoardLike` (`hal/board_types.hpp`) requires `wifi()` (mutable and const), and
 `init_all()` initializes the radio last. `init_all()` does **not** start the AP
 or the station — the caller decides (Configure mode starts the AP, Run mode
 starts the station). Reach the stub controls through the board, e.g.
 `board.wifi().start_ap(cfg)` / `board.wifi().ap_running()`.
+
+The two aggregate boards are **named differently on purpose**:
+`hal_board`'s is `thermo::hal::Board` in `hal/board.hpp`, `hal_stub`'s is
+`thermo::hal::BoardStub` in `hal/board_stub.hpp`. Nothing includes one header
+hoping the other implementation is on the include path, so a project states
+which board it linked. `hal_stub`'s devices keep the shared headers
+(`hal/led.hpp`, `hal/wifi.hpp`, …), and the shared `WifiRadio` alias still
+resolves per implementation. Code that must work with either takes the
+`hal::BoardLike` template parameter and never names a concrete board — see
+`logic/led_task.hpp`, whose LED-cycle table and coverage checks are free
+functions (`thermo::ledtask::led_cycles()` / `has_cycle()`), so the
+`static_assert`s naming every `LedState` need no board at all.
 
 **Deep sleep is on the board, not a HAL device.** There is no third sleep
 implementation to swap in, and sleeping powers down the *whole* board rather
@@ -325,12 +337,14 @@ the policy itself is still firmware-only (it reads `rtc_state()`, which needs
 the `RTC_DATA_ATTR` block), while the cold-boot half it delegates to —
 `rtc_state_reset()` — is host-tested in `test_rtc_buffer.cpp`.
 
-`LedRunner` and `LedTask` take a `std::shared_ptr<Board>` (never a null one) and
-share the board with the caller instead of owning it, so the caller can keep
-using the board the task drives (e.g. a test reads back the LEDs). Create it
-with `std::make_shared<Board>(Board::create(pins))` and call `init_all()`
-before starting the task. The HAL itself is unchanged: `Board` stays
-non-copyable and movable.
+`LedRunner` and `LedTask` take a `std::shared_ptr<Board>` (never a null one,
+where `Board` is the `hal::BoardLike` template parameter) and share the board
+with the caller instead of owning it, so the caller can keep using the board
+the task drives (e.g. a test reads back the LEDs). Create it with
+`std::make_shared<BoardStub>(BoardStub::create(pins))` under `hal_stub`, or the
+`port::hal::Board` equivalent under `hal_board`, and call `init_all()` before
+starting the task. The HAL itself is unchanged: both boards stay non-copyable
+and movable.
 
 Layout: `include/logic/` for public headers, `src/` for `.cpp` files
 (`src/temp_format.cpp`, `src/rtc_buffer.cpp`, `src/self_signed_cert.cpp`,
