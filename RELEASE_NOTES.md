@@ -100,6 +100,23 @@ Implemented
   `linux` target requires: `esp_sleep.h` is not self-contained there and the
   port links no `sleep_modes.c`.
 
+- `donny` (the linux-emulated application) now runs a **console task** that
+  gives a test driver a way to change the board: nothing on the `linux` target
+  ever touches hardware, so the driver has to. It reads one JSON object per
+  line from stdin, applies the fields it names to the `hal_stub` board
+  (buttons, LEDs, chip temperature, the sensor bus, the WiFi radio), and writes
+  the resulting state back as one JSON line on stdout. Documents are partial
+  (a missing field leaves that state alone) and the round trip is idempotent,
+  so a driver can read the state, edit one field, and write it back. Errors are
+  reported as `{"error": ..., "state": ...}` without stopping the task, and
+  logs are redirected to stderr so stdout carries only protocol lines. The task
+  starts before `Application`, so a driver can set up the board while the
+  application boots. JSON is provided by nlohmann/json, vendored as a
+  header-only component under the repo-root `third_party/` and required by
+  `donny` alone — the firmware does not depend on it. `third_party/` is
+  outside every directory `scripts/dev.py` clang-formats, so the vendored
+  header stays byte-identical to upstream.
+
 - Development environment: the dev container uses the **prebuilt, pinned**
   image `marcpawl/esp-idf:20261025` (official ESP-IDF v6.1 plus `gh`, PyGithub,
   and esp-clang). Developers and CI *pull* it instead of rebuilding it, so both
