@@ -41,6 +41,12 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 # default search path (that would be `donny/components/`). Point at it.
 set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../components")
 
+# Vendored third-party components (`json` = nlohmann/json) live in the repo-root
+# `third_party/`, not under `donny/`: that keeps them out of every directory
+# `scripts/dev.py` formats, which is the point — vendored sources are copied
+# verbatim from upstream and must not be reformatted.
+list(APPEND EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../third_party")
+
 # Restrict the component set to `main` (and its requirements) plus `hal_stub`.
 # Without this the `linux` target also tries to build chip-specific components
 # such as esp_driver_ana_cmpr, which have no linux implementation and fail to
