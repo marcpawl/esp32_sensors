@@ -439,6 +439,15 @@ back as one JSON line on stdout.
   `app_main` installs `esp_log_set_vprintf()` via a **static-init** struct: doing
   it inside `app_main` is too late, since the port logs "Starting scheduler"
   first.
+- **stdin is read with `read()`, never `fgets`.** The ESP-IDF `linux` FreeRTOS
+  port drives the scheduler from a 1 kHz `SIGALRM` whose handler it installs with
+  `sa_flags = 0` (no `SA_RESTART`), so *every* blocking read returns early with
+  `EINTR`. `fgets` cannot distinguish that from end of file: it sets the sticky
+  error flag and returns `NULL`, so an interactive console saw "EOF" about a
+  millisecond after it started and shut its input down (a pipe only appeared to
+  work because the data was already buffered). `read()` keeps `errno`, so the
+  console task simply retries on `EINTR`; reading the descriptor directly also
+  sidesteps the `FILE` error flag.
 - **The JSON library is vendored in `third_party/`.** `third_party/json` holds
   `nlohmann/json` (v3.11.3, single header, MIT + `LICENSE.MIT`) as a
   header-only ESP-IDF component. It sits in `third_party/` rather than under
