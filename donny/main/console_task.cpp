@@ -46,6 +46,9 @@
 #include <cstdio>
 #include <cstring>
 
+#include <errno.h>
+#include <unistd.h>
+
 #include "hal/ds18b20_types.hpp"
 #include "hal/led_types.hpp"
 #include "hal/push_button_types.hpp"
@@ -58,39 +61,85 @@ namespace {
 
 using json = nlohmann::json;
 
+constexpr char const* const kTag = "console";
+
 // Size of the line buffer. A full snapshot of the stub board is well under
 // 1 KiB; the generous bound leaves room for a driver to send a longer document
 // (for example a sensor list with long ROM IDs) without truncation.
 constexpr std::size_t kLineCapacity = 4096;
 
+// Consumes stdin up to and including the next newline (or end of input).
+void discard_through_newline() {
+    while (true) {
+        char discarded = '\0';
+        const ssize_t count = ::read(STDIN_FILENO, &discarded, 1);
+        if (count < 0 && errno == EINTR) {
+            continue;
+        }
+        if (count <= 0 || discarded == '\n') {
+            return;
+        }
+    }
+}
+
 // Reads one line from stdin into `buffer`, without the newline.
 //
-// Returns `std::nullopt` on end of input. Because the buffer is fixed, an
-// overlong line is a protocol error: the excess is discarded (so the next read
-// starts at a line boundary) and the empty string is returned, which the caller
-// ignores, rather than silently truncating a document.
+// Returns `std::nullopt` on end of input, and `std::string{}` for a line that
+// was too long (the excess is drained so the next read starts at a line
+// boundary, which the caller ignores) rather than silently truncating a
+// document.
+//
+// This is a hand-written reader rather than `std::fgets` because on the ESP-IDF
+// `linux` target the FreeRTOS port drives the scheduler from a 1 kHz
+// `SIGALRM` and installs that handler with `sa_flags = 0` — no `SA_RESTART`.
+// A signal with no `SA_RESTART` makes any blocking read return early, and
+// `fgets` cannot tell "interrupted" from "end of file": it sets the sticky
+// error flag and returns `NULL`. Reading interactively therefore looked exactly
+// like EOF, and the task shut its input down ~1 ms after it started (a pipe
+// only appeared to work because the data was already buffered). `read()` keeps
+// `errno`, so an `EINTR` can simply be resumed — and it is also what clears a
+// spurious `stdin` error flag, since that flag lives on the `FILE` and the
+// handle is read directly here.
 std::optional<std::string> read_line(std::array<char, kLineCapacity>& buffer) {
-    if (std::fgets(buffer.data(), static_cast<int>(buffer.size()), stdin) ==
-        nullptr) {
-        return std::nullopt;
-    }
-    std::size_t length = std::strlen(buffer.data());
-    if (length > 0 && buffer[length - 1] == '\n') {
-        buffer[length - 1] = '\0';
-        --length;
-    } else if (length == buffer.size() - 1) {
-        // No newline and the buffer is full: the line was too long. Drain the
-        // rest so the next read starts on a fresh line.
-        int c;
-        while ((c = std::getchar()) != EOF && c != '\n') {
+    std::size_t length = 0;
+    while (true) {
+        // One byte at a time, so nothing past the newline is consumed: bytes
+        // that arrive together (a write-then-read driver) stay available for
+        // the next call. Reads are only made when the line is incomplete, so
+        // the usual case costs no extra syscall.
+        const ssize_t count = ::read(STDIN_FILENO, &buffer[length], 1);
+        if (count < 0) {
+            if (errno == EINTR) {
+                // The scheduler tick interrupted us; this is not end of input.
+                continue;
+            }
+            ESP_LOGE(kTag, "stdin read failed: %s", std::strerror(errno));
+            return std::nullopt;
         }
-        return std::string{};
+        if (count == 0) {
+            // End of input. A final line without a newline is still delivered.
+            if (length == 0) {
+                return std::nullopt;
+            }
+            break;
+        }
+        if (buffer[length] == '\n') {
+            break;
+        }
+        ++length;
+        if (length == buffer.size()) {
+            // The line is longer than any document the protocol allows. Discard
+            // the remainder so the next read starts at a line boundary.
+            discard_through_newline();
+            ESP_LOGW(kTag, "discarded an over-long line");
+            return std::string{};
+        }
     }
     // Tolerate CRLF from a driver on another platform.
     if (length > 0 && buffer[length - 1] == '\r') {
-        buffer[length - 1] = '\0';
+        --length;
     }
-    return std::string{buffer.data()};
+    return std::string{buffer.data(), length};
 }
 
 // --- Small value helpers ---------------------------------------------------
