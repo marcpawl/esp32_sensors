@@ -26,7 +26,6 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
-import shutil
 import shlex
 import subprocess
 import sys
@@ -48,6 +47,13 @@ ROOTS = (
     "scripts",
 )
 EXTENSIONS = (".cpp", ".hpp", ".h", ".cc", ".cxx")
+
+# clang-format style files. Style is discovered by searching *upward* from each
+# source file, so a nested one (e.g. `DisableFormat: true` over vendored code)
+# overrides the root `.clang-format`. `format-check-staged` must reproduce that
+# search in its temp tree, or it would check a different style than `format`
+# and reject commits that `format` leaves untouched.
+STYLE_FILE_NAMES = (".clang-format", ".clang-format-ignore")
 
 # Docker dev image: the prebuilt ESP-IDF v6.1 image plus this project's tooling
 # (gh, PyGithub, esp-clang). It is pinned in docker-compose.yml too; the tag is
@@ -563,33 +569,106 @@ def _staged_files() -> list[str]:
     return [line for line in out.splitlines() if line.endswith(EXTENSIONS)]
 
 
-def _materialize_staged(files: list[str], tmp_dir: Path) -> None:
+def _staged_blob(path: str, repo: Path = REPO_ROOT) -> bytes:
+    """The exact content of `path` in the index (what a commit would record).
+
+    `_staged_files()` only yields added/copied/modified/renamed paths, so the
+    path is always in the index and `check=True` cannot fire in practice.
+    """
+    return subprocess.run(
+        ("git", "show", f":{path}"),
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    ).stdout
+
+
+def _style_blob(path: str, repo: Path = REPO_ROOT) -> bytes | None:
+    """Content of a clang-format style file, or None if it is being removed.
+
+    Tracked style files are read from the index, so the temp tree mirrors the
+    commit exactly rather than the working copy. A style file that is *not*
+    tracked still counts: `format` honors it in the working tree, and this
+    check must agree with `format` instead of silently falling back to the root
+    style. One staged for deletion is not part of the commit, so it is skipped.
+    """
+    staged = subprocess.run(
+        ("git", "show", f":{path}"),
+        cwd=repo,
+        capture_output=True,
+    )
+    if staged.returncode == 0:
+        return staged.stdout
+    deleted = subprocess.run(
+        ("git", "diff", "--cached", "--name-only", "--diff-filter=D",
+         "--", path),
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    if deleted.strip():
+        return None
+    return (repo / path).read_bytes()
+
+
+def _style_files_for(files: list[str], root: Path = REPO_ROOT) -> list[str]:
+    """Repo-relative clang-format style files that apply to `files`.
+
+    clang-format discovers style by searching *upward* from each source file
+    and stops at the first one it finds, so only the ancestors of these files
+    can contribute. Walking exactly those directories keeps the search cheap
+    and avoids copying the style files of unrelated trees.
+
+    `root` is a parameter so the discovery can be unit-tested against a scratch
+    tree without touching the real repository.
+    """
+    found = set()
+    for f in files:
+        for directory in Path(f).parents:
+            for name in STYLE_FILE_NAMES:
+                candidate = directory / name
+                if (root / candidate).is_file():
+                    found.add(candidate.as_posix())
+    return sorted(found)
+
+
+def _materialize_staged(
+    files: list[str], tmp_dir: Path, repo: Path = REPO_ROOT
+) -> None:
     """Write the staged (index) version of each file into a temp tree.
 
-    We check exactly what is being committed rather than the working copy. The
-    committed .clang-format is copied in too so clang-format discovers it (it
-    searches upward from each source file). Copying beats bind-mounting a
-    single file, which fails when the parent is mounted read-only.
+    We check exactly what is being committed rather than the working copy.
+
+    The clang-format style files that apply to these files are written at the
+    same relative paths, because clang-format finds style by searching upward
+    from each source file. Copying only the root `.clang-format` used to hide a
+    *nested* one (say `DisableFormat: true` over vendored code), so the check
+    reformatted those files against the root style and rejected commits that
+    `format` leaves untouched. Copying beats bind-mounting a single file, which
+    fails when the parent is mounted read-only.
+
+    `repo` is a parameter so this can be exercised against a scratch repo.
     """
-    for f in files:
-        dest = tmp_dir / f
+    contents = [(f, _staged_blob(f, repo)) for f in files]
+    for style in _style_files_for(files, repo):
+        blob = _style_blob(style, repo)
+        if blob is not None:
+            contents.append((style, blob))
+    for path, blob in contents:
+        dest = tmp_dir / path
         dest.parent.mkdir(parents=True, exist_ok=True)
-        blob = subprocess.run(
-            ("git", "show", f":{f}"),
-            cwd=REPO_ROOT,
-            check=True,
-            capture_output=True,
-        ).stdout
         dest.write_bytes(blob)
-    shutil.copyfile(REPO_ROOT / ".clang-format", tmp_dir / ".clang-format")
 
 
 def _run_staged_format_check(tmp_dir: Path, files: list[str]) -> int:
-    """Run clang-format --dry-run --Werror"""
-    return run(
-            ("clang-format", *FORMAT_ARGS, *files),
-            cwd=tmp_dir,
-        )
+    """Run clang-format on the staged copies inside `tmp_dir`.
+
+    The paths stay repo-relative and `cwd` is the temp tree, so clang-format
+    resolves each file's style from the copies `_materialize_staged` wrote.
+    """
+    return run(("clang-format", *FORMAT_ARGS, *files), cwd=tmp_dir)
+
 
 def cmd_format_check_staged() -> int:
     """Check only the staged C/C++ content (used by the pre-commit hook).
@@ -599,7 +678,7 @@ def cmd_format_check_staged() -> int:
     validates exactly what is about to be committed.
     """
     change_to_container()
-            
+
     files = _staged_files()
     if not files:
         return 0

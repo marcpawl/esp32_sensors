@@ -20,8 +20,10 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 
 # Make `import dev` work regardless of the caller's cwd: add this script's
@@ -816,6 +818,220 @@ class GitHooksInstallationTests(unittest.TestCase):
         self.assertIsNotNone(tracked, f"{rel} is not tracked by git")
         on_disk = (dev.REPO_ROOT / self.GITHOOKS_DIR / self.HOOK_NAME).read_text()
         self.assertEqual(on_disk, tracked)
+
+
+class StagedFormatCheckTests(unittest.TestCase):
+    """`format-check-staged` must reproduce the style `format` would apply.
+
+    clang-format discovers style by searching *upward* from each source file,
+    so a nested `.clang-format` overrides the root one. `format` runs on the
+    real working tree and honors that; `format-check-staged` runs on a
+    materialized temp tree, so it has to recreate the same layout or the two
+    disagree.
+
+    They did disagree: only the root `.clang-format` was copied into the temp
+    tree, so a nested `DisableFormat: true` (over vendored code) was ignored
+    and the staged check rejected files that `format` leaves untouched. These
+    tests pin the ancestor-search behavior that fixes it.
+    """
+
+    def _git(self, repo, *args):
+        """Run git in `repo` (a scratch repository) and return stdout."""
+        return subprocess.run(
+            ("git", *args),
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+
+    def _scratch_repo(self):
+        """A throwaway git repository, so no test touches the real index."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        repo = Path(tmp.name)
+        self._git(repo, "init", "-q", ".")
+        self._git(repo, "config", "user.email", "test@example.com")
+        self._git(repo, "config", "user.name", "test")
+        return repo
+
+    def _write(self, repo, relative, content):
+        """Write `content` to `repo/relative`, creating parent directories."""
+        path = repo / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+        return path
+
+    def _stage(self, repo, *relative):
+        """Stage the named paths (paths are relative to `repo`)."""
+        self._git(repo, "add", "--", *relative)
+
+    def _commit(self, repo, message="snapshot"):
+        """Commit the current index so later changes read as staged."""
+        self._git(repo, "commit", "-q", "-m", message)
+
+    # -- style discovery ----------------------------------------------------
+
+    def test_style_files_are_found_by_ancestor_search(self):
+        # Both the root style and the nested one apply to a nested source.
+        repo = self._scratch_repo()
+        self._write(repo, ".clang-format", "Root\n")
+        self._write(repo, "vendor/.clang-format", "DisableFormat: true\n")
+        self._write(repo, "vendor/lib/x.cpp", "int x;\n")
+        self.assertEqual(
+            dev._style_files_for(["vendor/lib/x.cpp"], repo),
+            [".clang-format", "vendor/.clang-format"],
+        )
+
+    def test_style_discovery_only_walks_ancestors_of_the_given_files(self):
+        # A style file in an unrelated tree cannot affect these files, so it
+        # must not be materialized (it would just be dead weight).
+        repo = self._scratch_repo()
+        self._write(repo, ".clang-format", "Root\n")
+        self._write(repo, "other/.clang-format", "Unrelated\n")
+        self._write(repo, "mcgowan/main/x.cpp", "int x;\n")
+        self.assertEqual(
+            dev._style_files_for(["mcgowan/main/x.cpp"], repo),
+            [".clang-format"],
+        )
+
+    def test_style_discovery_includes_the_clang_format_ignore_file(self):
+        repo = self._scratch_repo()
+        self._write(repo, ".clang-format", "Root\n")
+        self._write(repo, "vendor/.clang-format-ignore", "*.c\n")
+        self._write(repo, "vendor/x.cpp", "int x;\n")
+        self.assertEqual(
+            dev._style_files_for(["vendor/x.cpp"], repo),
+            [".clang-format", "vendor/.clang-format-ignore"],
+        )
+
+    def test_style_discovery_finds_the_real_root_style(self):
+        # Against the actual repository, a real source file resolves to the
+        # committed root style (which must stay tracked for a fresh clone).
+        self.assertEqual(
+            dev._style_files_for(
+                ["components/logic/include/logic/led_task.hpp"]
+            ),
+            [".clang-format"],
+        )
+
+    # -- materialization ----------------------------------------------------
+
+    def test_materialize_copies_a_nested_style_to_its_relative_path(self):
+        # The nested style must land at the same depth in the temp tree, or
+        # clang-format's upward search will not reach it.
+        repo = self._scratch_repo()
+        self._write(repo, ".clang-format", "Root\n")
+        self._write(repo, "vendor/.clang-format", "DisableFormat: true\n")
+        self._write(repo, "vendor/x.cpp", "int   x;\n")
+        self._stage(repo, ".clang-format", "vendor/.clang-format")
+        self._stage(repo, "vendor/x.cpp")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            dev._materialize_staged(["vendor/x.cpp"], tmp_dir, repo)
+            self.assertEqual(
+                (tmp_dir / ".clang-format").read_text(), "Root\n"
+            )
+            self.assertEqual(
+                (tmp_dir / "vendor" / ".clang-format").read_text(),
+                "DisableFormat: true\n",
+            )
+            self.assertEqual(
+                (tmp_dir / "vendor" / "x.cpp").read_text(), "int   x;\n"
+            )
+
+    def test_materialize_uses_the_staged_content_not_the_working_copy(self):
+        # The check must validate what is about to be committed, so an
+        # unstaged edit in the working tree is irrelevant.
+        repo = self._scratch_repo()
+        self._write(repo, ".clang-format", "Root\n")
+        self._write(repo, "x.cpp", "int staged;\n")
+        self._stage(repo, ".clang-format", "x.cpp")
+        self._write(repo, "x.cpp", "int working_tree;\n")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            dev._materialize_staged(["x.cpp"], tmp_dir, repo)
+            self.assertEqual(
+                (tmp_dir / "x.cpp").read_text(), "int staged;\n"
+            )
+
+    def test_materialize_skips_a_style_file_staged_for_deletion(self):
+        # A style file being removed is not part of the commit, so the temp
+        # tree must not contain it (otherwise the check would use a style the
+        # commit no longer has). `git rm --cached` keeps the working copy,
+        # which is exactly the case the ancestor search still finds.
+        repo = self._scratch_repo()
+        self._write(repo, ".clang-format", "Root\n")
+        self._write(repo, "vendor/.clang-format", "DisableFormat: true\n")
+        self._write(repo, "x.cpp", "int   x;\n")
+        self._stage(repo, ".clang-format", "vendor/.clang-format", "x.cpp")
+        self._commit(repo)
+        self._git(repo, "rm", "-q", "--cached", "--", "vendor/.clang-format")
+        self._write(repo, "x.cpp", "int   changed;\n")
+        self._stage(repo, "x.cpp")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            dev._materialize_staged(["x.cpp"], tmp_dir, repo)
+            self.assertTrue((tmp_dir / ".clang-format").is_file())
+            self.assertFalse((tmp_dir / "vendor" / ".clang-format").exists())
+
+    def test_materialize_includes_an_untracked_style_file(self):
+        # `format` honors a style file in the working tree whether or not it is
+        # tracked; the staged check must agree rather than silently fall back
+        # to the root style.
+        repo = self._scratch_repo()
+        self._write(repo, ".clang-format", "Root\n")
+        self._write(repo, "vendor/.clang-format", "DisableFormat: true\n")
+        self._write(repo, "vendor/x.cpp", "int   x;\n")
+        self._stage(repo, ".clang-format", "vendor/x.cpp")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            dev._materialize_staged(["vendor/x.cpp"], tmp_dir, repo)
+            self.assertEqual(
+                (tmp_dir / "vendor" / ".clang-format").read_text(),
+                "DisableFormat: true\n",
+            )
+
+    # -- end to end, with a real clang-format ------------------------------
+
+    def _format_check_in_tree(self, repo, files):
+        """Materialize `files` from `repo` and run the real staged check."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            dev._materialize_staged(files, tmp_dir, repo)
+            return dev._run_staged_format_check(tmp_dir, files)
+
+    @unittest.skipUnless(
+        shutil.which("clang-format"), "clang-format is not on PATH"
+    )
+    def test_nested_disable_format_style_lets_unformatted_code_pass(self):
+        # The regression: the nested `DisableFormat: true` used to be dropped,
+        # so this unformatted (but deliberately unformatted) file was rejected.
+        repo = self._scratch_repo()
+        self._write(repo, ".clang-format", "BasedOnStyle: Google\n")
+        self._write(repo, "vendor/.clang-format", "DisableFormat: true\n")
+        self._write(repo, "vendor/x.cpp", "int   x(int   y){return y;}\n")
+        self._stage(repo, ".clang-format", "vendor/.clang-format")
+        self._stage(repo, "vendor/x.cpp")
+        self.assertEqual(self._format_check_in_tree(repo, ["vendor/x.cpp"]), 0)
+
+    @unittest.skipUnless(
+        shutil.which("clang-format"), "clang-format is not on PATH"
+    )
+    def test_root_style_still_rejects_unformatted_code(self):
+        # The fix must not blunt the check: with no nested exemption, the very
+        # same code is still rejected.
+        repo = self._scratch_repo()
+        self._write(repo, ".clang-format", "BasedOnStyle: Google\n")
+        self._write(repo, "vendor/x.cpp", "int   x(int   y){return y;}\n")
+        self._stage(repo, ".clang-format", "vendor/x.cpp")
+        self.assertNotEqual(
+            self._format_check_in_tree(repo, ["vendor/x.cpp"]), 0
+        )
 
 
 class SelfCheckModuleTests(unittest.TestCase):
