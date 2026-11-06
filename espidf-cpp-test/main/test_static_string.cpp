@@ -18,6 +18,7 @@
 
 #include <string>
 
+#include <compare>
 #include <cstddef>
 #include <cstring>
 
@@ -72,6 +73,41 @@ constexpr bool static_string_constexpr_builds() {
 
 static_assert(static_string_constexpr_builds(),
               "static_string must be usable in constant expressions");
+
+// --- constexpr comparisons --------------------------------------------------
+//
+// The comparison operators go through `std::strncmp`, which is a builtin on
+// this toolchain, so they must stay usable in constant expressions too.
+namespace {
+
+constexpr bool static_string_constexpr_compares() {
+    constexpr static_string<8> abc("abc");
+    constexpr static_string<3> abc_tight("abc");
+
+    // Equal contents across capacities, both against each other and against a
+    // C string.
+    const bool equal_across_capacities = abc == abc_tight && abc_tight == abc;
+    const bool equal_to_c_str = abc == "abc" && abc_tight == "abc";
+    const bool unequal = abc != "abd" && abc != static_string<8>("ab");
+
+    // Ordering: a prefix sorts first, then plain character order.
+    const bool ordered = abc < "abd" && static_string<8>("ab") < abc &&
+                         abc > "abb" && abc_tight >= abc && abc_tight <= abc;
+
+    // Three-way comparison agrees with the relational operators.
+    const bool spaceship = (abc <=> abc_tight) == std::strong_ordering::equal &&
+                           (abc <=> "abd") == std::strong_ordering::less &&
+                           (abc <=> "abb") == std::strong_ordering::greater;
+
+    return equal_across_capacities && equal_to_c_str && unequal && ordered &&
+           spaceship;
+}
+
+}  // namespace
+
+static_assert(static_string_constexpr_compares(),
+              "static_string comparisons must be usable in constant "
+              "expressions");
 
 // --- Construction and capacity ----------------------------------------------
 
@@ -275,6 +311,130 @@ TEST_CASE("static_string: append a bounded slice copies exactly n bytes",
     s.append(raw, 3);
     TEST_ASSERT_EQUAL_UINT(5, s.size());
     TEST_ASSERT_EQUAL_STRING("abxyz", s.c_str());
+}
+
+// --- Comparison -------------------------------------------------------------
+
+TEST_CASE("static_string: equal contents compare equal", "[static_string]") {
+    static_string<8> a("abc");
+    static_string<8> b("abc");
+    static_string<3> tight("abc");
+    static_string<8> empty;
+
+    TEST_ASSERT_TRUE(a == b);
+    TEST_ASSERT_FALSE(a != b);
+
+    // Capacity is not part of the value.
+    TEST_ASSERT_TRUE(a == tight);
+    TEST_ASSERT_TRUE(tight == a);
+    TEST_ASSERT_TRUE(a == "abc");
+    TEST_ASSERT_TRUE(empty == "");
+    TEST_ASSERT_TRUE(empty == static_string<1>());
+}
+
+TEST_CASE("static_string: different contents compare unequal",
+          "[static_string]") {
+    static_string<8> abc("abc");
+
+    TEST_ASSERT_TRUE(abc != static_string<8>("abd"));
+    TEST_ASSERT_TRUE(abc != static_string<8>("ab"));
+    TEST_ASSERT_TRUE(abc != static_string<8>("abcd"));
+    TEST_ASSERT_TRUE(abc != "");
+    TEST_ASSERT_TRUE(abc != "abcd");
+    TEST_ASSERT_TRUE(abc != "ab");
+}
+
+TEST_CASE("static_string: a prefix sorts before the longer string",
+          "[static_string]") {
+    static_string<8> ab("ab");
+    static_string<8> abc("abc");
+
+    TEST_ASSERT_TRUE(ab < abc);
+    TEST_ASSERT_TRUE(ab <= abc);
+    TEST_ASSERT_TRUE(abc > ab);
+    TEST_ASSERT_TRUE(abc >= ab);
+    TEST_ASSERT_FALSE(abc < ab);
+    TEST_ASSERT_FALSE(abc <= ab);
+
+    // The empty string is the smallest.
+    static_string<8> empty;
+    TEST_ASSERT_TRUE(empty < ab);
+    TEST_ASSERT_TRUE(empty <= ab);
+    TEST_ASSERT_FALSE(ab < empty);
+}
+
+TEST_CASE("static_string: ordering is by character value", "[static_string]") {
+    // Plain char comparison (strncmp), not collation: 'B' (0x42) < 'a' (0x61).
+    TEST_ASSERT_TRUE(static_string<8>("B") < static_string<8>("a"));
+    TEST_ASSERT_TRUE(static_string<8>("Z") < static_string<8>("a"));
+    TEST_ASSERT_TRUE(static_string<8>("abc") < static_string<8>("abd"));
+
+    // ... and it applies to a C string too.
+    static_string<8> abc("abc");
+    TEST_ASSERT_TRUE(abc < "abd");
+    TEST_ASSERT_TRUE(abc > "abb");
+    TEST_ASSERT_TRUE(abc <= "abc");
+    TEST_ASSERT_TRUE(abc >= "abc");
+}
+
+TEST_CASE(
+    "static_string: the three-way comparison agrees with the "
+    "relational operators",
+    "[static_string]") {
+    static_string<8> abc("abc");
+
+    TEST_ASSERT_TRUE((abc <=> static_string<8>("abc")) ==
+                     std::strong_ordering::equal);
+    TEST_ASSERT_TRUE((abc <=> static_string<8>("abd")) ==
+                     std::strong_ordering::less);
+    TEST_ASSERT_TRUE((abc <=> static_string<8>("abb")) ==
+                     std::strong_ordering::greater);
+
+    TEST_ASSERT_TRUE((abc <=> "abc") == std::strong_ordering::equal);
+    TEST_ASSERT_TRUE((abc <=> "abd") == std::strong_ordering::less);
+    TEST_ASSERT_TRUE((abc <=> "abb") == std::strong_ordering::greater);
+}
+
+TEST_CASE("static_string: a null C string compares as empty",
+          "[static_string]") {
+    static_string<8> empty;
+    static_string<8> abc("abc");
+
+    TEST_ASSERT_TRUE(empty == static_cast<const char*>(nullptr));
+    TEST_ASSERT_FALSE(abc == static_cast<const char*>(nullptr));
+    TEST_ASSERT_TRUE(abc != static_cast<const char*>(nullptr));
+    TEST_ASSERT_TRUE((empty <=> static_cast<const char*>(nullptr)) ==
+                     std::strong_ordering::equal);
+    TEST_ASSERT_TRUE((abc <=> static_cast<const char*>(nullptr)) ==
+                     std::strong_ordering::greater);
+}
+
+TEST_CASE("static_string: an embedded NUL is an ordinary character",
+          "[static_string]") {
+    // A bounded append can store a NUL inside the string. Comparison is by
+    // size() and content -- like std::string, not like strcmp -- so the NUL
+    // does not truncate the comparison, and `==` agrees with `<=>`.
+    static_string<8> embedded;
+    embedded.append("a\0b", 3);
+    TEST_ASSERT_EQUAL_UINT(3, embedded.size());
+
+    // A C string literal cannot *contain* an embedded NUL: "a\0b" is the
+    // one-character string "a". So the C-string overload compares against
+    // one character, and the longer value sorts after it.
+    TEST_ASSERT_TRUE(embedded != "a");
+    TEST_ASSERT_TRUE((embedded <=> "a") == std::strong_ordering::greater);
+    TEST_ASSERT_TRUE(embedded < "b");
+
+    // Against another static_string the NUL is just a character: same bytes
+    // compare equal, and a shorter prefix sorts first.
+    static_string<8> same;
+    same.append("a\0b", 3);
+    TEST_ASSERT_TRUE(embedded == same);
+    TEST_ASSERT_TRUE((embedded <=> same) == std::strong_ordering::equal);
+
+    static_string<3> prefix("a");
+    TEST_ASSERT_TRUE(embedded != prefix);
+    TEST_ASSERT_TRUE(embedded > prefix);
 }
 
 // --- Overflow asserts (fork + exec the standalone program) ------------------
