@@ -11,7 +11,8 @@
 # Usage:
 #   scripts/dev.py [pull|image|build|build-espidf-cpp-test|flash|monitor|\
 #                   menuconfig|test|test-linux|self-check|format|\
-#                   format-check|format-check-staged|install-hooks|shell]
+#                   format-check|format-check-staged|clang-tidy|\
+#                   install-hooks|shell]
 #   scripts/dev.py --help        # full help, including per-command details
 #
 # Environment:
@@ -24,8 +25,10 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
+import re
 import shlex
 import subprocess
 import sys
@@ -123,6 +126,49 @@ SUBPROJECTS = (
 # Host-side unit tests for this script itself (stdlib `unittest`), run by
 # `scripts/dev.py self-check`.
 SELF_CHECK_MODULE = "scripts.test_dev"
+
+# clang-tidy: the ESP-IDF projects whose compile databases seed the analysis,
+# mapped to their build directory. clang-tidy consumes a compilation database,
+# so these builds must have run first (`scripts/dev.py build`).
+TIDY_PROJECTS = (
+    (FIRMWARE_PROJECT, FW_BUILD_DIR),
+    (TEST_PROJECT, TEST_BUILD_DIR),
+    (ESPIDF_CPP_TEST_PROJECT, TEST_BUILD_DIR),
+    (DONNY_PROJECT, TEST_BUILD_DIR),
+)
+
+# Source extensions clang-tidy analyzes. The compile database lists every
+# translation unit, including the generated C/assembly ESP-IDF compiles; only
+# C++ sources are ours to check.
+TIDY_EXTENSIONS = (".cpp", ".cc", ".cxx")
+
+# GCC driver flags clang's driver rejects outright, or accepts only to warn
+# "argument unused" (which `--warnings-as-errors` would turn into a failure).
+# ESP-IDF passes them to the xtensa GCC for code-size reasons; they are
+# meaningless to clang-tidy, which only parses (never code-generates).
+TIDY_DROP_FLAGS = frozenset({
+    "-c",
+    "-fno-jump-tables",
+    "-fno-test-coverage",
+    "-fno-tree-switch-conversion",
+    "-freorder-blocks",
+    "-fstrict-volatile-bitfields",
+    "-mlongcalls",
+    "-mno-target-align",
+})
+
+# GCC flags whose *value* is the following argv element (`-o out.o`,
+# `-MF dep.d`). Either form is dropped, together with its value.
+TIDY_DROP_FLAGS_WITH_VALUE = frozenset({"-o", "-MF", "-MT", "-MQ"})
+
+# GCC flags whose value is glued on with `=` (`-fmacro-prefix-map=a=b`).
+TIDY_DROP_FLAG_PREFIXES = (
+    "-ffile-prefix-map=",
+    "-fdebug-prefix-map=",
+    "-fdiagnostics-color",
+    "-fmacro-prefix-map=",
+    "-specs=",
+)
 
 
 def is_in_container():
@@ -452,6 +498,228 @@ def cmd_format_check() -> int:
     return 0
 
 
+def _tidy_compile_arguments(argv: list[str]) -> list[str]:
+    """Strip the GCC-driver flags clang cannot use from one compile command.
+
+    ESP-IDF compiles with Xtensa GCC, so the compilation database records
+    flags the Espressif `clang-tidy` driver (LLVM) rejects: `-mlongcalls`,
+    `-mno-target-align`, `-fstrict-volatile-bitfields`,
+    `-fno-tree-switch-conversion`, `-fno-jump-tables`, `-freorder-blocks` and
+    `-specs=...` are GCC-only, and `-fmacro-prefix-map=` is not a clang flag
+    spelling clang accepts. Left in, they surface as `clang-diagnostic-error`s
+    (or "argument unused" warnings, which `--warnings-as-errors` promotes).
+
+    `argv` is the whole command line, so `argv[0]` (the compiler) is dropped:
+    clang-tidy takes the driver from its own argv. The trailing source file is
+    **kept**, because clang derives the compilation job from it — without one
+    the driver reports "no input files" and every unit fails. Pure (no I/O), so
+    it is unit-testable.
+    """
+    kept = []
+    skip_value = False
+    for token in argv[1:]:
+        if skip_value:
+            skip_value = False
+            continue
+        if token in TIDY_DROP_FLAGS_WITH_VALUE:
+            skip_value = True
+            continue
+        if token in TIDY_DROP_FLAGS:
+            continue
+        if token.startswith(TIDY_DROP_FLAG_PREFIXES):
+            continue
+        kept.append(token)
+    return kept
+
+
+def _compiler_system_include_flags(compiler: str, args: list[str]) -> list[str]:
+    """Ask `compiler` for its system include dirs, as clang `-isystem` flags.
+
+    clang's driver resolves `<cstdint>`, `<string>`, ... from its own resource
+    directory, which has no libstdc++/newlib headers for the Xtensa target (and
+    no `x86_64` multilib either). GCC does know where they are, so we ask it
+    (`-E -v`) and pass the answer to clang as `-isystem`, together with
+    `-nostdinc` so clang does *not* also search its own, incompatible copy.
+    """
+    command = [compiler, "-E", "-x", "c++", "-v",
+               *[a for a in args if not a.startswith("-I")], "/dev/null"]
+    result = subprocess.run(command, capture_output=True, text=True)
+    match = re.search(
+        r"#include <\.\.\.> search starts here:\n(.*?)\nEnd of search list",
+        result.stderr,
+        re.DOTALL,
+    )
+    if match is None:
+        return []
+    return [f"-isystem{line.strip()}" for line in match.group(1).splitlines()]
+
+
+def _tidy_target_arguments(compiler: str, args: list[str]) -> list[str]:
+    """clang flags making the analysis target match what `compiler` compiles.
+
+    The compile database says *how* to compile but not *for what*: the target
+    triple comes from the driver's name, which clang-tidy replaces with its own
+    (defaulting to a host target). Taking `-dumpmachine` from the recorded
+    compiler restores it — `xtensa-esp-elf` for the firmware, `x86_64-linux-gnu`
+    for the `linux`-target host projects.
+
+    `-Wno-unused-command-line-argument` keeps a stray GCC-only flag from
+    failing the run: clang ignores those, and a diagnostic about the flag says
+    nothing about our code.
+
+    `-nostdinc` stops clang from *also* searching its own resource directory,
+    which would shadow the compiler's headers with an incompatible copy.
+    """
+    machine = subprocess.run(
+        [compiler, "-dumpmachine"], capture_output=True, text=True
+    )
+    triple = machine.stdout.strip()
+    flags = ["-Wno-unused-command-line-argument"]
+    if triple:
+        flags.insert(0, f"--target={triple}")
+    system_flags = _compiler_system_include_flags(compiler, args)
+    if system_flags:
+        # Only suppress clang's own search when there is something to replace
+        # it with; otherwise every `<cstdint>` include would fail.
+        flags.append("-nostdinc")
+        flags.extend(system_flags)
+    return flags
+
+
+def _unique_tidy_units(
+    compilations: list[dict], root: Path = REPO_ROOT
+) -> list[dict]:
+    """The C++ compilation-database entries to analyze, one per source file.
+
+    A shared source (`components/logic/src/payload.cpp`, most of the HAL) is
+    compiled by three or four subprojects, so the union of their databases
+    repeats it. Analyzing it once is enough, and taking the *first* occurrence
+    keeps the verdict stable: the projects are listed firmware-first, so a
+    shared file is checked as the chip build sees it.
+
+    Entries outside `root` (ESP-IDF's own components, the generated
+    `project_elf_src_*.c`) and non-C++ sources are skipped. Pure (no I/O), so
+    it is unit-testable.
+    """
+    seen = set()
+    units = []
+    for entry in compilations:
+        source = Path(entry["file"])
+        if source.suffix not in TIDY_EXTENSIONS:
+            continue
+        try:
+            relative = source.relative_to(root)
+        except ValueError:
+            continue
+        if relative in seen:
+            continue
+        seen.add(relative)
+        units.append(entry)
+    return units
+
+
+def _tidy_database(units: list[dict], destination: Path) -> None:
+    """Write a compilation database clang can consume for `units`.
+
+    Each entry is rewritten from the recorded GCC command line into a
+    clang-compatible one (see `_tidy_compile_arguments`) plus the target flags
+    from `_tidy_target_arguments`. `-fsyntax-only` keeps clang from looking for
+    an output file, since clang-tidy only needs the parse.
+    """
+    # The target flags depend only on the compiler and its non-`-I` arguments
+    # (see `_compiler_system_include_flags`), so they are probed once per
+    # distinct command line rather than once per translation unit.
+    cache: dict[tuple[str, tuple[str, ...]], list[str]] = {}
+    entries = []
+    for unit in units:
+        argv = unit.get("arguments")
+        if argv is None:
+            argv = shlex.split(unit["command"])
+        compiler = argv[0]
+        args = _tidy_compile_arguments(argv)
+        key = (compiler, tuple(a for a in args if not a.startswith("-I")))
+        if key not in cache:
+            cache[key] = _tidy_target_arguments(compiler, args)
+        entries.append({
+            "directory": unit["directory"],
+            "file": unit["file"],
+            "arguments": ["clang++", *cache[key], "-fsyntax-only", *args],
+        })
+    destination.write_text(json.dumps(entries, indent=2))
+
+
+def _tidy_units(projects: list[str]) -> list[dict] | None:
+    """The C++ translation units of `projects`, or None if a build is missing.
+
+    Seeds the analysis from each project's compile database, then reduces the
+    union to one entry per source file (see `_unique_tidy_units`).
+    """
+    compilations: list[dict] = []
+    for project in projects:
+        build_dir = dict(TIDY_PROJECTS)[project]
+        database = REPO_ROOT / project / build_dir / "compile_commands.json"
+        if not database.is_file():
+            print(
+                f"clang-tidy: '{project}' has no "
+                f"{database.relative_to(REPO_ROOT)}; "
+                f"run `scripts/dev.py build {project}` first.",
+                file=sys.stderr,
+            )
+            return None
+        compilations.extend(json.loads(database.read_text()))
+    return _unique_tidy_units(compilations)
+
+
+def cmd_clang_tidy(projects: list[str]) -> int:
+    """Static analysis (clang-tidy) over the C/C++ sources. No container hop.
+
+    Imports the ESP-IDF compile databases so clang-tidy sees the exact flags,
+    defines, and include paths each file is really built with, including the
+    `hal_board`/`hal_stub` split that differs per project.
+
+    Nothing is auto-built: a project with no compile database is reported and
+    the run fails, so CI cannot quietly analyze stale or partial input. Use
+    `scripts/dev.py build` first.
+
+    Uses clang-tidy's default check set (`clang-diagnostic-*`,
+    `clang-analyzer-*`) — the repository commits no `.clang-tidy` — and reports
+    only diagnostics in this repository's own headers, not ESP-IDF's or
+    libstdc++'s. Any finding is an error (`--warnings-as-errors=*`).
+    """
+    change_to_container()
+
+    units = _tidy_units(projects)
+    if units is None:
+        return 1
+    if not units:
+        print("clang-tidy: no C++ sources to analyze", file=sys.stderr)
+        return 1
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_dir = Path(tmp)
+        _tidy_database(units, tmp_dir / "compile_commands.json")
+        print(f"clang-tidy: analyzing {len(units)} C++ sources")
+        return run([
+            "clang-tidy",
+            "-p", str(tmp_dir),
+            "--header-filter", _tidy_header_filter(),
+            "--warnings-as-errors=*",
+            "--quiet",
+            *[unit["file"] for unit in units],
+        ])
+
+
+def _tidy_header_filter() -> str:
+    """Only report diagnostics in *our* headers, not ESP-IDF's or libstdc++'s.
+
+    clang-tidy names a diagnostic by the file it lands in, and a template error
+    often lands in a system header. Restricting to the repository's own
+    directories keeps the signal on code we can fix.
+    """
+    roots = "|".join(re.escape(root) for root in ROOTS if root != "scripts")
+    return rf"^{re.escape(str(REPO_ROOT))}/({roots})/"
+
+
 def cmd_install_hooks() -> int:
     """Activate the version-controlled git hooks (.githooks/pre-commit).
 
@@ -717,6 +985,7 @@ COMMANDS = {
     "format": cmd_format,
     "format-check": cmd_format_check,
     "format-check-staged": cmd_format_check_staged,
+    "clang-tidy": cmd_clang_tidy,
     "install-hooks": cmd_install_hooks,
     "shell": cmd_shell,
     "complete": cmd_complete,
@@ -759,6 +1028,17 @@ def _build_parser() -> argparse.ArgumentParser:
              "omit for all of them",
     )
 
+    # `clang-tidy` analyzes all analyzed projects by default; naming some
+    # restricts the run (handy while working on one subproject).
+    tidy_parser = subparsers.choices["clang-tidy"]
+    tidy_parser.add_argument(
+        "projects",
+        nargs="*",
+        metavar="PROJECT",
+        help=f"subprojects to analyze (any of: {' '.join(SUBPROJECTS)}); "
+             "omit for all of them",
+    )
+
     shell_parser = subparsers.choices["shell"]
     shell_parser.add_argument(
         "-C",
@@ -797,6 +1077,11 @@ def main(argv: list[str]) -> int:
         return cmd_shell(args.args, args.directory)
     if args.command == "build":
         return cmd_build(args.subprojects)
+    if args.command == "clang-tidy":
+        projects = _parse_subprojects(args.projects)
+        if projects is None:
+            return 1
+        return cmd_clang_tidy(projects)
     return args.handler()
 
 

@@ -128,8 +128,38 @@ Implemented
   including GitHub's runner at 1001 — `scripts/dev.py` pins `HOME` and
   `CCACHE_DIR`, fixing the `ccache: error: Permission denied` CI failure.
 
+- Static analysis: `scripts/dev.py clang-tidy` runs clang-tidy's default checks
+  (`clang-diagnostic-*`, `clang-analyzer-*`) over every subproject's C++
+  sources and fails on any finding. It reuses the ESP-IDF compile databases —
+  so the `hal_board`/`hal_stub` split, defines, and include paths are exactly
+  the real build's — and rewrites each entry into a form the Espressif clang
+  accepts (GCC-only flags stripped, the target triple restored from the
+  compiler's `-dumpmachine`, and GCC's system header search list passed as
+  `-isystem` together with `-nostdinc`). It never builds: a missing database is
+  an error telling you to run `scripts/dev.py build <project>` first.
+  Diagnostics are filtered to this repository's own headers, and a shared
+  source compiled by several subprojects is analyzed once. The command is a
+  gate in both the pre-commit hook (before the format check) and CI (after the
+  build).
+
+- The new gate found six pre-existing issues, fixed rather than suppressed: two
+  unused `kTag` constants and an unused `BatteryMonitor` private field, and
+  `HttpField`'s `operator==`, which had been `= default`ed even though
+  `static_string` has no `==` — so it was silently *deleted*, and comparing two
+  fields could never have compiled. It is now an explicit content comparison,
+  with host tests. The two
+  `clang-analyzer-optin.core.EnumCastOutOfRange` findings are suppressed with
+  an explanatory comment each, because the analyzer is right in both cases:
+  `HTTP_ANY` is ESP-IDF's deliberate `INT_MAX` wildcard rather than an
+  enumerator, and `pins::kDividerGate` is a parked defect (below).
+
 Not yet implemented
 -------------------
 
 - Run mode network path: Wi-Fi station connect with cached fast reconnect,
   batch upload of the payload, and exponential backoff.
+- Parked defect: `pins::kDividerGate` is 25, but the ESP32-S3 has no GPIO 22-25
+  (`soc/gpio_num.h` jumps `GPIO_NUM_21` to `GPIO_NUM_26`), so the battery
+  divider gate addresses a pin that does not exist. `Specification.md` §2.4
+  still lists it in classic-ESP32 numbering; the pin map is left unchanged
+  until the spec and the SoC are reconciled.

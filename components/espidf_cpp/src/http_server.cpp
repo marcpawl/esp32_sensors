@@ -393,6 +393,13 @@ esp_err_t HttpServer<BodyCapacity>::start() noexcept {
     any.uri = "/*";
     // HTTP_ANY (INT_MAX) covers every method, so nothing falls through to the
     // ESP-IDF 404 handler before this one sees it.
+    //
+    // HTTP_ANY is deliberately outside `http_method`'s range: ESP-IDF defines
+    // it as a separate `#define HTTP_ANY INT_MAX`, not as an enumerator (the
+    // enumerators come from HTTP_METHOD_MAP and are all small). It is a
+    // wildcard this API accepts as a "match anything" marker, so the cast is
+    // intentional, not a stray out-of-range value.
+    // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
     any.method = static_cast<enum http_method>(HTTP_ANY);
     any.handler = &HttpServer::handle_request;
     any.user_ctx = this;

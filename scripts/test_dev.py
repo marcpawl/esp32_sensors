@@ -820,6 +820,228 @@ class GitHooksInstallationTests(unittest.TestCase):
         self.assertEqual(on_disk, tracked)
 
 
+class TidyCompileArgumentsTests(unittest.TestCase):
+    """`_tidy_compile_arguments` launders a GCC command line for clang.
+
+    The ESP-IDF compile database records Xtensa GCC command lines, which the
+    Espressif clang driver rejects (or warns about, and the gate promotes
+    warnings to errors). These tests pin what is dropped and — just as
+    important — what must survive.
+    """
+
+    def test_drops_the_compiler_from_argv_zero(self):
+        args = dev._tidy_compile_arguments(["gcc", "-DFOO=1", "a.cpp"])
+        self.assertEqual(args, ["-DFOO=1", "a.cpp"])
+
+    def test_keeps_the_source_file(self):
+        # clang derives the compilation job from the input file: without it the
+        # driver reports "no input files" and every translation unit fails.
+        args = dev._tidy_compile_arguments(["gcc", "-c", "a.cpp"])
+        self.assertEqual(args, ["a.cpp"])
+
+    def test_drops_gcc_only_codegen_flags(self):
+        args = dev._tidy_compile_arguments([
+            "gcc",
+            "-mlongcalls",
+            "-mno-target-align",
+            "-fstrict-volatile-bitfields",
+            "-fno-tree-switch-conversion",
+            "-fno-jump-tables",
+            "-freorder-blocks",
+            "-fno-test-coverage",
+            "-std=gnu++26",
+            "a.cpp",
+        ])
+        self.assertEqual(args, ["-std=gnu++26", "a.cpp"])
+
+    def test_drops_prefix_flags(self):
+        args = dev._tidy_compile_arguments([
+            "gcc",
+            "-specs=/opt/esp/idf/tools/esp32s3/specs",
+            "-fmacro-prefix-map=/project/=",
+            "-fdebug-prefix-map=/project/=/",
+            "-ffile-prefix-map=/project/=/",
+            "-fdiagnostics-color=always",
+            "-DFOO=1",
+            "a.cpp",
+        ])
+        self.assertEqual(args, ["-DFOO=1", "a.cpp"])
+
+    def test_drops_value_taking_flags_with_their_value(self):
+        args = dev._tidy_compile_arguments([
+            "gcc",
+            "-o",
+            "a.cpp.obj",
+            "-MF",
+            "a.cpp.d",
+            "-MT",
+            "a.cpp.obj",
+            "-MQ",
+            "a.cpp.obj",
+            "-DFOO=1",
+            "a.cpp",
+        ])
+        self.assertEqual(args, ["-DFOO=1", "a.cpp"])
+
+    def test_keeps_defines_and_include_paths(self):
+        args = dev._tidy_compile_arguments([
+            "gcc",
+            "-DTHERMO_X=1",
+            "-I/project/components/logic/include",
+            "-isystem/opt/esp/idf/components/esp_common/include",
+            "a.cpp",
+        ])
+        self.assertEqual(
+            args,
+            [
+                "-DTHERMO_X=1",
+                "-I/project/components/logic/include",
+                "-isystem/opt/esp/idf/components/esp_common/include",
+                "a.cpp",
+            ],
+        )
+
+
+class TidyUnitSelectionTests(unittest.TestCase):
+    """`_unique_tidy_units` picks one entry per C++ source in the repository."""
+
+    ROOT = Path("/project")
+
+    def _entry(self, path, directory="/project/mcgowan/build_esp32s3"):
+        return {
+            "directory": directory,
+            "file": path,
+            "arguments": ["gcc", "-c", path],
+        }
+
+    def _units(self, entries):
+        return dev._unique_tidy_units(entries, root=self.ROOT)
+
+    def test_keeps_cpp_sources_in_the_repository(self):
+        entry = self._entry("/project/mcgowan/src/main.cpp")
+        self.assertEqual(self._units([entry]), [entry])
+
+    def test_skips_non_cpp_sources(self):
+        entries = [
+            self._entry("/project/mcgowan/src/main.c"),
+            self._entry("/project/mcgowan/src/boot.S"),
+        ]
+        self.assertEqual(self._units(entries), [])
+
+    def test_skips_sources_outside_the_repository(self):
+        # ESP-IDF's own components and the generated project_elf_src file are
+        # in the database but are not ours to analyze.
+        entries = [
+            self._entry("/opt/esp/idf/components/esp_common/src/foo.cpp"),
+            self._entry(
+                "/project/mcgowan/build_esp32s3/project_elf_src_esp32s3.c"
+            ),
+        ]
+        self.assertEqual(self._units(entries), [])
+
+    def test_duplicate_sources_are_analyzed_once(self):
+        # A shared component is compiled by several subprojects.
+        first = self._entry("/project/components/logic/src/payload.cpp")
+        second = self._entry(
+            "/project/components/logic/src/payload.cpp",
+            directory="/project/test/build_linux",
+        )
+        self.assertEqual(self._units([first, second]), [first])
+
+    def test_first_occurrence_wins(self):
+        # Projects are seeded firmware-first, so the chip build's flags decide.
+        firmware = self._entry("/project/components/logic/src/payload.cpp")
+        host = self._entry(
+            "/project/components/logic/src/payload.cpp",
+            directory="/project/test/build_linux",
+        )
+        self.assertEqual(self._units([firmware, host])[0], firmware)
+        self.assertEqual(self._units([host, firmware])[0], host)
+
+    def test_entry_with_command_instead_of_arguments_is_supported(self):
+        # The compilation database allows `command` instead of `arguments`.
+        entry = {
+            "directory": "/project/mcgowan/build_esp32s3",
+            "command": "gcc -DFOO=1 -c /project/mcgowan/src/main.cpp",
+            "file": "/project/mcgowan/src/main.cpp",
+        }
+        self.assertEqual(self._units([entry]), [entry])
+
+
+class TidyConfigurationTests(unittest.TestCase):
+    """clang-tidy configuration that the CI and commit gates depend on."""
+
+    def test_projects_cover_every_buildable_subproject(self):
+        # Every subproject must be analyzed; a missing one silently weakens
+        # the gate.
+        self.assertEqual(
+            [project for project, _ in dev.TIDY_PROJECTS],
+            list(dev.SUBPROJECTS),
+        )
+
+    def test_every_project_build_dir_is_the_one_dev_py_builds(self):
+        # `clang-tidy` reads the databases `build` writes, so the paths must
+        # agree or the gate would tell the user to build what is already built.
+        for project, build_dir in dev.TIDY_PROJECTS:
+            expected = (
+                dev.FW_BUILD_DIR
+                if project == dev.FIRMWARE_PROJECT
+                else dev.TEST_BUILD_DIR
+            )
+            self.assertEqual(build_dir, expected, project)
+
+    def test_header_filter_covers_our_sources_and_excludes_vendored_code(self):
+        # The filter is anchored at the repository root, which is `/project`
+        # inside the container and the checkout path on the host.
+        root = str(dev.REPO_ROOT)
+        pattern = re.compile(dev._tidy_header_filter())
+        for path in (
+            f"{root}/mcgowan/src/include/battery_monitor.hpp",
+            f"{root}/components/logic/include/logic/payload.hpp",
+            f"{root}/test/main/test_main.cpp",
+            f"{root}/espidf-cpp-test/main/test_main.cpp",
+            f"{root}/donny/main/console_task.hpp",
+        ):
+            self.assertIsNotNone(pattern.match(path), path)
+        for path in (
+            "/opt/esp/idf/components/esp_common/include/esp_err.h",
+            "/opt/esp/tools/xtensa-esp-elf/esp-15.2.0/xtensa-esp-elf/"
+            "include/c++/15.2.0/string",
+            # Vendored code lives outside ROOTS and is not ours to fix.
+            f"{root}/third_party/json/json.hpp",
+            f"{root}/scripts/dev.py",
+        ):
+            self.assertIsNone(pattern.match(path), path)
+
+    def test_command_is_registered(self):
+        self.assertIn("clang-tidy", dev.COMMANDS)
+        self.assertIs(dev.COMMANDS["clang-tidy"], dev.cmd_clang_tidy)
+
+
+class TidyGateTests(unittest.TestCase):
+    """`clang-tidy` is wired into the pre-commit hook and into CI."""
+
+    def test_hook_runs_tidy_before_the_format_check(self):
+        # Ordering matters: static analysis reports first, then formatting,
+        # then the slow test suite.
+        hook = (dev.REPO_ROOT / ".githooks" / "pre-commit").read_text()
+        tidy = hook.index('run_check(dev, "clang-tidy")')
+        fmt = hook.index('run_check(dev, "format-check-staged")')
+        tests = hook.index('run_check(dev, "test")')
+        self.assertLess(tidy, fmt)
+        self.assertLess(fmt, tests)
+
+    def test_ci_runs_tidy_after_the_build(self):
+        # clang-tidy consumes the compile databases, so it must come after the
+        # step that produces them.
+        workflow = (
+            dev.REPO_ROOT / ".github" / "workflows" / "ci.yml"
+        ).read_text()
+        build = workflow.index("python3 ./scripts/dev.py build")
+        tidy = workflow.index("python3 ./scripts/dev.py clang-tidy")
+        self.assertLess(build, tidy)
+
+
 class StagedFormatCheckTests(unittest.TestCase):
     """`format-check-staged` must reproduce the style `format` would apply.
 

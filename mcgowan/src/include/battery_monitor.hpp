@@ -37,7 +37,6 @@ class BatteryMonitor {
 
   private:
     bool initialized_ = false;
-    int gate_gpio_ = -1;
     Config const& config_;
 };
 }  // namespace thermo
