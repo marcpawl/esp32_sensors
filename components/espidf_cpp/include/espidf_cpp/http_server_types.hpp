@@ -100,17 +100,12 @@ struct HttpField {
 
     // Compares both halves by content.
     //
-    // `static_string` deliberately has no `==` of its own (only the free
-    // `c_str()`/`size()` view), so `= default` would default this operator to
-    // *deleted* — comparing two fields would fail to compile with "use of
-    // deleted function". Hence the explicit comparison.
-    [[nodiscard]] friend bool operator==(HttpField const& lhs,
-                                         HttpField const& rhs) noexcept {
-        return std::string_view(lhs.name.c_str(), lhs.name.size()) ==
-                   std::string_view(rhs.name.c_str(), rhs.name.size()) &&
-               std::string_view(lhs.value.c_str(), lhs.value.size()) ==
-                   std::string_view(rhs.value.c_str(), rhs.value.size());
-    }
+    // Defaulting works because `static_string` compares by content rather than
+    // by capacity, so two fields are equal exactly when their names and values
+    // are. (Before `static_string` had comparison operators this `= default`
+    // was implicitly *deleted*, and comparing two fields did not compile.)
+    [[nodiscard]] friend bool operator==(HttpField const&,
+                                         HttpField const&) = default;
 };
 
 using HttpFields = static_vector<HttpField, kMaxHttpFormFields>;

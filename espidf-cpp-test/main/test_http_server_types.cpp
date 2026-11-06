@@ -181,8 +181,9 @@ TEST_CASE("http_server_types: fields are fixed-capacity",
 
 TEST_CASE("http_server_types: HttpField compares by content",
           "[http_server_types]") {
-    // `static_string` has no `==`, so this operator must not be defaulted:
-    // defaulting it deletes it, and comparing two fields would not compile.
+    // `operator==` is `= default`, which is only meaningful because
+    // `static_string` compares by content: three different buffers holding the
+    // same text must compare equal, and one differing character must not.
     // (Braced arguments are avoided: the commas inside them would split the
     // Unity macro's arguments.)
     const HttpField expected_name{"a", "1"};

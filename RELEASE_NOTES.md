@@ -144,10 +144,11 @@ Implemented
 
 - The new gate found six pre-existing issues, fixed rather than suppressed: two
   unused `kTag` constants and an unused `BatteryMonitor` private field, and
-  `HttpField`'s `operator==`, which had been `= default`ed even though
-  `static_string` has no `==` — so it was silently *deleted*, and comparing two
-  fields could never have compiled. It is now an explicit content comparison,
-  with host tests. The two
+  `HttpField`'s `operator==`, which had been `= default`ed even though the
+  `static_string` of that branch had no `==` — so it was silently *deleted*,
+  and comparing two fields could never have compiled. It is backed by a host
+  test. (`static_string` gained the comparison operators in a later change, at
+  which point `HttpField`'s operator went back to `= default`.) The two
   `clang-analyzer-optin.core.EnumCastOutOfRange` findings are suppressed with
   an explanatory comment each, because the analyzer is right in both cases:
   `HTTP_ANY` is ESP-IDF's deliberate `INT_MAX` wildcard rather than an
