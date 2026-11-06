@@ -139,10 +139,10 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 - `CMakeLists.txt` (root) — the generator-agnostic aggregator: one prefixed target per subproject invoking `idf.py -C <sub> -B <sub>/<build-dir>`. `-DSUBPROJECTS="mcgowan;test;espidf-cpp-test;donny"` (default: all) selects what is built.
 - `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash environment. Extend these (not ad-hoc `docker run`) when adding tooling. The compose `dev` service is also the target of the Dev Container (see below).
 - `.devcontainer/devcontainer.json` — the CLion / VS Code **Dev Container** definition. It **reuses the compose `dev` service** (it does not define its own image), so CLion pulls/starts the same container the CLI uses. Edit `docker-compose.yml` for image/mount/user changes; edit `devcontainer.json` only for IDE-level wiring.
-- `scripts/dev.py` — the single container task runner (`pull`, `image`, `build`, `flash`, `monitor`, `menuconfig`, `test`, `test-linux`, `self-check`, `format`, `format-check`, `format-check-staged`, `install-hooks`, `shell`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. `shell` is the preferred way to run a container command from the host: with no arguments it opens an interactive login shell, and with arguments it runs them in the container (e.g. `./scripts/dev.py shell ls -1d /`). The pre-commit hook (`.githooks/pre-commit`) delegates its check to `scripts/dev.py format-check-staged`. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
+- `scripts/dev.py` — the single container task runner (`pull`, `image`, `build`, `flash`, `monitor`, `menuconfig`, `test`, `test-linux`, `self-check`, `format`, `format-check`, `format-check-staged`, `clang-tidy`, `install-hooks`, `shell`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. `shell` is the preferred way to run a container command from the host: with no arguments it opens an interactive login shell, and with arguments it runs them in the container (e.g. `./scripts/dev.py shell ls -1d /`). The pre-commit hook (`.githooks/pre-commit`) runs `scripts/dev.py clang-tidy`, then `format-check-staged`, then `test`. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
 - `scripts/idf.sh` — runs a command (normally `idf.py`) with the ESP-IDF environment established, sourcing `$IDF_PATH/export.sh` when `IDF_PYTHON_ENV_PATH`/`ESP_IDF_VERSION` are absent. The image's entrypoint sources `export.sh` for the container's own command only; anything started later — notably the CMake/Ninja build CLion spawns — inherits a bare environment, where `idf.py` dies with `TypeError: expected string or bytes-like object, got 'NoneType'` (`Version.coerce(os.getenv('ESP_IDF_VERSION'))`). So the root aggregator's targets invoke `idf.py` through this wrapper (`set(IDF_RUNNER ...)` in `CMakeLists.txt`), which makes `cmake --build build_root` correct however it was started. `BASH_ENV` cannot substitute: bash sources it only for non-interactive shells and the image's `~/.bashrc` returns early for those. The wrapper is idempotent — it execs the command directly when the variables are already present — and exits non-zero when `IDF_PATH` is not an ESP-IDF checkout.
-- `scripts/test_dev.py` — host-side unit tests for `dev.py` itself (stdlib `unittest`, run by `scripts/dev.py self-check`). Imports `dev.py` in-process and covers its pure helpers — chiefly the command line `shell` builds (so shell syntax like pipes/semicolons is passed through verbatim) and `shell -C` path resolution. `StagedFormatCheckTests` pins `format-check-staged`'s style handling against throwaway git repositories: the ancestor search that finds nested `.clang-format` / `.clang-format-ignore` files, that the *staged* blob (not the working copy) is materialized, that a style file staged for deletion is skipped while an untracked one is honored — plus two end-to-end checks that a nested `DisableFormat: true` exempts unformatted code while the root style still rejects it (they skip on the host, where `clang-format` is not installed). It also pins the `scripts/idf.sh` contract (`IdfRunnerTests`): the wrapper exists, is executable, is tracked by git, establishes the environment, passes the command through unmodified, and is used by the root aggregator's per-subproject helper. `ClionRunConfigurationTests` pins the four CMake run configurations to the CMake project they are actually bound to: `PROJECT_NAME` must be the root `project()` name, `CONFIG_NAME` must name a profile declared in `.idea/cmake.xml`, and `TARGET_NAME` must be one of the root aggregator's `*_build` targets (a subproject's `<name>.elf` is not resolvable from the root and fails with "cannot find target").
-- `scripts/dev.py-completion.bash` — bash tab-completion for `scripts/dev.py`. Source it to complete subcommands (e.g. `./scripts/dev.py form<TAB>` → `format`, `format-check`, `format-check-staged`). It asks `dev.py complete <prefix>` for candidates, so the command list is defined in exactly one place.
+- `scripts/test_dev.py` — host-side unit tests for `dev.py` itself (stdlib `unittest`, run by `scripts/dev.py self-check`). Imports `dev.py` in-process and covers its pure helpers — chiefly the command line `shell` builds (so shell syntax like pipes/semicolons is passed through verbatim) and `shell -C` path resolution. `StagedFormatCheckTests` pins `format-check-staged`'s style handling against throwaway git repositories: the ancestor search that finds nested `.clang-format` / `.clang-format-ignore` files, that the *staged* blob (not the working copy) is materialized, that a style file staged for deletion is skipped while an untracked one is honored — plus two end-to-end checks that a nested `DisableFormat: true` exempts unformatted code while the root style still rejects it (they skip on the host, where `clang-format` is not installed). It also pins the `scripts/idf.sh` contract (`IdfRunnerTests`): the wrapper exists, is executable, is tracked by git, establishes the environment, passes the command through unmodified, and is used by the root aggregator's per-subproject helper. `ClionRunConfigurationTests` pins the four CMake run configurations to the CMake project they are actually bound to: `PROJECT_NAME` must be the root `project()` name, `CONFIG_NAME` must name a profile declared in `.idea/cmake.xml`, and `TARGET_NAME` must be one of the root aggregator's `*_build` targets (a subproject's `<name>.elf` is not resolvable from the root and fails with "cannot find target"). The `Tidy*` classes cover `clang-tidy`: `TidyCompileArgumentsTests` pins which GCC flags are stripped and that the source file and the `-D`/`-I` flags survive; `TidyUnitSelectionTests` pins the one-entry-per-source reduction (non-C++ and out-of-tree entries skipped, first occurrence wins); `TidyConfigurationTests` pins the project list, the build directories it reads, and the header filter; and `TidyGateTests` pins the hook and CI ordering (tidy before format-check, tidy after build).
+- `scripts/dev.py-completion.bash` — bash tab-completion for `scripts/dev.py`. Source it to complete subcommands (e.g. `./scripts/dev.py form<TAB>` → `format`, `format-check`, `format-check-staged`, or `./scripts/dev.py clang-<TAB>` → `clang-tidy`). It asks `dev.py complete <prefix>` for candidates, so the command list is defined in exactly one place.
 - `.idea/cmake.xml` / `.idea/runConfigurations/*.xml` — **committed** shared CLion configuration. `cmake.xml` defines one CMake profile per subproject, so each subproject is indexed and buildable inside the Dev Container; the run configurations drive the build, test, format, flash, and shell tasks (six via `python3 scripts/dev.py`, four native CMake configs — one per profile — for build/refactor). `.idea/workspace.xml` (local, git-ignored) holds per-machine state. **Known limitation:** those profiles do not yet give the code model they were designed for. `GENERATION_DIR` is only the build directory; the source directory comes from the single CMake workspace in `.idea/misc.xml` (the repo root), so all four `cmake-build-*` trees configure the root aggregator (`CMAKE_HOME_DIRECTORY=/project`), contain no `compile_commands.json`, and expose only the four aggregate targets as `UTILITY` targets. Navigation/refactorings are therefore not driven by them; `scripts/dev.py build` is the way to build everything. Fixing it needs either one CLion project per subproject or a merged `compile_commands.json` at the root. **CLion rewrites these XML files from its in-memory model**: it drops XML comments and the trailing newline, and it restores the real `PROJECT_NAME` (`esp32_sensors_subprojects`, the root `project()` name) whenever it has resolved the project. Do not commit its wholesale rewrite — keep the comments and edit only the attribute that genuinely changed.
 - `LICENSE` — GPL-3.0.
 - `RELEASE_NOTES.md` — human-readable release notes; keep the "Implemented" / "Not yet implemented" split honest as milestones land.
@@ -656,6 +656,7 @@ enacted on the host.
 |both|format|clang-format all source code|
 |both|format-check|Check if code is formatted, non-zero exit if anything is unformatted |
 |both|format-check-staged|Check if staged code is formatted, non-zero exit if anything is unformatted |
+|both|clang-tidy [PROJECT...]|Static analysis over the built projects' C++ sources (needs a prior `build`); non-zero exit on any finding|
 |both|shell|Run a bash command in the container (arguments after `shell` are executed); with no arguments, an interactive login shell|
 |both|complete|Print subcommands matching a prefix (internal; used by bash completion)|
 |host|install-hooks|install git commit hooks|
@@ -670,7 +671,8 @@ source scripts/dev.py-completion.bash
 ```
 
 Then `./scripts/dev.py form<TAB>` completes to `format`, `format-check`,
-`format-check-staged`. The script delegates candidate lookup to
+`format-check-staged`, and `./scripts/dev.py clang-<TAB>` to `clang-tidy`. The
+script delegates candidate lookup to
 `dev.py complete <prefix>`, so the command list has a single source of truth.
 
 ### Container commands
@@ -771,7 +773,68 @@ nested `DisableFormat: true` exempts). Vendored code that must stay
 byte-identical belongs in `third_party/` (outside the `ROOTS` `dev.py`
 formats), not under a component with a nested style file.
 
-- **Static checks:** clang-tidy via `idf.py` or standalone; ensure C++26 compatibility with the ESP-IDF toolchain.
+- **Static checks:** `scripts/dev.py clang-tidy` (see below); ensure C++26 compatibility with the ESP-IDF toolchain.
+
+### Static analysis (clang-tidy)
+
+`scripts/dev.py clang-tidy [PROJECT...]` runs clang-tidy over the C++ sources of
+every subproject (or just the named ones) and exits non-zero on any finding. It
+is a gate in both the pre-commit hook and CI, and it uses clang-tidy's
+**default** check set (`clang-diagnostic-*`, `clang-analyzer-*`) — the
+repository commits **no** `.clang-tidy`, so there is nothing to keep in sync:
+
+```bash
+./scripts/dev.py build         # first: produces the compile databases
+./scripts/dev.py clang-tidy    # all subprojects
+./scripts/dev.py clang-tidy donny   # just one
+```
+
+**It reads the ESP-IDF compile databases; it never builds them itself.** A
+project with no `compile_commands.json` is reported and the run fails (rather
+than silently analyzing nothing), so run `build` first — in the pre-commit hook
+that means at least once after a clone or pull.
+
+Three things make the ESP-IDF databases usable by the Espressif clang:
+
+1. **GCC-only flags are stripped.** ESP-IDF compiles with Xtensa GCC, whose
+   command lines carry `-mlongcalls`, `-mno-target-align`,
+   `-fstrict-volatile-bitfields`, `-fno-tree-switch-conversion`,
+   `-fno-jump-tables`, `-freorder-blocks`, `-specs=…`, and `-f…-prefix-map=`;
+   clang rejects them or warns "argument unused", which
+   `--warnings-as-errors=*` would promote to a failure.
+2. **The target triple is restored.** The database says *how* to compile but not
+   *for what* — the triple normally comes from the driver's name, and
+   clang-tidy substitutes its own. It is recovered with
+   `<recorded compiler> -dumpmachine` (`xtensa-esp-elf` for the firmware,
+   `x86_64-linux-gnu` for the `linux` projects).
+3. **The compiler's system headers are passed in.** clang's resource directory
+   has no libstdc++/newlib for the Xtensa target, so GCC's search list is read
+   from `-E -v` and supplied as `-isystem` flags together with `-nostdinc`.
+
+Diagnostics are filtered to this repository's own headers
+(`--header-filter`), so findings in ESP-IDF or libstdc++ — which we cannot fix —
+never fail the gate, and shared sources compiled by several subprojects are
+analyzed once.
+
+Findings are fixed, not suppressed, with one deliberate exception: a NOLINT is
+acceptable only when the analyzer is right but the code must stay as it is, and
+then it carries a comment explaining why. The two current instances are
+`clang-analyzer-optin.core.EnumCastOutOfRange` on `HTTP_ANY` (an `INT_MAX`
+wildcard ESP-IDF accepts by design, not an enumerator) and on
+`pins::kDividerGate` (a **parked defect** — see below).
+
+> **Parked defect:** `pins::kDividerGate` is 25, but the ESP32-S3 has no GPIO
+> 22–25 at all (`soc/gpio_num.h` jumps `GPIO_NUM_21` straight to
+> `GPIO_NUM_26`), so `battery_monitor.cpp`'s cast to `gpio_num_t` addresses a
+> pin that does not exist. `Specification.md` §2.4 still says "GPIO 25
+> (optional)", which is classic-ESP32 numbering, so the spec and this SoC
+> disagree. The pin map is deliberately left alone until that is settled; the
+> analyzer finding is suppressed there with a comment pointing at this note.
+
+**The ESP-IDF tree under `$IDF_PATH` is read-only.** Never edit an ESP-IDF
+header (or anything else under `/opt/esp/idf`) to make a check pass — fixes
+belong in this repository, and a local edit would be lost on the next image
+pull and would not reproduce in CI.
 
 ### Conventions to follow
 

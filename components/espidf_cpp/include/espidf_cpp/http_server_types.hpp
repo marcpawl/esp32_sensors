@@ -98,7 +98,14 @@ struct HttpField {
     HttpFieldName name;
     HttpFieldValue value;
 
-    friend bool operator==(HttpField const&, HttpField const&) = default;
+    // Compares both halves by content.
+    //
+    // Defaulting works because `static_string` compares by content rather than
+    // by capacity, so two fields are equal exactly when their names and values
+    // are. (Before `static_string` had comparison operators this `= default`
+    // was implicitly *deleted*, and comparing two fields did not compile.)
+    [[nodiscard]] friend bool operator==(HttpField const&,
+                                         HttpField const&) = default;
 };
 
 using HttpFields = static_vector<HttpField, kMaxHttpFormFields>;

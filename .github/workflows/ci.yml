@@ -39,6 +39,12 @@ jobs:
         run: |
           python3 ./scripts/dev.py build
 
+      # Static analysis reads the compile databases the build just produced, so
+      # it must run after `build` (it never builds anything itself).
+      - name: Run clang-tidy
+        run: |
+          python3 ./scripts/dev.py clang-tidy
+
       - name: Run tests
         run: |
           python3 ./scripts/dev.py test

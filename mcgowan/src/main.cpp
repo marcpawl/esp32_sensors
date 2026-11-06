@@ -29,9 +29,9 @@
 
 namespace {
 
+#if 0
 constexpr const char* kTag = "app_main";
 
-#if 0
 // Reads the two mode-sense poles and maps them to a mode (§3). The mapping
 // itself is pure and host-tested (`logic/mode_selection.hpp`); this wrapper
 // only turns its hardware-fault result into the firmware's fail-loudly policy.

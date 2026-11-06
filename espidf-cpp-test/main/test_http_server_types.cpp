@@ -178,3 +178,27 @@ TEST_CASE("http_server_types: fields are fixed-capacity",
     TEST_ASSERT_EQUAL_UINT(kMaxHttpFieldValue, field.value.capacity());
     TEST_ASSERT_EQUAL_UINT(kMaxHttpFormFields, HttpFields::capacity());
 }
+
+TEST_CASE("http_server_types: HttpField compares by content",
+          "[http_server_types]") {
+    // `operator==` is `= default`, which is only meaningful because
+    // `static_string` compares by content: three different buffers holding the
+    // same text must compare equal, and one differing character must not.
+    // (Braced arguments are avoided: the commas inside them would split the
+    // Unity macro's arguments.)
+    const HttpField expected_name{"a", "1"};
+    TEST_ASSERT_TRUE(HttpField("a", "1") == expected_name);
+    TEST_ASSERT_FALSE(HttpField("b", "1") == expected_name);
+    TEST_ASSERT_FALSE(HttpField("a", "2") == expected_name);
+    TEST_ASSERT_FALSE(expected_name == HttpField("a", "2"));
+
+    // A content comparison, not a buffer comparison: the same text appended in
+    // pieces compares equal to one built from literals.
+    HttpField built;
+    TEST_ASSERT_TRUE(built.name.try_append("na", 2));
+    TEST_ASSERT_TRUE(built.name.try_append("me", 2));
+    TEST_ASSERT_TRUE(built.value.try_append("val", 3));
+    TEST_ASSERT_TRUE(built.value.try_append("ue", 2));
+    const HttpField reference{"name", "value"};
+    TEST_ASSERT_TRUE(built == reference);
+}
