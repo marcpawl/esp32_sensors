@@ -222,6 +222,23 @@ is rejected with `ESP_ERR_INVALID_ARG`; callers must not start it. The stub
 adds observation accessors (`initialized()`, `ap_running()`,
 `station_running()`, `ap_config()`, `station_config()`), useful in tests.
 
+**The one-shot timer is a HAL device, but a new one.** `hal/timer_types.hpp`
+(`hal_common`) defines the `TimerHandleLike` concept (`cancel()`) and the
+`OneShotTimerLike<Timer, TimerHandle>` concept (`register_timer(milliseconds,
+std::function<void()>) -> TimerHandle`); `hal/timer.hpp` (`hal_board` /
+`hal_stub`) will add the concrete classes. `register` cannot be the method name
+(it is a C++ keyword), hence `register_timer`, which is also the name the board
+then exposes (Step 4 of the plan). The handle type is a concept parameter
+rather than a fixed type, because the two implementations arm timers through
+different mechanisms and the caller only needs `cancel()`. Cancellation is
+**racy by contract**: the callback may already be running (or already be
+queued for the timer task) when `cancel()` returns, so a caller that must not
+act on a stale callback guards the callback body itself. `hal_board` will use
+`esp_timer` (its callback runs in the ESP-IDF timer task); `hal_stub` must use
+FreeRTOS software timers (`freertos/timers.h`) because the `linux` target has
+no `esp_timer` implementation — `test/main/test_freertos_timers.cpp` pins that
+the one-shot API works there.
+
 **The aggregate board owns one of every device**, including the WiFi radio:
 `BoardLike` (`hal/board_types.hpp`) requires `wifi()` (mutable and const), and
 `init_all()` initializes the radio last. `init_all()` does **not** start the AP
@@ -754,7 +771,13 @@ There are two test suites, both runnable from the host via `scripts/dev.py`:
   `config_button()` / `run_button()` / `wifi()` are wired up, that
   `init_all()` initializes but does not start the radio, and that
   `deep_sleep_start()` records the duration while `sleep_get_wakeup_causes()` /
-  `set_wakeup_causes()` model the next boot's wake cause).
+  `set_wakeup_causes()` model the next boot's wake cause). The timer HAL
+  vocabulary is pinned by `test_hal_timer_types.cpp` (which models conforming
+  and non-conforming timer/handle types to prove both concepts reject what they
+  should), and `test_freertos_timers.cpp` verifies that FreeRTOS software
+  timers — what the `hal_stub` timer implementation must be built on, since the
+  `linux` target has no `esp_timer` — create, fire exactly once, re-arm, and
+  stay silent after a cancel.
 - **On-target tests** are planned for hardware-dependent code (1-Wire/DS18B20
   reads, deep-sleep wake, Wi-Fi upload).
 - Keep hardware interactions behind thin interfaces so business logic remains
