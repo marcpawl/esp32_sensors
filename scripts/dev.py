@@ -9,8 +9,8 @@
 # specifics live in one place.
 #
 # Usage:
-#   scripts/dev.py [pull|image|build|build-espidf-cpp-test|flash|monitor|\
-#                   menuconfig|test|test-linux|self-check|format|\
+#   scripts/dev.py [pull|image|submodules|build|build-espidf-cpp-test|flash|\
+#                   monitor|menuconfig|test|test-linux|self-check|format|\
 #                   format-check|format-check-staged|clang-tidy|\
 #                   install-hooks|shell]
 #   scripts/dev.py --help        # full help, including per-command details
@@ -50,6 +50,24 @@ ROOTS = (
     "scripts",
 )
 EXTENSIONS = (".cpp", ".hpp", ".h", ".cc", ".cxx")
+
+# Git submodules holding vendored third-party code the build needs. A bare
+# clone leaves each submodule directory empty, so the build/test/lint commands
+# fetch them first, and `scripts/dev.py submodules` (CI step) does so explicitly.
+#
+# `third_party/sml` is boost-ext/sml (https://github.com/boost-ext/sml),
+# pinned to tag **v1.2.0** via the gitlink recorded in .gitmodules. The
+# `components/sml` component exposes its headers to `logic`, which uses it for
+# the application state machines. Its sources are NOT ours: they sit outside
+# ROOTS (so clang-format never touches them) and are excluded from clang-tidy
+# (see `_is_vendored`).
+SUBMODULES = ("third_party/sml",)
+
+# A file whose presence proves a submodule is actually checked out. Its absence
+# means the gitlink was not fetched (fresh clone, or `--no-recurse-submodules`).
+SUBMODULE_MARKERS = {
+    "third_party/sml": "third_party/sml/include/boost/sml.hpp",
+}
 
 # clang-format style files. Style is discovered by searching *upward* from each
 # source file, so a nested one (e.g. `DisableFormat: true` over vendored code)
@@ -290,6 +308,64 @@ def git(*args: str) -> subprocess.CompletedProcess:
         text=True,
     )
 
+
+def _missing_submodules(markers: dict[str, str] = SUBMODULE_MARKERS,
+                        root: Path = REPO_ROOT) -> list[str]:
+    """Submodule paths that are not checked out yet. Pure (testable).
+
+    A gitlink is recorded in the index whether or not the working tree actually
+    has the sources, so presence is decided by the per-submodule marker file
+    (e.g. `include/boost/sml.hpp`), which only exists once it is fetched.
+    """
+    return [
+        path for path, marker in markers.items() if not (root / marker).is_file()
+    ]
+
+
+def _submodule_update_command(paths: list[str]) -> list[str]:
+    """The `git submodule update` argv that fetches `paths`. Pure (testable).
+
+    `--init` registers the submodule in `.git/config` and `--recursive` covers
+    any nested submodules (boost-ext/sml has none today, but the flag keeps a
+    future one from silently staying empty). Only the named paths are touched,
+    so an unrelated submodule is left exactly as the caller left it.
+    """
+    return ["git", "submodule", "update", "--init", "--recursive", "--", *paths]
+
+
+def _ensure_submodules() -> int:
+    """Check the vendored submodules out if they are missing. No container hop.
+
+    Called at the start of `build`, `test`, and `clang-tidy`, so a bare clone
+    builds without a manual `git submodule update`. When every marker is
+    present this does nothing (the common case), so it costs one `stat` per
+    submodule on every build.
+    """
+    missing = _missing_submodules()
+    if not missing:
+        return 0
+    print(
+        f"Fetching {len(missing)} missing git submodule(s): {' '.join(missing)}"
+    )
+    return run(_submodule_update_command(missing))
+
+
+def cmd_submodules() -> int:
+    """Fetch (check out) the vendored git submodules, e.g. boost-ext/sml.
+
+    Idempotent: submodules already checked out at the pinned commit are left
+    alone. Run it once after a fresh clone, or whenever `.gitmodules` changes
+    — `build`, `test`, and `clang-tidy` also call it automatically, and CI
+    runs it as its own step so a fetch failure is reported on its own.
+    """
+    change_to_container()
+    missing = _missing_submodules()
+    if not missing:
+        print("Submodules: already checked out")
+        return 0
+    return run(_submodule_update_command(missing))
+
+
 def cmd_pull() -> int:
     """Pull the pinned prebuilt dev image from the registry."""
     if is_in_container():
@@ -394,6 +470,9 @@ def cmd_build(args: list[str]) -> int:
     `build test`       → any of: mcgowan test espidf-cpp-test donny
     """
     change_to_container()
+    rc = _ensure_submodules()
+    if rc != 0:
+        return rc
     subprojects = _parse_subprojects(args)
     if subprojects is None:
         return 1
@@ -403,6 +482,9 @@ def cmd_build(args: list[str]) -> int:
 def cmd_build_espidf_cpp_test() -> int:
     """Build the espidf_cpp unit tests for the ESP-IDF `linux` target."""
     change_to_container()
+    rc = _ensure_submodules()
+    if rc != 0:
+        return rc
     return _build_project(ESPIDF_CPP_TEST_PROJECT)
 
 
@@ -434,6 +516,9 @@ def _run_host_tests() -> int:
     Each project in `HOST_TEST_PROJECTS` is pinned to `linux`, built, and its
     ELF run; the first failing suite stops the run with a non-zero status.
     """
+    rc = _ensure_submodules()
+    if rc != 0:
+        return rc
     for project, elf in HOST_TEST_PROJECTS:
         for cmd in (
             _idf(project, TEST_BUILD_DIR, "--preview", "set-target", "linux"),
@@ -586,6 +671,21 @@ def _tidy_target_arguments(compiler: str, args: list[str]) -> list[str]:
     return flags
 
 
+def _is_vendored(relative: Path) -> bool:
+    """True when `relative` (repo-relative) lives inside a vendored submodule.
+
+    Vendored sources are not ours to fix, so neither clang-format nor
+    clang-tidy may report on them. `ROOTS` already keeps them out of the
+    formatted file list (they live under `third_party/`, which is not a root);
+    this is the matching guard for clang-tidy, whose input is the compile
+    database and so is not limited to `ROOTS`. Pure (testable).
+    """
+    return any(
+        relative == Path(sub) or Path(sub) in relative.parents
+        for sub in SUBMODULES
+    )
+
+
 def _unique_tidy_units(
     compilations: list[dict], root: Path = REPO_ROOT
 ) -> list[dict]:
@@ -598,8 +698,8 @@ def _unique_tidy_units(
     shared file is checked as the chip build sees it.
 
     Entries outside `root` (ESP-IDF's own components, the generated
-    `project_elf_src_*.c`) and non-C++ sources are skipped. Pure (no I/O), so
-    it is unit-testable.
+    `project_elf_src_*.c`), vendored submodule sources (see `_is_vendored`),
+    and non-C++ sources are skipped. Pure (no I/O), so it is unit-testable.
     """
     seen = set()
     units = []
@@ -610,6 +710,8 @@ def _unique_tidy_units(
         try:
             relative = source.relative_to(root)
         except ValueError:
+            continue
+        if _is_vendored(relative):
             continue
         if relative in seen:
             continue
@@ -688,6 +790,9 @@ def cmd_clang_tidy(projects: list[str]) -> int:
     """
     change_to_container()
 
+    rc = _ensure_submodules()
+    if rc != 0:
+        return rc
     units = _tidy_units(projects)
     if units is None:
         return 1
@@ -974,6 +1079,7 @@ def cmd_format_check_staged() -> int:
 COMMANDS = {
     "pull": cmd_pull,
     "image": cmd_image,
+    "submodules": cmd_submodules,
     "build": cmd_build,
     "build-espidf-cpp-test": cmd_build_espidf_cpp_test,
     "flash": cmd_flash,

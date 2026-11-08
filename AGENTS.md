@@ -69,7 +69,6 @@ Refer to `Specification.md` for the detailed contracts: operating modes, sample 
 ```
 esp32_sensors/
 ├── Specification.md     # Authoritative software spec (Rev 14) — read this first
-├── RELEASE_NOTES.md     # Human-readable release notes
 ├── CMakeLists.txt       # Root aggregator (plain CMake) — builds all subprojects
 ├── mcgowan/             # Firmware subproject (ESP32-S3, hal_board) -> mcgowan.bin
 │   ├── CMakeLists.txt   #   standalone ESP-IDF project (project(mcgowan))
@@ -82,9 +81,11 @@ esp32_sensors/
 │   ├── logic/           # Board-independent application logic (temp_format, rom_id, payload, limits, led_manager, mode*, led_task, self_signed_cert)
 │   ├── hal_common/      # Shared, header-only HAL vocabulary (types/concepts)
 │   ├── hal_board/       # Real, GPIO-backed HAL (linked by mcgowan)
-│   └── hal_stub/        # Pin-free HAL stub (linked by host tests)
-├── third_party/         # Vendored third-party components (never clang-formatted)
-│   └── json/            #   nlohmann/json v3.11.3 (header-only, MIT)
+│   ├── hal_stub/        # Pin-free HAL stub (linked by host tests)
+│   └── sml/             # Wrapper component exposing the third_party/sml submodule
+├── third_party/         # Vendored third-party code (never formatted, never tidy'd)
+│   ├── json/            #   nlohmann/json v3.11.3 (header-only, MIT)
+│   └── sml/             #   boost-ext/sml git SUBMODULE, pinned to v1.2.0
 ├── test/                # Host-based unit tests subproject (IDF `linux`, Unity)
 ├── espidf-cpp-test/     # Host tests for components/espidf_cpp (IDF `linux`, Unity)
 ├── donny/               # Linux-emulated application (IDF `linux`, hal_stub)
@@ -139,13 +140,12 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 - `CMakeLists.txt` (root) — the generator-agnostic aggregator: one prefixed target per subproject invoking `idf.py -C <sub> -B <sub>/<build-dir>`. `-DSUBPROJECTS="mcgowan;test;espidf-cpp-test;donny"` (default: all) selects what is built.
 - `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash environment. Extend these (not ad-hoc `docker run`) when adding tooling. The compose `dev` service is also the target of the Dev Container (see below).
 - `.devcontainer/devcontainer.json` — the CLion / VS Code **Dev Container** definition. It **reuses the compose `dev` service** (it does not define its own image), so CLion pulls/starts the same container the CLI uses. Edit `docker-compose.yml` for image/mount/user changes; edit `devcontainer.json` only for IDE-level wiring.
-- `scripts/dev.py` — the single container task runner (`pull`, `image`, `build`, `flash`, `monitor`, `menuconfig`, `test`, `test-linux`, `self-check`, `format`, `format-check`, `format-check-staged`, `clang-tidy`, `install-hooks`, `shell`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. `shell` is the preferred way to run a container command from the host: with no arguments it opens an interactive login shell, and with arguments it runs them in the container (e.g. `./scripts/dev.py shell ls -1d /`). The pre-commit hook (`.githooks/pre-commit`) runs `scripts/dev.py clang-tidy`, then `format-check-staged`, then `test`. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
+- `scripts/dev.py` — the single container task runner (`pull`, `image`, `submodules`, `build`, `flash`, `monitor`, `menuconfig`, `test`, `test-linux`, `self-check`, `format`, `format-check`, `format-check-staged`, `clang-tidy`, `install-hooks`, `shell`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. `submodules` fetches the pinned git submodules (`third_party/sml`); `build`, `test`, and `clang-tidy` call the same helper first, so a bare clone builds without a manual step. `shell` is the preferred way to run a container command from the host: with no arguments it opens an interactive login shell, and with arguments it runs them in the container (e.g. `./scripts/dev.py shell ls -1d /`). The pre-commit hook (`.githooks/pre-commit`) runs `scripts/dev.py clang-tidy`, then `format-check-staged`, then `test`. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
 - `scripts/idf.sh` — runs a command (normally `idf.py`) with the ESP-IDF environment established, sourcing `$IDF_PATH/export.sh` when `IDF_PYTHON_ENV_PATH`/`ESP_IDF_VERSION` are absent. The image's entrypoint sources `export.sh` for the container's own command only; anything started later — notably the CMake/Ninja build CLion spawns — inherits a bare environment, where `idf.py` dies with `TypeError: expected string or bytes-like object, got 'NoneType'` (`Version.coerce(os.getenv('ESP_IDF_VERSION'))`). So the root aggregator's targets invoke `idf.py` through this wrapper (`set(IDF_RUNNER ...)` in `CMakeLists.txt`), which makes `cmake --build build_root` correct however it was started. `BASH_ENV` cannot substitute: bash sources it only for non-interactive shells and the image's `~/.bashrc` returns early for those. The wrapper is idempotent — it execs the command directly when the variables are already present — and exits non-zero when `IDF_PATH` is not an ESP-IDF checkout.
-- `scripts/test_dev.py` — host-side unit tests for `dev.py` itself (stdlib `unittest`, run by `scripts/dev.py self-check`). Imports `dev.py` in-process and covers its pure helpers — chiefly the command line `shell` builds (so shell syntax like pipes/semicolons is passed through verbatim) and `shell -C` path resolution. `StagedFormatCheckTests` pins `format-check-staged`'s style handling against throwaway git repositories: the ancestor search that finds nested `.clang-format` / `.clang-format-ignore` files, that the *staged* blob (not the working copy) is materialized, that a style file staged for deletion is skipped while an untracked one is honored — plus two end-to-end checks that a nested `DisableFormat: true` exempts unformatted code while the root style still rejects it (they skip on the host, where `clang-format` is not installed). It also pins the `scripts/idf.sh` contract (`IdfRunnerTests`): the wrapper exists, is executable, is tracked by git, establishes the environment, passes the command through unmodified, and is used by the root aggregator's per-subproject helper. `ClionRunConfigurationTests` pins the four CMake run configurations to the CMake project they are actually bound to: `PROJECT_NAME` must be the root `project()` name, `CONFIG_NAME` must name a profile declared in `.idea/cmake.xml`, and `TARGET_NAME` must be one of the root aggregator's `*_build` targets (a subproject's `<name>.elf` is not resolvable from the root and fails with "cannot find target"). The `Tidy*` classes cover `clang-tidy`: `TidyCompileArgumentsTests` pins which GCC flags are stripped and that the source file and the `-D`/`-I` flags survive; `TidyUnitSelectionTests` pins the one-entry-per-source reduction (non-C++ and out-of-tree entries skipped, first occurrence wins); `TidyConfigurationTests` pins the project list, the build directories it reads, and the header filter; and `TidyGateTests` pins the hook and CI ordering (tidy before format-check, tidy after build).
+- `scripts/test_dev.py` — host-side unit tests for `dev.py` itself (stdlib `unittest`, run by `scripts/dev.py self-check`). Imports `dev.py` in-process and covers its pure helpers — chiefly the command line `shell` builds (so shell syntax like pipes/semicolons is passed through verbatim) and `shell -C` path resolution. `StagedFormatCheckTests` pins `format-check-staged`'s style handling against throwaway git repositories: the ancestor search that finds nested `.clang-format` / `.clang-format-ignore` files, that the *staged* blob (not the working copy) is materialized, that a style file staged for deletion is skipped while an untracked one is honored — plus two end-to-end checks that a nested `DisableFormat: true` exempts unformatted code while the root style still rejects it (they skip on the host, where `clang-format` is not installed). It also pins the `scripts/idf.sh` contract (`IdfRunnerTests`): the wrapper exists, is executable, is tracked by git, establishes the environment, passes the command through unmodified, and is used by the root aggregator's per-subproject helper. `ClionRunConfigurationTests` pins the four CMake run configurations to the CMake project they are actually bound to: `PROJECT_NAME` must be the root `project()` name, `CONFIG_NAME` must name a profile declared in `.idea/cmake.xml`, and `TARGET_NAME` must be one of the root aggregator's `*_build` targets (a subproject's `<name>.elf` is not resolvable from the root and fails with "cannot find target"). The `Tidy*` classes cover `clang-tidy`: `TidyCompileArgumentsTests` pins which GCC flags are stripped and that the source file and the `-D`/`-I` flags survive; `TidyUnitSelectionTests` pins the one-entry-per-source reduction (non-C++ and out-of-tree entries skipped, first occurrence wins); `TidyConfigurationTests` pins the project list, the build directories it reads, and the header filter; and `TidyGateTests` pins the hook and CI ordering (tidy before format-check, tidy after build). `SubmoduleTests` pins the `third_party/sml` git submodule: `.gitmodules` records the upstream URL, the **index** records a `160000` gitlink at the v1.2.0 commit (the index, not `HEAD`, because the submodule is only staged until it is committed), every entry in `dev.SUBMODULES` has a marker file inside it, `_submodule_update_command` builds the `git submodule update --init --recursive -- <path>` argv, the fetch helper is called by `build` / `build-espidf-cpp-test` / `test` / `clang-tidy`, `submodules` runs through the container, and CI fetches submodules **before** it builds. It also pins that `third_party/` is outside `dev.ROOTS` and that `_is_vendored` excludes the submodule from `clang-tidy` while leaving `components/sml` and `components/logic` in scope.
 - `scripts/dev.py-completion.bash` — bash tab-completion for `scripts/dev.py`. Source it to complete subcommands (e.g. `./scripts/dev.py form<TAB>` → `format`, `format-check`, `format-check-staged`, or `./scripts/dev.py clang-<TAB>` → `clang-tidy`). It asks `dev.py complete <prefix>` for candidates, so the command list is defined in exactly one place.
 - `.idea/cmake.xml` / `.idea/runConfigurations/*.xml` — **committed** shared CLion configuration. `cmake.xml` defines one CMake profile per subproject, so each subproject is indexed and buildable inside the Dev Container; the run configurations drive the build, test, format, flash, and shell tasks (six via `python3 scripts/dev.py`, four native CMake configs — one per profile — for build/refactor). `.idea/workspace.xml` (local, git-ignored) holds per-machine state. **Known limitation:** those profiles do not yet give the code model they were designed for. `GENERATION_DIR` is only the build directory; the source directory comes from the single CMake workspace in `.idea/misc.xml` (the repo root), so all four `cmake-build-*` trees configure the root aggregator (`CMAKE_HOME_DIRECTORY=/project`), contain no `compile_commands.json`, and expose only the four aggregate targets as `UTILITY` targets. Navigation/refactorings are therefore not driven by them; `scripts/dev.py build` is the way to build everything. Fixing it needs either one CLion project per subproject or a merged `compile_commands.json` at the root. **CLion rewrites these XML files from its in-memory model**: it drops XML comments and the trailing newline, and it restores the real `PROJECT_NAME` (`esp32_sensors_subprojects`, the root `project()` name) whenever it has resolved the project. Do not commit its wholesale rewrite — keep the comments and edit only the attribute that genuinely changed.
 - `LICENSE` — GPL-3.0.
-- `RELEASE_NOTES.md` — human-readable release notes; keep the "Implemented" / "Not yet implemented" split honest as milestones land.
 
 **`mcgowan/src/` module map:**
 
@@ -302,10 +302,24 @@ and `test_http_server.cpp` — which drives a real server over a loopback socket
 plus fork+exec `_assert` programs for the abort paths); `task.hpp` needs a real
 scheduler and is verified on target by the firmware build.
 
+**`sml` component (`components/sml`).** A **wrapper**, not a copy: the
+state-machine library is the `third_party/sml` git submodule
+([boost-ext/sml](https://github.com/boost-ext/sml), pinned to tag **v1.2.0**),
+and this component only teaches ESP-IDF about it. Upstream is header-only, so
+`SRCS` is empty and `INCLUDE_DIRS` points *outside* the component at
+`third_party/sml/include`; consumers name `sml` in `REQUIRES` and include
+`<boost/sml.hpp>`. The wrapper exists because the upstream tree carries its own
+`CMakeLists.txt` (upstream tests and examples) and must never be discovered as
+an ESP-IDF component. It fails loudly at configure time when the submodule has
+not been checked out, naming `scripts/dev.py submodules`. The component is also
+why `third_party/` stays off every component search path: `donny` names
+`third_party/json` explicitly rather than scanning `/third_party`.
+
 **`logic` component (`components/logic`).** Board-independent application logic,
-shared by the firmware and the host tests. It requires
-only `espidf_cpp` and `hal_common` (the HAL vocabulary), never a concrete HAL
-implementation, and the headers are included with the `logic/` prefix:
+shared by the firmware and the host tests. It requires only `espidf_cpp`,
+`hal_common` (the HAL vocabulary), and `sml` (the state-machine library, via the
+wrapper component below) — never a concrete HAL implementation — and the
+headers are included with the `logic/` prefix:
 
 | Header | Provides |
 |---|---|
@@ -455,12 +469,38 @@ back as one JSON line on stdout.
   `scripts/dev.py` clang-formats: a vendored header must stay byte-identical to
   upstream so it can be diffed against a release. No project sees it by
   default — `donny/CMakeLists.txt` opts in with
-  `list(APPEND EXTRA_COMPONENT_DIRS .../third_party)` and `main` names `json` in
+  `list(APPEND EXTRA_COMPONENT_DIRS .../third_party/json)` (the *component
+  directory*, not the whole of `third_party/`, so the `sml` submodule's own
+  upstream `CMakeLists.txt` can never be discovered) and `main` names `json` in
   its `REQUIRES`. The firmware deliberately does not use it: it formats its
   payload by hand and has no JSON parser, whereas `donny`'s binary size is
   irrelevant. `donny` builds with `CONFIG_COMPILER_CXX_EXCEPTIONS=n`, so the
   parse uses the non-throwing form (`json::parse(line, nullptr, false)` +
   `is_discarded()`), never `try`/`catch`.
+- **The state-machine library is a git submodule.** `third_party/sml` is
+  [boost-ext/sml](https://github.com/boost-ext/sml) at tag **v1.2.0**
+  (commit `2d8485d`), recorded in `.gitmodules` and used by the `logic`
+  component for the application state machines. `components/sml` is a thin
+  ESP-IDF wrapper that exposes the submodule's `include/` directory; `logic`
+  names `sml` in `REQUIRES`, so consumers include `<boost/sml.hpp>` and never
+  name the component themselves. The upstream tree is **never** a component:
+  its own `CMakeLists.txt` builds upstream tests/examples, so it stays off every
+  component search path (`donny/CMakeLists.txt` names
+  `third_party/json` explicitly instead of scanning `third_party/`), and it is
+  outside `ROOTS`, so clang-format never touches it (`_is_vendored` keeps
+  clang-tidy off it too).
+  - **Not vendored, not committed content.** The submodule is pinned by the
+    gitlink recorded in git, so a fresh clone has an empty directory until the
+    sources are fetched. `scripts/dev.py submodules` fetches them
+    (`git submodule update --init --recursive -- <path>`, idempotent), and
+    `build`, `test`, and `clang-tidy` call the same helper first, so a bare
+    clone builds without a manual step. CI runs `submodules` as its own step,
+    before `build`, so a failed fetch is reported on its own rather than as a
+    confusing configure error.
+  - **Updating the pin:** `git -C third_party/sml checkout v1.2.1`, then
+    `git add third_party/sml` in this repo (and update the version in this
+    document and `components/sml/CMakeLists.txt`). `scripts/dev.py self-check`
+    pins the gitlink to the v1.2.0 commit.
 
 **Not yet present (expected next):**
 - On-target tests for hardware-dependent code (1-Wire, deep-sleep, Wi-Fi).
@@ -645,6 +685,7 @@ enacted on the host.
 |===|===|===|
 |host|pull|Pull the pinned prebuilt dev image from the registry|
 |host|image|Build the dev image locally from the Dockerfile (not needed normally)|
+|both|submodules|Fetch the pinned git submodules (`third_party/sml`)|
 |both|build [SUBPROJECT...]|Build all subprojects via the root aggregator, or just the named ones (mcgowan, test, espidf-cpp-test, donny)|
 |both|build-espidf-cpp-test|Build the espidf_cpp unit tests for the ESP-IDF `linux` target|
 |both|test|Run the host unit test suites (alias of `test-linux`)|
@@ -771,7 +812,9 @@ copying every style file on the ancestors of the staged files, so a staged
 check applies exactly the style `format` would (and does not reject files a
 nested `DisableFormat: true` exempts). Vendored code that must stay
 byte-identical belongs in `third_party/` (outside the `ROOTS` `dev.py`
-formats), not under a component with a nested style file.
+formats), not under a component with a nested style file — that is why the
+`third_party/sml` submodule, whose `components/sml` wrapper *is* in scope, is
+never formatted.
 
 - **Static checks:** `scripts/dev.py clang-tidy` (see below); ensure C++26 compatibility with the ESP-IDF toolchain.
 
@@ -814,7 +857,9 @@ Three things make the ESP-IDF databases usable by the Espressif clang:
 Diagnostics are filtered to this repository's own headers
 (`--header-filter`), so findings in ESP-IDF or libstdc++ — which we cannot fix —
 never fail the gate, and shared sources compiled by several subprojects are
-analyzed once.
+analyzed once. Vendored code is excluded outright: `_unique_tidy_units()` drops
+every entry under `third_party/`, so the `third_party/sml` submodule is never
+analyzed (its `components/sml` wrapper is, since that file is ours).
 
 Findings are fixed, not suppressed, with one deliberate exception: a NOLINT is
 acceptable only when the analyzer is right but the code must stay as it is, and

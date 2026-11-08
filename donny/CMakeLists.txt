@@ -41,11 +41,19 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 # default search path (that would be `donny/components/`). Point at it.
 set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../components")
 
-# Vendored third-party components (`json` = nlohmann/json) live in the repo-root
-# `third_party/`, not under `donny/`: that keeps them out of every directory
-# `scripts/dev.py` formats, which is the point — vendored sources are copied
-# verbatim from upstream and must not be reformatted.
-list(APPEND EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../third_party")
+# Vendored third-party components live in the repo-root `third_party/`, not
+# under `donny/`: that keeps them out of every directory `scripts/dev.py`
+# formats, which is the point — vendored sources are copied verbatim from
+# upstream and must not be reformatted.
+#
+# It names the *individual* components (`third_party/json`) rather than
+# `third_party/` as a whole. `third_party/` also holds the `sml` git submodule
+# (`third_party/sml`), whose upstream tree has its own `CMakeLists.txt` and a
+# `test/` directory of sibling projects; scanning the directory would treat
+# those as ESP-IDF components. The ESP-IDF face of sml is the wrapper
+# component `components/sml`, found via `EXTRA_COMPONENT_DIRS` above, so the
+# submodule itself is never on a component search path.
+list(APPEND EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../third_party/json")
 
 # Restrict the component set to `main` (and its requirements) plus `hal_stub`.
 # Without this the `linux` target also tries to build chip-specific components
