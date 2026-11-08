@@ -49,6 +49,7 @@ set(test_srcs
     "test_hal_wifi.cpp"
     "test_hal_board.cpp"
     "test_led_runner.cpp"
+    "test_freertos_timers.cpp"
 )
 
 # Production sources under test (paths are relative to this component dir).
