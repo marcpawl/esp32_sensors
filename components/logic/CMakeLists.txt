@@ -13,8 +13,10 @@
 # conversions (`logic/rom_id.hpp`, `src/rom_id.cpp`), the §9 upload payload
 # (`logic/payload.hpp`, `src/payload.cpp`) and, as it grows, the rest of the
 # logic shared by the firmware and the host tests. It
-# depends only on `espidf_cpp` and the HAL *vocabulary* (`hal_common`), so the
-# same code links into:
+# depends on `espidf_cpp`, the HAL *vocabulary* (`hal_common`), and `sml` — the
+# thin wrapper component around the `third_party/sml` git submodule, which
+# provides boost-ext/sml for the state machines this component owns. The same
+# code links into:
 #
 #   * `mcgowan/` — production firmware, driving the GPIO-backed `hal::Board`
 #                  from `hal_board`.
@@ -45,4 +47,9 @@ idf_component_register(
     REQUIRES
         espidf_cpp
         hal_common
+        # boost-ext/sml (v1.2.0), via the wrapper component in
+        # `components/sml` that exposes the `third_party/sml` submodule. The
+        # state machines live in this component, so its consumers do not name
+        # `sml` themselves.
+        sml
 )

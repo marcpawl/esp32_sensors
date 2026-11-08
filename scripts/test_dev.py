@@ -223,6 +223,137 @@ class SubprojectBuildTests(unittest.TestCase):
             )
 
 
+class SubmoduleTests(unittest.TestCase):
+    """The vendored `sml` submodule and the commands that fetch and skip it.
+
+    `third_party/sml` is a git submodule pinned to boost-ext/sml v1.2.0 and a
+    requirement of the `logic` component. A bare clone leaves it empty, so
+    `build`/`test`/`clang-tidy` fetch it and CI runs `submodules` on its own.
+    Its sources are vendored: never formatted, never analyzed.
+    """
+
+    SML_PATH = "third_party/sml"
+    SML_URL = "https://github.com/boost-ext/sml.git"
+    # The commit tag v1.2.0 points at; the gitlink must record exactly this.
+    SML_COMMIT = "2d8485da6661519a7697b5f800c7165c543fa499"
+
+    def test_sml_is_a_registered_submodule(self):
+        self.assertIn(self.SML_PATH, dev.SUBMODULES)
+
+    def test_every_submodule_has_a_marker_inside_it(self):
+        for submodule in dev.SUBMODULES:
+            with self.subTest(submodule=submodule):
+                marker = dev.SUBMODULE_MARKERS[submodule]
+                self.assertTrue(
+                    marker.startswith(submodule + "/"),
+                    f"marker {marker!r} is outside {submodule}",
+                )
+
+    def test_gitmodules_records_the_submodule_url(self):
+        gitmodules = (dev.REPO_ROOT / ".gitmodules").read_text()
+        self.assertIn(f"path = {self.SML_PATH}", gitmodules)
+        self.assertIn(f"url = {self.SML_URL}", gitmodules)
+
+    def test_sml_is_pinned_to_the_v1_2_0_commit(self):
+        # A gitlink (mode 160000) records the exact commit, so the pin is a tag
+        # that resolves to one commit rather than a branch that moves. Read the
+        # index (`ls-files -s`), which is what a commit records and which is
+        # already correct before the submodule is committed.
+        entry = subprocess.run(
+            ("git", "ls-files", "-s", "--", self.SML_PATH),
+            cwd=dev.REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split()
+        self.assertEqual(entry[0], "160000", entry)
+        self.assertEqual(entry[1], self.SML_COMMIT, entry)
+
+    def test_missing_submodules_reports_an_unfetched_tree(self):
+        # A bare clone has the gitlink but no marker file, so the fetch path
+        # must fire; with the marker present it must not.
+        markers = {self.SML_PATH: f"{self.SML_PATH}/include/boost/sml.hpp"}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.assertEqual(
+                dev._missing_submodules(markers, root=root), [self.SML_PATH]
+            )
+            marker = root / markers[self.SML_PATH]
+            marker.parent.mkdir(parents=True)
+            marker.write_text("// sml\n")
+            self.assertEqual(dev._missing_submodules(markers, root=root), [])
+
+    def test_update_command_init_recurses_over_the_named_paths(self):
+        self.assertEqual(
+            dev._submodule_update_command([self.SML_PATH]),
+            [
+                "git", "submodule", "update", "--init", "--recursive", "--",
+                self.SML_PATH,
+            ],
+        )
+
+    def test_submodules_command_is_registered_and_documented(self):
+        self.assertIn("submodules", dev.COMMANDS)
+        self.assertIs(dev.COMMANDS["submodules"], dev.cmd_submodules)
+        self.assertTrue((dev.cmd_submodules.__doc__ or "").strip())
+
+    def _function_body(self, name):
+        source = (dev.REPO_ROOT / "scripts" / "dev.py").read_text()
+        return source.split(f"def {name}", 1)[1].split("\ndef ", 1)[0]
+
+    def test_commands_fetch_missing_submodules(self):
+        # A fresh clone must build/test/lint without a manual submodule step,
+        # so each entry point checks first.
+        for name in (
+            "cmd_build",
+            "cmd_build_espidf_cpp_test",
+            "_run_host_tests",
+            "cmd_clang_tidy",
+        ):
+            with self.subTest(function=name):
+                self.assertIn("_ensure_submodules()", self._function_body(name))
+
+    def test_submodules_command_does_not_hop_into_a_container(self):
+        # `git submodule update` runs on whichever side invoked dev.py, so the
+        # vendored sources land in the real working tree either way.
+        self.assertIn("change_to_container()", self._function_body("cmd_submodules"))
+
+    def test_ci_fetches_submodules_before_building(self):
+        workflow = (
+            dev.REPO_ROOT / ".github" / "workflows" / "ci.yml"
+        ).read_text()
+        fetch = workflow.index("python3 ./scripts/dev.py submodules")
+        build = workflow.index("python3 ./scripts/dev.py build")
+        self.assertLess(fetch, build)
+
+    def test_vendored_sources_are_never_analyzed_or_formatted(self):
+        # clang-tidy is seeded from the compile database (not ROOTS), so it
+        # needs an explicit guard; clang-format discovers files under ROOTS,
+        # and `third_party/` is not one of them.
+        self.assertTrue(
+            dev._is_vendored(Path(f"{self.SML_PATH}/include/boost/sml.hpp"))
+        )
+        self.assertFalse(dev._is_vendored(Path("components/sml/CMakeLists.txt")))
+        self.assertFalse(
+            dev._is_vendored(Path("components/logic/include/logic/mode.hpp"))
+        )
+        self.assertNotIn("third_party", dev.ROOTS)
+
+    def test_component_wraps_the_submodule_headers(self):
+        # ESP-IDF needs a component with `idf_component_register`; the upstream
+        # tree must never be one, so a thin wrapper points at its headers and
+        # `logic` requires that wrapper.
+        wrapper = (
+            dev.REPO_ROOT / "components" / "sml" / "CMakeLists.txt"
+        ).read_text()
+        self.assertIn("idf_component_register", wrapper)
+        self.assertIn(f"{self.SML_PATH}/include", wrapper)
+        logic = (
+            dev.REPO_ROOT / "components" / "logic" / "CMakeLists.txt"
+        ).read_text()
+        self.assertIn("sml", logic.split("REQUIRES", 1)[1])
+
+
 class IdfRunnerTests(unittest.TestCase):
     """The aggregate targets reach `idf.py` through `scripts/idf.sh`.
 
