@@ -1,6 +1,6 @@
 # Software Specification: ESP32 Solar-Powered Thermometer Logger
 
-**Version:** Rev 14
+**Version:** Rev 15
 **Status:** Ready for implementation
 **Date:** 2026-10-25
 
@@ -31,13 +31,13 @@ A solar-powered, battery-backed ESP32-S3 that samples three DS18B20 thermometers
 |---|---|
 | Host OS | Linux Mint |
 | Container runtime | Docker |
-| Container image | `marcpawl/esp-idf:20261025` (prebuilt) |
+| Container image | `marcpawl/esp-idf:20261109` (prebuilt) |
 | Source language | **C++26** (GNU extensions, `-std=gnu++26`) |
 | Target framework | ESP-IDF v6.1 |
 
 ### Why This Image
 
-`marcpawl/esp-idf:20261025` is the **prebuilt, published** development image.
+`marcpawl/esp-idf:20261109` is the **prebuilt, published** development image.
 It extends the official `espressif/idf:release-v6.1` image (the officially
 supported build environment for ESP-IDF: cross-compiler toolchain, CMake,
 Ninja, Python virtual environment, and all required packages) with this
@@ -60,7 +60,7 @@ supplies the user mapping and environment flags described below:
 
 ```bash
 # Pull the pinned image (host only; not run inside a container)
-./scripts/dev.py pull       # == docker pull marcpawl/esp-idf:20261025
+./scripts/dev.py pull       # == docker pull marcpawl/esp-idf:20261109
 
 # Build the firmware, run the host tests, check formatting
 ./scripts/dev.py build
@@ -79,7 +79,7 @@ The equivalent ad-hoc form, if a command must bypass `dev.py`:
 ```bash
 docker run --rm -v $PWD:/project -w /project -u "$(id -u):$(id -g)" \
   -e HOME=/tmp -e CCACHE_DIR=/tmp/.cache/ccache \
-  marcpawl/esp-idf:20261025 idf.py build
+  marcpawl/esp-idf:20261109 idf.py build
 ```
 
 > **Docker note (Linux):** Your user must have access to the Docker daemon (typically via the `docker` group) and to the serial device (via the `dialout` group). Add with:
@@ -108,7 +108,7 @@ defines its own image). CLion pulls the pinned image when it is not cached and
 starts the container on demand.
 
 - Point CLion at the standard Docker socket (`unix:///var/run/docker.sock`).
-- Select the `marcpawl/esp-idf:20261025` image (or open the repo as a Dev
+- Select the `marcpawl/esp-idf:20261109` image (or open the repo as a Dev
   Container, which takes it from `docker-compose.yml`).
 - CLion will run commands inside the container transparently.
 
@@ -750,3 +750,4 @@ Panel ≈ 8 / 0.504 / 3 ≈ 5.3 mW
 | 12 | Container runtime switched from Podman to **Docker**. |
 | 13 | Container image pinned to the prebuilt `marcpawl/esp-idf:20261025` (the official `espressif/idf:release-v6.1` image plus project tooling: `gh`, PyGithub, esp-clang), pulled by developers and CI rather than built locally. Container runs as the calling user (no chown); `HOME`/`CCACHE_DIR` are pinned for non-1000 uids so ccache works on CI (runner uid 1001). CLion attaches through the Dev Container. |
 | 14 | §8 RTC layout: `buffer` and `rom_ids` are fixed-capacity vectors with inline storage that carry their own element counts, so the separate `buffer_len` / `rom_count` counters are removed. The block remains trivially copyable and is still restored verbatim across deep sleep. |
+| 15 | Container image republished as `marcpawl/esp-idf:20261109`: the Rev 13 image rebuilt to add the Node.js runtime and Continue CLI (`cn`), and to create the `~/.continue`, `~/.ssh`, and `~/.config/gh` mount points the compose service bind-mounts. Same base image and toolchain as Rev 13. |

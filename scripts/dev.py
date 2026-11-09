@@ -88,7 +88,7 @@ STYLE_FILE_NAMES = (".clang-format", ".clang-format-ignore")
 # never moved, so update it in both places (test_dev.py asserts they agree).
 # `LOCAL_IMAGE` is only what `image` (a local rebuild) produces, for trying out
 # Dockerfile changes.
-DEV_IMAGE = "marcpawl/esp-idf:20261025"
+DEV_IMAGE = "marcpawl/esp-idf:20261109"
 LOCAL_IMAGE = "esp32-sensors-dev:local"
 
 # User baked into DEV_IMAGE, and where ccache lives under a writable HOME. A

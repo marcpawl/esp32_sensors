@@ -2,7 +2,7 @@
 
 ## Project Description
 
-This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its software specification (Rev 14). Firmware implementation is **in progress**: Configure mode is fully implemented; Run mode is scaffolded with the network paths (Wi-Fi station, batch upload, backoff) intentionally stubbed.
+This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its software specification (Rev 15). Firmware implementation is **in progress**: Configure mode is fully implemented; Run mode is scaffolded with the network paths (Wi-Fi station, batch upload, backoff) intentionally stubbed.
 
 **What it does:**
 - A solar-powered, battery-backed ESP32 samples three **DS18B20** thermometers on a shared **1-Wire bus**.
@@ -23,7 +23,7 @@ This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its s
 | Host OS | Linux Mint |
 | IDE | CLion 2026.2 |
 | Container runtime | Docker |
-| Container image | `marcpawl/esp-idf:20261025` (prebuilt: `espressif/idf:release-v6.1` + project tooling) |
+| Container image | `marcpawl/esp-idf:20261109` (prebuilt: `espressif/idf:release-v6.1` + project tooling) |
 | Source language | **C++26** (GNU extensions, `-std=gnu++26`) |
 | Target framework | ESP-IDF v6.1 |
 | Toolchain | GCC 15.2.0 (Xtensa `esp-15.2.0_20251204`, bundled with ESP-IDF v6.1) |
@@ -36,7 +36,7 @@ This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its s
 > - **Run mode — scaffolded/stubbed.** Real: boot self-test LEDs, battery read + hysteresis, sensor read with cached ROM IDs (first-boot scan), sample append to the RTC buffer, deep sleep. **Stubbed:** Wi-Fi station connect + cached fast-reconnect (§3.9), batch upload + payload wire-out (§9, payload is formatted and logged but not sent), exponential backoff (§3.7).
 > - **Host unit tests.** `test/` and `espidf-cpp-test/` build for the ESP-IDF `linux` target (Unity) and run via `scripts/dev.py test` (alias of `test-linux` / `build-espidf-cpp-test`). On-target tests for hardware-dependent code are planned.
 
-> **Toolchain note:** The host's locally installed ESP-IDF is **v6.1** with **Xtensa GCC 15.2.0** (`esp-15.2.0_20251204`), which matches the pinned Docker image `marcpawl/esp-idf:20261025` exactly (it is built on `espressif/idf:release-v6.1`). Keep both in sync: if you upgrade the host toolchain, change the base image in `Dockerfile`, publish a new image under a **new** date-stamped tag (never move an existing tag), and bump the pin in `docker-compose.yml` + `scripts/dev.py` (`DEV_IMAGE`) and this document.
+> **Toolchain note:** The host's locally installed ESP-IDF is **v6.1** with **Xtensa GCC 15.2.0** (`esp-15.2.0_20251204`), which matches the pinned Docker image `marcpawl/esp-idf:20261109` exactly (it is built on `espressif/idf:release-v6.1`). Keep both in sync: if you upgrade the host toolchain, change the base image in `Dockerfile`, publish a new image under a **new** date-stamped tag (never move an existing tag), and bump the pin in `docker-compose.yml` + `scripts/dev.py` (`DEV_IMAGE`) and this document.
 
 ## Architecture Overview
 
@@ -68,7 +68,7 @@ Refer to `Specification.md` for the detailed contracts: operating modes, sample 
 
 ```
 esp32_sensors/
-├── Specification.md     # Authoritative software spec (Rev 14) — read this first
+├── Specification.md     # Authoritative software spec (Rev 15) — read this first
 ├── CMakeLists.txt       # Root aggregator (plain CMake) — builds all subprojects
 ├── mcgowan/             # Firmware subproject (ESP32-S3, hal_board) -> mcgowan.bin
 │   ├── CMakeLists.txt   #   standalone ESP-IDF project (project(mcgowan))
@@ -600,15 +600,15 @@ extern "C" void app_main(void);
 
 ## Development Workflow
 
-> **Important:** All builds run inside the ESP-IDF Docker environment. The environment is defined by the committed `Dockerfile` + `docker-compose.yml`, but the image itself is **prebuilt and pulled** (`marcpawl/esp-idf:20261025`); use `docker compose run --rm dev <cmd>` (or `./scripts/dev.py shell <cmd>`) rather than ad-hoc `docker run`. `sdkconfig` is generated (git-ignored) — edit `sdkconfig.defaults` instead when changing configuration intent.
+> **Important:** All builds run inside the ESP-IDF Docker environment. The environment is defined by the committed `Dockerfile` + `docker-compose.yml`, but the image itself is **prebuilt and pulled** (`marcpawl/esp-idf:20261109`); use `docker compose run --rm dev <cmd>` (or `./scripts/dev.py shell <cmd>`) rather than ad-hoc `docker run`. `sdkconfig` is generated (git-ignored) — edit `sdkconfig.defaults` instead when changing configuration intent.
 
 ### Development environment setup
 
-All builds run inside the prebuilt ESP-IDF Docker image to guarantee a reproducible toolchain (ESP-IDF v6.1, Xtensa GCC 15.2.0, CMake, Ninja, Python venv). The image `marcpawl/esp-idf:20261025` is pinned in `docker-compose.yml`, is never moved, and is the same image CI pulls, so there is nothing to build locally:
+All builds run inside the prebuilt ESP-IDF Docker image to guarantee a reproducible toolchain (ESP-IDF v6.1, Xtensa GCC 15.2.0, CMake, Ninja, Python venv). The image `marcpawl/esp-idf:20261109` is pinned in `docker-compose.yml`, is never moved, and is the same image CI pulls, so there is nothing to build locally:
 
 ```bash
 # From the repository root, pull the pinned dev image (first time, or to refresh)
-./scripts/dev.py pull       # == docker pull marcpawl/esp-idf:20261025
+./scripts/dev.py pull       # == docker pull marcpawl/esp-idf:20261109
 
 # Interactive shell with the ESP-IDF environment auto-sourced
 docker compose run --rm dev
@@ -652,7 +652,7 @@ required.
   it never defines its own image).
 - **Connect:** open the repo in CLion and accept the Dev Container prompt, or use
   *Remote Development → Dev Containers → docker-compose.yml → `dev`*. CLion
-  pulls `marcpawl/esp-idf:20261025` if it is not cached and starts the service on
+  pulls `marcpawl/esp-idf:20261109` if it is not cached and starts the service on
   demand. Note that compose falls back to building the local `Dockerfile` if the
   pull fails, so run `./scripts/dev.py pull` first if you want that failure to be
   loud.
