@@ -59,7 +59,7 @@ using thermo::hal::ButtonState;
 using thermo::hal::copy_text;
 using thermo::hal::LedState;
 using thermo::hal::StationConfig;
-using thermo::hal::TimerHandleLike;
+using thermo::hal::TimerLike;
 using thermo::hal::wake_cause_bit;
 using thermo::hal::WakeCause;
 using thermo::hal::WakeCauses;
@@ -265,9 +265,8 @@ TEST_CASE("hal board: the board names a cancelable TimerHandle type",
           "[hal_board]") {
     // The `BoardLike` contract requires a public member typedef, and the
     // handle it names must be cancelable — that is all a holder needs.
-    static_assert(
-        std::same_as<BoardStub::TimerHandle, thermo::hal::TimerHandleStub>);
-    static_assert(TimerHandleLike<BoardStub::TimerHandle>);
+    static_assert(std::same_as<BoardStub::TimerHandle, thermo::hal::TimerStub>);
+    static_assert(TimerLike<BoardStub::TimerHandle>);
     TEST_PASS();
 }
 
@@ -461,7 +460,7 @@ TEST_CASE("hal board: stub BoardStub models BoardLike", "[hal_board]") {
                                WakeCauses>);
     // The one-shot timer is part of the same contract: the board names the
     // handle type and arms timers through it.
-    static_assert(TimerHandleLike<BoardStub::TimerHandle>);
+    static_assert(TimerLike<BoardStub::TimerHandle>);
     static_assert(
         std::same_as<decltype(std::declval<BoardStub&>().register_timer(
                          kTimerDelay, std::function<void()>{})),

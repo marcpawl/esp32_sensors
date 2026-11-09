@@ -7,7 +7,7 @@
 // target. Each `register_timer()` allocates one `TimerCallbackBox` (the
 // caller's `std::function`), creates a one-shot (`pdFALSE`, i.e. no
 // auto-reload) FreeRTOS timer whose `pvTimerID` is that box, starts it, and
-// hands the caller a `TimerHandleStub` that owns both.
+// hands the caller a `TimerStub` that owns both.
 //
 // Lifetime is the delicate part, because the FreeRTOS timer API is
 // *asynchronous*: `xTimerStart()`, `xTimerStop()`, and `xTimerDelete()` only
@@ -79,21 +79,20 @@ TickType_t delay_to_ticks(std::chrono::milliseconds delay) {
 
 }  // namespace
 
-// --- TimerHandleStub -------------------------------------------------------
+// --- TimerStub ---------------------------------------------------------------
 
-TimerHandleStub::TimerHandleStub(TimerHandle_t timer,
-                                 TimerCallbackBox* box) noexcept
+TimerStub::TimerStub(TimerHandle_t timer, TimerCallbackBox* box) noexcept
     : timer_(timer), box_(box) {}
 
-TimerHandleStub::TimerHandleStub(TimerHandleStub&& other) noexcept
+TimerStub::TimerStub(TimerStub&& other) noexcept
     : timer_(std::exchange(other.timer_, nullptr)),
       box_(std::exchange(other.box_, nullptr)) {}
 
-TimerHandleStub::~TimerHandleStub() {
+TimerStub::~TimerStub() {
     cancel();
 }
 
-TimerHandleStub& TimerHandleStub::operator=(TimerHandleStub&& other) noexcept {
+TimerStub& TimerStub::operator=(TimerStub&& other) noexcept {
     if (this != &other) {
         // Release this handle's timer before taking the other's.
         cancel();
@@ -103,7 +102,7 @@ TimerHandleStub& TimerHandleStub::operator=(TimerHandleStub&& other) noexcept {
     return *this;
 }
 
-void TimerHandleStub::cancel() noexcept {
+void TimerStub::cancel() noexcept {
     if (timer_ == nullptr) {
         return;
     }
@@ -136,7 +135,7 @@ void TimerHandleStub::cancel() noexcept {
 
 // --- OneShotTimerFactoryStub -------------------------------------------------
 
-TimerHandleStub OneShotTimerFactoryStub::register_timer(
+TimerStub OneShotTimerFactoryStub::register_timer(
     std::chrono::milliseconds delay, std::function<void()> callback) {
     assert(callback != nullptr);
     TickType_t const ticks = delay_to_ticks(delay);
@@ -152,7 +151,7 @@ TimerHandleStub OneShotTimerFactoryStub::register_timer(
         // would never end.
         delete box;
         assert(false && "xTimerCreate failed");
-        return TimerHandleStub();
+        return TimerStub();
     }
 
     if (xTimerStart(timer, portMAX_DELAY) != pdPASS) {
@@ -162,10 +161,10 @@ TimerHandleStub OneShotTimerFactoryStub::register_timer(
         (void)xTimerDelete(timer, portMAX_DELAY);
         delete box;
         assert(false && "xTimerStart failed");
-        return TimerHandleStub();
+        return TimerStub();
     }
 
-    return TimerHandleStub(timer, box);
+    return TimerStub(timer, box);
 }
 
 }  // namespace thermo::hal

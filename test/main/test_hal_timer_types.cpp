@@ -24,7 +24,7 @@
 namespace {
 
 using thermo::hal::OneShotTimerFactoryLike;
-using thermo::hal::TimerHandleLike;
+using thermo::hal::TimerLike;
 
 // --- Model types ------------------------------------------------------------
 
@@ -54,7 +54,7 @@ struct GoodTimer {
     }
 };
 
-// Returns a handle that does not satisfy `TimerHandleLike`, so it cannot model
+// Returns a handle that does not satisfy `TimerLike`, so it cannot model
 // the timer whatever handle type the caller names.
 struct NoCancelReturnTimer {
     NoCancelHandle register_timer(std::chrono::milliseconds /*delay*/,
@@ -93,35 +93,33 @@ struct ReferenceReturnTimer {
 
 }  // namespace
 
-// --- TimerHandleLike --------------------------------------------------------
+// --- TimerLike --------------------------------------------------------------
 
-TEST_CASE("hal timer types: a class with cancel() models TimerHandleLike",
+TEST_CASE("hal timer types: a class with cancel() models TimerLike",
           "[hal_timer_types]") {
-    static_assert(TimerHandleLike<GoodHandle>);
+    static_assert(TimerLike<GoodHandle>);
     TEST_PASS();
 }
 
-TEST_CASE("hal timer types: TimerHandleLike requires cancel()",
-          "[hal_timer_types]") {
-    static_assert(!TimerHandleLike<NoCancelHandle>);
-    static_assert(!TimerHandleLike<NotATimer>);
+TEST_CASE("hal timer types: TimerLike requires cancel()", "[hal_timer_types]") {
+    static_assert(!TimerLike<NoCancelHandle>);
+    static_assert(!TimerLike<NotATimer>);
     // A non-class cannot be a handle, even if it had the right shape.
-    static_assert(!TimerHandleLike<int>);
+    static_assert(!TimerLike<int>);
     // A reference is not a handle: the caller owns the handle by value.
-    static_assert(!TimerHandleLike<GoodHandle&>);
+    static_assert(!TimerLike<GoodHandle&>);
     TEST_PASS();
 }
 
-TEST_CASE("hal timer types: TimerHandleLike requires a void cancel()",
+TEST_CASE("hal timer types: TimerLike requires a void cancel()",
           "[hal_timer_types]") {
     // The concept pins the return type: a `bool cancel()` would not satisfy it,
     // so an implementation cannot silently change what cancelling reports.
-    static_assert(!TimerHandleLike<WrongReturnHandle>);
+    static_assert(!TimerLike<WrongReturnHandle>);
     TEST_PASS();
 }
 
-// --- OneShotTimerFactoryLike
-// -------------------------------------------------------
+// --- OneShotTimerFactoryLike ------------------------------------------------
 
 TEST_CASE("hal timer types: a conforming timer models OneShotTimerFactoryLike",
           "[hal_timer_types]") {
@@ -135,9 +133,9 @@ TEST_CASE("hal timer types: OneShotTimerFactoryLike names its handle type",
     // return type, so a conforming timer does not model the concept with some
     // *other* handle:
     static_assert(!OneShotTimerFactoryLike<GoodTimer, NoCancelHandle>);
-    // ...and a timer whose return type is not a `TimerHandleLike` at all never
+    // ...and a timer whose return type is not a `TimerLike` at all never
     // satisfies it, for any handle type.
-    static_assert(!TimerHandleLike<NoCancelHandle>);
+    static_assert(!TimerLike<NoCancelHandle>);
     static_assert(!OneShotTimerFactoryLike<NoCancelReturnTimer, GoodHandle>);
     static_assert(
         !OneShotTimerFactoryLike<NoCancelReturnTimer, NoCancelHandle>);

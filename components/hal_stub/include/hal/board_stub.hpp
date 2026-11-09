@@ -27,7 +27,7 @@
 //
 // The one-shot timer is owned by the board as well: `register_timer()` arms an
 // `OneShotTimerFactoryStub` and returns the board's `TimerHandle` (here
-// `TimerHandleStub`). A test therefore arms a timer through the board and can
+// `TimerStub`). A test therefore arms a timer through the board and can
 // observe it firing, exactly as the firmware does — and because the stub is
 // built on FreeRTOS software timers, that callback really does run.
 #pragma once
@@ -61,8 +61,8 @@ class BoardStub {
   public:
     // The type `register_timer()` returns: the FreeRTOS-backed handle. A caller
     // only needs `cancel()`, so board-independent code holds it as
-    // `BoardStub::TimerHandle` rather than naming `TimerHandleStub`.
-    using TimerHandle = TimerHandleStub;
+    // `BoardStub::TimerHandle` rather than naming `TimerStub`.
+    using TimerHandle = TimerStub;
 
     // `pins` describes the wiring; see `BoardPins`. The stub ignores the pin
     // numbers but keeps the LED labels for logging. Constructs the devices but
@@ -145,7 +145,7 @@ class BoardStub {
     // task; capture whatever state it needs in the callable.
     //
     // Part of the `BoardLike` contract, so callers arm timers through the board
-    // and never name `OneShotTimerFactoryStub` / `TimerHandleStub`. Fails
+    // and never name `OneShotTimerFactoryStub` / `TimerStub`. Fails
     // loudly (an assert) if the delay rounds to fewer than one tick, the
     // callback is null, or the timer cannot be created or started.
     //

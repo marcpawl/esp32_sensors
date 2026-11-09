@@ -47,19 +47,19 @@ using thermo::hal::ChipTemperature;
 using thermo::hal::Led;
 using thermo::hal::OneWire;
 using thermo::hal::PushButton;
-using thermo::hal::TimerHandleLike;
-using thermo::hal::TimerHandleStub;
+using thermo::hal::TimerLike;
+using thermo::hal::TimerStub;
 using thermo::hal::WakeCauses;
 using thermo::hal::WifiRadio;
 
 // A handle that is a class but has no `cancel()`: exactly the mistake a board
-// could make, and which `TimerHandleLike` must reject.
+// could make, and which `TimerLike` must reject.
 struct NotCancelable {
     void stop() {}
 };
 
 // A second, *cancelable* handle. Lets "the return type must match the board's
-// own typedef" be tested without also tripping `TimerHandleLike`.
+// own typedef" be tested without also tripping `TimerLike`.
 struct OtherHandle {
     void cancel() {}
 };
@@ -166,7 +166,7 @@ struct NoTimerHandleTypedef : BoardWithoutTimer {
         return {};
     }
 
-    [[nodiscard]] TimerHandleStub register_timer(
+    [[nodiscard]] TimerStub register_timer(
         std::chrono::milliseconds /*delay*/,
         std::function<void()> /*callback*/) const noexcept {
         return {};
@@ -178,7 +178,7 @@ struct NoRegisterTimer : BoardWithoutTimer {
     // See `ModelBoard`: the return type has to name this model, not the base.
     static NoRegisterTimer create(BoardPins /*pins*/) noexcept { return {}; }
 
-    using TimerHandle = TimerHandleStub;
+    using TimerHandle = TimerStub;
 };
 
 }  // namespace
@@ -187,10 +187,10 @@ struct NoRegisterTimer : BoardWithoutTimer {
 
 TEST_CASE("hal board types: a complete board models BoardLike",
           "[hal_board_types]") {
-    static_assert(BoardLike<ModelBoard<TimerHandleStub>>);
+    static_assert(BoardLike<ModelBoard<TimerStub>>);
     // The handle the model names is cancelable, which is the whole of what
     // `BoardLike` asks of `TimerHandle`.
-    static_assert(TimerHandleLike<ModelBoard<TimerHandleStub>::TimerHandle>);
+    static_assert(TimerLike<ModelBoard<TimerStub>::TimerHandle>);
     TEST_PASS();
 }
 
@@ -206,9 +206,9 @@ TEST_CASE("hal board types: BoardLike requires a public TimerHandle type",
 
 TEST_CASE("hal board types: BoardLike requires a TimerHandle that is a class",
           "[hal_board_types]") {
-    // `void` is not a class, so `TimerHandleLike` rejects it: a board cannot
+    // `void` is not a class, so `TimerLike` rejects it: a board cannot
     // satisfy the concept by naming a "handle" nobody could hold.
-    static_assert(!TimerHandleLike<void>);
+    static_assert(!TimerLike<void>);
     static_assert(!BoardLike<ModelBoard<void>>);
     TEST_PASS();
 }
@@ -217,7 +217,7 @@ TEST_CASE("hal board types: BoardLike requires a cancelable TimerHandle",
           "[hal_board_types]") {
     // The typedef is a class, but the handle has no `cancel()`, so a caller
     // could never disarm a timer.
-    static_assert(!TimerHandleLike<NotCancelable>);
+    static_assert(!TimerLike<NotCancelable>);
     static_assert(!BoardLike<ModelBoard<NotCancelable>>);
     TEST_PASS();
 }
@@ -227,8 +227,8 @@ TEST_CASE("hal board types: BoardLike pins the register_timer return type",
     // Both handles are cancelable, so the only thing wrong is that
     // `register_timer()` returns one type while the board names another: a
     // caller storing the result as `TimerHandle` would not compile.
-    static_assert(TimerHandleLike<OtherHandle>);
-    static_assert(!BoardLike<ModelBoard<TimerHandleStub, OtherHandle>>);
+    static_assert(TimerLike<OtherHandle>);
+    static_assert(!BoardLike<ModelBoard<TimerStub, OtherHandle>>);
     TEST_PASS();
 }
 
@@ -248,6 +248,6 @@ TEST_CASE("hal board types: BoardLike rejects a non-board",
     // A non-class cannot be a board.
     static_assert(!BoardLike<int>);
     // A reference is not a board: callers own the board.
-    static_assert(!BoardLike<ModelBoard<TimerHandleStub>&>);
+    static_assert(!BoardLike<ModelBoard<TimerStub>&>);
     TEST_PASS();
 }

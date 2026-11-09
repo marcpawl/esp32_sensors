@@ -1,9 +1,9 @@
 // Hardware abstraction: one-shot timer, software-driven stub for the host
 // tests.
 //
-// The shared timer vocabulary (`TimerHandleLike`, `OneShotTimerFactoryLike`)
+// The shared timer vocabulary (`TimerLike`, `OneShotTimerFactoryLike`)
 // lives in the header-only `hal_common` component (`hal/timer_types.hpp`); this
-// header adds the concrete `TimerHandleStub` and `OneShotTimerFactoryStub`
+// header adds the concrete `TimerStub` and `OneShotTimerFactoryStub`
 // classes. `hal_board` provides the real implementation on top of `esp_timer`,
 // so the code that must work with either takes the
 // `hal::OneShotTimerFactoryLike` template parameter and never names a concrete
@@ -35,9 +35,9 @@
 //     the race cannot read freed memory — but a caller that must not act on a
 //     stale callback still has to guard the callback body itself.
 //
-// Ownership: `register_timer()` hands the caller a `TimerHandleStub` that owns
-// the FreeRTOS timer, so a dropped handle deletes the timer instead of leaking
-// it. The handle is move-only for that reason: two owners would double-delete.
+// Ownership: `register_timer()` hands the caller a `TimerStub` that owns the
+// FreeRTOS timer, so a dropped handle deletes the timer instead of leaking it.
+// The handle is move-only for that reason: two owners would double-delete.
 #pragma once
 
 // NOLINTBEGIN
@@ -70,16 +70,16 @@ using TimerCallbackBox = std::function<void()>;
 // service task has drained the delete, so that is safe but not instantaneous.
 //
 // The handle is move-only: it owns the timer and deletes it on destruction.
-class TimerHandleStub {
+class TimerStub {
   public:
-    TimerHandleStub() noexcept = default;
+    TimerStub() noexcept = default;
 
-    TimerHandleStub(TimerHandleStub const&) = delete;
-    TimerHandleStub(TimerHandleStub&& other) noexcept;
-    ~TimerHandleStub();
+    TimerStub(TimerStub const&) = delete;
+    TimerStub(TimerStub&& other) noexcept;
+    ~TimerStub();
 
-    TimerHandleStub& operator=(TimerHandleStub const&) = delete;
-    TimerHandleStub& operator=(TimerHandleStub&& other) noexcept;
+    TimerStub& operator=(TimerStub const&) = delete;
+    TimerStub& operator=(TimerStub&& other) noexcept;
 
     // Disarms the timer, so no *further* callback is scheduled, and releases
     // it. Idempotent: cancelling a handle that holds no timer, or one whose
@@ -94,7 +94,7 @@ class TimerHandleStub {
     friend class OneShotTimerFactoryStub;
 
     // Takes ownership of an already-started timer and of its callback box.
-    TimerHandleStub(TimerHandle_t timer, TimerCallbackBox* box) noexcept;
+    TimerStub(TimerHandle_t timer, TimerCallbackBox* box) noexcept;
 
     TimerHandle_t timer_ = nullptr;
     TimerCallbackBox* box_ = nullptr;
@@ -127,14 +127,14 @@ class OneShotTimerFactoryStub {
     // least one tick, a null callback, or a failed create/start trips an assert
     // rather than silently dropping the request — a dropped timer would leave
     // the caller waiting forever.
-    [[nodiscard]] TimerHandleStub register_timer(
-        std::chrono::milliseconds delay, std::function<void()> callback);
+    [[nodiscard]] TimerStub register_timer(std::chrono::milliseconds delay,
+                                           std::function<void()> callback);
 };
 
-static_assert(TimerHandleLike<TimerHandleStub>,
-              "TimerHandleStub must satisfy the TimerHandleLike concept");
+static_assert(TimerLike<TimerStub>,
+              "TimerStub must satisfy the TimerLike concept");
 static_assert(
-    OneShotTimerFactoryLike<OneShotTimerFactoryStub, TimerHandleStub>,
+    OneShotTimerFactoryLike<OneShotTimerFactoryStub, TimerStub>,
     "OneShotTimerFactoryStub must satisfy the OneShotTimerFactoryLike concept");
 
 }  // namespace thermo::hal

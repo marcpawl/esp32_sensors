@@ -40,8 +40,8 @@ namespace {
 
 using thermo::hal::OneShotTimerFactoryLike;
 using thermo::hal::OneShotTimerFactoryStub;
-using thermo::hal::TimerHandleLike;
-using thermo::hal::TimerHandleStub;
+using thermo::hal::TimerLike;
+using thermo::hal::TimerStub;
 
 // Long enough to be cancelled before it expires, short enough to keep the suite
 // fast (`configTICK_RATE_HZ` is 100 on this target, so this is 20 ticks).
@@ -93,22 +93,21 @@ int calls_after_quiet_period(std::atomic<int>& calls) {
 
 TEST_CASE("hal timer stub: the stub models both timer concepts",
           "[hal_timer_stub]") {
-    static_assert(TimerHandleLike<TimerHandleStub>);
-    static_assert(
-        OneShotTimerFactoryLike<OneShotTimerFactoryStub, TimerHandleStub>);
+    static_assert(TimerLike<TimerStub>);
+    static_assert(OneShotTimerFactoryLike<OneShotTimerFactoryStub, TimerStub>);
     // `register_timer()` returns the stub's own handle by value, so the caller
     // owns it.
     static_assert(
         std::same_as<
             decltype(std::declval<OneShotTimerFactoryStub&>().register_timer(
                 kDelay, std::function<void()>{})),
-            TimerHandleStub>);
+            TimerStub>);
     TEST_PASS();
 }
 
 TEST_CASE("hal timer stub: a default handle is invalid and cancel is a no-op",
           "[hal_timer_stub]") {
-    TimerHandleStub handle;
+    TimerStub handle;
     TEST_ASSERT_FALSE(handle.valid());
     // Must not assert, leak, or touch the timer service task.
     handle.cancel();
@@ -123,7 +122,7 @@ TEST_CASE("hal timer stub: register_timer fires the callback exactly once",
     calls.store(0);
 
     OneShotTimerFactoryStub timer;
-    TimerHandleStub const handle =
+    TimerStub const handle =
         timer.register_timer(kDelay, [] { calls.fetch_add(1); });
     TEST_ASSERT_TRUE(handle.valid());
 
@@ -143,7 +142,7 @@ TEST_CASE("hal timer stub: the callback runs the state the caller captured",
     int payload = 4242;
 
     OneShotTimerFactoryStub timer;
-    TimerHandleStub const handle =
+    TimerStub const handle =
         timer.register_timer(kDelay, [payload] { observed.store(payload); });
 
     // The callback stores the captured value rather than incrementing, so wait
@@ -160,8 +159,7 @@ TEST_CASE("hal timer stub: cancel() before the expiry prevents the callback",
     calls.store(0);
 
     OneShotTimerFactoryStub timer;
-    TimerHandleStub handle =
-        timer.register_timer(kDelay, [] { calls.fetch_add(1); });
+    TimerStub handle = timer.register_timer(kDelay, [] { calls.fetch_add(1); });
     TEST_ASSERT_TRUE(handle.valid());
 
     // Cancelled while it is still armed, so the callback never runs, however
@@ -181,8 +179,7 @@ TEST_CASE("hal timer stub: cancelling after the expiry is harmless",
     calls.store(0);
 
     OneShotTimerFactoryStub timer;
-    TimerHandleStub handle =
-        timer.register_timer(kDelay, [] { calls.fetch_add(1); });
+    TimerStub handle = timer.register_timer(kDelay, [] { calls.fetch_add(1); });
 
     // Let it fire first; the timer is then idle, and cancelling an idle timer
     // must still release it without a second callback.
@@ -200,11 +197,10 @@ TEST_CASE("hal timer stub: move construction transfers the timer",
     calls.store(0);
 
     OneShotTimerFactoryStub timer;
-    TimerHandleStub handle =
-        timer.register_timer(kDelay, [] { calls.fetch_add(1); });
+    TimerStub handle = timer.register_timer(kDelay, [] { calls.fetch_add(1); });
     TEST_ASSERT_TRUE(handle.valid());
 
-    TimerHandleStub moved = std::move(handle);
+    TimerStub moved = std::move(handle);
     TEST_ASSERT_FALSE(handle.valid());
     TEST_ASSERT_TRUE(moved.valid());
 
@@ -222,10 +218,9 @@ TEST_CASE("hal timer stub: move assignment releases the previous timer",
     taken.store(0);
 
     OneShotTimerFactoryStub timer;
-    TimerHandleStub target =
+    TimerStub target =
         timer.register_timer(kDelay, [] { replaced.fetch_add(1); });
-    TimerHandleStub source =
-        timer.register_timer(kDelay, [] { taken.fetch_add(1); });
+    TimerStub source = timer.register_timer(kDelay, [] { taken.fetch_add(1); });
 
     // Assigning over `target` cancels the timer it owned, so only the timer
     // from `source` survives.
@@ -247,10 +242,8 @@ TEST_CASE("hal timer stub: each registration arms an independent timer",
     calls.store(0);
 
     OneShotTimerFactoryStub timer;
-    TimerHandleStub a =
-        timer.register_timer(kDelay, [] { calls.fetch_add(1); });
-    TimerHandleStub b =
-        timer.register_timer(kDelay, [] { calls.fetch_add(1); });
+    TimerStub a = timer.register_timer(kDelay, [] { calls.fetch_add(1); });
+    TimerStub b = timer.register_timer(kDelay, [] { calls.fetch_add(1); });
 
     TEST_ASSERT_TRUE(a.valid());
     TEST_ASSERT_TRUE(b.valid());

@@ -24,7 +24,7 @@
 # Like `hal_board`, it depends on the header-only `hal_common` component for the
 # shared device vocabulary (`ButtonState`, `PushButtonLike`, `LedState`,
 # `LedLike`, `OneWireLike`, `ChipTemperatureLike`,
-# `AccessPointConfig`, `StationConfig`, `WifiRadioLike`, `TimerHandleLike`,
+# `AccessPointConfig`, `StationConfig`, `WifiRadioLike`, `TimerLike`,
 # `OneShotTimerFactoryLike`, `BoardPins`, `BoardLike`) and the deep-sleep
 # vocabulary (`WakeCause`, `WakeCauses`, `wake_cause_bit()`, `woke_from()`).
 #

@@ -1,7 +1,7 @@
 // Shared, implementation-free types for a one-shot timer.
 //
 // This header is the *single* definition of the timer vocabulary — the
-// `TimerHandleLike` and `OneShotTimerFactoryLike` concepts — used by both timer
+// `TimerLike` and `OneShotTimerFactoryLike` concepts — used by both timer
 // implementations:
 //
 //   - `hal_board` — real ESP-IDF timers (`esp_timer`), whose callback runs in
@@ -48,7 +48,7 @@ namespace thermo::hal {
 // to the contract — in particular it does not promise to report whether the
 // callback ran.
 template<typename T>
-concept TimerHandleLike = std::is_class_v<T> && requires(T& handle) {
+concept TimerLike = std::is_class_v<T> && requires(T& handle) {
     { handle.cancel() } -> std::same_as<void>;
 };
 
@@ -68,10 +68,10 @@ concept TimerHandleLike = std::is_class_v<T> && requires(T& handle) {
 // The returned handle's type is a template parameter rather than a fixed type
 // so each implementation can return its own: `hal_board` and `hal_stub` arm
 // timers through different mechanisms, and the caller only needs
-// `TimerHandleLike` to cancel one.
+// `TimerLike` to cancel one.
 template<typename T, typename TimerHandle>
 concept OneShotTimerFactoryLike =
-    std::is_class_v<T> && TimerHandleLike<TimerHandle> &&
+    std::is_class_v<T> && TimerLike<TimerHandle> &&
     requires(T& timer, std::chrono::milliseconds delay,
              std::function<void()> callback) {
         { timer.register_timer(delay, callback) } -> std::same_as<TimerHandle>;

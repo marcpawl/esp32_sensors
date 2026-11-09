@@ -3,7 +3,7 @@
 // Each `register_timer()` allocates one `esp_timer` instance and one
 // `std::function` box, arms the timer for the requested delay with
 // `ESP_TIMER_TASK` dispatch (the default, so the callback runs in the esp_timer
-// task rather than in an ISR), and hands the caller a `TimerHandleBoard` that
+// task rather than in an ISR), and hands the caller a `TimerBoard` that
 // owns both.
 //
 // Lifetime is the delicate part, because the callback receives a bare `void*`
@@ -53,23 +53,21 @@ void timer_callback(void* arg) {
 
 }  // namespace
 
-// --- TimerHandleBoard ------------------------------------------------------
+// --- TimerBoard --------------------------------------------------------------
 
-TimerHandleBoard::TimerHandleBoard(
-    esp_timer_handle_t timer,
-    std::shared_ptr<TimerCallbackBox> callback) noexcept
+TimerBoard::TimerBoard(esp_timer_handle_t timer,
+                       std::shared_ptr<TimerCallbackBox> callback) noexcept
     : timer_(timer), callback_(std::move(callback)) {}
 
-TimerHandleBoard::TimerHandleBoard(TimerHandleBoard&& other) noexcept
+TimerBoard::TimerBoard(TimerBoard&& other) noexcept
     : timer_(std::exchange(other.timer_, nullptr)),
       callback_(std::move(other.callback_)) {}
 
-TimerHandleBoard::~TimerHandleBoard() {
+TimerBoard::~TimerBoard() {
     cancel();
 }
 
-TimerHandleBoard& TimerHandleBoard::operator=(
-    TimerHandleBoard&& other) noexcept {
+TimerBoard& TimerBoard::operator=(TimerBoard&& other) noexcept {
     if (this != &other) {
         // Release this handle's timer before taking the other's.
         cancel();
@@ -79,7 +77,7 @@ TimerHandleBoard& TimerHandleBoard::operator=(
     return *this;
 }
 
-void TimerHandleBoard::cancel() noexcept {
+void TimerBoard::cancel() noexcept {
     if (timer_ == nullptr) {
         return;
     }
@@ -99,7 +97,7 @@ void TimerHandleBoard::cancel() noexcept {
 
 // --- OneShotTimerFactoryBoard ------------------------------------------------
 
-TimerHandleBoard OneShotTimerFactoryBoard::register_timer(
+TimerBoard OneShotTimerFactoryBoard::register_timer(
     std::chrono::milliseconds delay, std::function<void()> callback) {
     // A zero (or negative) delay is a programming error: `esp_timer` would fire
     // immediately, and a dropped timer would leave the caller waiting forever.
@@ -122,7 +120,7 @@ TimerHandleBoard OneShotTimerFactoryBoard::register_timer(
         // would never end. Report it and give back an empty handle rather than
         // ever returning a handle that does not own a timer.
         assert(false && "esp_timer_create failed");
-        return TimerHandleBoard();
+        return TimerBoard();
     }
 
     auto const delay_us =
@@ -131,10 +129,10 @@ TimerHandleBoard OneShotTimerFactoryBoard::register_timer(
         // Do not leak the instance on a failed arm.
         (void)esp_timer_delete(timer);
         assert(false && "esp_timer_start_once failed");
-        return TimerHandleBoard();
+        return TimerBoard();
     }
 
-    return TimerHandleBoard(timer, std::move(box));
+    return TimerBoard(timer, std::move(box));
 }
 
 }  // namespace thermo::hal

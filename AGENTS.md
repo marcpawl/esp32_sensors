@@ -223,7 +223,7 @@ adds observation accessors (`initialized()`, `ap_running()`,
 `station_running()`, `ap_config()`, `station_config()`), useful in tests.
 
 **The one-shot timer is a HAL device, but a new one.** `hal/timer_types.hpp`
-(`hal_common`) defines the `TimerHandleLike` concept (`cancel()`) and the
+(`hal_common`) defines the `TimerLike` concept (`cancel()`) and the
 `OneShotTimerFactoryLike<Timer, TimerHandle>` concept
 (`register_timer(milliseconds, std::function<void()>) -> TimerHandle`).
 `register` cannot be the method name
@@ -242,7 +242,7 @@ always states which one it linked, and board-independent code targets the
 concept rather than a concrete type.
 
 - **`hal_board`:** `hal/timer_board.hpp` + `timer_board.cpp` provide
-  `OneShotTimerFactoryBoard` (the arming factory) and `TimerHandleBoard` (the
+  `OneShotTimerFactoryBoard` (the arming factory) and `TimerBoard` (the
   move-only handle). Both `static_assert` their concepts, so the implementation
   cannot drift from the shared contract. It is built on `esp_timer` with
   `ESP_TIMER_TASK` dispatch, so the callback runs in the esp_timer task and may
@@ -262,7 +262,7 @@ concept rather than a concrete type.
   silently dropping the request (after the assert it returns an empty handle,
   never a handle that owns no timer).
 - **`hal_stub`:** `hal/timer_stub.hpp` + `timer_stub.cpp` provide
-  `OneShotTimerFactoryStub` and `TimerHandleStub`, likewise pinned by
+  `OneShotTimerFactoryStub` and `TimerStub`, likewise pinned by
   `static_assert`.
   It uses FreeRTOS software timers (`freertos/timers.h`) because the `linux`
   target has no `esp_timer` implementation — `test/main/test_freertos_timers.cpp`
@@ -294,16 +294,16 @@ starts the station). Reach the stub controls through the board, e.g.
 
 **The one-shot timer is on the board too, but not as a device accessor.**
 `BoardLike` requires a public member typedef — `typename T::TimerHandle`, which
-must satisfy `TimerHandleLike` — plus a method
+must satisfy `TimerLike` — plus a method
 `T::TimerHandle register_timer(std::chrono::milliseconds, std::function<void()>)`.
 Each board spells the typedef for the handle it hands back
-(`Board::TimerHandle = TimerHandleBoard`, `BoardStub::TimerHandle =
-TimerHandleStub`) and owns a private timer factory (`OneShotTimerFactoryBoard` /
+(`Board::TimerHandle = TimerBoard`, `BoardStub::TimerHandle =
+TimerStub`) and owns a private timer factory (`OneShotTimerFactoryBoard` /
 `OneShotTimerFactoryStub`) that `register_timer()` delegates to. There is **no**
 `timer()` accessor on purpose: a caller arms a timer and immediately owns the
 handle, so exposing the factory as well would give it two ways to do the same
 thing. Because the typedef is spelled by the implementation, `BoardLike` stays
-implementation-free — it names only the `TimerHandleLike` concept, so
+implementation-free — it names only the `TimerLike` concept, so
 board-independent code (templated on `hal::BoardLike`) can arm and cancel a
 timer without knowing which mechanism is underneath.
 
@@ -857,7 +857,7 @@ There are two test suites, both runnable from the host via `scripts/dev.py`:
   timers — what the `hal_stub` timer implementation is built on, since the
   `linux` target has no `esp_timer` — create, fire exactly once, re-arm, and
   stay silent after a cancel; and `test_hal_timer_stub.cpp` covers the stub
-  itself (`TimerHandleStub` / `OneShotTimerFactoryStub`): the concepts, firing
+  itself (`TimerStub` / `OneShotTimerFactoryStub`): the concepts, firing
   exactly once, a captured callable really running, cancelling before and after
   the expiry, and move construction / move assignment transferring ownership.
 - **On-target tests** are planned for hardware-dependent code (1-Wire/DS18B20

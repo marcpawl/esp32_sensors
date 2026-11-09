@@ -16,7 +16,7 @@
 //
 // It also owns an `OneShotTimerFactoryBoard` and exposes `register_timer()`, so
 // a caller arms a one-shot timer through the board and holds the board's
-// `TimerHandle` (here `TimerHandleBoard`) without naming the timer class — the
+// `TimerHandle` (here `TimerBoard`) without naming the timer class — the
 // `BoardLike` contract only requires that the handle can be cancelled.
 #pragma once
 
@@ -46,8 +46,8 @@ class Board {
   public:
     // The type `register_timer()` returns: the `esp_timer`-backed handle. A
     // caller only needs `cancel()`, so board-independent code holds it as
-    // `Board::TimerHandle` rather than naming `TimerHandleBoard`.
-    using TimerHandle = TimerHandleBoard;
+    // `Board::TimerHandle` rather than naming `TimerBoard`.
+    using TimerHandle = TimerBoard;
 
     // `pins` describes the wiring; see `BoardPins`. Constructs the devices but
     // does not touch any hardware — call init_all() for that.
@@ -130,7 +130,7 @@ class Board {
     // task; capture whatever state it needs in the callable.
     //
     // Part of the `BoardLike` contract, so callers arm timers through the board
-    // and never name `OneShotTimerFactoryBoard` / `TimerHandleBoard`. Fails
+    // and never name `OneShotTimerFactoryBoard` / `TimerBoard`. Fails
     // loudly (an assert) if the timer cannot be created or started.
     [[nodiscard]] TimerHandle register_timer(std::chrono::milliseconds delay,
                                              std::function<void()> callback) {

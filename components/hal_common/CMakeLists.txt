@@ -5,7 +5,7 @@
 # LED's `LedState` and `LedLike`; the 1-Wire bus's `OneWireLike`; the WiFi
 # radio's `AccessPointConfig`, `StationConfig`, and `WifiRadioLike`; the
 # chip temperature sensor's `ChipTemperatureLike`; the one-shot timer's
-# `TimerHandleLike` / `OneShotTimerFactoryLike`; and the board-level deep
+# `TimerLike` / `OneShotTimerFactoryLike`; and the board-level deep
 # sleep vocabulary `WakeCause` / `WakeCauses` with `wake_cause_bit()` and
 # `woke_from()`). It carries no hardware dependency, so both `hal_board` and
 # `hal_stub` can require it and the shared definitions live in exactly one

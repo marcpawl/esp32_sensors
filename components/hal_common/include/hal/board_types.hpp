@@ -25,7 +25,7 @@
 // typedef* rather than a device accessor: `BoardLike` requires a public
 // `TimerHandle` type and a `register_timer()` method, so a caller arms a timer
 // through the board and holds the returned handle without naming either
-// implementation's classes. `TimerHandle` must satisfy `TimerHandleLike` (see
+// implementation's classes. `TimerHandle` must satisfy `TimerLike` (see
 // `hal/timer_types.hpp`), which is all a holder needs to cancel one.
 #pragma once
 
@@ -105,7 +105,7 @@ struct BoardPins {
 // than as a device accessor: `TimerHandle` is the type the caller holds, and
 // `register_timer()` arms one. Because `TimerHandle` is spelled by the
 // implementation, `BoardLike` stays implementation-free — it names only the
-// `TimerHandleLike` concept, so a project can link either board and board-
+// `TimerLike` concept, so a project can link either board and board-
 // independent code can cancel a timer without knowing which mechanism armed it.
 template<typename T>
 concept BoardLike =
@@ -115,7 +115,7 @@ concept BoardLike =
         // The board names the handle type it hands back, and that type can be
         // cancelled. A board without a public `TimerHandle` — or one whose
         // handle has no `cancel()` — cannot model this.
-        requires TimerHandleLike<typename T::TimerHandle>;
+        requires TimerLike<typename T::TimerHandle>;
         {
             board.register_timer(delay, callback)
         } -> std::same_as<typename T::TimerHandle>;
