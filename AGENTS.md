@@ -1056,6 +1056,30 @@ The test case should fork and exec the "_assert" program with the name of the te
 
 ### Agent interaction
 
+#### Model selection
+
+Prefer the less expensive **DeepSeek** model for trivial work, and escalate
+only when something fails. The default routing is:
+
+| Work | Model |
+|---|---|
+| Running `./scripts/dev.py` commands | DeepSeek Chat |
+| Running `git` commands | DeepSeek Chat |
+| Fixing `.hpp` / `.cpp` clang-format failures | DeepSeek Chat |
+| Performing the pre-commit checks | DeepSeek Chat |
+| Making file changes once the work is figured out | DeepSeek Chat |
+| Fixing a failing `./scripts/dev.py` command | DeepSeek Reasoner |
+| Fixing a failing `git` command | DeepSeek Reasoner |
+
+- **Escalate on failure, do not retry.** A failing step is handed to DeepSeek
+  Reasoner rather than retried under DeepSeek Chat. This is the default;
+  follow any more specific instruction given for the task at hand.
+- **Fixing a failing pre-commit check** follows the rule for whatever the
+  check reported — a clang-format failure stays on DeepSeek Chat, while a
+  clang-tidy or test failure escalates to DeepSeek Reasoner.
+- **Reason first, edit second.** Work out *what* to change with the stronger
+  model, then hand the mechanical edits to DeepSeek Chat.
+
 - **Ignore the CLion configuration.** Unless explicitly told otherwise, do not
   read, edit, stage, commit, or otherwise consider the CLion configuration files
   (`.idea/*`, including `.idea/cmake.xml`, `.idea/runConfigurations/*`,
