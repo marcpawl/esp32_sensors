@@ -840,7 +840,13 @@ There are two test suites, both runnable from the host via `scripts/dev.py`:
   `deep_sleep_start()` records the duration while `sleep_get_wakeup_causes()` /
   `set_wakeup_causes()` model the next boot's wake cause, and that the board
   names a cancelable `TimerHandle` and arms working timers through
-  `register_timer()`). The timer HAL
+  `register_timer()`). `test_hal_board_types.cpp` pins the `BoardLike` contract
+  from the other side: `BoardWithoutTimer` spells out every requirement except
+  the timer using the real stub devices, and `ModelBoard<Handle, Returned>`
+  adds just the timer clause, so a model that names no handle, a non-class or
+  non-cancelable handle, a `register_timer()` returning something other than the
+  board's `TimerHandle`, or no `register_timer()` at all is each rejected for
+  that reason alone. The timer HAL
   vocabulary is pinned by `test_hal_timer_types.cpp` (which models conforming
   and non-conforming timer/handle types to prove both concepts reject what they
   should); `test_freertos_timers.cpp` verifies that FreeRTOS software
