@@ -225,19 +225,44 @@ adds observation accessors (`initialized()`, `ap_running()`,
 **The one-shot timer is a HAL device, but a new one.** `hal/timer_types.hpp`
 (`hal_common`) defines the `TimerHandleLike` concept (`cancel()`) and the
 `OneShotTimerLike<Timer, TimerHandle>` concept (`register_timer(milliseconds,
-std::function<void()>) -> TimerHandle`); `hal/timer.hpp` (`hal_board` /
-`hal_stub`) will add the concrete classes. `register` cannot be the method name
+std::function<void()>) -> TimerHandle`). `register` cannot be the method name
 (it is a C++ keyword), hence `register_timer`, which is also the name the board
-then exposes (Step 4 of the plan). The handle type is a concept parameter
-rather than a fixed type, because the two implementations arm timers through
-different mechanisms and the caller only needs `cancel()`. Cancellation is
-**racy by contract**: the callback may already be running (or already be
-queued for the timer task) when `cancel()` returns, so a caller that must not
-act on a stale callback guards the callback body itself. `hal_board` will use
-`esp_timer` (its callback runs in the ESP-IDF timer task); `hal_stub` must use
-FreeRTOS software timers (`freertos/timers.h`) because the `linux` target has
-no `esp_timer` implementation — `test/main/test_freertos_timers.cpp` pins that
-the one-shot API works there.
+exposes (Step 4). The handle type is a concept parameter rather than a fixed
+type, because the two implementations arm timers through different mechanisms
+and the caller only needs `cancel()`. Cancellation is **racy by contract**: the
+callback may already be running (or already be queued for the timer task) when
+`cancel()` returns, so a caller that must not act on a stale callback guards
+the callback body itself.
+
+Unlike the other HAL devices there is no shared `hal/timer.hpp` and no single
+`Timer` class: the two implementations are named after themselves, so a project
+always states which one it linked, and board-independent code targets the
+concept rather than a concrete type.
+
+- **`hal_board`:** `hal/timer_board.hpp` + `timer_board.cpp` provide
+  `OneShotTimerBoard` (the arming class) and `TimerHandleBoard` (the move-only
+  handle). Both `static_assert` their concepts, so the implementation cannot
+  drift from the shared contract. It is built on `esp_timer` with
+  `ESP_TIMER_TASK` dispatch, so the callback runs in the esp_timer task and may
+  use ordinary FreeRTOS APIs — but must stay short, since that one task also
+  dispatches every other `esp_timer` callback. The handle **owns** the
+  `esp_timer` instance (RAII): `cancel()` — also run by the destructor — arms
+  nothing further, stops with `esp_timer_stop_blocking(…, portMAX_DELAY)`, then
+  deletes the instance. The `std::function` lives in a `shared_ptr` the handle
+  holds while the timer's `arg` points at it; `esp_timer_stop_blocking()` from
+  task context does not return until no callback is running, which is what makes
+  releasing the box safe. A handle destroyed from *inside* its own callback is
+  the exception (the stop returns immediately there), so the callback copies the
+  callable before invoking it and touches the box no further. Consequently
+  `cancel()` on this implementation is **stronger** than the abstract contract:
+  it is not racy when called from task context. A zero delay or a failed
+  `esp_timer_create()` / `esp_timer_start_once()` trips an `assert` rather than
+  silently dropping the request (after the assert it returns an empty handle,
+  never a handle that owns no timer).
+- **`hal_stub` (Step 3, not yet written):** must use FreeRTOS software timers
+  (`freertos/timers.h`) because the `linux` target has no `esp_timer`
+  implementation — `test/main/test_freertos_timers.cpp` pins that the one-shot
+  API works there.
 
 **The aggregate board owns one of every device**, including the WiFi radio:
 `BoardLike` (`hal/board_types.hpp`) requires `wifi()` (mutable and const), and
