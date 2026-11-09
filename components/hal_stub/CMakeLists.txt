@@ -16,7 +16,7 @@
 # The one-shot timer is the one device whose header is *not* the same name in
 # both implementations (`hal/timer_stub.hpp` here, `hal/timer_board.hpp` in
 # `hal_board`): the two share only the `hal_common` concepts, not a `Timer`
-# class, so board-independent code is written against `OneShotTimerLike`
+# class, so board-independent code is written against `OneShotTimerFactoryLike`
 # instead of including either header. `timer_stub.cpp` is built on FreeRTOS
 # software timers (`freertos/timers.h`), because the `linux` target has no
 # `esp_timer` implementation.
@@ -25,8 +25,8 @@
 # shared device vocabulary (`ButtonState`, `PushButtonLike`, `LedState`,
 # `LedLike`, `OneWireLike`, `ChipTemperatureLike`,
 # `AccessPointConfig`, `StationConfig`, `WifiRadioLike`, `TimerHandleLike`,
-# `OneShotTimerLike`, `BoardPins`, `BoardLike`) and the deep-sleep vocabulary
-# (`WakeCause`, `WakeCauses`, `wake_cause_bit()`, `woke_from()`).
+# `OneShotTimerFactoryLike`, `BoardPins`, `BoardLike`) and the deep-sleep
+# vocabulary (`WakeCause`, `WakeCauses`, `wake_cause_bit()`, `woke_from()`).
 #
 # Deep sleep (§3.8) needs no ESP-IDF dependency here: the stub records the
 # request, arms the timer wake the real board would produce, and reports it,

@@ -1,12 +1,13 @@
 // Hardware abstraction: one-shot timer, software-driven stub for the host
 // tests.
 //
-// The shared timer vocabulary (`TimerHandleLike`, `OneShotTimerLike`) lives in
-// the header-only `hal_common` component (`hal/timer_types.hpp`); this header
-// adds the concrete `TimerHandleStub` and `OneShotTimerStub` classes.
-// `hal_board` provides the real implementation on top of `esp_timer`, so the
-// code that must work with either takes the `hal::OneShotTimerLike` template
-// parameter and never names a concrete timer.
+// The shared timer vocabulary (`TimerHandleLike`, `OneShotTimerFactoryLike`)
+// lives in the header-only `hal_common` component (`hal/timer_types.hpp`); this
+// header adds the concrete `TimerHandleStub` and `OneShotTimerFactoryStub`
+// classes. `hal_board` provides the real implementation on top of `esp_timer`,
+// so the code that must work with either takes the
+// `hal::OneShotTimerFactoryLike` template parameter and never names a concrete
+// timer.
 //
 // There is no `esp_timer` implementation on the `linux` target, so this stub is
 // built on FreeRTOS software timers (`freertos/timers.h`) instead — the timer
@@ -54,8 +55,8 @@
 
 namespace thermo::hal {
 
-// A software-driven one-shot timer (FreeRTOS software timers).
-class OneShotTimerStub;
+// The FreeRTOS-timer-backed one-shot timer factory (forward declaration).
+class OneShotTimerFactoryStub;
 
 // The callable the armed timer runs. Held by the timer itself (as its
 // `pvTimerID`) and released once the timer has been deleted.
@@ -90,7 +91,7 @@ class TimerHandleStub {
     [[nodiscard]] bool valid() const noexcept { return timer_ != nullptr; }
 
   private:
-    friend class OneShotTimerStub;
+    friend class OneShotTimerFactoryStub;
 
     // Takes ownership of an already-started timer and of its callback box.
     TimerHandleStub(TimerHandle_t timer, TimerCallbackBox* box) noexcept;
@@ -100,19 +101,22 @@ class TimerHandleStub {
 };
 
 // Arms one-shot timers: after the requested delay each timer calls its callback
-// once and then stays idle until re-armed.
-class OneShotTimerStub {
+// once and then stays idle. The factory itself holds no timer — each
+// `register_timer()` creates its own FreeRTOS timer and hands it back through
+// the returned handle.
+class OneShotTimerFactoryStub {
   public:
-    OneShotTimerStub() noexcept = default;
+    OneShotTimerFactoryStub() noexcept = default;
 
-    OneShotTimerStub(OneShotTimerStub const&) = delete;
+    OneShotTimerFactoryStub(OneShotTimerFactoryStub const&) = delete;
     // Movable so a board can own one and still be moved by value out of
     // `create()`. The factory holds no state — each registration owns its own
     // FreeRTOS timer — so moving one is indistinguishable from copying it.
-    OneShotTimerStub(OneShotTimerStub&&) noexcept = default;
-    ~OneShotTimerStub() = default;
-    OneShotTimerStub& operator=(OneShotTimerStub const&) = delete;
-    OneShotTimerStub& operator=(OneShotTimerStub&&) noexcept = delete;
+    OneShotTimerFactoryStub(OneShotTimerFactoryStub&&) noexcept = default;
+    ~OneShotTimerFactoryStub() = default;
+    OneShotTimerFactoryStub& operator=(OneShotTimerFactoryStub const&) = delete;
+    OneShotTimerFactoryStub& operator=(OneShotTimerFactoryStub&&) noexcept =
+        delete;
 
     // Schedules `callback` to run once after `delay`, returning the handle that
     // owns the timer. The callback takes no arguments and runs in the timer
@@ -129,7 +133,8 @@ class OneShotTimerStub {
 
 static_assert(TimerHandleLike<TimerHandleStub>,
               "TimerHandleStub must satisfy the TimerHandleLike concept");
-static_assert(OneShotTimerLike<OneShotTimerStub, TimerHandleStub>,
-              "OneShotTimerStub must satisfy the OneShotTimerLike concept");
+static_assert(
+    OneShotTimerFactoryLike<OneShotTimerFactoryStub, TimerHandleStub>,
+    "OneShotTimerFactoryStub must satisfy the OneShotTimerFactoryLike concept");
 
 }  // namespace thermo::hal

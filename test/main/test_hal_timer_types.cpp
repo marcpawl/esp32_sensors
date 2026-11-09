@@ -23,7 +23,7 @@
 
 namespace {
 
-using thermo::hal::OneShotTimerLike;
+using thermo::hal::OneShotTimerFactoryLike;
 using thermo::hal::TimerHandleLike;
 
 // --- Model types ------------------------------------------------------------
@@ -120,38 +120,42 @@ TEST_CASE("hal timer types: TimerHandleLike requires a void cancel()",
     TEST_PASS();
 }
 
-// --- OneShotTimerLike -------------------------------------------------------
+// --- OneShotTimerFactoryLike
+// -------------------------------------------------------
 
-TEST_CASE("hal timer types: a conforming timer models OneShotTimerLike",
+TEST_CASE("hal timer types: a conforming timer models OneShotTimerFactoryLike",
           "[hal_timer_types]") {
-    static_assert(OneShotTimerLike<GoodTimer, GoodHandle>);
+    static_assert(OneShotTimerFactoryLike<GoodTimer, GoodHandle>);
     TEST_PASS();
 }
 
-TEST_CASE("hal timer types: OneShotTimerLike names its handle type",
+TEST_CASE("hal timer types: OneShotTimerFactoryLike names its handle type",
           "[hal_timer_types]") {
     // The handle type is named by the caller rather than inferred from the
     // return type, so a conforming timer does not model the concept with some
     // *other* handle:
-    static_assert(!OneShotTimerLike<GoodTimer, NoCancelHandle>);
+    static_assert(!OneShotTimerFactoryLike<GoodTimer, NoCancelHandle>);
     // ...and a timer whose return type is not a `TimerHandleLike` at all never
     // satisfies it, for any handle type.
     static_assert(!TimerHandleLike<NoCancelHandle>);
-    static_assert(!OneShotTimerLike<NoCancelReturnTimer, GoodHandle>);
-    static_assert(!OneShotTimerLike<NoCancelReturnTimer, NoCancelHandle>);
+    static_assert(!OneShotTimerFactoryLike<NoCancelReturnTimer, GoodHandle>);
+    static_assert(
+        !OneShotTimerFactoryLike<NoCancelReturnTimer, NoCancelHandle>);
     TEST_PASS();
 }
 
-TEST_CASE("hal timer types: OneShotTimerLike pins the register_timer signature",
-          "[hal_timer_types]") {
+TEST_CASE(
+    "hal timer types: OneShotTimerFactoryLike pins the register_timer "
+    "signature",
+    "[hal_timer_types]") {
     // A `std::chrono::seconds` parameter cannot be called with a `milliseconds`
     // argument (that conversion loses resolution, so it is not implicit), so an
     // implementation cannot silently round the caller's delay away.
-    static_assert(!OneShotTimerLike<WrongDelayTimer, GoodHandle>);
+    static_assert(!OneShotTimerFactoryLike<WrongDelayTimer, GoodHandle>);
     // Likewise for the callback: a plain function-pointer parameter would
     // reject the capturing lambdas callers rely on.
-    static_assert(!OneShotTimerLike<WrongCallbackTimer, GoodHandle>);
+    static_assert(!OneShotTimerFactoryLike<WrongCallbackTimer, GoodHandle>);
     // Returned by value, not by reference: the caller owns the handle.
-    static_assert(!OneShotTimerLike<ReferenceReturnTimer, GoodHandle>);
+    static_assert(!OneShotTimerFactoryLike<ReferenceReturnTimer, GoodHandle>);
     TEST_PASS();
 }

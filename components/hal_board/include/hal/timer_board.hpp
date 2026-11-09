@@ -1,13 +1,14 @@
 // Hardware abstraction: one-shot timer, real `esp_timer` implementation for the
 // development board.
 //
-// The shared timer vocabulary (`TimerHandleLike`, `OneShotTimerLike`) lives in
-// the header-only `hal_common` component (`hal/timer_types.hpp`); this header
-// adds the concrete `TimerHandleBoard` and `OneShotTimerBoard` classes.
-// `hal_stub` provides the same two class names on top of FreeRTOS software
-// timers (the `linux` target has no `esp_timer` implementation), so the code
-// that must work with either takes the `hal::OneShotTimerLike` template
-// parameter and never names a concrete timer.
+// The shared timer vocabulary (`TimerHandleLike`, `OneShotTimerFactoryLike`)
+// lives in the header-only `hal_common` component (`hal/timer_types.hpp`); this
+// header adds the concrete `TimerHandleBoard` and `OneShotTimerFactoryBoard`
+// classes. `hal_stub` provides its own `TimerHandleStub` /
+// `OneShotTimerFactoryStub` pair on top of FreeRTOS software timers (the
+// `linux` target has no `esp_timer` implementation), so the code that must work
+// with either takes the `hal::OneShotTimerFactoryLike` template parameter and
+// never names a concrete timer.
 //
 // The implementation files are `hal/timer_board.hpp` / `timer_board.cpp` rather
 // than the shared `hal/timer.hpp` name the other HAL devices use: there is no
@@ -16,8 +17,8 @@
 // `hal_stub`) makes it obvious which one a project linked.
 //
 // `esp_timer` dispatches the callback from the esp_timer task (the default
-// `ESP_TIMER_TASK` method), which is what `OneShotTimerBoard` selects. The
-// callback therefore runs in task context and may use the ordinary FreeRTOS
+// `ESP_TIMER_TASK` method), which is what `OneShotTimerFactoryBoard` selects.
+// The callback therefore runs in task context and may use the ordinary FreeRTOS
 // APIs — but it must stay short, because that one task also dispatches every
 // other `esp_timer` callback on the device.
 //
@@ -42,8 +43,8 @@
 
 namespace thermo::hal {
 
-// A software-driven one-shot timer (`esp_timer`, task-dispatch).
-class OneShotTimerBoard;
+// The `esp_timer`-backed one-shot timer factory (forward declaration).
+class OneShotTimerFactoryBoard;
 
 // The callback storage the timer's `arg` points at. Held by the handle in a
 // `shared_ptr` so it outlives every callback invocation.
@@ -80,7 +81,7 @@ class TimerHandleBoard {
     [[nodiscard]] bool valid() const noexcept { return timer_ != nullptr; }
 
   private:
-    friend class OneShotTimerBoard;
+    friend class OneShotTimerFactoryBoard;
 
     // Takes ownership of an already-started `esp_timer` instance and of the
     // callback box its `arg` points at.
@@ -92,19 +93,23 @@ class TimerHandleBoard {
 };
 
 // Arms one-shot timers: after the requested delay each timer calls its callback
-// once and then stays idle until re-armed.
-class OneShotTimerBoard {
+// once and then stays idle. The factory itself holds no timer — each
+// `register_timer()` creates its own `esp_timer` and hands it back through the
+// returned handle.
+class OneShotTimerFactoryBoard {
   public:
-    OneShotTimerBoard() noexcept = default;
+    OneShotTimerFactoryBoard() noexcept = default;
 
-    OneShotTimerBoard(OneShotTimerBoard const&) = delete;
+    OneShotTimerFactoryBoard(OneShotTimerFactoryBoard const&) = delete;
     // Movable so a board can own one and still be moved by value out of
     // `create()`. The factory holds no state — each registration owns its own
     // `esp_timer` — so moving one is indistinguishable from copying it.
-    OneShotTimerBoard(OneShotTimerBoard&&) noexcept = default;
-    ~OneShotTimerBoard() = default;
-    OneShotTimerBoard& operator=(OneShotTimerBoard const&) = delete;
-    OneShotTimerBoard& operator=(OneShotTimerBoard&&) noexcept = delete;
+    OneShotTimerFactoryBoard(OneShotTimerFactoryBoard&&) noexcept = default;
+    ~OneShotTimerFactoryBoard() = default;
+    OneShotTimerFactoryBoard& operator=(OneShotTimerFactoryBoard const&) =
+        delete;
+    OneShotTimerFactoryBoard& operator=(OneShotTimerFactoryBoard&&) noexcept =
+        delete;
 
     // Schedules `callback` to run once after `delay`, returning the handle that
     // owns the timer. The callback takes no arguments and runs in the esp_timer
@@ -121,7 +126,9 @@ class OneShotTimerBoard {
 
 static_assert(TimerHandleLike<TimerHandleBoard>,
               "TimerHandleBoard must satisfy the TimerHandleLike concept");
-static_assert(OneShotTimerLike<OneShotTimerBoard, TimerHandleBoard>,
-              "OneShotTimerBoard must satisfy the OneShotTimerLike concept");
+static_assert(
+    OneShotTimerFactoryLike<OneShotTimerFactoryBoard, TimerHandleBoard>,
+    "OneShotTimerFactoryBoard must satisfy the OneShotTimerFactoryLike "
+    "concept");
 
 }  // namespace thermo::hal

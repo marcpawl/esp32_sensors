@@ -1,7 +1,7 @@
 // Shared, implementation-free types for a one-shot timer.
 //
 // This header is the *single* definition of the timer vocabulary — the
-// `TimerHandleLike` and `OneShotTimerLike` concepts — used by both timer
+// `TimerHandleLike` and `OneShotTimerFactoryLike` concepts — used by both timer
 // implementations:
 //
 //   - `hal_board` — real ESP-IDF timers (`esp_timer`), whose callback runs in
@@ -9,11 +9,11 @@
 //   - `hal_stub`  — software-driven FreeRTOS software timers used by the host
 //     tests.
 //
-// Each implementation provides its own `hal/timer.hpp` that includes this
-// header and adds the concrete classes, so there is exactly one definition of
-// the shared contract and the two implementations cannot drift. (A project
-// still links exactly one of `hal_board` / `hal_stub`, but both
-// `REQUIRES hal_common`.)
+// Each implementation provides its own header (`hal/timer_board.hpp` in
+// `hal_board`, `hal/timer_stub.hpp` in `hal_stub`) that includes this one and
+// adds the concrete classes, so there is exactly one definition of the shared
+// contract and the two implementations cannot drift. (A project still links
+// exactly one of `hal_board` / `hal_stub`, but both `REQUIRES hal_common`.)
 //
 // The HAL is *semantics-free* about when to arm a timer: it knows how to
 // schedule a callback after a delay and how to cancel that schedule, but not
@@ -52,27 +52,29 @@ concept TimerHandleLike = std::is_class_v<T> && requires(T& handle) {
     { handle.cancel() } -> std::same_as<void>;
 };
 
-// Concept: a one-shot timer type that arms a callback to run once after a
-// delay.
+// Concept: a one-shot timer *factory* — a type that arms a callback to run once
+// after a delay.
 //
 // `register_timer(delay, callback)` returns a handle for the armed timer: after
 // `delay` elapses the timer calls `callback` exactly once, and the handle can
-// be used to cancel it before it fires. The timer does not own the caller's
-// state, so a callback that needs data captures it (a lambda with a copy, or a
-// reference to something that outlives the timer) — the HAL never sees that
-// state.
+// be used to cancel it before it fires. "Factory" because that is all the type
+// is: it holds no timer of its own, it creates one per call and hands it back
+// through the handle.
+//
+// The timer does not own the caller's state, so a callback that needs data
+// captures it (a lambda with a copy, or a reference to something that outlives
+// the timer) — the HAL never sees that state.
 //
 // The returned handle's type is a template parameter rather than a fixed type
 // so each implementation can return its own: `hal_board` and `hal_stub` arm
 // timers through different mechanisms, and the caller only needs
 // `TimerHandleLike` to cancel one.
 template<typename T, typename TimerHandle>
-concept OneShotTimerLike = std::is_class_v<T> && TimerHandleLike<TimerHandle> &&
-                           requires(T& timer, std::chrono::milliseconds delay,
-                                    std::function<void()> callback) {
-                               {
-                                   timer.register_timer(delay, callback)
-                               } -> std::same_as<TimerHandle>;
-                           };
+concept OneShotTimerFactoryLike =
+    std::is_class_v<T> && TimerHandleLike<TimerHandle> &&
+    requires(T& timer, std::chrono::milliseconds delay,
+             std::function<void()> callback) {
+        { timer.register_timer(delay, callback) } -> std::same_as<TimerHandle>;
+    };
 
 }  // namespace thermo::hal

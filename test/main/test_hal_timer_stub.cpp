@@ -38,8 +38,8 @@
 
 namespace {
 
-using thermo::hal::OneShotTimerLike;
-using thermo::hal::OneShotTimerStub;
+using thermo::hal::OneShotTimerFactoryLike;
+using thermo::hal::OneShotTimerFactoryStub;
 using thermo::hal::TimerHandleLike;
 using thermo::hal::TimerHandleStub;
 
@@ -94,13 +94,15 @@ int calls_after_quiet_period(std::atomic<int>& calls) {
 TEST_CASE("hal timer stub: the stub models both timer concepts",
           "[hal_timer_stub]") {
     static_assert(TimerHandleLike<TimerHandleStub>);
-    static_assert(OneShotTimerLike<OneShotTimerStub, TimerHandleStub>);
+    static_assert(
+        OneShotTimerFactoryLike<OneShotTimerFactoryStub, TimerHandleStub>);
     // `register_timer()` returns the stub's own handle by value, so the caller
     // owns it.
     static_assert(
-        std::same_as<decltype(std::declval<OneShotTimerStub&>().register_timer(
-                         kDelay, std::function<void()>{})),
-                     TimerHandleStub>);
+        std::same_as<
+            decltype(std::declval<OneShotTimerFactoryStub&>().register_timer(
+                kDelay, std::function<void()>{})),
+            TimerHandleStub>);
     TEST_PASS();
 }
 
@@ -120,7 +122,7 @@ TEST_CASE("hal timer stub: register_timer fires the callback exactly once",
     static std::atomic<int> calls;
     calls.store(0);
 
-    OneShotTimerStub timer;
+    OneShotTimerFactoryStub timer;
     TimerHandleStub const handle =
         timer.register_timer(kDelay, [] { calls.fetch_add(1); });
     TEST_ASSERT_TRUE(handle.valid());
@@ -140,7 +142,7 @@ TEST_CASE("hal timer stub: the callback runs the state the caller captured",
     observed.store(0);
     int payload = 4242;
 
-    OneShotTimerStub timer;
+    OneShotTimerFactoryStub timer;
     TimerHandleStub const handle =
         timer.register_timer(kDelay, [payload] { observed.store(payload); });
 
@@ -157,7 +159,7 @@ TEST_CASE("hal timer stub: cancel() before the expiry prevents the callback",
     static std::atomic<int> calls;
     calls.store(0);
 
-    OneShotTimerStub timer;
+    OneShotTimerFactoryStub timer;
     TimerHandleStub handle =
         timer.register_timer(kDelay, [] { calls.fetch_add(1); });
     TEST_ASSERT_TRUE(handle.valid());
@@ -178,7 +180,7 @@ TEST_CASE("hal timer stub: cancelling after the expiry is harmless",
     static std::atomic<int> calls;
     calls.store(0);
 
-    OneShotTimerStub timer;
+    OneShotTimerFactoryStub timer;
     TimerHandleStub handle =
         timer.register_timer(kDelay, [] { calls.fetch_add(1); });
 
@@ -197,7 +199,7 @@ TEST_CASE("hal timer stub: move construction transfers the timer",
     static std::atomic<int> calls;
     calls.store(0);
 
-    OneShotTimerStub timer;
+    OneShotTimerFactoryStub timer;
     TimerHandleStub handle =
         timer.register_timer(kDelay, [] { calls.fetch_add(1); });
     TEST_ASSERT_TRUE(handle.valid());
@@ -219,7 +221,7 @@ TEST_CASE("hal timer stub: move assignment releases the previous timer",
     replaced.store(0);
     taken.store(0);
 
-    OneShotTimerStub timer;
+    OneShotTimerFactoryStub timer;
     TimerHandleStub target =
         timer.register_timer(kDelay, [] { replaced.fetch_add(1); });
     TimerHandleStub source =
@@ -244,7 +246,7 @@ TEST_CASE("hal timer stub: each registration arms an independent timer",
     static std::atomic<int> calls;
     calls.store(0);
 
-    OneShotTimerStub timer;
+    OneShotTimerFactoryStub timer;
     TimerHandleStub a =
         timer.register_timer(kDelay, [] { calls.fetch_add(1); });
     TimerHandleStub b =

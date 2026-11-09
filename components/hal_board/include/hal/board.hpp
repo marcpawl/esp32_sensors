@@ -14,8 +14,8 @@
 // deep sleep (§3.8), which belongs to the board rather than to a peripheral
 // because it powers the whole board down.
 //
-// It also owns an `OneShotTimerBoard` and exposes `register_timer()`, so a
-// caller arms a one-shot timer through the board and holds the board's
+// It also owns an `OneShotTimerFactoryBoard` and exposes `register_timer()`, so
+// a caller arms a one-shot timer through the board and holds the board's
 // `TimerHandle` (here `TimerHandleBoard`) without naming the timer class — the
 // `BoardLike` contract only requires that the handle can be cancelled.
 #pragma once
@@ -130,8 +130,8 @@ class Board {
     // task; capture whatever state it needs in the callable.
     //
     // Part of the `BoardLike` contract, so callers arm timers through the board
-    // and never name `OneShotTimerBoard` / `TimerHandleBoard`. Fails loudly (an
-    // assert) if the timer cannot be created or started.
+    // and never name `OneShotTimerFactoryBoard` / `TimerHandleBoard`. Fails
+    // loudly (an assert) if the timer cannot be created or started.
     [[nodiscard]] TimerHandle register_timer(std::chrono::milliseconds delay,
                                              std::function<void()> callback) {
         return timer_.register_timer(delay, std::move(callback));
@@ -163,7 +163,7 @@ class Board {
     // Arms the board's one-shot timers. Not initialized by `init_all()`: the
     // esp_timer service needs no per-board setup, and an armed timer is
     // independent of every other device.
-    OneShotTimerBoard timer_;
+    OneShotTimerFactoryBoard timer_;
 };
 
 static_assert(BoardLike<Board>, "Board must satisfy the BoardLike concept");

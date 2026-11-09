@@ -224,9 +224,12 @@ adds observation accessors (`initialized()`, `ap_running()`,
 
 **The one-shot timer is a HAL device, but a new one.** `hal/timer_types.hpp`
 (`hal_common`) defines the `TimerHandleLike` concept (`cancel()`) and the
-`OneShotTimerLike<Timer, TimerHandle>` concept (`register_timer(milliseconds,
-std::function<void()>) -> TimerHandle`). `register` cannot be the method name
-(it is a C++ keyword), hence `register_timer`. The handle type is a concept
+`OneShotTimerFactoryLike<Timer, TimerHandle>` concept
+(`register_timer(milliseconds, std::function<void()>) -> TimerHandle`).
+`register` cannot be the method name
+(it is a C++ keyword), hence `register_timer`. The arming class is a *factory*
+rather than a timer: it holds no timer of its own, creating one per call and
+handing it back through the handle. The handle type is a concept
 parameter rather than a fixed type, because the two implementations arm timers
 through different mechanisms and the caller only needs `cancel()`. Cancellation
 is **racy by contract**: the callback may already be running (or already be
@@ -239,9 +242,9 @@ always states which one it linked, and board-independent code targets the
 concept rather than a concrete type.
 
 - **`hal_board`:** `hal/timer_board.hpp` + `timer_board.cpp` provide
-  `OneShotTimerBoard` (the arming class) and `TimerHandleBoard` (the move-only
-  handle). Both `static_assert` their concepts, so the implementation cannot
-  drift from the shared contract. It is built on `esp_timer` with
+  `OneShotTimerFactoryBoard` (the arming factory) and `TimerHandleBoard` (the
+  move-only handle). Both `static_assert` their concepts, so the implementation
+  cannot drift from the shared contract. It is built on `esp_timer` with
   `ESP_TIMER_TASK` dispatch, so the callback runs in the esp_timer task and may
   use ordinary FreeRTOS APIs — but must stay short, since that one task also
   dispatches every other `esp_timer` callback. The handle **owns** the
@@ -259,7 +262,8 @@ concept rather than a concrete type.
   silently dropping the request (after the assert it returns an empty handle,
   never a handle that owns no timer).
 - **`hal_stub`:** `hal/timer_stub.hpp` + `timer_stub.cpp` provide
-  `OneShotTimerStub` and `TimerHandleStub`, likewise pinned by `static_assert`.
+  `OneShotTimerFactoryStub` and `TimerHandleStub`, likewise pinned by
+  `static_assert`.
   It uses FreeRTOS software timers (`freertos/timers.h`) because the `linux`
   target has no `esp_timer` implementation — `test/main/test_freertos_timers.cpp`
   first pinned that the one-shot API works there, and
@@ -294,8 +298,8 @@ must satisfy `TimerHandleLike` — plus a method
 `T::TimerHandle register_timer(std::chrono::milliseconds, std::function<void()>)`.
 Each board spells the typedef for the handle it hands back
 (`Board::TimerHandle = TimerHandleBoard`, `BoardStub::TimerHandle =
-TimerHandleStub`) and owns a private timer factory (`OneShotTimerBoard` /
-`OneShotTimerStub`) that `register_timer()` delegates to. There is **no**
+TimerHandleStub`) and owns a private timer factory (`OneShotTimerFactoryBoard` /
+`OneShotTimerFactoryStub`) that `register_timer()` delegates to. There is **no**
 `timer()` accessor on purpose: a caller arms a timer and immediately owns the
 handle, so exposing the factory as well would give it two ways to do the same
 thing. Because the typedef is spelled by the implementation, `BoardLike` stays
@@ -853,9 +857,9 @@ There are two test suites, both runnable from the host via `scripts/dev.py`:
   timers — what the `hal_stub` timer implementation is built on, since the
   `linux` target has no `esp_timer` — create, fire exactly once, re-arm, and
   stay silent after a cancel; and `test_hal_timer_stub.cpp` covers the stub
-  itself (`TimerHandleStub` / `OneShotTimerStub`): the concepts, firing exactly
-  once, a captured callable really running, cancelling before and after the
-  expiry, and move construction / move assignment transferring ownership.
+  itself (`TimerHandleStub` / `OneShotTimerFactoryStub`): the concepts, firing
+  exactly once, a captured callable really running, cancelling before and after
+  the expiry, and move construction / move assignment transferring ownership.
 - **On-target tests** are planned for hardware-dependent code (1-Wire/DS18B20
   reads, deep-sleep wake, Wi-Fi upload).
 - Keep hardware interactions behind thin interfaces so business logic remains

@@ -26,7 +26,7 @@
 // wanting a different wake overrides it with `set_wakeup_causes()`.
 //
 // The one-shot timer is owned by the board as well: `register_timer()` arms an
-// `OneShotTimerStub` and returns the board's `TimerHandle` (here
+// `OneShotTimerFactoryStub` and returns the board's `TimerHandle` (here
 // `TimerHandleStub`). A test therefore arms a timer through the board and can
 // observe it firing, exactly as the firmware does — and because the stub is
 // built on FreeRTOS software timers, that callback really does run.
@@ -145,9 +145,9 @@ class BoardStub {
     // task; capture whatever state it needs in the callable.
     //
     // Part of the `BoardLike` contract, so callers arm timers through the board
-    // and never name `OneShotTimerStub` / `TimerHandleStub`. Fails loudly (an
-    // assert) if the delay rounds to fewer than one tick, the callback is null,
-    // or the timer cannot be created or started.
+    // and never name `OneShotTimerFactoryStub` / `TimerHandleStub`. Fails
+    // loudly (an assert) if the delay rounds to fewer than one tick, the
+    // callback is null, or the timer cannot be created or started.
     //
     // The callback really runs (this is a live timer, not a recording), so a
     // test observes it the way `test_hal_timer_stub.cpp` does: poll with
@@ -202,7 +202,7 @@ class BoardStub {
     // Arms the board's one-shot timers. Not initialized by `init_all()`: the
     // FreeRTOS timer service needs no per-board setup, and an armed timer is
     // independent of every other device.
-    OneShotTimerStub timer_;
+    OneShotTimerFactoryStub timer_;
     // Wake causes reported by `sleep_get_wakeup_causes()`. A fresh stub
     // models a cold boot, which is what the real board reports while running
     // normally.

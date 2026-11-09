@@ -134,9 +134,9 @@ void TimerHandleStub::cancel() noexcept {
     box_ = nullptr;
 }
 
-// --- OneShotTimerStub ------------------------------------------------------
+// --- OneShotTimerFactoryStub -------------------------------------------------
 
-TimerHandleStub OneShotTimerStub::register_timer(
+TimerHandleStub OneShotTimerFactoryStub::register_timer(
     std::chrono::milliseconds delay, std::function<void()> callback) {
     assert(callback != nullptr);
     TickType_t const ticks = delay_to_ticks(delay);

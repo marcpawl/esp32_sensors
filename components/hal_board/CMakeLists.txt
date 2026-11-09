@@ -15,13 +15,13 @@
 # The timer is the one device whose header is *not* the same name in both
 # implementations (`hal/timer_board.hpp` here, `hal/timer_stub.hpp` in
 # `hal_stub`): the two share only the `hal_common` concepts, not a `Timer`
-# class, so board-independent code is written against `OneShotTimerLike`
+# class, so board-independent code is written against `OneShotTimerFactoryLike`
 # instead of including either header.
 #
 # Both depend on the header-only `hal_common` component for the shared device
 # vocabulary (`ButtonState`, `PushButtonLike`, `LedState`, `LedLike`,
 # `OneWireLike`, `ChipTemperatureLike`, `AccessPointConfig`, `StationConfig`,
-# `WifiRadioLike`, `TimerHandleLike`, `OneShotTimerLike`, `BoardPins`,
+# `WifiRadioLike`, `TimerHandleLike`, `OneShotTimerFactoryLike`, `BoardPins`,
 # `BoardLike`) and the deep-sleep vocabulary
 # (`WakeCause`, `WakeCauses`, `wake_cause_bit()`, `woke_from()`).
 #

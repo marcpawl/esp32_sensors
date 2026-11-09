@@ -97,9 +97,9 @@ void TimerHandleBoard::cancel() noexcept {
     callback_.reset();
 }
 
-// --- OneShotTimerBoard -----------------------------------------------------
+// --- OneShotTimerFactoryBoard ------------------------------------------------
 
-TimerHandleBoard OneShotTimerBoard::register_timer(
+TimerHandleBoard OneShotTimerFactoryBoard::register_timer(
     std::chrono::milliseconds delay, std::function<void()> callback) {
     // A zero (or negative) delay is a programming error: `esp_timer` would fire
     // immediately, and a dropped timer would leave the caller waiting forever.
