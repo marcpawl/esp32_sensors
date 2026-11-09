@@ -259,10 +259,28 @@ concept rather than a concrete type.
   `esp_timer_create()` / `esp_timer_start_once()` trips an `assert` rather than
   silently dropping the request (after the assert it returns an empty handle,
   never a handle that owns no timer).
-- **`hal_stub` (Step 3, not yet written):** must use FreeRTOS software timers
-  (`freertos/timers.h`) because the `linux` target has no `esp_timer`
-  implementation — `test/main/test_freertos_timers.cpp` pins that the one-shot
-  API works there.
+- **`hal_stub`:** `hal/timer_stub.hpp` + `timer_stub.cpp` provide
+  `OneShotTimerStub` and `TimerHandleStub`, likewise pinned by `static_assert`.
+  It uses FreeRTOS software timers (`freertos/timers.h`) because the `linux`
+  target has no `esp_timer` implementation — `test/main/test_freertos_timers.cpp`
+  first pinned that the one-shot API works there, and
+  `test/main/test_hal_timer_stub.cpp` covers the stub itself. Each
+  `register_timer()` allocates one `TimerCallbackBox` (the caller's
+  `std::function`) and creates a one-shot (`pdFALSE`) timer whose `pvTimerID`
+  is that box, so it too is RAII-owned by a move-only handle. Lifetime is
+  harder here than on the board, because FreeRTOS timer commands are
+  **asynchronous**: start/stop/delete only queue work for the "Tmr Svc" task, so
+  neither the timer nor its callback storage can be freed when `cancel()`
+  returns. `cancel()` therefore queues the box's free with
+  `xTimerPendFunctionCall()`, which FreeRTOS posts to the *same* command queue
+  and so processes strictly after the timer's own delete — and the timer task
+  drains expired timers before the queue, and the callback copies the callable
+  before invoking it, so neither a late callback nor a self-cancel can read
+  freed memory. Consequently `cancel()` on the stub is genuinely **racy**, as
+  the abstract contract allows: a callback already dispatched may still run
+  after `cancel()` returns. A delay that rounds to fewer than one tick (10 ms at
+  `configTICK_RATE_HZ` = 100), a null callback, or a failed create/start trips an
+  `assert`; after the assert an empty handle is returned.
 
 **The aggregate board owns one of every device**, including the WiFi radio:
 `BoardLike` (`hal/board_types.hpp`) requires `wifi()` (mutable and const), and
@@ -434,8 +452,9 @@ pole combinations — including the both-on hardware fault, which the header
 reports as `std::nullopt` instead of rebooting. `main.cpp`'s `read_mode()` is
 the thin wrapper that turns that `std::nullopt` into the firmware's fail-loudly
 `reboot()`. The HAL's `hal_stub` component (the pin-free buttons, LEDs, 1-Wire
-bus, chip-temperature sensor, WiFi radio, and aggregate board) is likewise built
-for the `linux` target and covered by `test/main/test_hal_*.cpp`.
+bus, chip-temperature sensor, WiFi radio, one-shot timer, and aggregate board)
+is likewise built for the `linux` target and covered by
+`test/main/test_hal_*.cpp`.
 **Keep it that way** — put pure logic in these files and hardware/IDF calls
 behind them.
 
@@ -799,10 +818,13 @@ There are two test suites, both runnable from the host via `scripts/dev.py`:
   `set_wakeup_causes()` model the next boot's wake cause). The timer HAL
   vocabulary is pinned by `test_hal_timer_types.cpp` (which models conforming
   and non-conforming timer/handle types to prove both concepts reject what they
-  should), and `test_freertos_timers.cpp` verifies that FreeRTOS software
-  timers — what the `hal_stub` timer implementation must be built on, since the
+  should); `test_freertos_timers.cpp` verifies that FreeRTOS software
+  timers — what the `hal_stub` timer implementation is built on, since the
   `linux` target has no `esp_timer` — create, fire exactly once, re-arm, and
-  stay silent after a cancel.
+  stay silent after a cancel; and `test_hal_timer_stub.cpp` covers the stub
+  itself (`TimerHandleStub` / `OneShotTimerStub`): the concepts, firing exactly
+  once, a captured callable really running, cancelling before and after the
+  expiry, and move construction / move assignment transferring ownership.
 - **On-target tests** are planned for hardware-dependent code (1-Wire/DS18B20
   reads, deep-sleep wake, Wi-Fi upload).
 - Keep hardware interactions behind thin interfaces so business logic remains
