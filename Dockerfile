@@ -29,6 +29,8 @@
 # Project tooling added on top of the base image:
 #   - GitHub CLI (`gh`) from GitHub's official apt repository.
 #   - PyGithub (`import github`) in the ESP-IDF Python venv.
+#   - Node.js (pinned LTS, official tarball) — the base image ships none.
+#   - Continue CLI (`cn`), the command line coding agent used in this repo.
 
 FROM espressif/idf:release-v6.1
 
@@ -101,6 +103,61 @@ RUN mkdir -p -m 755 /etc/apt/keyrings \
     && gh --version
 
 # ---------------------------------------------------------------------------
+# Node.js: required by the Continue CLI below. The base image ships no Node
+# runtime at all, and the ESP-IDF venv cannot provide one.
+#
+# The official static tarball is used (rather than NodeSource or a distro
+# package) so the version is pinned by URL *and* SHA-256 and does not drift with
+# the Ubuntu release. It is unpacked into /usr/local so `node`/`npm` are on PATH
+# for *any* uid: the container is run as the calling user, and for a uid with no
+# passwd entry `scripts/dev.py` sets HOME=/tmp — a per-user install (nvm/fnm,
+# what the upstream Continue installer does) would need a writable HOME at build
+# time and would be invisible to those users.
+#
+# To bump: set NODE_VERSION and the two SHA-256 values from
+# https://nodejs.org/dist/v<version>/SHASUMS256.txt (only the architectures
+# below are supported; add a branch for any other).
+# ---------------------------------------------------------------------------
+ARG NODE_VERSION=24.22.2
+RUN ARCH="$(dpkg --print-architecture)" \
+    && case "$ARCH" in \
+        amd64) NODE_ARCH=x64 \
+               NODE_SHA256=48cc0e21e048790e54c0cf5749c2725005313d652651c40b7a21feb9697aaf75 ;; \
+        arm64) NODE_ARCH=arm64 \
+               NODE_SHA256=eb187837a2230d4047161ac0be008584e16b46f726e9c9490ee35dc6b17d9ba8 ;; \
+        *) echo "Unsupported architecture for Node.js: $ARCH" >&2; exit 1 ;; \
+    esac \
+    && TARBALL="node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" \
+    && curl -fsSL -o "/tmp/${TARBALL}" \
+        "https://nodejs.org/dist/v${NODE_VERSION}/${TARBALL}" \
+    && echo "${NODE_SHA256}  /tmp/${TARBALL}" | sha256sum --check --strict - \
+    && tar -xJf "/tmp/${TARBALL}" -C /usr/local \
+        --strip-components=1 --no-same-owner \
+    && rm -f "/tmp/${TARBALL}" \
+    && node --version \
+    && npm --version
+
+# ---------------------------------------------------------------------------
+# Continue CLI (`cn`), the command line coding agent used on this repository.
+# https://github.com/continuedev/continue/tree/main/extensions/cli
+#
+# Installed from npm into /usr/local (npm's default prefix as root) rather than
+# a user prefix, so every uid that runs the container finds `cn` on PATH. The
+# version is pinned exactly and the registry integrity is left to npm, so a
+# rebuild cannot silently pick up a new release.
+#
+# `cn` keeps its configuration, sessions and models under `$HOME/.continue`, so
+# it is per-user state, never part of this image: uid 1000 (the image user)
+# keeps it in /home/dev, while any other uid gets HOME=/tmp from `dev.py` and so
+# starts with a fresh config on each container. Point it elsewhere explicitly
+# with `cn --config <path>` (see scripts/dev.py's environment) to share one.
+# ---------------------------------------------------------------------------
+ARG CONTINUE_CLI_VERSION=1.5.47
+RUN npm install --global --no-fund --no-audit \
+        "@continuedev/cli@${CONTINUE_CLI_VERSION}" \
+    && test "$(cn --version)" = "${CONTINUE_CLI_VERSION}"
+
+# ---------------------------------------------------------------------------
 # esp-clang: the Espressif-maintained LLVM toolchain, which ships the
 # `clang-format` / `clang-tidy` binaries used by the pre-commit hook
 # (.githooks/pre-commit) and scripts/dev.py.
@@ -148,11 +205,31 @@ RUN if getent passwd "${UID}" >/dev/null 2>&1; then \
         getent group "$g" >/dev/null && usermod -aG "$g" "${USERNAME}"; \
     done \
     && mkdir -p "/home/${USERNAME}/.cache" "/home/${USERNAME}/.espressif" \
-        "/home/${USERNAME}/.commandhistory" \
+        "/home/${USERNAME}/.commandhistory" "/home/${USERNAME}/.continue" \
     && chown -R "${UID}:${GID}" "/home/${USERNAME}" \
     # Source the IDF environment for every interactive login shell.
     && echo "ESP_IDF_EXPORT_DEBUG=1" >> "/home/${USERNAME}/.bashrc" \
     && printf 'source %s/export.sh\n' "${IDF_PATH}" >> "/home/${USERNAME}/.bashrc"
+
+# ---------------------------------------------------------------------------
+# Continue CLI (`cn`) state directory, shared with the host.
+#
+# `docker-compose.yml` bind-mounts the host's `~/.continue` here so the host and
+# the container see the same config, models, and sessions. A bind mount needs
+# its destination to exist; Docker would otherwise create it as root (and the
+# mount would hide it), and `cn` running without the mount would have to invent
+# it. Creating it up front, owned by the container user, makes both paths work.
+#
+# Two locations, because the container's HOME depends on the uid it runs as
+# (see scripts/dev.py): uid 1000 keeps /home/dev, any other uid is given
+# HOME=/tmp so tools like ccache find a writable home. `cn` reads its state from
+# $HOME/.continue, so both are mount points in compose.
+# ---------------------------------------------------------------------------
+RUN mkdir -p /tmp/.continue \
+    && chown "${UID}:${GID}" "/home/${USERNAME}/.continue" /tmp/.continue \
+    # World-writable + sticky, like /tmp itself: any uid may use it when the
+    # host config is not mounted (the mount, when present, hides this dir).
+    && chmod 1777 /tmp/.continue
 
 
 # Persist bash history across container restarts (volume-mounted in compose).

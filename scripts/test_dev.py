@@ -693,6 +693,93 @@ class ContainerUserTests(unittest.TestCase):
         self.assertEqual(command[command.index("dev") + 1:], ["dev.py", "build"])
 
 
+class ContinueCliMountTests(unittest.TestCase):
+    """The host's `~/.continue` is shared with the container.
+
+    `cn` keeps its config, models, and sessions under `$HOME/.continue`. Users
+    expect `ls ~/.continue` to list the same files on the host and inside the
+    container (`./scripts/dev.py shell ls '~/.continue'`), which needs a bind
+    mount. A Dockerfile cannot mount host paths, so the mount lives in
+    docker-compose.yml — which the Dev Container reuses, so the IDE gets it too.
+
+    The container's HOME depends on the uid it runs as (see
+    ContainerUserTests), so a single mount point cannot cover every user.
+    """
+
+    TARGET_UID_HOME = "/home/dev"
+    OTHER_UID_HOME = "/tmp"
+
+    def _compose(self) -> str:
+        return (dev.REPO_ROOT / "docker-compose.yml").read_text()
+
+    def _mounts(self) -> dict[str, str]:
+        """Map each bind target for the Continue dir to its host source."""
+        mounts = {}
+        for line in self._compose().splitlines():
+            entry = line.strip().removeprefix("- ").strip()
+            if entry.startswith("#") or "/.continue:" not in entry:
+                continue
+            # Split at the *last* colon: the source spells `${HOME:?...}`, so
+            # it contains a colon of its own.
+            source, _, target = entry.rpartition(":")
+            mounts[target] = source
+        return mounts
+
+    def test_host_continue_dir_is_mounted_at_the_image_users_home(self):
+        self.assertEqual(
+            self._mounts().get(f"{self.TARGET_UID_HOME}/.continue"),
+            "${HOME:?HOME must be set to share the Continue CLI config}/.continue",
+        )
+
+    def test_host_continue_dir_is_mounted_where_dev_py_puts_other_uids_home(self):
+        # The coupling that matters: `dev.py` pins HOME for any uid other than
+        # the image's 1000, so the mount must be made at *that* path too. If
+        # HOME ever changes, this mount silently stops applying.
+        flags = dev._container_environment("1001:1001")
+        [home_flag] = [flag for flag in flags if flag.startswith("HOME=")]
+        other_home = home_flag.split("=", 1)[1]
+        self.assertEqual(other_home, self.OTHER_UID_HOME)
+        self.assertIn(f"{other_home}/.continue", self._mounts())
+
+    def test_mount_refuses_to_fall_back_to_the_filesystem_root(self):
+        # `${HOME}` unset would make the source `/.continue`. The `:?` form
+        # fails the run loudly instead.
+        mounts = self._mounts()
+        # Guard against passing vacuously if the mount lines are ever renamed.
+        self.assertEqual(len(mounts), 2, mounts)
+        for source in mounts.values():
+            self.assertIn("${HOME:?", source)
+
+    def test_image_creates_both_mount_points(self):
+        # A bind mount needs an existing destination with the right owner;
+        # Docker would otherwise create it as root. Both paths are created, and
+        # /tmp/.continue is world-writable like /tmp so it works without the
+        # mount too.
+        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        self.assertIn('mkdir -p /tmp/.continue', dockerfile)
+        self.assertIn('"/home/${USERNAME}/.continue"', dockerfile)
+        self.assertIn("chmod 1777 /tmp/.continue", dockerfile)
+
+    def test_image_installs_the_continue_cli_and_its_node_runtime(self):
+        # `cn` needs Node >= 20.20.1 and the base image ships no Node at all.
+        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        self.assertIn("@continuedev/cli@${CONTINUE_CLI_VERSION}", dockerfile)
+        self.assertIn("ARG NODE_VERSION=", dockerfile)
+        # The tarball is pinned by checksum, not just by URL.
+        self.assertIn("sha256sum --check --strict", dockerfile)
+        # Installed globally (/usr/local) so every uid finds it on PATH.
+        self.assertIn("npm install --global", dockerfile)
+
+
+    def test_dev_container_inherits_the_mount_from_compose(self):
+        # The Dev Container reuses the compose service, so the `~/.continue`
+        # bind mount is inherited. A `mounts` entry there would shadow it (the
+        # devcontainer spec layers its own mounts over the compose ones), so
+        # the mount must stay in docker-compose.yml alone.
+        text = (dev.REPO_ROOT / ".devcontainer" / "devcontainer.json").read_text()
+        self.assertNotIn('"mounts"', text)
+
+
 class SpecRevisionTests(unittest.TestCase):
     """`Specification.md` is the source of truth; docs must cite its revision.
 

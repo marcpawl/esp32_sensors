@@ -8,7 +8,8 @@
 # --- Which image? ---------------------------------------------------------
 # `dev` uses the PREBUILT image `marcpawl/esp-idf:20261025`, which is the
 # official ESP-IDF v6.1 image plus this project's tooling (gh, PyGithub,
-# esp-clang). Pull it once with `docker compose pull`; do not rebuild it.
+# esp-clang, Node.js, Continue CLI `cn`). Pull it once with
+# `docker compose pull`; do not rebuild it.
 # CI pulls the same tag, so developers and CI share one toolchain.
 #
 # The `build:` section below is kept only so the image can be rebuilt from the
@@ -90,6 +91,15 @@ services:
       # the classic per-user location.
       - idf-bash-history:/home/dev/.commandhistory
       - idf-espressif-cache:/home/dev/.espressif
+      # Share the host's Continue CLI (`cn`) state — config, models, sessions —
+      # with the container, so `ls ~/.continue` lists the same files on the
+      # host and inside the container. Listed twice because the container's
+      # HOME depends on the uid it runs as (see scripts/dev.py): the image user
+      # (uid 1000) keeps /home/dev, any other uid is given HOME=/tmp. `cn`
+      # stores its state under $HOME/.continue, so both paths need the mount.
+      # `${HOME:?...}` fails the run loudly rather than mounting /.continue.
+      - ${HOME:?HOME must be set to share the Continue CLI config}/.continue:/home/dev/.continue
+      - ${HOME:?HOME must be set to share the Continue CLI config}/.continue:/tmp/.continue
 
     working_dir: /project
     environment:

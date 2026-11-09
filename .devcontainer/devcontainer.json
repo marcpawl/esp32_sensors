@@ -10,6 +10,13 @@
 // The service pins the PREBUILT image `marcpawl/esp-idf:20261025` (see
 // `image:`/`pull_policy:` in docker-compose.yml), so nothing is built locally.
 //
+// Volumes are inherited from the compose service, so the IDE gets everything
+// the CLI does — including the host's `~/.continue`, which compose bind-mounts
+// into the container so `cn` (the Continue CLI, installed in the image) uses
+// the same config, models, and sessions as on the host. Do NOT re-declare that
+// mount here: compose already supplies it, and a second declaration would
+// silently shadow it with a different source.
+//
 // What this gives you in CLion:
 //   * CLion pulls the image and starts the container automatically.
 //   * Toolchain, CMake, Ninja, and the ESP-IDF Python venv all run inside the

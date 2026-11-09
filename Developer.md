@@ -50,9 +50,9 @@ $ esptool --port /dev/ttyACM0
 
 The development container uses the **prebuilt** image
 `marcpawl/esp-idf:20261025` (ESP-IDF v6.1 plus the project tooling: gh,
-PyGithub, esp-clang). The tag is pinned in `docker-compose.yml`, is never
-moved, and is the same image CI pulls, so there is nothing to build on a
-fresh machine — just pull it.
+PyGithub, esp-clang, Node.js, and the Continue CLI `cn`). The tag is pinned in
+`docker-compose.yml`, is never moved, and is the same image CI pulls, so there
+is nothing to build on a fresh machine — just pull it.
 
 Pull the image and start the container:
 
@@ -88,6 +88,44 @@ $ ./scripts/dev.py shell -C mcgowan idf.py -B build_esp32s3 fullclean
 $ ./scripts/dev.py shell -C mcgowan idf.py -B build_esp32s3 set-target esp32s3
 $
 ```
+
+### Continue CLI (`cn`) in the container
+
+The image installs the [Continue CLI](https://github.com/continuedev/continue/tree/main/extensions/cli)
+(`cn`) plus the Node.js runtime it needs, so the coding agent is available
+inside the container without a host install:
+
+```console
+$ ./scripts/dev.py shell cn --version
+1.5.47
+```
+
+`cn` keeps its configuration, sessions, and model list under `$HOME/.continue`,
+and the container's `$HOME/.continue` **is** the host's: `docker-compose.yml`
+bind-mounts `${HOME}/.continue` from the host there, so the same files are
+visible on both sides:
+
+```console
+$ ls ~/.continue          # host
+config.yaml  index  logs  sessions  ...
+$ ./scripts/dev.py shell ls '~/.continue'
+config.yaml  index  logs  sessions  ...
+```
+
+The mount is declared in `docker-compose.yml` (a `Dockerfile` cannot mount host
+paths), which is also why the Dev Container gets it: `.devcontainer/devcontainer.json`
+reuses the compose `dev` service. It is listed **twice** because the container's
+`HOME` depends on the uid it runs as — uid 1000 keeps `/home/dev`, any other uid
+is given `HOME=/tmp` by `scripts/dev.py` (so ccache has a writable home) — and
+both locations are created in the image so the mount always has a destination.
+CI's checkout has no `~/.continue`; Docker creates the host directory when it
+is missing, and the runner never uses it.
+
+The service fails to start if `HOME` is unset (`${HOME:?...}`), rather than
+silently mounting `/.continue`.
+
+`cn` also runs headless, which is what makes it usable from scripts and CI:
+`cn -p "your prompt"` (add `--format json` for machine-readable output).
 
 ### How the container user is handled
 
