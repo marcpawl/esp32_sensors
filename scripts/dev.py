@@ -38,9 +38,11 @@ import tempfile
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Directories whose C/C++ sources are checked/formatted by clang-format. The
-# file list is discovered via git so it always matches the tracked files (no
-# missing-glob errors). Keep this in sync with the pre-commit hook
-# (.githooks/pre-commit).
+# file list is discovered via git (`source_files`), and deliberately covers
+# untracked files as well as tracked ones, so a source that exists but has not
+# been `git add`ed is still formatted. Discovering the files through git keeps
+# the walk to source trees (no build output, no missing-glob errors). Keep this
+# in sync with the pre-commit hook (.githooks/pre-commit).
 ROOTS = (
     "mcgowan",
     "components",
@@ -196,25 +198,62 @@ def split_list(items, max_size):
     # Step through the list from 0 to n, skipping by max_size each time
     return [items[i : i + max_size] for i in range(0, len(items), max_size)]
 
-def source_files():
+def _source_file_command(roots: tuple[str, ...] = ROOTS) -> list[str]:
+    """The `git ls-files` argv that enumerates the sources to format. Pure.
+
+    `--cached` lists the files in the index (the tracked ones) and `--others`
+    adds the files that exist in the working tree but are not tracked yet.
+    Both are needed: enumerating only `--cached` meant a brand-new source that
+    had not been `git add`ed was silently skipped by `format`, so the file
+    stayed unformatted while `format-check-staged` (which runs on the staged
+    content by definition) reported it. `format` must see every source under
+    `ROOTS` that exists on disk, tracked or not.
+
+    `--exclude-standard` applies `.gitignore`, so build trees and other
+    generated output are still never formatted even though they are untracked.
+
+    The pathspec is scoped to `ROOTS` rather than the whole repository, so
+    `third_party/` (vendored, must stay byte-identical) is never picked up.
+    """
+    return [
+        "git", "ls-files",
+        "--cached", "--others", "--exclude-standard",
+        "--", *roots,
+    ]
+
+
+def _select_sources(paths: list[str], root: Path = REPO_ROOT) -> list[str]:
+    """Filter `paths` down to the C/C++ sources that exist on disk. Pure.
+
+    Keeps only the `EXTENSIONS` suffixes (git lists every file type) and drops
+    paths that are not regular files: a tracked file that has been deleted is
+    still in the index, and clang-format cannot read it. Duplicates cannot
+    arise — `git ls-files` prints each path once even when it is both cached
+    and untracked — but the result is sorted for a stable, reviewable order.
+    """
+    return sorted({
+        path
+        for path in paths
+        if path.endswith(EXTENSIONS) and (root / path).is_file()
+    })
+
+
+def source_files() -> list[str]:
+    """Every C/C++ source under `ROOTS` that exists, tracked or untracked.
+
+    This is the file list `format` and `format-check` operate on. It includes
+    files that have not been `git add`ed yet, so formatting a new source does
+    not depend on staging it first; ignored files (build output) are still
+    excluded by `--exclude-standard`.
+    """
     try:
-        # Run the git command safely
-        # This matches tracked files in the directories listed in ROOTS.
         result = subprocess.run(
-            ["git", "ls-files", *[f"{root}/*" for root in ROOTS]],
+            _source_file_command(),
+            cwd=REPO_ROOT,
             capture_output=True,
             text=True,
-            check=True
+            check=True,
         )
-    
-        # Split the output into individual file paths and strip whitespace
-        all_files = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-    
-        # Filter the files using the EXTENSIONS tuple
-        filtered_files = [file for file in all_files if file.endswith(EXTENSIONS)]
-        # Skip tracked-but-deleted files: formatting cannot read them.
-        return [file for file in filtered_files if (REPO_ROOT / file).is_file()]
-    
     except subprocess.CalledProcessError as e:
         print(f"Git command failed with exit code {e.returncode}", file=sys.stderr)
         print(f"Error output: {e.stderr}", file=sys.stderr)
@@ -222,7 +261,9 @@ def source_files():
     except FileNotFoundError:
         print("Error: 'git' command-line tool not found on this system.", file=sys.stderr)
         raise
-    
+
+    return _select_sources(result.stdout.splitlines())
+
 
 def run(cmd: list[str], cwd: Path | str = REPO_ROOT) -> int:
     """Run a command in `cwd` (default: repo root), inheriting stdio."""
