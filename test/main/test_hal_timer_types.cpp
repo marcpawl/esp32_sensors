@@ -1,14 +1,14 @@
 // Tests for the timer HAL vocabulary (`hal/timer_types.hpp`).
 //
-// Step 1 of the timer HAL is the shared, implementation-free contract, so there
-// is no device to drive yet: these tests pin the contract itself with small
-// model types. The value is in the *rejections* — a concept that is too loose
+// This header is the shared, implementation-free contract, so there is no
+// device to drive here: these tests pin the contract itself with small model
+// types. The value is in the *rejections* — a concept that is too loose
 // silently accepts an implementation whose handle cannot be cancelled, or whose
 // `register_timer()` returns the wrong type, and the first real caller would
 // then not compile (or worse, compile and leak a timer).
 //
 // The concrete implementations are tested where they live: the FreeRTOS
-// software-timer stub by `test_hal_timer.cpp`, and the `esp_timer` board
+// software-timer stub by `test_hal_timer_stub.cpp`, and the `esp_timer` board
 // implementation by the firmware build (it has no `linux` target).
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)

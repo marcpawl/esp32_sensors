@@ -16,9 +16,9 @@
 // `register_timer()` returning `Returned` (default `Handle`, so only a broken
 // case names it). Each rejection therefore isolates a single requirement.
 //
-// The timer is the requirement Step 4 added, which is why it gets the closest
-// attention here; the other clauses are pinned by the two real boards'
-// `static_assert`s.
+// The timer is the requirement with the most moving parts, which is why it
+// gets the closest attention here; the other clauses are pinned by the two real
+// boards' `static_assert`s.
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #pragma GCC diagnostic pop
@@ -198,8 +198,8 @@ TEST_CASE("hal board types: a complete board models BoardLike",
 
 TEST_CASE("hal board types: BoardLike requires a public TimerHandle type",
           "[hal_board_types]") {
-    // The requirement Step 4 added: without the typedef, `Board::TimerHandle`
-    // does not exist and a caller cannot declare the handle it is given.
+    // Without the typedef, `Board::TimerHandle` does not exist and a caller
+    // cannot declare the handle it is given.
     static_assert(!BoardLike<NoTimerHandleTypedef>);
     TEST_PASS();
 }
