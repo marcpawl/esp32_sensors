@@ -11,11 +11,13 @@
 // `image:`/`pull_policy:` in docker-compose.yml), so nothing is built locally.
 //
 // Volumes are inherited from the compose service, so the IDE gets everything
-// the CLI does — including the host's `~/.continue`, which compose bind-mounts
-// into the container so `cn` (the Continue CLI, installed in the image) uses
-// the same config, models, and sessions as on the host. Do NOT re-declare that
-// mount here: compose already supplies it, and a second declaration would
-// silently shadow it with a different source.
+// the CLI does — two host directories in particular:
+//   * `~/.continue` (read/write), so `cn` — the Continue CLI installed in the
+//     image — uses the same config, models, and sessions as on the host.
+//   * `~/.ssh` (read-only), so the IDE's built-in Git can `push` with the
+//     host's keys without copying them into the image.
+// Do NOT re-declare either mount here: compose already supplies them, and a
+// second declaration would shadow the compose source.
 //
 // What this gives you in CLion:
 //   * CLion pulls the image and starts the container automatically.

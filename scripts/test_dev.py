@@ -620,6 +620,14 @@ class DevContainerTests(unittest.TestCase):
         self.assertNotIn("image", text)
         self.assertNotIn("build", text)
 
+    def test_inherits_the_host_home_mounts_from_compose(self):
+        # The Dev Container reuses the compose service, so `~/.continue` and
+        # `~/.ssh` are inherited. A `mounts` entry here would layer another
+        # mount over the compose one, shadowing its source, so both must stay
+        # in docker-compose.yml alone.
+        text = (dev.REPO_ROOT / ".devcontainer" / "devcontainer.json").read_text()
+        self.assertNotIn('"mounts"', text)
+
 
 class ContainerUserTests(unittest.TestCase):
     """The container runs as the calling user, with a usable HOME.
@@ -693,6 +701,32 @@ class ContainerUserTests(unittest.TestCase):
         self.assertEqual(command[command.index("dev") + 1:], ["dev.py", "build"])
 
 
+def _compose_home_bind_mounts() -> dict[str, tuple[str, str]]:
+    """The host `$HOME` bind mounts in docker-compose.yml, keyed by target.
+
+    Parses the `- ${HOME:?...}/<dir>:<target>[:<mode>]` entries of the `dev`
+    service and returns `{target: (source, mode)}`, where `mode` is "ro" for a
+    read-only mount and "rw" otherwise.
+
+    The source starts with a `${HOME:?...}` expansion, which contains a colon
+    of its own, so splitting has to skip past the closing brace first. Reading
+    the file (rather than running `docker compose config`) keeps this
+    dependency-free, so `self-check` needs no Docker.
+    """
+    compose = (dev.REPO_ROOT / "docker-compose.yml").read_text()
+    mounts = {}
+    for line in compose.splitlines():
+        entry = line.strip().removeprefix("- ").strip()
+        if entry.startswith("#") or not entry.startswith("${HOME:"):
+            continue
+        brace = entry.index("}")
+        suffix, _, rest = entry[brace + 1:].partition(":")
+        source = entry[: brace + 1] + suffix
+        target, _, mode = rest.partition(":")
+        mounts[target] = (source, mode or "rw")
+    return mounts
+
+
 class ContinueCliMountTests(unittest.TestCase):
     """The host's `~/.continue` is shared with the container.
 
@@ -709,26 +743,22 @@ class ContinueCliMountTests(unittest.TestCase):
     TARGET_UID_HOME = "/home/dev"
     OTHER_UID_HOME = "/tmp"
 
-    def _compose(self) -> str:
-        return (dev.REPO_ROOT / "docker-compose.yml").read_text()
-
-    def _mounts(self) -> dict[str, str]:
-        """Map each bind target for the Continue dir to its host source."""
-        mounts = {}
-        for line in self._compose().splitlines():
-            entry = line.strip().removeprefix("- ").strip()
-            if entry.startswith("#") or "/.continue:" not in entry:
-                continue
-            # Split at the *last* colon: the source spells `${HOME:?...}`, so
-            # it contains a colon of its own.
-            source, _, target = entry.rpartition(":")
-            mounts[target] = source
-        return mounts
+    def _mounts(self) -> dict[str, tuple[str, str]]:
+        """The `~/.continue` bind mounts, keyed by target."""
+        return {
+            target: mount
+            for target, mount in _compose_home_bind_mounts().items()
+            if target.endswith("/.continue")
+        }
 
     def test_host_continue_dir_is_mounted_at_the_image_users_home(self):
         self.assertEqual(
             self._mounts().get(f"{self.TARGET_UID_HOME}/.continue"),
-            "${HOME:?HOME must be set to share the Continue CLI config}/.continue",
+            (
+                "${HOME:?HOME must be set to share the Continue CLI config}"
+                "/.continue",
+                "rw",
+            ),
         )
 
     def test_host_continue_dir_is_mounted_where_dev_py_puts_other_uids_home(self):
@@ -747,7 +777,7 @@ class ContinueCliMountTests(unittest.TestCase):
         mounts = self._mounts()
         # Guard against passing vacuously if the mount lines are ever renamed.
         self.assertEqual(len(mounts), 2, mounts)
-        for source in mounts.values():
+        for source, _ in mounts.values():
             self.assertIn("${HOME:?", source)
 
     def test_image_creates_both_mount_points(self):
@@ -756,7 +786,7 @@ class ContinueCliMountTests(unittest.TestCase):
         # /tmp/.continue is world-writable like /tmp so it works without the
         # mount too.
         dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
-        self.assertIn('mkdir -p /tmp/.continue', dockerfile)
+        self.assertIn("mkdir -p /tmp/.continue", dockerfile)
         self.assertIn('"/home/${USERNAME}/.continue"', dockerfile)
         self.assertIn("chmod 1777 /tmp/.continue", dockerfile)
 
@@ -771,13 +801,59 @@ class ContinueCliMountTests(unittest.TestCase):
         self.assertIn("npm install --global", dockerfile)
 
 
-    def test_dev_container_inherits_the_mount_from_compose(self):
-        # The Dev Container reuses the compose service, so the `~/.continue`
-        # bind mount is inherited. A `mounts` entry there would shadow it (the
-        # devcontainer spec layers its own mounts over the compose ones), so
-        # the mount must stay in docker-compose.yml alone.
-        text = (dev.REPO_ROOT / ".devcontainer" / "devcontainer.json").read_text()
-        self.assertNotIn('"mounts"', text)
+class SshMountTests(unittest.TestCase):
+    """The host's `~/.ssh` is shared with the container, read-only.
+
+    `git push` over SSH needs the host's private key and a matching
+    `known_hosts`. Mounting the directory (rather than copying keys into the
+    image) means the key never leaves the host filesystem and there is nothing
+    per-developer to keep out of the image.
+
+    Read-only is deliberate: the container can authenticate but cannot modify
+    or delete the host's private keys, nor rewrite `known_hosts`. The cost is
+    that a host key missing from the host's `known_hosts` cannot be added from
+    inside the container.
+
+    Like `~/.continue`, the target is duplicated because the container's HOME
+    is uid-dependent (see ContainerUserTests).
+    """
+
+    def _mounts(self) -> dict[str, tuple[str, str]]:
+        """The `~/.ssh` bind mounts, keyed by target."""
+        return {
+            target: mount
+            for target, mount in _compose_home_bind_mounts().items()
+            if target.endswith("/.ssh")
+        }
+
+    def test_host_ssh_dir_is_mounted_at_both_possible_homes(self):
+        # Both the image user's home and the HOME `dev.py` pins for any other
+        # uid, so `~/.ssh` resolves to the host directory either way.
+        self.assertIn("/home/dev/.ssh", self._mounts())
+        self.assertIn("/tmp/.ssh", self._mounts())
+
+    def test_ssh_mount_is_read_only(self):
+        # The private key must be usable but not mutable from the container.
+        modes = {mode for _, mode in self._mounts().values()}
+        self.assertEqual(modes, {"ro"}, self._mounts())
+
+    def test_ssh_mount_comes_from_the_host_home(self):
+        # Not a named volume and not baked into the image: every source must be
+        # the host's `$HOME/.ssh`, with `:?` so an unset HOME fails loudly.
+        mounts = self._mounts()
+        self.assertEqual(len(mounts), 2, mounts)
+        for source, _ in mounts.values():
+            self.assertTrue(source.startswith("${HOME:?"), source)
+            self.assertTrue(source.endswith("/.ssh"), source)
+
+    def test_image_creates_the_ssh_mount_points(self):
+        # A bind mount needs a destination. Both are created 0700 and owned by
+        # the container user, which is what ssh requires before it will use a
+        # key (the read-only host mount carries the host's own modes).
+        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        self.assertIn('"/home/${USERNAME}/.ssh"', dockerfile)
+        self.assertIn("install -d -m 700", dockerfile)
+        self.assertIn("/tmp/.ssh", dockerfile)
 
 
 class SpecRevisionTests(unittest.TestCase):

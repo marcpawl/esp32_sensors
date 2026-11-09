@@ -100,6 +100,22 @@ services:
       # `${HOME:?...}` fails the run loudly rather than mounting /.continue.
       - ${HOME:?HOME must be set to share the Continue CLI config}/.continue:/home/dev/.continue
       - ${HOME:?HOME must be set to share the Continue CLI config}/.continue:/tmp/.continue
+      # Share the host's SSH keys, so `git push` over SSH works from inside the
+      # container (the key itself never leaves the host filesystem, and `gh`
+      # credential helpers are unaffected). READ-ONLY on purpose: the container
+      # can authenticate but cannot modify or delete the host's private keys or
+      # rewrite `known_hosts`.
+      #
+      # Consequence: `ssh` cannot append a newly seen host key, so a host that
+      # is not already in the host's `known_hosts` fails with
+      # "Host key verification failed" instead of prompting. Add it on the
+      # host (e.g. `ssh-keyscan github.com >> ~/.ssh/known_hosts`) and re-run;
+      # github.com is already recorded for anyone who has pushed from the host.
+      #
+      # Listed twice for the same reason as `~/.continue`: the container's HOME
+      # is uid-dependent (see scripts/dev.py).
+      - ${HOME:?HOME must be set to share the SSH keys}/.ssh:/home/dev/.ssh:ro
+      - ${HOME:?HOME must be set to share the SSH keys}/.ssh:/tmp/.ssh:ro
 
     working_dir: /project
     environment:

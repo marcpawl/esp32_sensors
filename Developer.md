@@ -127,6 +127,34 @@ silently mounting `/.continue`.
 `cn` also runs headless, which is what makes it usable from scripts and CI:
 `cn -p "your prompt"` (add `--format json` for machine-readable output).
 
+### SSH keys and pushing to GitHub from the container
+
+The host's `~/.ssh` is bind-mounted (read-only) into the container at the same
+place `ssh` looks for it, so `git push` works from inside the container with
+the host's keys — nothing is copied into the image and there is no per-developer
+key setup:
+
+```console
+$ ./scripts/dev.py shell ssh -T git@github.com
+Hi <you>! You've successfully authenticated, but GitHub does not provide shell access.
+```
+
+It is mounted **read-only**: the container can authenticate but cannot modify or
+delete the host's private keys or rewrite `known_hosts`. The one consequence is
+that a host key missing from the host's `known_hosts` cannot be added from the
+container — `ssh` fails with "Host key verification failed" rather than
+prompting. Record it on the host first:
+
+```console
+$ ssh-keyscan github.com >> ~/.ssh/known_hosts
+```
+
+`ssh` insists that `~/.ssh` be `0700` and private keys `0600`, and that they be
+owned by the running user. Those are the host's modes (the mount carries them),
+which is why the container must run as your uid — see "How the container user
+is handled" below. Like `~/.continue`, the mount is declared twice in
+`docker-compose.yml`, once per possible container `HOME`.
+
 ### How the container user is handled
 
 The container is run as **your own** UID/GID

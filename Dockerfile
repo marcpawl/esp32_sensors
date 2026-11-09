@@ -212,24 +212,40 @@ RUN if getent passwd "${UID}" >/dev/null 2>&1; then \
     && printf 'source %s/export.sh\n' "${IDF_PATH}" >> "/home/${USERNAME}/.bashrc"
 
 # ---------------------------------------------------------------------------
-# Continue CLI (`cn`) state directory, shared with the host.
+# Continue CLI (`cn`) state and SSH key mount points, shared with the host.
 #
-# `docker-compose.yml` bind-mounts the host's `~/.continue` here so the host and
-# the container see the same config, models, and sessions. A bind mount needs
-# its destination to exist; Docker would otherwise create it as root (and the
-# mount would hide it), and `cn` running without the mount would have to invent
-# it. Creating it up front, owned by the container user, makes both paths work.
+# `docker-compose.yml` bind-mounts the host's `~/.continue` and `~/.ssh` here so
+# the host and the container see the same files: `cn` keeps its config, models,
+# and sessions under $HOME/.continue, and `git push` authenticates with the
+# host's SSH keys under $HOME/.ssh.
+#
+# A bind mount needs its destination to exist; Docker would otherwise create it
+# as root (and the mount would hide it), and the tool running without the mount
+# would have to invent it. Creating it up front, owned by the container user,
+# makes both paths work.
 #
 # Two locations, because the container's HOME depends on the uid it runs as
 # (see scripts/dev.py): uid 1000 keeps /home/dev, any other uid is given
-# HOME=/tmp so tools like ccache find a writable home. `cn` reads its state from
-# $HOME/.continue, so both are mount points in compose.
+# HOME=/tmp so tools like ccache find a writable home. `cn` and `ssh` read from
+# $HOME, so both are mount points in compose.
+#
+# `~/.ssh` is mounted READ-ONLY, so its permissions are the host's — SSH
+# requires the private key to be 0600 and the directory 0700 or it refuses to
+# use them, and a `.ssh` directory owned by another uid would fail. That is
+# exactly why the container must run as the host uid (see scripts/dev.py).
+#
+# The directory is 0700 here as well, so `ssh` is happy when the mount is
+# absent (then there is simply no key, and `git push` fails loudly).
 # ---------------------------------------------------------------------------
 RUN mkdir -p /tmp/.continue \
-    && chown "${UID}:${GID}" "/home/${USERNAME}/.continue" /tmp/.continue \
     # World-writable + sticky, like /tmp itself: any uid may use it when the
     # host config is not mounted (the mount, when present, hides this dir).
-    && chmod 1777 /tmp/.continue
+    && chmod 1777 /tmp/.continue \
+    # The remaining mount points belong to the container user. `install -d`
+    # creates them with SSH's required 0700 (a loose mode or a foreign owner
+    # makes ssh refuse the key), for both possible HOMEs.
+    && install -d -m 700 -o "${UID}" -g "${GID}" \
+        "/home/${USERNAME}/.continue" "/home/${USERNAME}/.ssh" /tmp/.ssh
 
 
 # Persist bash history across container restarts (volume-mounted in compose).
