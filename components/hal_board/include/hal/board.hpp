@@ -13,6 +13,11 @@
 // no behaviour of its own beyond delegating `init_all()` to the devices, plus
 // deep sleep (§3.8), which belongs to the board rather than to a peripheral
 // because it powers the whole board down.
+//
+// It also owns an `OneShotTimerBoard` and exposes `register_timer()`, so a
+// caller arms a one-shot timer through the board and holds the board's
+// `TimerHandle` (here `TimerHandleBoard`) without naming the timer class — the
+// `BoardLike` contract only requires that the handle can be cancelled.
 #pragma once
 
 // NOLINTBEGIN
@@ -22,6 +27,8 @@
 // NOLINTEND
 
 #include <chrono>
+#include <functional>
+#include <utility>
 
 #include "hal/board_types.hpp"
 #include "hal/chip_temperature.hpp"
@@ -29,6 +36,7 @@
 #include "hal/onewire.hpp"
 #include "hal/push_button.hpp"
 #include "hal/sleep_types.hpp"
+#include "hal/timer_board.hpp"
 #include "hal/wifi.hpp"
 
 namespace thermo::hal {
@@ -36,6 +44,11 @@ namespace thermo::hal {
 // Owns every HAL device on the board.
 class Board {
   public:
+    // The type `register_timer()` returns: the `esp_timer`-backed handle. A
+    // caller only needs `cancel()`, so board-independent code holds it as
+    // `Board::TimerHandle` rather than naming `TimerHandleBoard`.
+    using TimerHandle = TimerHandleBoard;
+
     // `pins` describes the wiring; see `BoardPins`. Constructs the devices but
     // does not touch any hardware — call init_all() for that.
     explicit Board(BoardPins pins) noexcept;
@@ -110,6 +123,20 @@ class Board {
 
     [[nodiscard]] WifiRadio const& wifi() const noexcept { return wifi_; }
 
+    // --- One-shot timer ----------------------------------------------------
+
+    // Schedules `callback` to run once after `delay` and returns the handle
+    // that owns the timer (§3.7, §3.8). The callback runs in the esp_timer
+    // task; capture whatever state it needs in the callable.
+    //
+    // Part of the `BoardLike` contract, so callers arm timers through the board
+    // and never name `OneShotTimerBoard` / `TimerHandleBoard`. Fails loudly (an
+    // assert) if the timer cannot be created or started.
+    [[nodiscard]] TimerHandle register_timer(std::chrono::milliseconds delay,
+                                             std::function<void()> callback) {
+        return timer_.register_timer(delay, std::move(callback));
+    }
+
     // Enters deep sleep for `duration` (§3.8): enables the RTC timer as the
     // wake source and then sleeps, so the next boot happens `duration` later.
     //
@@ -133,6 +160,10 @@ class Board {
     PushButton config_button_;
     PushButton run_button_;
     WifiRadio wifi_;
+    // Arms the board's one-shot timers. Not initialized by `init_all()`: the
+    // esp_timer service needs no per-board setup, and an armed timer is
+    // independent of every other device.
+    OneShotTimerBoard timer_;
 };
 
 static_assert(BoardLike<Board>, "Board must satisfy the BoardLike concept");

@@ -98,7 +98,10 @@ class OneShotTimerBoard {
     OneShotTimerBoard() noexcept = default;
 
     OneShotTimerBoard(OneShotTimerBoard const&) = delete;
-    OneShotTimerBoard(OneShotTimerBoard&&) noexcept = delete;
+    // Movable so a board can own one and still be moved by value out of
+    // `create()`. The factory holds no state — each registration owns its own
+    // `esp_timer` — so moving one is indistinguishable from copying it.
+    OneShotTimerBoard(OneShotTimerBoard&&) noexcept = default;
     ~OneShotTimerBoard() = default;
     OneShotTimerBoard& operator=(OneShotTimerBoard const&) = delete;
     OneShotTimerBoard& operator=(OneShotTimerBoard&&) noexcept = delete;

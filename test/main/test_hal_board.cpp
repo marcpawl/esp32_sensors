@@ -2,25 +2,35 @@
 //
 // `BoardStub` is a convenience aggregate: it owns one stub device per HAL
 // device (chip temperature, 1-Wire bus, green/red LEDs, push buttons, WiFi
-// radio) and exposes them. These tests cover the *aggregate* contract —
-// construction from `BoardPins`, `init_all()`, that each accessor returns a
-// live, usable device, that the underlying stub controls (`set_sensors()`,
-// `set()`, `set_celsius()`, `write()`) remain reachable through the board, and
-// the board-wide deep sleep (§3.8). The devices' own behaviour is covered by
-// their dedicated tests (test_hal_led.cpp, test_hal_push_button.cpp,
-// test_hal_onewire.cpp, test_hal_chip_temperature.cpp); here we only verify the
-// wiring.
+// radio, one-shot timer) and exposes them. These tests cover the *aggregate*
+// contract — construction from `BoardPins`, `init_all()`, that each accessor
+// returns a live, usable device, that the underlying stub controls
+// (`set_sensors()`, `set()`, `set_celsius()`, `write()`) remain reachable
+// through the board, and the board-wide deep sleep (§3.8). The devices' own
+// behaviour is covered by their dedicated tests (test_hal_led.cpp,
+// test_hal_push_button.cpp, test_hal_onewire.cpp,
+// test_hal_chip_temperature.cpp, test_hal_timer_stub.cpp); here we only verify
+// the wiring.
+//
+// The one-shot timer is the exception to "the wiring only": its stub callback
+// really runs, in the FreeRTOS timer service task, so `register_timer()`
+// through the board is exercised end-to-end here (with bounded polls, exactly
+// as `test_hal_timer_stub.cpp` does).
 //
 // They run on the ESP-IDF `linux` target with Unity and link the pin-free
 // `hal_stub` component (never `hal_board`). Every device is deterministic, so
 // no hardware is needed.
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #pragma GCC diagnostic pop
 // NOLINTEND
 
+#include <atomic>
 #include <chrono>
 #include <concepts>
+#include <functional>
 #include <utility>
 #include <vector>
 
@@ -34,6 +44,8 @@
 #include "hal/pin_map.hpp"
 #include "hal/push_button.hpp"
 #include "hal/sleep_types.hpp"
+#include "hal/timer_stub.hpp"
+#include "hal/timer_types.hpp"
 #include "hal/wifi.hpp"
 #include "unity.h"
 
@@ -47,6 +59,7 @@ using thermo::hal::ButtonState;
 using thermo::hal::copy_text;
 using thermo::hal::LedState;
 using thermo::hal::StationConfig;
+using thermo::hal::TimerHandleLike;
 using thermo::hal::wake_cause_bit;
 using thermo::hal::WakeCause;
 using thermo::hal::WakeCauses;
@@ -69,6 +82,36 @@ BoardStub make_board() {
     BoardStub b = BoardStub::create(kPins);
     b.init_all();
     return b;
+}
+
+// --- Bounded polling for the one-shot timer ---------------------------------
+//
+// The stub timer runs on FreeRTOS software timers, whose commands are
+// asynchronous and whose callback arrives from the timer service task, so every
+// assertion about it has to wait rather than read once. The waits are bounded
+// so a timer that never fires fails the test instead of hanging it.
+//
+// `TickType_t` is spelled explicitly because on this port `pdMS_TO_TICKS()` is
+// not an assignable lvalue, and `configTICK_RATE_HZ` is 100 (a tick is 10 ms).
+constexpr std::chrono::milliseconds kTimerDelay{200};
+constexpr TickType_t kPollTicks = 20 * configTICK_RATE_HZ / 1000;
+constexpr TickType_t kLimitTicks = 4000 * configTICK_RATE_HZ / 1000;
+constexpr TickType_t kQuietTicks =
+    (kTimerDelay * 10).count() * configTICK_RATE_HZ / 1000;
+
+// Waits (bounded) for `calls` to reach `expected` and returns what was seen.
+int wait_for_calls(std::atomic<int>& calls, int expected) {
+    for (TickType_t waited = 0; calls.load() < expected && waited < kLimitTicks;
+         waited += kPollTicks) {
+        vTaskDelay(kPollTicks);
+    }
+    return calls.load();
+}
+
+// Gives the timer many periods to misbehave, then returns the count.
+int calls_after_quiet_period(std::atomic<int>& calls) {
+    vTaskDelay(kQuietTicks);
+    return calls.load();
 }
 
 }  // namespace
@@ -216,6 +259,79 @@ TEST_CASE("hal board: wifi() is a live stub device", "[hal_board]") {
     TEST_ASSERT_TRUE(b.wifi().station_running());
 }
 
+// --- One-shot timer ---------------------------------------------------------
+
+TEST_CASE("hal board: the board names a cancelable TimerHandle type",
+          "[hal_board]") {
+    // The `BoardLike` contract requires a public member typedef, and the
+    // handle it names must be cancelable — that is all a holder needs.
+    static_assert(
+        std::same_as<BoardStub::TimerHandle, thermo::hal::TimerHandleStub>);
+    static_assert(TimerHandleLike<BoardStub::TimerHandle>);
+    TEST_PASS();
+}
+
+TEST_CASE("hal board: register_timer() returns the board's TimerHandle",
+          "[hal_board]") {
+    static_assert(
+        std::same_as<decltype(std::declval<BoardStub&>().register_timer(
+                         kTimerDelay, std::function<void()>{})),
+                     BoardStub::TimerHandle>);
+    TEST_PASS();
+}
+
+TEST_CASE("hal board: a timer armed through the board fires exactly once",
+          "[hal_board]") {
+    // A function-local static: the callback may outlive this test (cancellation
+    // is racy by contract), so it must not write to a stack local — and naming
+    // it directly keeps the lambda capture-less, which is what clang-tidy's
+    // unused-lambda-capture check requires.
+    static std::atomic<int> calls;
+    calls.store(0);
+
+    BoardStub b = make_board();
+    BoardStub::TimerHandle handle =
+        b.register_timer(kTimerDelay, [] { calls.fetch_add(1); });
+    TEST_ASSERT_TRUE(handle.valid());
+
+    // The callback really runs, in the timer service task...
+    TEST_ASSERT_EQUAL_INT(1, wait_for_calls(calls, 1));
+    // ...and only once, however many further periods elapse.
+    TEST_ASSERT_EQUAL_INT(1, calls_after_quiet_period(calls));
+}
+
+TEST_CASE("hal board: a timer armed through the board can be cancelled",
+          "[hal_board]") {
+    static std::atomic<int> calls;
+    calls.store(0);
+
+    BoardStub b = make_board();
+    BoardStub::TimerHandle handle =
+        b.register_timer(kTimerDelay, [] { calls.fetch_add(1); });
+    // Cancelled while still armed, so the callback never runs.
+    handle.cancel();
+    TEST_ASSERT_FALSE(handle.valid());
+    TEST_ASSERT_EQUAL_INT(0, calls_after_quiet_period(calls));
+}
+
+TEST_CASE("hal board: the board arms independent timers", "[hal_board]") {
+    // Two registrations through one board must produce two calls, so the board
+    // really does hand each one its own timer.
+    static std::atomic<int> calls;
+    calls.store(0);
+
+    BoardStub b = make_board();
+    BoardStub::TimerHandle a =
+        b.register_timer(kTimerDelay, [] { calls.fetch_add(1); });
+    BoardStub::TimerHandle other =
+        b.register_timer(kTimerDelay, [] { calls.fetch_add(1); });
+    TEST_ASSERT_TRUE(a.valid());
+    TEST_ASSERT_TRUE(other.valid());
+
+    TEST_ASSERT_EQUAL_INT(2, wait_for_calls(calls, 2));
+    TEST_ASSERT_EQUAL_INT(2, calls_after_quiet_period(calls));
+}
+
 // --- Deep sleep (§3.8) ------------------------------------------------------
 
 TEST_CASE("hal board: a fresh stub reports a cold boot, not a wake",
@@ -343,5 +459,12 @@ TEST_CASE("hal board: stub BoardStub models BoardLike", "[hal_board]") {
     static_assert(std::same_as<decltype(std::declval<BoardStub const&>()
                                             .sleep_get_wakeup_causes()),
                                WakeCauses>);
+    // The one-shot timer is part of the same contract: the board names the
+    // handle type and arms timers through it.
+    static_assert(TimerHandleLike<BoardStub::TimerHandle>);
+    static_assert(
+        std::same_as<decltype(std::declval<BoardStub&>().register_timer(
+                         kTimerDelay, std::function<void()>{})),
+                     BoardStub::TimerHandle>);
     TEST_ASSERT_EQUAL(ESP_OK, make_board().init_all());
 }

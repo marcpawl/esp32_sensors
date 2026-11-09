@@ -226,13 +226,12 @@ adds observation accessors (`initialized()`, `ap_running()`,
 (`hal_common`) defines the `TimerHandleLike` concept (`cancel()`) and the
 `OneShotTimerLike<Timer, TimerHandle>` concept (`register_timer(milliseconds,
 std::function<void()>) -> TimerHandle`). `register` cannot be the method name
-(it is a C++ keyword), hence `register_timer`, which is also the name the board
-exposes (Step 4). The handle type is a concept parameter rather than a fixed
-type, because the two implementations arm timers through different mechanisms
-and the caller only needs `cancel()`. Cancellation is **racy by contract**: the
-callback may already be running (or already be queued for the timer task) when
-`cancel()` returns, so a caller that must not act on a stale callback guards
-the callback body itself.
+(it is a C++ keyword), hence `register_timer`. The handle type is a concept
+parameter rather than a fixed type, because the two implementations arm timers
+through different mechanisms and the caller only needs `cancel()`. Cancellation
+is **racy by contract**: the callback may already be running (or already be
+queued for the timer task) when `cancel()` returns, so a caller that must not
+act on a stale callback guards the callback body itself.
 
 Unlike the other HAL devices there is no shared `hal/timer.hpp` and no single
 `Timer` class: the two implementations are named after themselves, so a project
@@ -288,6 +287,30 @@ concept rather than a concrete type.
 or the station — the caller decides (Configure mode starts the AP, Run mode
 starts the station). Reach the stub controls through the board, e.g.
 `board.wifi().start_ap(cfg)` / `board.wifi().ap_running()`.
+
+**The one-shot timer is on the board too, but not as a device accessor.**
+`BoardLike` requires a public member typedef — `typename T::TimerHandle`, which
+must satisfy `TimerHandleLike` — plus a method
+`T::TimerHandle register_timer(std::chrono::milliseconds, std::function<void()>)`.
+Each board spells the typedef for the handle it hands back
+(`Board::TimerHandle = TimerHandleBoard`, `BoardStub::TimerHandle =
+TimerHandleStub`) and owns a private timer factory (`OneShotTimerBoard` /
+`OneShotTimerStub`) that `register_timer()` delegates to. There is **no**
+`timer()` accessor on purpose: a caller arms a timer and immediately owns the
+handle, so exposing the factory as well would give it two ways to do the same
+thing. Because the typedef is spelled by the implementation, `BoardLike` stays
+implementation-free — it names only the `TimerHandleLike` concept, so
+board-independent code (templated on `hal::BoardLike`) can arm and cancel a
+timer without knowing which mechanism is underneath.
+
+The two timer factories are **movable** (defaulted move constructor, move
+assignment still deleted, like every other HAL device). They hold no state —
+each `register_timer()` creates its own timer — so moving one is
+indistinguishable from copying it, and making them movable is what keeps
+`Board` / `BoardStub` movable, which `create()` plus
+`std::make_shared<Board>(Board::create({}))` relies on. `init_all()` does not
+touch the timer: neither `esp_timer` nor the FreeRTOS timer service needs
+per-board setup.
 
 The two aggregate boards are **named differently on purpose**:
 `hal_board`'s is `thermo::hal::Board` in `hal/board.hpp`, `hal_stub`'s is
@@ -813,9 +836,11 @@ There are two test suites, both runnable from the host via `scripts/dev.py`:
   `test_hal_wifi.cpp` covers the WiFi radio stub, and
   `test_hal_board.cpp` covers the aggregate board — including that
   `config_button()` / `run_button()` / `wifi()` are wired up, that
-  `init_all()` initializes but does not start the radio, and that
+  `init_all()` initializes but does not start the radio, that
   `deep_sleep_start()` records the duration while `sleep_get_wakeup_causes()` /
-  `set_wakeup_causes()` model the next boot's wake cause). The timer HAL
+  `set_wakeup_causes()` model the next boot's wake cause, and that the board
+  names a cancelable `TimerHandle` and arms working timers through
+  `register_timer()`). The timer HAL
   vocabulary is pinned by `test_hal_timer_types.cpp` (which models conforming
   and non-conforming timer/handle types to prove both concepts reject what they
   should); `test_freertos_timers.cpp` verifies that FreeRTOS software

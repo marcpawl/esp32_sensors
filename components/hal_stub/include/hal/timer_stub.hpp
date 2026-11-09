@@ -106,7 +106,10 @@ class OneShotTimerStub {
     OneShotTimerStub() noexcept = default;
 
     OneShotTimerStub(OneShotTimerStub const&) = delete;
-    OneShotTimerStub(OneShotTimerStub&&) noexcept = delete;
+    // Movable so a board can own one and still be moved by value out of
+    // `create()`. The factory holds no state — each registration owns its own
+    // FreeRTOS timer — so moving one is indistinguishable from copying it.
+    OneShotTimerStub(OneShotTimerStub&&) noexcept = default;
     ~OneShotTimerStub() = default;
     OneShotTimerStub& operator=(OneShotTimerStub const&) = delete;
     OneShotTimerStub& operator=(OneShotTimerStub&&) noexcept = delete;
