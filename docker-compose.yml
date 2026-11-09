@@ -153,6 +153,16 @@ services:
       # Do NOT put a token in this file: it is committed.
       GH_TOKEN:
       GITHUB_TOKEN:
+      # Pass the host's DeepSeek API key through when it is set, so the
+      # Continue CLI (`cn`, via `scripts/dev.py cn`) can authenticate. The
+      # config in `~/.continue/config.yaml` names its models' key as
+      # `${{ secrets.DEEPSEEK_API_KEY }}`, and cn resolves that from the
+      # environment. A null value means "take it from the host env", so a host
+      # without the variable passes nothing (and cn then reports the missing
+      # secret) rather than an empty string.
+      #
+      # Do NOT put a key in this file: it is committed.
+      DEEPSEEK_API_KEY:
 
     # Optional: expose the device's HTTPS config server for host-side testing
     # once Configure mode is implemented (adjust the container-side port).

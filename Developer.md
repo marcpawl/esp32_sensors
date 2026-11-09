@@ -96,9 +96,13 @@ The image installs the [Continue CLI](https://github.com/continuedev/continue/tr
 inside the container without a host install:
 
 ```console
-$ ./scripts/dev.py shell cn --version
+$ ./scripts/dev.py cn --version
 1.5.47
 ```
+
+`./scripts/dev.py cn` is the supported entry point (see
+[`scripts/dev.py cn`](#scriptsdevpy-cn) below); `./scripts/dev.py shell cn`
+also works and simply runs `cn` in the container's shell.
 
 `cn` keeps its configuration, sessions, and model list under `$HOME/.continue`,
 and the container's `$HOME/.continue` **is** the host's: `docker-compose.yml`
@@ -124,8 +128,40 @@ is missing, and the runner never uses it.
 The service fails to start if `HOME` is unset (`${HOME:?...}`), rather than
 silently mounting `/.continue`.
 
-`cn` also runs headless, which is what makes it usable from scripts and CI:
-`cn -p "your prompt"` (add `--format json` for machine-readable output).
+#### `scripts/dev.py cn`
+
+`./scripts/dev.py cn` runs the Continue CLI in the container the same way every
+other task does, and names the config explicitly:
+
+```console
+$ ./scripts/dev.py cn                              # interactive agent
+$ ./scripts/dev.py cn -p "summarize scripts/dev.py"
+$ ./scripts/dev.py cn --format json -p "list the files in components/"
+```
+
+It prefixes its own `--config <container HOME>/.continue/config.yaml` because
+`cn`'s default lookup of that file is not reliable — pointed at the wrong
+directory it silently falls back to a **remote default config**, which has none
+of the host's models. Everything after `cn` is forwarded to `cn` verbatim, so
+any `cn` flag works (a later `--config` still wins, since the last one wins).
+The `$HOME` in that path is the container's, which `scripts/dev.py` sets —
+`/home/dev` for the image user (uid 1000) and `/tmp` for any other uid — and
+`docker-compose.yml` mounts the host's `~/.continue` at both.
+
+The config's models authenticate with `${{ secrets.DEEPSEEK_API_KEY }}`, which
+`cn` resolves from the process environment. `docker-compose.yml` passes the
+host's `DEEPSEEK_API_KEY` through, with **no value in the file**, so the secret
+is read from your environment and never committed. Export it on the host and
+the container sees it:
+
+```console
+$ export DEEPSEEK_API_KEY=...
+$ ./scripts/dev.py cn -p "hello"
+```
+
+`./scripts/dev.py shell cn ...` gets the same `DEEPSEEK_API_KEY` (compose
+passes the service environment to every command it runs), but not the
+`--config`: it inherits `cn`'s own default lookup.
 
 ### GitHub CLI (`gh`) in the container: no SSH login
 
