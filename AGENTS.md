@@ -222,12 +222,99 @@ is rejected with `ESP_ERR_INVALID_ARG`; callers must not start it. The stub
 adds observation accessors (`initialized()`, `ap_running()`,
 `station_running()`, `ap_config()`, `station_config()`), useful in tests.
 
+**The one-shot timer is a HAL device, but a new one.** `hal/timer_types.hpp`
+(`hal_common`) defines the `TimerLike` concept (`cancel()`) and the
+`OneShotTimerFactoryLike<Timer, TimerHandle>` concept
+(`register_timer(milliseconds, std::function<void()>) -> TimerHandle`).
+`register` cannot be the method name
+(it is a C++ keyword), hence `register_timer`. The arming class is a *factory*
+rather than a timer: it holds no timer of its own, creating one per call and
+handing it back through the handle. The handle type is a concept
+parameter rather than a fixed type, because the two implementations arm timers
+through different mechanisms and the caller only needs `cancel()`. Cancellation
+is **racy by contract**: the callback may already be running (or already be
+queued for the timer task) when `cancel()` returns, so a caller that must not
+act on a stale callback guards the callback body itself.
+
+Unlike the other HAL devices there is no shared `hal/timer.hpp` and no single
+`Timer` class: the two implementations are named after themselves, so a project
+always states which one it linked, and board-independent code targets the
+concept rather than a concrete type.
+
+- **`hal_board`:** `hal/timer_board.hpp` + `timer_board.cpp` provide
+  `OneShotTimerFactoryBoard` (the arming factory) and `TimerBoard` (the
+  move-only handle). Both `static_assert` their concepts, so the implementation
+  cannot drift from the shared contract. It is built on `esp_timer` with
+  `ESP_TIMER_TASK` dispatch, so the callback runs in the esp_timer task and may
+  use ordinary FreeRTOS APIs — but must stay short, since that one task also
+  dispatches every other `esp_timer` callback. The handle **owns** the
+  `esp_timer` instance (RAII): `cancel()` — also run by the destructor — arms
+  nothing further, stops with `esp_timer_stop_blocking(…, portMAX_DELAY)`, then
+  deletes the instance. The `std::function` lives in a `shared_ptr` the handle
+  holds while the timer's `arg` points at it; `esp_timer_stop_blocking()` from
+  task context does not return until no callback is running, which is what makes
+  releasing the box safe. A handle destroyed from *inside* its own callback is
+  the exception (the stop returns immediately there), so the callback copies the
+  callable before invoking it and touches the box no further. Consequently
+  `cancel()` on this implementation is **stronger** than the abstract contract:
+  it is not racy when called from task context. A zero delay or a failed
+  `esp_timer_create()` / `esp_timer_start_once()` trips an `assert` rather than
+  silently dropping the request (after the assert it returns an empty handle,
+  never a handle that owns no timer).
+- **`hal_stub`:** `hal/timer_stub.hpp` + `timer_stub.cpp` provide
+  `OneShotTimerFactoryStub` and `TimerStub`, likewise pinned by
+  `static_assert`.
+  It uses FreeRTOS software timers (`freertos/timers.h`) because the `linux`
+  target has no `esp_timer` implementation — `test/main/test_freertos_timers.cpp`
+  first pinned that the one-shot API works there, and
+  `test/main/test_hal_timer_stub.cpp` covers the stub itself. Each
+  `register_timer()` allocates one `TimerCallbackBox` (the caller's
+  `std::function`) and creates a one-shot (`pdFALSE`) timer whose `pvTimerID`
+  is that box, so it too is RAII-owned by a move-only handle. Lifetime is
+  harder here than on the board, because FreeRTOS timer commands are
+  **asynchronous**: start/stop/delete only queue work for the "Tmr Svc" task, so
+  neither the timer nor its callback storage can be freed when `cancel()`
+  returns. `cancel()` therefore queues the box's free with
+  `xTimerPendFunctionCall()`, which FreeRTOS posts to the *same* command queue
+  and so processes strictly after the timer's own delete — and the timer task
+  drains expired timers before the queue, and the callback copies the callable
+  before invoking it, so neither a late callback nor a self-cancel can read
+  freed memory. Consequently `cancel()` on the stub is genuinely **racy**, as
+  the abstract contract allows: a callback already dispatched may still run
+  after `cancel()` returns. A delay that rounds to fewer than one tick (10 ms at
+  `configTICK_RATE_HZ` = 100), a null callback, or a failed create/start trips an
+  `assert`; after the assert an empty handle is returned.
+
 **The aggregate board owns one of every device**, including the WiFi radio:
 `BoardLike` (`hal/board_types.hpp`) requires `wifi()` (mutable and const), and
 `init_all()` initializes the radio last. `init_all()` does **not** start the AP
 or the station — the caller decides (Configure mode starts the AP, Run mode
 starts the station). Reach the stub controls through the board, e.g.
 `board.wifi().start_ap(cfg)` / `board.wifi().ap_running()`.
+
+**The one-shot timer is on the board too, but not as a device accessor.**
+`BoardLike` requires a public member typedef — `typename T::TimerHandle`, which
+must satisfy `TimerLike` — plus a method
+`T::TimerHandle register_timer(std::chrono::milliseconds, std::function<void()>)`.
+Each board spells the typedef for the handle it hands back
+(`Board::TimerHandle = TimerBoard`, `BoardStub::TimerHandle =
+TimerStub`) and owns a private timer factory (`OneShotTimerFactoryBoard` /
+`OneShotTimerFactoryStub`) that `register_timer()` delegates to. There is **no**
+`timer()` accessor on purpose: a caller arms a timer and immediately owns the
+handle, so exposing the factory as well would give it two ways to do the same
+thing. Because the typedef is spelled by the implementation, `BoardLike` stays
+implementation-free — it names only the `TimerLike` concept, so
+board-independent code (templated on `hal::BoardLike`) can arm and cancel a
+timer without knowing which mechanism is underneath.
+
+The two timer factories are **movable** (defaulted move constructor, move
+assignment still deleted, like every other HAL device). They hold no state —
+each `register_timer()` creates its own timer — so moving one is
+indistinguishable from copying it, and making them movable is what keeps
+`Board` / `BoardStub` movable, which `create()` plus
+`std::make_shared<Board>(Board::create({}))` relies on. `init_all()` does not
+touch the timer: neither `esp_timer` nor the FreeRTOS timer service needs
+per-board setup.
 
 The two aggregate boards are **named differently on purpose**:
 `hal_board`'s is `thermo::hal::Board` in `hal/board.hpp`, `hal_stub`'s is
@@ -392,8 +479,9 @@ pole combinations — including the both-on hardware fault, which the header
 reports as `std::nullopt` instead of rebooting. `main.cpp`'s `read_mode()` is
 the thin wrapper that turns that `std::nullopt` into the firmware's fail-loudly
 `reboot()`. The HAL's `hal_stub` component (the pin-free buttons, LEDs, 1-Wire
-bus, chip-temperature sensor, WiFi radio, and aggregate board) is likewise built
-for the `linux` target and covered by `test/main/test_hal_*.cpp`.
+bus, chip-temperature sensor, WiFi radio, one-shot timer, and aggregate board)
+is likewise built for the `linux` target and covered by
+`test/main/test_hal_*.cpp`.
 **Keep it that way** — put pure logic in these files and hardware/IDF calls
 behind them.
 
@@ -752,9 +840,26 @@ There are two test suites, both runnable from the host via `scripts/dev.py`:
   `test_hal_wifi.cpp` covers the WiFi radio stub, and
   `test_hal_board.cpp` covers the aggregate board — including that
   `config_button()` / `run_button()` / `wifi()` are wired up, that
-  `init_all()` initializes but does not start the radio, and that
+  `init_all()` initializes but does not start the radio, that
   `deep_sleep_start()` records the duration while `sleep_get_wakeup_causes()` /
-  `set_wakeup_causes()` model the next boot's wake cause).
+  `set_wakeup_causes()` model the next boot's wake cause, and that the board
+  names a cancelable `TimerHandle` and arms working timers through
+  `register_timer()`). `test_hal_board_types.cpp` pins the `BoardLike` contract
+  from the other side: `BoardWithoutTimer` spells out every requirement except
+  the timer using the real stub devices, and `ModelBoard<Handle, Returned>`
+  adds just the timer clause, so a model that names no handle, a non-class or
+  non-cancelable handle, a `register_timer()` returning something other than the
+  board's `TimerHandle`, or no `register_timer()` at all is each rejected for
+  that reason alone. The timer HAL
+  vocabulary is pinned by `test_hal_timer_types.cpp` (which models conforming
+  and non-conforming timer/handle types to prove both concepts reject what they
+  should); `test_freertos_timers.cpp` verifies that FreeRTOS software
+  timers — what the `hal_stub` timer implementation is built on, since the
+  `linux` target has no `esp_timer` — create, fire exactly once, re-arm, and
+  stay silent after a cancel; and `test_hal_timer_stub.cpp` covers the stub
+  itself (`TimerStub` / `OneShotTimerFactoryStub`): the concepts, firing
+  exactly once, a captured callable really running, cancelling before and after
+  the expiry, and move construction / move assignment transferring ownership.
 - **On-target tests** are planned for hardware-dependent code (1-Wire/DS18B20
   reads, deep-sleep wake, Wi-Fi upload).
 - Keep hardware interactions behind thin interfaces so business logic remains

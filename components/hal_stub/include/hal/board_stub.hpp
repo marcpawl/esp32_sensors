@@ -24,6 +24,12 @@
 // arms the wake cause the real board would wake from (`WakeCause::kTimer`), and
 // returns, so a test can follow one sleep cycle into the next boot. A test
 // wanting a different wake overrides it with `set_wakeup_causes()`.
+//
+// The one-shot timer is owned by the board as well: `register_timer()` arms an
+// `OneShotTimerFactoryStub` and returns the board's `TimerHandle` (here
+// `TimerStub`). A test therefore arms a timer through the board and can
+// observe it firing, exactly as the firmware does — and because the stub is
+// built on FreeRTOS software timers, that callback really does run.
 #pragma once
 
 // NOLINTBEGIN
@@ -33,7 +39,9 @@
 // NOLINTEND
 
 #include <chrono>
+#include <functional>
 #include <optional>
+#include <utility>
 
 #include <cstdint>
 
@@ -43,6 +51,7 @@
 #include "hal/onewire.hpp"
 #include "hal/push_button.hpp"
 #include "hal/sleep_types.hpp"
+#include "hal/timer_stub.hpp"
 #include "hal/wifi.hpp"
 
 namespace thermo::hal {
@@ -50,6 +59,11 @@ namespace thermo::hal {
 // Owns every stub HAL device on the board.
 class BoardStub {
   public:
+    // The type `register_timer()` returns: the FreeRTOS-backed handle. A caller
+    // only needs `cancel()`, so board-independent code holds it as
+    // `BoardStub::TimerHandle` rather than naming `TimerStub`.
+    using TimerHandle = TimerStub;
+
     // `pins` describes the wiring; see `BoardPins`. The stub ignores the pin
     // numbers but keeps the LED labels for logging. Constructs the devices but
     // does not touch any hardware — call init_all() for that.
@@ -124,6 +138,25 @@ class BoardStub {
 
     [[nodiscard]] WifiRadio const& wifi() const noexcept { return wifi_; }
 
+    // --- One-shot timer ----------------------------------------------------
+
+    // Schedules `callback` to run once after `delay` and returns the handle
+    // that owns the timer. The callback runs in the FreeRTOS timer service
+    // task; capture whatever state it needs in the callable.
+    //
+    // Part of the `BoardLike` contract, so callers arm timers through the board
+    // and never name `OneShotTimerFactoryStub` / `TimerStub`. Fails
+    // loudly (an assert) if the delay rounds to fewer than one tick, the
+    // callback is null, or the timer cannot be created or started.
+    //
+    // The callback really runs (this is a live timer, not a recording), so a
+    // test observes it the way `test_hal_timer_stub.cpp` does: poll with
+    // `vTaskDelay()` rather than reading a flag immediately.
+    [[nodiscard]] TimerHandle register_timer(std::chrono::milliseconds delay,
+                                             std::function<void()> callback) {
+        return timer_.register_timer(delay, std::move(callback));
+    }
+
     // --- Deep sleep (§3.8) -------------------------------------------------
 
     // Stubbed deep sleep: records `duration`, arms the wake cause the real
@@ -166,6 +199,10 @@ class BoardStub {
     PushButton config_button_;
     PushButton run_button_;
     WifiRadio wifi_;
+    // Arms the board's one-shot timers. Not initialized by `init_all()`: the
+    // FreeRTOS timer service needs no per-board setup, and an armed timer is
+    // independent of every other device.
+    OneShotTimerFactoryStub timer_;
     // Wake causes reported by `sleep_get_wakeup_causes()`. A fresh stub
     // models a cold boot, which is what the real board reports while running
     // normally.

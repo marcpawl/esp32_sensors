@@ -20,6 +20,13 @@
 // operations that are not a peripheral — entering deep sleep (§3.8) and
 // reporting why the last wake happened; the semantics of each device live in
 // that device's own HAL.
+//
+// The one-shot timer is owned by the board too, but exposed through a *member
+// typedef* rather than a device accessor: `BoardLike` requires a public
+// `TimerHandle` type and a `register_timer()` method, so a caller arms a timer
+// through the board and holds the returned handle without naming either
+// implementation's classes. `TimerHandle` must satisfy `TimerLike` (see
+// `hal/timer_types.hpp`), which is all a holder needs to cancel one.
 #pragma once
 
 // NOLINTBEGIN
@@ -30,6 +37,7 @@
 
 #include <chrono>
 #include <concepts>
+#include <functional>
 #include <type_traits>
 
 #include "hal/chip_temperature.hpp"
@@ -38,6 +46,7 @@
 #include "hal/pin_map.hpp"
 #include "hal/push_button.hpp"
 #include "hal/sleep_types.hpp"
+#include "hal/timer_types.hpp"
 #include "hal/wifi.hpp"
 
 namespace thermo::hal {
@@ -91,10 +100,25 @@ struct BoardPins {
 // the stub must return, so a host test can carry on and assert the recorded
 // request. `[[noreturn]]` is deliberately not part of the contract, and no
 // caller may rely on the sleep returning.
+//
+// The one-shot timer is required as a *member typedef* plus a method rather
+// than as a device accessor: `TimerHandle` is the type the caller holds, and
+// `register_timer()` arms one. Because `TimerHandle` is spelled by the
+// implementation, `BoardLike` stays implementation-free — it names only the
+// `TimerLike` concept, so a project can link either board and board-
+// independent code can cancel a timer without knowing which mechanism armed it.
 template<typename T>
 concept BoardLike =
     std::is_class_v<T> &&
-    requires(T& board, T const& const_board, std::chrono::seconds duration) {
+    requires(T& board, T const& const_board, std::chrono::seconds duration,
+             std::chrono::milliseconds delay, std::function<void()> callback) {
+        // The board names the handle type it hands back, and that type can be
+        // cancelled. A board without a public `TimerHandle` — or one whose
+        // handle has no `cancel()` — cannot model this.
+        requires TimerLike<typename T::TimerHandle>;
+        {
+            board.register_timer(delay, callback)
+        } -> std::same_as<typename T::TimerHandle>;
         { T::create(BoardPins{}) } -> std::same_as<T>;
         { board.init_all() } -> std::same_as<esp_err_t>;
         { board.deep_sleep_start(duration) } -> std::same_as<void>;
