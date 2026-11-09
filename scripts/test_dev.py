@@ -1387,6 +1387,141 @@ class StagedFormatCheckTests(unittest.TestCase):
         )
 
 
+class SourceFileDiscoveryTests(unittest.TestCase):
+    """`source_files` must see untracked sources, not just the index.
+
+    `format` used to enumerate with plain `git ls-files`, whose default is the
+    index. A brand-new source that had not been `git add`ed was therefore
+    silently skipped: `format` left it untouched, and the pre-commit hook's
+    `format-check-staged` (which reads the staged content by definition) then
+    rejected the commit with a wall of violations. The fix enumerates
+    `--cached --others --exclude-standard`, so `format` covers the working tree
+    while still ignoring build output.
+    """
+
+    def _git(self, repo, *args):
+        """Run git in `repo` (a scratch repository) and return stdout."""
+        return subprocess.run(
+            ("git", *args),
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+
+    def _scratch_repo(self):
+        """A throwaway git repository, so no test touches the real index."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        repo = Path(tmp.name)
+        self._git(repo, "init", "-q", ".")
+        self._git(repo, "config", "user.email", "test@example.com")
+        self._git(repo, "config", "user.name", "test")
+        return repo
+
+    def _write(self, repo, relative, content):
+        """Write `content` to `repo/relative`, creating parent directories."""
+        path = repo / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+        return path
+
+    def _listed(self, repo):
+        """The paths `_source_file_command` reports for a scratch repository."""
+        # `_source_file_command` starts with "git"; `_git` adds that itself.
+        argv = dev._source_file_command(roots=(".",))[1:]
+        return self._git(repo, *argv).splitlines()
+
+    # -- the command itself -------------------------------------------------
+
+    def test_command_lists_cached_and_untracked_with_standard_excludes(self):
+        # The three flags that matter: tracked files, untracked files, and the
+        # `.gitignore` filter that keeps build output out.
+        argv = dev._source_file_command()
+        self.assertEqual(argv[:2], ["git", "ls-files"])
+        self.assertIn("--cached", argv)
+        self.assertIn("--others", argv)
+        self.assertIn("--exclude-standard", argv)
+
+    def test_command_is_scoped_to_roots(self):
+        # The pathspec keeps `third_party/` (vendored, must stay
+        # byte-identical) out of the walk.
+        argv = dev._source_file_command()
+        separator = argv.index("--")
+        self.assertEqual(tuple(argv[separator + 1:]), dev.ROOTS)
+
+    # -- selection ----------------------------------------------------------
+
+    def test_selection_keeps_only_cpp_extensions(self):
+        repo = self._scratch_repo()
+        for name in ("a.cpp", "b.hpp", "c.h", "d.py", "e.txt"):
+            self._write(repo, name, "")
+        self.assertEqual(
+            dev._select_sources(
+                ["a.cpp", "b.hpp", "c.h", "d.py", "e.txt"], repo
+            ),
+            ["a.cpp", "b.hpp", "c.h"],
+        )
+
+    def test_selection_drops_paths_that_are_not_files(self):
+        # A tracked-but-deleted file is still in the index; handing it to
+        # clang-format would fail the run.
+        repo = self._scratch_repo()
+        self._write(repo, "kept.cpp", "")
+        self.assertEqual(
+            dev._select_sources(["kept.cpp", "gone.cpp"], repo), ["kept.cpp"]
+        )
+
+    def test_selection_is_sorted_and_deduplicated(self):
+        repo = self._scratch_repo()
+        self._write(repo, "b.cpp", "")
+        self._write(repo, "a.cpp", "")
+        self.assertEqual(
+            dev._select_sources(["b.cpp", "a.cpp", "a.cpp"], repo),
+            ["a.cpp", "b.cpp"],
+        )
+
+    # -- end to end, against a scratch repository ---------------------------
+
+    def test_untracked_source_is_included(self):
+        # The regression: a source that exists but is not in the index must
+        # still be handed to clang-format.
+        repo = self._scratch_repo()
+        self._write(repo, "src/new.cpp", "int x;\n")
+        self.assertTrue(
+            any(path.endswith("src/new.cpp") for path in self._listed(repo)),
+            self._listed(repo),
+        )
+
+    def test_ignored_source_is_excluded(self):
+        # `--exclude-standard` must keep build trees out of the walk even
+        # though they are untracked.
+        repo = self._scratch_repo()
+        self._write(repo, ".gitignore", "build/\n")
+        self._write(repo, "build/generated.cpp", "int x;\n")
+        self._write(repo, "src/real.cpp", "int x;\n")
+        listed = self._listed(repo)
+        self.assertTrue(any(p.endswith("src/real.cpp") for p in listed), listed)
+        self.assertFalse(
+            any("generated.cpp" in p for p in listed), listed
+        )
+
+    def test_tracked_and_untracked_sources_are_both_listed(self):
+        # `--cached` alone lists only the first and `--others` only the
+        # second, so both flags are required.
+        repo = self._scratch_repo()
+        self._write(repo, "src/tracked.cpp", "int x;\n")
+        self._git(repo, "add", "--", "src/tracked.cpp")
+        self._write(repo, "src/untracked.cpp", "int x;\n")
+        listed = self._listed(repo)
+        self.assertTrue(
+            any(p.endswith("src/tracked.cpp") for p in listed), listed
+        )
+        self.assertTrue(
+            any(p.endswith("src/untracked.cpp") for p in listed), listed
+        )
+
+
 class SelfCheckModuleTests(unittest.TestCase):
     """Sanity check on the module dev.py invokes for `self-check`."""
 
