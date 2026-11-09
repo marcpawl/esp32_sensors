@@ -101,10 +101,12 @@ services:
       - ${HOME:?HOME must be set to share the Continue CLI config}/.continue:/home/dev/.continue
       - ${HOME:?HOME must be set to share the Continue CLI config}/.continue:/tmp/.continue
       # Share the host's SSH keys, so `git push` over SSH works from inside the
-      # container (the key itself never leaves the host filesystem, and `gh`
-      # credential helpers are unaffected). READ-ONLY on purpose: the container
-      # can authenticate but cannot modify or delete the host's private keys or
-      # rewrite `known_hosts`.
+      # container (the key itself never leaves the host filesystem). READ-ONLY
+      # on purpose: the container can authenticate but cannot modify or delete
+      # the host's private keys or rewrite `known_hosts`.
+      #
+      # This authenticates *git*, not the GitHub CLI: `gh` is an API client and
+      # accepts no SSH key, so its login is the `~/.config/gh` mount below.
       #
       # Consequence: `ssh` cannot append a newly seen host key, so a host that
       # is not already in the host's `known_hosts` fails with
@@ -116,6 +118,22 @@ services:
       # is uid-dependent (see scripts/dev.py).
       - ${HOME:?HOME must be set to share the SSH keys}/.ssh:/home/dev/.ssh:ro
       - ${HOME:?HOME must be set to share the SSH keys}/.ssh:/tmp/.ssh:ro
+      # Share the host's GitHub CLI state (`~/.config/gh`: the active account
+      # and its token), so `gh` is already logged in inside the container.
+      #
+      # gh has no SSH-key authentication: `git push` uses `~/.ssh`, but gh's
+      # own commands (pr, release, api, issue, ...) call the GitHub REST API,
+      # which only accepts an OAuth token or a PAT. Those credentials live in
+      # `~/.config/gh/hosts.yml` — or this mount does nothing, because the host
+      # stored its token in the desktop keyring instead (see the GH_TOKEN
+      # passthrough in `environment:` below, which is the recommended path).
+      #
+      # Read/write, unlike `~/.ssh`: `gh auth login` inside the container then
+      # persists to the host, exactly as on the host. That also means the
+      # container can read and replace the host's gh token — it is a secret
+      # either way, and the whole point is to share one login.
+      - ${HOME:?HOME must be set to share the GitHub CLI login}/.config/gh:/home/dev/.config/gh
+      - ${HOME:?HOME must be set to share the GitHub CLI login}/.config/gh:/tmp/.config/gh
 
     working_dir: /project
     environment:
@@ -124,6 +142,17 @@ services:
       # actually set on the host, so the variable is absent (not empty) in
       # the container otherwise. A null value means "take from the host env".
       ESP32_PORT:
+      # Pass the host's GitHub token through when it is set, so `gh` is
+      # authenticated in the container without touching any config file:
+      # `GH_TOKEN` takes precedence over stored credentials, and works even
+      # when the host keeps its token in the desktop keyring (which the
+      # container cannot reach). A null value means "take from the host env",
+      # so an unset token stays unset rather than becoming an empty string
+      # that gh would treat as a (bad) credential.
+      #
+      # Do NOT put a token in this file: it is committed.
+      GH_TOKEN:
+      GITHUB_TOKEN:
 
     # Optional: expose the device's HTTPS config server for host-side testing
     # once Configure mode is implemented (adjust the container-side port).

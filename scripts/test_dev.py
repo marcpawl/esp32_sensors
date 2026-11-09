@@ -621,10 +621,10 @@ class DevContainerTests(unittest.TestCase):
         self.assertNotIn("build", text)
 
     def test_inherits_the_host_home_mounts_from_compose(self):
-        # The Dev Container reuses the compose service, so `~/.continue` and
-        # `~/.ssh` are inherited. A `mounts` entry here would layer another
-        # mount over the compose one, shadowing its source, so both must stay
-        # in docker-compose.yml alone.
+        # The Dev Container reuses the compose service, so `~/.continue`,
+        # `~/.ssh`, and `~/.config/gh` are inherited. A `mounts` entry here
+        # would layer another mount over the compose one, shadowing its source,
+        # so all of them must stay in docker-compose.yml alone.
         text = (dev.REPO_ROOT / ".devcontainer" / "devcontainer.json").read_text()
         self.assertNotIn('"mounts"', text)
 
@@ -725,6 +725,37 @@ def _compose_home_bind_mounts() -> dict[str, tuple[str, str]]:
         target, _, mode = rest.partition(":")
         mounts[target] = (source, mode or "rw")
     return mounts
+
+
+def _compose_dev_environment() -> dict[str, str | None]:
+    """The `dev` service's `environment:` mapping in docker-compose.yml.
+
+    Returns `{name: value}`, where `None` means the entry was written with no
+    value at all. That is compose's spelling of "take it from the host
+    environment": an unset host variable stays unset instead of being passed
+    as an empty string (which tools like `gh` would read as a bad credential).
+
+    Parsed line by line, like `_compose_home_bind_mounts`, so `self-check`
+    needs no Docker and no YAML library. The block ends at the first line
+    indented no deeper than the `environment:` key itself.
+    """
+    compose = (dev.REPO_ROOT / "docker-compose.yml").read_text()
+    lines = compose.splitlines()
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped != "environment:":
+            continue
+        depth = len(line) - len(line.lstrip())
+        environment: dict[str, str | None] = {}
+        for entry in lines[index + 1:]:
+            if not entry.strip() or entry.strip().startswith("#"):
+                continue
+            if len(entry) - len(entry.lstrip()) <= depth:
+                return environment
+            name, _, value = entry.strip().partition(":")
+            environment[name] = value.strip() or None
+        return environment
+    raise AssertionError("docker-compose.yml has no `environment:` block")
 
 
 class ContinueCliMountTests(unittest.TestCase):
@@ -854,6 +885,92 @@ class SshMountTests(unittest.TestCase):
         self.assertIn('"/home/${USERNAME}/.ssh"', dockerfile)
         self.assertIn("install -d -m 700", dockerfile)
         self.assertIn("/tmp/.ssh", dockerfile)
+
+
+class GhCliMountTests(unittest.TestCase):
+    """The host's `~/.config/gh` is shared with the container, read/write.
+
+    `gh` is an API client, so the host's `~/.ssh` does not log it in: its
+    commands (pr, release, api, issue, ...) call the GitHub REST API with an
+    OAuth token or a PAT, which `gh` reads from `$HOME/.config/gh` or from
+    `GH_TOKEN` / `GITHUB_TOKEN`.
+
+    Two independent paths are provided on purpose:
+
+    * the environment passthrough below is the recommended one — `GH_TOKEN`
+      takes precedence over any stored credential, and it works even when the
+      host keeps its token in a desktop keyring the container cannot reach;
+    * the bind mount covers the case where `gh auth login` stored the token in
+      `hosts.yml`, and it needs no token in the environment at all.
+
+    Read/write (unlike `~/.ssh`) so that `gh auth login` inside the container
+    persists to the host, which is what makes the two logins one.
+    """
+
+    def _mounts(self) -> dict[str, tuple[str, str]]:
+        """The `~/.config/gh` bind mounts, keyed by target."""
+        return {
+            target: mount
+            for target, mount in _compose_home_bind_mounts().items()
+            if target.endswith("/.config/gh")
+        }
+
+    def test_host_gh_config_is_mounted_at_both_possible_homes(self):
+        # Both the image user's home and the HOME `dev.py` pins for any other
+        # uid, so `gh` finds its state whichever uid the container runs as.
+        self.assertIn("/home/dev/.config/gh", self._mounts())
+        self.assertIn("/tmp/.config/gh", self._mounts())
+
+    def test_gh_mount_is_read_write(self):
+        # `gh auth login` in the container must persist back to the host, so
+        # unlike `~/.ssh` this mount cannot be read-only.
+        modes = {mode for _, mode in self._mounts().values()}
+        self.assertEqual(modes, {"rw"}, self._mounts())
+
+    def test_gh_mount_comes_from_the_host_home(self):
+        # Not a named volume and not baked into the image. `${HOME:?...}`
+        # fails the run loudly rather than mounting `/.config/gh` when the host
+        # HOME is unset.
+        mounts = self._mounts()
+        self.assertEqual(len(mounts), 2, mounts)
+        for source, _ in mounts.values():
+            self.assertTrue(source.startswith("${HOME:?"), source)
+            self.assertTrue(source.endswith("/.config/gh"), source)
+
+    def test_image_creates_the_gh_mount_points(self):
+        # A bind mount needs a destination owned by the container user, or
+        # Docker creates it as root and `gh` cannot write to it without the
+        # mount.
+        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        self.assertIn('"/home/${USERNAME}/.config/gh"', dockerfile)
+        self.assertIn("/tmp/.config/gh", dockerfile)
+
+    def test_other_uids_home_is_world_writable(self):
+        # `dev.py` gives every uid but the image's 1000 a HOME of /tmp, and
+        # this mount is skipped whenever the host has no `gh` login. A 0700
+        # /tmp/.config/gh owned by uid 1000 makes gh die with
+        # "failed to read configuration: ... permission denied" for those
+        # uids, instead of the intended "You are not logged into any GitHub
+        # hosts" (which is what a bare `docker run -u 1234` showed).
+        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        install = dockerfile.index("install -d -m 700")
+        [chmod_line] = [
+            line
+            for line in dockerfile[:install].splitlines()
+            if line.strip().startswith("&& chmod 1777")
+        ]
+        self.assertIn("/tmp/.config/gh", chmod_line)
+        self.assertIn("/tmp/.continue", chmod_line)
+
+    def test_token_is_passed_through_from_the_host_environment(self):
+        # The recommended path. A null value in the compose `environment:`
+        # mapping means "take it from the host env", so the token is never
+        # written into the committed file and an unset variable stays unset
+        # (rather than becoming an empty string gh would read as a credential).
+        service = _compose_dev_environment()
+        for name in ("GH_TOKEN", "GITHUB_TOKEN"):
+            self.assertIn(name, service, service)
+            self.assertIsNone(service[name], f"{name} must not be hardcoded")
 
 
 class SpecRevisionTests(unittest.TestCase):

@@ -11,12 +11,16 @@
 // `image:`/`pull_policy:` in docker-compose.yml), so nothing is built locally.
 //
 // Volumes are inherited from the compose service, so the IDE gets everything
-// the CLI does — two host directories in particular:
+// the CLI does — three host directories in particular:
 //   * `~/.continue` (read/write), so `cn` — the Continue CLI installed in the
 //     image — uses the same config, models, and sessions as on the host.
 //   * `~/.ssh` (read-only), so the IDE's built-in Git can `push` with the
 //     host's keys without copying them into the image.
-// Do NOT re-declare either mount here: compose already supplies them, and a
+//   * `~/.config/gh` (read/write), so the GitHub CLI `gh` is logged in as on
+//     the host. gh accepts no SSH key — its commands call the REST API — so
+//     this is separate from `~/.ssh`; a GH_TOKEN/GITHUB_TOKEN set on the host
+//     is also passed through and takes precedence over it.
+// Do NOT re-declare any of them here: compose already supplies them, and a
 // second declaration would shadow the compose source.
 //
 // What this gives you in CLion:

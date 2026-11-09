@@ -19,6 +19,11 @@
 #   ESP32_PORT   Serial device for flash/monitor (optional)
 #                docker-compose.yml will pass into the container the value 
 #                on the host.
+#   GH_TOKEN     GitHub token for `gh` inside the container (optional;
+#                GITHUB_TOKEN is accepted too). docker-compose.yml passes
+#                whichever is set on the host, and `gh` prefers it over any
+#                stored credential. See Developer.md, "GitHub CLI (`gh`) in
+#                the container".
 #
 """Container task runner for the ESP32 thermometer logger."""
 

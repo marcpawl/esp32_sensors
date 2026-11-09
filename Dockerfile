@@ -88,8 +88,16 @@ RUN PYTHON="$(ls -d "${IDF_PATH%/idf}"/python_env/idf*_py*/bin/python | head -n 
 # GitHub CLI (`gh`), installed from GitHub's official apt repository.
 # https://github.com/cli/cli/blob/trunk/docs/install_linux.md
 # Adds /usr/bin/gh for authenticated repository work from inside the container
-# (e.g. `gh pr create`, `gh release create`). `auth login` is per-user, so the
-# token lives in the bind-mounted/persisted home, not in this image.
+# (e.g. `gh pr create`, `gh release create`).
+#
+# `gh` is an API client, not a git transport: it accepts no SSH key, so the
+# host's `~/.ssh` does not log it in. Its credentials are an OAuth token or a
+# PAT, supplied either by the host's `~/.config/gh` (bind-mounted by
+# docker-compose.yml) or by passing GH_TOKEN/GITHUB_TOKEN through the
+# environment, which takes precedence and works even when the host keeps its
+# token in a desktop keyring the container cannot reach. Nothing is baked into
+# this image: `auth login` is per-user, so the token lives in the bind-mounted
+# home.
 # ---------------------------------------------------------------------------
 RUN mkdir -p -m 755 /etc/apt/keyrings \
     && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -212,12 +220,16 @@ RUN if getent passwd "${UID}" >/dev/null 2>&1; then \
     && printf 'source %s/export.sh\n' "${IDF_PATH}" >> "/home/${USERNAME}/.bashrc"
 
 # ---------------------------------------------------------------------------
-# Continue CLI (`cn`) state and SSH key mount points, shared with the host.
+# Continue CLI (`cn`), SSH key, and GitHub CLI (`gh`) mount points, shared with
+# the host.
 #
-# `docker-compose.yml` bind-mounts the host's `~/.continue` and `~/.ssh` here so
-# the host and the container see the same files: `cn` keeps its config, models,
-# and sessions under $HOME/.continue, and `git push` authenticates with the
-# host's SSH keys under $HOME/.ssh.
+# `docker-compose.yml` bind-mounts the host's `~/.continue`, `~/.ssh`, and
+# `~/.config/gh` here so the host and the container see the same files: `cn`
+# keeps its config, models, and sessions under $HOME/.continue, `git push`
+# authenticates with the host's SSH keys under $HOME/.ssh, and `gh` reads its
+# logged-in account from $HOME/.config/gh. (gh accepts no SSH key for its own
+# commands — they call the REST API, which needs a token — so its state is
+# separate from `~/.ssh`; see the GH_TOKEN passthrough in docker-compose.yml.)
 #
 # A bind mount needs its destination to exist; Docker would otherwise create it
 # as root (and the mount would hide it), and the tool running without the mount
@@ -236,16 +248,33 @@ RUN if getent passwd "${UID}" >/dev/null 2>&1; then \
 #
 # The directory is 0700 here as well, so `ssh` is happy when the mount is
 # absent (then there is simply no key, and `git push` fails loudly).
+#
+# `~/.config/gh` needs no 0700: unlike ssh, `gh` does not refuse to run when
+# the directory's mode or owner is "wrong", and `gh auth login` must be able to
+# write there when the mount is absent. (Its `hosts.yml` does hold a token when
+# `gh` stored one there, which is the same secret the mounted host copy already
+# carries — see the read/write mount in docker-compose.yml.)
 # ---------------------------------------------------------------------------
-RUN mkdir -p /tmp/.continue \
+RUN mkdir -p /tmp/.continue /tmp/.config/gh \
     # World-writable + sticky, like /tmp itself: any uid may use it when the
-    # host config is not mounted (the mount, when present, hides this dir).
-    && chmod 1777 /tmp/.continue \
+    # host config is not mounted (the mount, when present, hides this dir, and
+    # then carries the host's own modes — which is why the container must run
+    # as the host uid; see scripts/dev.py).
+    #
+    # `/tmp/.config/gh` gets the same treatment on purpose. Left at the 0700
+    # owned by uid 1000 that `install -d` below would give it, every other uid
+    # would fail with EACCES ("failed to read configuration") instead of simply
+    # starting unauthenticated, and that is the useful behaviour for the many
+    # runs that have no `gh` login to share (CI, a bare `docker run`, a host
+    # that never logged in).
+    && chmod 1777 /tmp/.continue /tmp/.config/gh \
     # The remaining mount points belong to the container user. `install -d`
     # creates them with SSH's required 0700 (a loose mode or a foreign owner
-    # makes ssh refuse the key), for both possible HOMEs.
+    # makes ssh refuse the key), for both possible HOMEs. `-m 700` applies to
+    # the leaf only, so each `.config` parent stays traversable at 755.
     && install -d -m 700 -o "${UID}" -g "${GID}" \
-        "/home/${USERNAME}/.continue" "/home/${USERNAME}/.ssh" /tmp/.ssh
+        "/home/${USERNAME}/.continue" "/home/${USERNAME}/.ssh" /tmp/.ssh \
+        "/home/${USERNAME}/.config/gh"
 
 
 # Persist bash history across container restarts (volume-mounted in compose).

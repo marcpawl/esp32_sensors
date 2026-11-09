@@ -127,6 +127,65 @@ silently mounting `/.continue`.
 `cn` also runs headless, which is what makes it usable from scripts and CI:
 `cn -p "your prompt"` (add `--format json` for machine-readable output).
 
+### GitHub CLI (`gh`) in the container: no SSH login
+
+The image ships the [GitHub CLI](https://cli.github.com/)
+(`gh`), but **the host's SSH keys do not log it in**. `gh` is an API client:
+`git push` uses `~/.ssh`, while `gh pr create`, `gh release`, `gh api`, and the
+rest call the GitHub REST API, which accepts only an OAuth token or a personal
+access token. So there are two independent ways to get an authenticated `gh`
+inside the container, and both are wired up:
+
+**1. Pass the token through the environment (recommended).** `docker-compose.yml`
+declares `GH_TOKEN:` and `GITHUB_TOKEN:` with no value, which makes compose take
+them from your host environment when they are set:
+
+```console
+$ export GH_TOKEN=$(gh auth token)     # host: the token gh is logged in with
+$ ./scripts/dev.py shell gh auth status
+github.com
+  ✓ Logged in to github.com account <you> (GH_TOKEN)
+```
+
+`GH_TOKEN` takes precedence over any stored credential, and this path works even
+when the host keeps its token in a **desktop keyring** — which the container
+cannot reach, and which is the default on a desktop Linux install. Because the
+value is never written to a file, it also stays out of the committed
+`docker-compose.yml`. Note that an *unset* host variable passes nothing (compose
+keeps the variable absent rather than making it empty), so a machine without the
+variable simply gets an unauthenticated `gh`.
+
+**2. Share the host's `gh` state.** `docker-compose.yml` bind-mounts the host's
+`~/.config/gh` (read/write) at both possible container homes, like `~/.continue`
+and `~/.ssh`, so when `gh auth login` stored the token in `hosts.yml` the
+container reads the same login:
+
+```console
+$ ./scripts/dev.py shell gh auth status
+```
+
+Read/write on purpose: `gh auth login` inside the container then persists to the
+host, so the container and the host keep a single login instead of two. If the
+host stored its token in the keyring instead, `hosts.yml` holds only the account
+name and this mount alone authenticates nothing — use path 1, or run
+`gh auth login` on the host (or in the container, which then writes `hosts.yml`).
+
+If the host has no `~/.config/gh` at all (CI, a fresh machine), Docker creates
+that directory as root when it satisfies the mount, so the container can read it
+but not write it. `gh` still runs — it simply reports that you are not logged in
+— and path 1 is the one to use there.
+
+Check the host first — a token can expire or be revoked, and `gh` then reports
+`The token in keyring is invalid`:
+
+```console
+$ gh auth status          # host
+$ gh auth login -h github.com    # host, if it says the token is invalid
+```
+
+Only a token needs to be passed: the container reaches `github.com` over its
+normal network access, and `GH_HOST` / enterprise hosts are not configured here.
+
 ### SSH keys and pushing to GitHub from the container
 
 The host's `~/.ssh` is bind-mounted (read-only) into the container at the same
