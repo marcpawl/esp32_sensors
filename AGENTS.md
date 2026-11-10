@@ -93,6 +93,8 @@ esp32_sensors/
 ├── Dockerfile           # Dev container: ESP-IDF v6.1 + non-root host-mapped user
 ├── docker-compose.yml   # `dev` service with serial (/dev) passthrough
 ├── .devcontainer/       # CLion / VS Code Dev Container definition (reuses compose)
+├── .continue/           # Continue CLI config: `rules/` (slash commands), `skills/`
+│   └── skills/git/      #   SKILL.md — how to write and pass a commit message
 ├── scripts/dev.py       # Container task runner (build/flash/test/format/shell)
 ├── scripts/idf.sh       # Runs idf.py with the ESP-IDF env, sourcing export.sh if absent
 ├── scripts/test_dev.py  # Host unit tests for dev.py (`dev.py self-check`)
@@ -1100,6 +1102,42 @@ The test case should fork and exec the "_assert" program with the name of the te
   an include block.
 
 ### Agent interaction
+
+#### Committing
+
+**Write the commit message to a temporary file, then commit with `git commit
+-F`.** Never pass it inline with `-m`, and never run a bare `git commit`.
+
+```bash
+# 1. Write the message (the Write tool, or $EDITOR "$(mktemp)").
+# 2. Commit reading the message from that file.
+git commit -F /tmp/commit_msg.txt
+# 3. Remove the file.
+rm /tmp/commit_msg.txt
+```
+
+Two moments use the same file: when the task's work **is ready for review,
+before it is committed**, and when the work **is about to be committed**.
+
+A bare `git commit` hangs here — `EDITOR=vim`, and vim fails with "Error
+reading input" in a non-TTY session, so the commit never happens (typically
+only after the pre-commit gates have already run and timed out). `-m` dodges
+the editor but is the fragile option: these messages contain backticks,
+apostrophes, `$`, and `!`, every one of which is a shell-quoting hazard that
+silently mangles the message. A file has no quoting at all.
+
+Subject ≤ 72 columns, imperative, no trailing period; a blank line; then a
+body wrapped at 72–79 columns that explains **why**, not just what. End with
+the Continue trailer:
+
+```
+Generated with [Continue](https://continue.dev)
+
+Co-Authored-By: Continue <noreply@continue.dev>
+```
+
+The full guidance, including a worked example, is the `git` skill at
+`.continue/skills/git/SKILL.md` — read it before writing a message.
 
 #### Model selection
 
