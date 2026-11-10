@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Pull dev image
         # Host-only: `docker pull` of the pinned tag. Not run inside a
