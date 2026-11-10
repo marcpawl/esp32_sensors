@@ -1184,6 +1184,182 @@ class CommandRegistryTests(unittest.TestCase):
             )
 
 
+class HostTestCommandTests(unittest.TestCase):
+    """`test`, `test-linux`, and `test-espidf-cpp` run the suites they name.
+
+    There are two host test suites (the `test/` application tests and the
+    `espidf_cpp` wrapper tests). `test` is the aggregate the pre-commit hook
+    and CI call, so it must run both; each suite also has a command of its
+    own so one can be run alone while working on it.
+    """
+
+    def setUp(self):
+        # Record the commands `run()` would execute instead of executing them.
+        self.calls = []
+        self._original_run = dev.run
+        self._original_change_to_container = dev.change_to_container
+        self.hops = []
+
+        def fake_run(cmd, cwd=dev.REPO_ROOT):
+            self.calls.append(list(cmd))
+            return 0
+
+        def fake_change_to_container():
+            # The real one re-execs `sys.argv` under `docker compose` and then
+            # `sys.exit()`s, so it would never return here. Record the hop
+            # instead and let the command under test run its own body: that is
+            # what makes the suite exercise the command's decisions on the
+            # host (where `self-check` is allowed to run) rather than its
+            # container handoff.
+            self.hops.append(True)
+
+        dev.run = fake_run
+        dev.change_to_container = fake_change_to_container
+
+    def tearDown(self):
+        dev.run = self._original_run
+        dev.change_to_container = self._original_change_to_container
+
+    def test_both_suite_commands_are_registered(self):
+        for name, handler in (
+            ("test-linux", dev.cmd_test_linux),
+            ("test-espidf-cpp", dev.cmd_test_espidf_cpp),
+        ):
+            with self.subTest(command=name):
+                self.assertIn(name, dev.COMMANDS)
+                self.assertIs(dev.COMMANDS[name], handler)
+
+    def test_every_suite_command_hops_into_the_container(self):
+        # `idf.py` only exists inside the dev image, so each command must hand
+        # off to it exactly once (`_run_host_tests` itself never hops).
+        for handler in (
+            dev.cmd_test_linux,
+            dev.cmd_test_espidf_cpp,
+            dev.cmd_test,
+        ):
+            with self.subTest(command=handler.__name__):
+                self.hops = []
+                handler()
+                self.assertEqual(len(self.hops), 1)
+
+    def test_test_espidf_cpp_uses_the_build_commands_project(self):
+        # `build-espidf-cpp-test` builds the wrapper suite and
+        # `test-espidf-cpp` builds and runs it: both must resolve to the same
+        # project, or the two commands would drift apart.
+        self.assertEqual(
+            dev._host_test_projects((dev.ESPIDF_CPP_TEST_PROJECT,)),
+            [
+                (
+                    dev.ESPIDF_CPP_TEST_PROJECT,
+                    dict(dev.HOST_TEST_PROJECTS)[dev.ESPIDF_CPP_TEST_PROJECT],
+                )
+            ],
+        )
+
+    def test_test_linux_runs_only_the_test_suite(self):
+        self.assertEqual(dev.cmd_test_linux(), 0)
+        self.assertEqual(
+            self.calls,
+            [
+                dev._idf(dev.TEST_PROJECT, dev.TEST_BUILD_DIR,
+                         "--preview", "set-target", "linux"),
+                dev._idf(dev.TEST_PROJECT, dev.TEST_BUILD_DIR, "build"),
+                [f"./{dev.TEST_PROJECT}/{dev.TEST_BUILD_DIR}/"
+                 "esp32_sensors_tests.elf"],
+            ],
+        )
+
+    def test_test_espidf_cpp_runs_only_the_wrapper_suite(self):
+        self.assertEqual(dev.cmd_test_espidf_cpp(), 0)
+        self.assertEqual(
+            self.calls,
+            [
+                dev._idf(dev.ESPIDF_CPP_TEST_PROJECT, dev.TEST_BUILD_DIR,
+                         "--preview", "set-target", "linux"),
+                dev._idf(dev.ESPIDF_CPP_TEST_PROJECT, dev.TEST_BUILD_DIR,
+                         "build"),
+                [f"./{dev.ESPIDF_CPP_TEST_PROJECT}/{dev.TEST_BUILD_DIR}/"
+                 "esp32_sensors_espidf_cpp_tests.elf"],
+            ],
+        )
+
+    def test_test_runs_both_suites_in_table_order(self):
+        # The regression this pins: `test` used to be an alias of
+        # `test-linux`, so the espidf_cpp suite was never run by the gate.
+        self.assertEqual(dev.cmd_test(), 0)
+        executed = [
+            Path(cmd[-1]).name
+            for cmd in self.calls
+            if cmd[-1].endswith(".elf")
+        ]
+        self.assertEqual(
+            executed,
+            [elf for _, elf in dev.HOST_TEST_PROJECTS],
+        )
+        expected = [
+            cmd
+            for project, elf in dev.HOST_TEST_PROJECTS
+            for cmd in (
+                dev._idf(project, dev.TEST_BUILD_DIR,
+                         "--preview", "set-target", "linux"),
+                dev._idf(project, dev.TEST_BUILD_DIR, "build"),
+                [f"./{project}/{dev.TEST_BUILD_DIR}/{elf}"],
+            )
+        ]
+        self.assertEqual(self.calls, expected)
+
+    def test_a_failing_suite_stops_the_run_and_fails_the_command(self):
+        # A red suite (here: the first ELF to run) must fail `test`, not be
+        # swallowed while the second suite is run anyway.
+        failing = (
+            f"./{dev.TEST_PROJECT}/{dev.TEST_BUILD_DIR}/"
+            "esp32_sensors_tests.elf"
+        )
+
+        def fake_run(cmd, cwd=dev.REPO_ROOT):
+            self.calls.append(list(cmd))
+            return 3 if list(cmd) == [failing] else 0
+
+        dev.run = fake_run
+        self.assertEqual(dev.cmd_test(), 1)
+        executed = [cmd[-1] for cmd in self.calls if cmd[-1].endswith(".elf")]
+        self.assertEqual(executed, [failing])
+
+    def test_every_host_test_project_has_a_command_that_runs_it(self):
+        # `test` covers the table, but each suite is also runnable alone. This
+        # pins that the two "run one suite" commands between them cover the
+        # whole table, so a third suite cannot be reachable only through
+        # `test`.
+        covered = {
+            project
+            for handler in (dev.cmd_test_linux, dev.cmd_test_espidf_cpp)
+            for project, _ in dev._host_test_projects(
+                self._projects_run_by(handler)
+            )
+        }
+        self.assertEqual(covered, {p for p, _ in dev.HOST_TEST_PROJECTS})
+
+    def _projects_run_by(self, handler):
+        """The host-test projects `handler` selects (by intercepting `run`)."""
+        self.calls = []
+        handler()
+        return tuple(
+            cmd[2]
+            for cmd in self.calls
+            if cmd[:2] == ["idf.py", "-C"]
+            and cmd[-1] == "build"
+        )
+
+    def test_unknown_project_trips_an_assertion(self):
+        # A stale constant would silently run fewer suites; fail loudly.
+        with self.assertRaises(AssertionError):
+            dev._host_test_projects(("mcgowan",))
+
+    def test_no_project_trips_an_assertion(self):
+        with self.assertRaises(AssertionError):
+            dev._run_host_tests(())
+
+
 class BuildProjectTests(unittest.TestCase):
     """`_build_project` picks the target-specific build directory."""
 
@@ -2182,7 +2358,12 @@ class PycodestyleGateTests(unittest.TestCase):
 
 
 class SelfCheckModuleTests(unittest.TestCase):
-    """Sanity check on the module dev.py invokes for `self-check`."""
+    """Sanity check on the module dev.py invokes for `self-check`.
+
+    Also pins `self-check` itself: it is host-only, because inside the
+    container none of the decisions this suite pins ever happen (no command
+    re-execs itself), so a run there would pass vacuously.
+    """
 
     def test_self_check_module_points_at_this_file(self):
         # `SELF_CHECK_MODULE` is dotted (`scripts.test_dev`); its final
@@ -2195,6 +2376,53 @@ class SelfCheckModuleTests(unittest.TestCase):
         # From the repo root, `scripts/test_dev.py` must exist.
         expected = dev.REPO_ROOT / "scripts" / "test_dev.py"
         self.assertTrue(os.path.isfile(expected))
+
+    # -- host-only ----------------------------------------------------------
+
+    def test_refuses_to_run_inside_the_container(self):
+        # Inside the container none of the decisions the suite pins ever
+        # happen (a command never re-execs itself), so a run there would pass
+        # vacuously. Fail loudly with a message that says what to run instead.
+        calls = []
+        original_run, original_in_container = dev.run, dev.is_in_container
+        err = io.StringIO()
+        try:
+            dev.run = lambda cmd, cwd=dev.REPO_ROOT: calls.append(cmd) or 0
+            dev.is_in_container = lambda: True
+            with redirect_stderr(err):
+                rc = dev.cmd_self_check()
+        finally:
+            dev.run, dev.is_in_container = original_run, original_in_container
+        self.assertEqual(rc, 1)
+        self.assertEqual(calls, [], "the test suite must not be run")
+        message = err.getvalue()
+        self.assertIn("refusing to run inside the dev container", message)
+        # The message must name the way out: run it on the host, or use the
+        # container's own test command instead.
+        self.assertIn("./scripts/dev.py self-check", message)
+        self.assertIn("./scripts/dev.py test", message)
+
+    def test_runs_the_suite_on_the_host(self):
+        calls = []
+        original_run, original_in_container = dev.run, dev.is_in_container
+        try:
+            dev.run = lambda cmd, cwd=dev.REPO_ROOT: calls.append(cmd) or 0
+            dev.is_in_container = lambda: False
+            self.assertEqual(dev.cmd_self_check(), 0)
+        finally:
+            dev.run, dev.is_in_container = original_run, original_in_container
+        self.assertEqual(
+            calls,
+            [["python3", "-m", "unittest", "-v", dev.SELF_CHECK_MODULE]],
+        )
+
+    def test_self_check_never_hops_into_the_container(self):
+        # It is host-only by design, so it must not call
+        # `change_to_container()` (which would re-exec the suite there).
+        source = (dev.REPO_ROOT / "scripts" / "dev.py").read_text()
+        body = source.split("def cmd_self_check", 1)[1].split("\ndef ", 1)[0]
+        self.assertNotIn("change_to_container()", body)
+        self.assertIn("is_in_container()", body)
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ cmake_minimum_required(VERSION 3.22)
 # means they build (and fail) independently of the firmware's tests.
 #
 # Build and run with:
-#   scripts/dev.py test-linux
+#   scripts/dev.py test-espidf-cpp     (or `test`, which runs every suite)
 # or directly in the container:
 #   scripts/dev.py shell -C espidf-cpp-test idf.py -B build_linux \
 #       --preview set-target linux
@@ -29,7 +29,7 @@ if(NOT "$ENV{DOCKER_IMAGE}" STREQUAL "esp32_sensors")
         "container.\n"
         "DOCKER_IMAGE is not 'esp32_sensors', so this looks like a host "
         "invocation.\n"
-        "Use:  scripts/dev.py test-linux")
+        "Use:  scripts/dev.py test-espidf-cpp")
 endif()
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)

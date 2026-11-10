@@ -40,7 +40,10 @@ jobs:
           python3 ./scripts/dev.py submodules
 
       - name: dev.py self-check
-        # No container and no Docker: runs the host stdlib unit tests.
+        # Host-only and no Docker: `self-check` refuses to run inside the
+        # container, because there the host-only decisions it pins (does a
+        # command re-exec itself under `docker compose`?) never happen and the
+        # suite would pass vacuously. It runs the stdlib unit tests instead.
         run: |
           python3 ./scripts/dev.py self-check
 
