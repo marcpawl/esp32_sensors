@@ -28,7 +28,7 @@
   the IDE discover it for you.
 -->
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Host tests (test, container CMake)" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="esp32_sensors_subprojects" TARGET_NAME="test_build" CONFIG_NAME="Host tests (test)" RUN_PATH="$CTest$">
+  <configuration default="false" name="Host tests (test, container CMake)" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="esp32_sensors_subprojects" TARGET_NAME="test-logic_build" CONFIG_NAME="Host tests (test)" RUN_PATH="$CTest$">
     <method v="2">
       <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
     </method>

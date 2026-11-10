@@ -12,7 +12,7 @@ cmake_minimum_required(VERSION 3.22)
 #                                                -> test-hal-stub/build_linux/
 #   test-hal-common/ host tests for components/hal_common, `linux`
 #                                                -> test-hal-common/build_linux/
-#   test/            host unit tests, `linux` target (hal_stub) -> test/build_linux/
+#   test-logic/      host unit tests, `linux` target (hal_stub) -> test-logic/build_linux/
 #   test-espidf-cpp/ host tests for components/espidf_cpp, `linux`
 #                                                -> test-espidf-cpp/build_linux/
 #
@@ -31,7 +31,7 @@ cmake_minimum_required(VERSION 3.22)
 #                                   && cmake --build build_root
 #
 # Every target in this file is prefixed with its subproject name (e.g.
-# mcgowan_build, test-hal-stub_build, test-hal-common_build, test_build,
+# mcgowan_build, test-hal-stub_build, test-hal-common_build, test-logic_build,
 # test-espidf-cpp_build; a
 # HAL component's would be hal_board_test) so it cannot collide with another
 # target in this project,
@@ -65,14 +65,14 @@ project(esp32_sensors_subprojects NONE)
 
 # Which subprojects to build. Default: all of them.
 set(SUBPROJECTS
-    "mcgowan;test-hal-stub;test-hal-common;test;test-espidf-cpp;donny"
+    "mcgowan;test-hal-stub;test-hal-common;test-logic;test-espidf-cpp;donny"
     CACHE STRING
-    "Subprojects to build: mcgowan, test-hal-stub, test-hal-common, test, test-espidf-cpp, donny")
+    "Subprojects to build: mcgowan, test-hal-stub, test-hal-common, test-logic, test-espidf-cpp, donny")
 set_property(CACHE SUBPROJECTS PROPERTY STRINGS
-    mcgowan test-hal-stub test-hal-common test test-espidf-cpp donny)
+    mcgowan test-hal-stub test-hal-common test-logic test-espidf-cpp donny)
 
 set(KNOWN_SUBPROJECTS
-    mcgowan test-hal-stub test-hal-common test test-espidf-cpp donny)
+    mcgowan test-hal-stub test-hal-common test-logic test-espidf-cpp donny)
 foreach(sub IN LISTS SUBPROJECTS)
     if(NOT sub IN_LIST KNOWN_SUBPROJECTS)
         message(FATAL_ERROR
@@ -124,7 +124,7 @@ if(mcgowan IN_LIST SUBPROJECTS)
 endif()
 
 # --- test-hal-stub: hal_stub device tests (linux) -> target *_build ------
-# Same `linux` target rules as `test/`; built (not run) here, since running is
+# Same `linux` target rules as `test-logic/`; built (not run) here, since running is
 # `scripts/dev.py test-hal-stub`'s job (`test` runs every host suite).
 if(test-hal-stub IN_LIST SUBPROJECTS)
     _idf_subproject(test-hal-stub build_linux
@@ -132,22 +132,22 @@ if(test-hal-stub IN_LIST SUBPROJECTS)
 endif()
 
 # --- test-hal-common: hal_common vocabulary tests (linux) -> *_build ------
-# Same `linux` target rules as `test/`; built (not run) here, since running is
+# Same `linux` target rules as `test-logic/`; built (not run) here, since running is
 # `scripts/dev.py test-hal-common`'s job (`test` runs every host suite).
 if(test-hal-common IN_LIST SUBPROJECTS)
     _idf_subproject(test-hal-common build_linux
         "--preview|set-target|linux" "build")
 endif()
 
-# --- test: host unit tests (linux target) -> target test_build ------------
+# --- test-logic: host unit tests (linux target) -> target test-logic_build ---
 # `set-target linux` is only meaningful when sdkconfig is (re)generated, so it
 # is cheap on every invocation and keeps a fresh build tree pointed at linux.
-if(test IN_LIST SUBPROJECTS)
-    _idf_subproject(test build_linux "--preview|set-target|linux" "build")
+if(test-logic IN_LIST SUBPROJECTS)
+    _idf_subproject(test-logic build_linux "--preview|set-target|linux" "build")
 endif()
 
 # --- test-espidf-cpp: host tests for espidf_cpp (linux) -> *_build --------
-# Same `linux` target rules as `test/`; built (not run) here, since running is
+# Same `linux` target rules as `test-logic/`; built (not run) here, since running is
 # `scripts/dev.py test-espidf-cpp`'s job (`test` runs every host suite).
 if(test-espidf-cpp IN_LIST SUBPROJECTS)
     _idf_subproject(test-espidf-cpp build_linux
