@@ -4,10 +4,11 @@
 # (inside the dev container), so no ESP32 hardware is required. The
 # ESP-IDF-free logic modules are exercised here — payload formatting (§9),
 # temperature serialization (§9.3), configuration validation (§5.1), the RTC
-# sample buffer (§4.2), ROM-ID/CRC helpers (§5.1.3) — along with the pin-free
-# `hal_stub` devices (`components/hal_stub`). The implementation-free
-# `hal_common` concepts and vocabulary have their own project
-# (`test-hal-common/`).
+# sample buffer (§4.2), ROM-ID/CRC helpers (§5.1.3), the mode-sense pole
+# mapping, and the LED runner — plus the firmware sources in `mcgowan/src`
+# that need no chip driver. The HAL has two dedicated projects: the shared
+# `hal_common` vocabulary (`test-hal-common/`) and the pin-free `hal_stub`
+# devices (`test-hal-stub/`).
 #
 # Run with:
 #   docker compose run --rm dev bash -lc 'cd test && idf.py --preview
