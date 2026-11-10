@@ -1206,9 +1206,11 @@ class HostTestCommandTests(unittest.TestCase):
 
         def fake_change_to_container():
             # The real one re-execs `sys.argv` under `docker compose` and then
-            # `sys.exit()`s, so on the host the command under test would never
-            # run. Record the hop instead: the commands are tested from
-            # whichever side `self-check` runs on.
+            # `sys.exit()`s, so it would never return here. Record the hop
+            # instead and let the command under test run its own body: that is
+            # what makes the suite exercise the command's decisions on the
+            # host (where `self-check` is allowed to run) rather than its
+            # container handoff.
             self.hops.append(True)
 
         dev.run = fake_run
@@ -2356,7 +2358,12 @@ class PycodestyleGateTests(unittest.TestCase):
 
 
 class SelfCheckModuleTests(unittest.TestCase):
-    """Sanity check on the module dev.py invokes for `self-check`."""
+    """Sanity check on the module dev.py invokes for `self-check`.
+
+    Also pins `self-check` itself: it is host-only, because inside the
+    container none of the decisions this suite pins ever happen (no command
+    re-execs itself), so a run there would pass vacuously.
+    """
 
     def test_self_check_module_points_at_this_file(self):
         # `SELF_CHECK_MODULE` is dotted (`scripts.test_dev`); its final
@@ -2369,6 +2376,53 @@ class SelfCheckModuleTests(unittest.TestCase):
         # From the repo root, `scripts/test_dev.py` must exist.
         expected = dev.REPO_ROOT / "scripts" / "test_dev.py"
         self.assertTrue(os.path.isfile(expected))
+
+    # -- host-only ----------------------------------------------------------
+
+    def test_refuses_to_run_inside_the_container(self):
+        # Inside the container none of the decisions the suite pins ever
+        # happen (a command never re-execs itself), so a run there would pass
+        # vacuously. Fail loudly with a message that says what to run instead.
+        calls = []
+        original_run, original_in_container = dev.run, dev.is_in_container
+        err = io.StringIO()
+        try:
+            dev.run = lambda cmd, cwd=dev.REPO_ROOT: calls.append(cmd) or 0
+            dev.is_in_container = lambda: True
+            with redirect_stderr(err):
+                rc = dev.cmd_self_check()
+        finally:
+            dev.run, dev.is_in_container = original_run, original_in_container
+        self.assertEqual(rc, 1)
+        self.assertEqual(calls, [], "the test suite must not be run")
+        message = err.getvalue()
+        self.assertIn("refusing to run inside the dev container", message)
+        # The message must name the way out: run it on the host, or use the
+        # container's own test command instead.
+        self.assertIn("./scripts/dev.py self-check", message)
+        self.assertIn("./scripts/dev.py test", message)
+
+    def test_runs_the_suite_on_the_host(self):
+        calls = []
+        original_run, original_in_container = dev.run, dev.is_in_container
+        try:
+            dev.run = lambda cmd, cwd=dev.REPO_ROOT: calls.append(cmd) or 0
+            dev.is_in_container = lambda: False
+            self.assertEqual(dev.cmd_self_check(), 0)
+        finally:
+            dev.run, dev.is_in_container = original_run, original_in_container
+        self.assertEqual(
+            calls,
+            [["python3", "-m", "unittest", "-v", dev.SELF_CHECK_MODULE]],
+        )
+
+    def test_self_check_never_hops_into_the_container(self):
+        # It is host-only by design, so it must not call
+        # `change_to_container()` (which would re-exec the suite there).
+        source = (dev.REPO_ROOT / "scripts" / "dev.py").read_text()
+        body = source.split("def cmd_self_check", 1)[1].split("\ndef ", 1)[0]
+        self.assertNotIn("change_to_container()", body)
+        self.assertIn("is_in_container()", body)
 
 
 if __name__ == "__main__":

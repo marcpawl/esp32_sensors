@@ -790,9 +790,33 @@ def cmd_self_check() -> int:
 
     Exercises `dev.py`'s own pure helpers (e.g. the command line `shell`
     builds) with the standard-library test runner, so no Docker hop, container,
-    or third-party dependency is needed. Works on the host and inside the
-    container alike.
+    or third-party dependency is needed.
+
+    Host-only. The suite pins the decisions the *host* side makes — above all
+    whether a command re-execs itself under `docker compose` — and inside the
+    container none of those decisions happen, so the run would pass vacuously
+    instead of testing anything. The command therefore refuses to run there,
+    the same way `pull` and `image` do.
     """
+    if is_in_container():
+        print(
+            "self-check: refusing to run inside the dev container.\n"
+            "\n"
+            "`self-check` is a HOST-side test of dev.py itself: it pins the\n"
+            "choices the host makes, such as whether a command re-execs\n"
+            "itself under `docker compose`. Inside the container those\n"
+            "choices never happen, so the run would pass vacuously.\n"
+            "\n"
+            "Run it on the host instead:\n"
+            "\n"
+            "    ./scripts/dev.py self-check\n"
+            "\n"
+            "Inside the container use `./scripts/dev.py test`, which builds\n"
+            "and runs the ESP-IDF `linux`-target suites (`test/` and\n"
+            "`espidf-cpp-test/`).",
+            file=sys.stderr,
+        )
+        return 1
     return run(["python3", "-m", "unittest", "-v", SELF_CHECK_MODULE])
 
 
