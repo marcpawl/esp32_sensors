@@ -143,6 +143,7 @@ class SubprojectBuildTests(unittest.TestCase):
             dev.SUBPROJECTS,
             (
                 "mcgowan",
+                "test-hal-stub",
                 "test-hal-common",
                 "test",
                 "espidf-cpp-test",
@@ -154,6 +155,7 @@ class SubprojectBuildTests(unittest.TestCase):
         self.assertEqual(
             dev.LINUX_PROJECTS,
             (
+                dev.HAL_STUB_TEST_PROJECT,
                 dev.HAL_COMMON_TEST_PROJECT,
                 dev.TEST_PROJECT,
                 dev.ESPIDF_CPP_TEST_PROJECT,
@@ -205,8 +207,8 @@ class SubprojectBuildTests(unittest.TestCase):
                     "cmake",
                     "-S", ".",
                     "-B", dev.ROOT_BUILD_DIR,
-                    "-DSUBPROJECTS="
-                    "mcgowan;test-hal-common;test;espidf-cpp-test;donny",
+                    "-DSUBPROJECTS=mcgowan;test-hal-stub;test-hal-common;"
+                    "test;espidf-cpp-test;donny",
                 ],
                 ["cmake", "--build", dev.ROOT_BUILD_DIR],
             ],
@@ -1167,13 +1169,15 @@ class CommandRegistryTests(unittest.TestCase):
             projects,
             [
                 dev.HAL_COMMON_TEST_PROJECT,
+                dev.HAL_STUB_TEST_PROJECT,
                 dev.TEST_PROJECT,
                 dev.ESPIDF_CPP_TEST_PROJECT,
             ],
         )
         # `test` runs `hal_common` first: it covers the shared vocabulary the
-        # other suites build on.
+        # other suites build on, and `hal_stub` follows it.
         self.assertEqual(projects[0], dev.HAL_COMMON_TEST_PROJECT)
+        self.assertEqual(projects[1], dev.HAL_STUB_TEST_PROJECT)
         # Every host-test project is also a buildable subproject.
         for project in projects:
             self.assertIn(project, dev.SUBPROJECTS)
@@ -1206,11 +1210,12 @@ class CommandRegistryTests(unittest.TestCase):
 class HostTestCommandTests(unittest.TestCase):
     """The `test*` commands run the suites they name.
 
-    There are three host test suites (the `hal_common` vocabulary tests, the
-    `test/` application tests, and the `espidf_cpp` wrapper tests). `test` is
-    the aggregate the pre-commit hook and CI call, so it must run all three,
-    with `test-hal-common` first; each suite also has a command of its own so
-    one can be run alone while working on it.
+    There are four host test suites (the `hal_common` vocabulary tests, the
+    `hal_stub` device tests, the `test/` application tests, and the
+    `espidf_cpp` wrapper tests). `test` is the aggregate the pre-commit hook
+    and CI call, so it must run all four, with `test-hal-common` first and
+    `test-hal-stub` next; each suite also has a command of its own so one can
+    be run alone while working on it.
     """
 
     def setUp(self):
@@ -1242,6 +1247,7 @@ class HostTestCommandTests(unittest.TestCase):
 
     def test_every_suite_command_is_registered(self):
         for name, handler in (
+            ("test-hal-stub", dev.cmd_test_hal_stub),
             ("test-hal-common", dev.cmd_test_hal_common),
             ("test-linux", dev.cmd_test_linux),
             ("test-espidf-cpp", dev.cmd_test_espidf_cpp),
@@ -1254,6 +1260,7 @@ class HostTestCommandTests(unittest.TestCase):
         # `idf.py` only exists inside the dev image, so each command must hand
         # off to it exactly once (`_run_host_tests` itself never hops).
         for handler in (
+            dev.cmd_test_hal_stub,
             dev.cmd_test_hal_common,
             dev.cmd_test_linux,
             dev.cmd_test_espidf_cpp,
@@ -1275,6 +1282,20 @@ class HostTestCommandTests(unittest.TestCase):
                     dev.ESPIDF_CPP_TEST_PROJECT,
                     dict(dev.HOST_TEST_PROJECTS)[dev.ESPIDF_CPP_TEST_PROJECT],
                 )
+            ],
+        )
+
+    def test_test_hal_stub_runs_only_the_hal_stub_suite(self):
+        self.assertEqual(dev.cmd_test_hal_stub(), 0)
+        self.assertEqual(
+            self.calls,
+            [
+                dev._idf(dev.HAL_STUB_TEST_PROJECT, dev.TEST_BUILD_DIR,
+                         "--preview", "set-target", "linux"),
+                dev._idf(dev.HAL_STUB_TEST_PROJECT, dev.TEST_BUILD_DIR,
+                         "build"),
+                [f"./{dev.HAL_STUB_TEST_PROJECT}/{dev.TEST_BUILD_DIR}/"
+                 "esp32_sensors_hal_stub_tests.elf"],
             ],
         )
 
@@ -1366,6 +1387,7 @@ class HostTestCommandTests(unittest.TestCase):
         covered = {
             project
             for handler in (
+                dev.cmd_test_hal_stub,
                 dev.cmd_test_hal_common,
                 dev.cmd_test_linux,
                 dev.cmd_test_espidf_cpp,

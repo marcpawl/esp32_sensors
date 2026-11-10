@@ -11,7 +11,7 @@ cmake_minimum_required(VERSION 3.22)
 # header (`hal/led.hpp`, `hal/wifi.hpp`, ...), so this project links the
 # pin-free `hal_stub` implementation — the only one with a `linux` target. The
 # tests still cover the shared vocabulary and the concept rejections; the stub
-# devices themselves are tested in `test/`.
+# devices themselves are tested in `test-hal-stub/`.
 #
 # Build and run with:
 #   scripts/dev.py test-hal-common     (or `test`, which runs every suite)

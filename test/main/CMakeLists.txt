@@ -11,14 +11,11 @@
 # example: the mode-sense pole mapping is pure and `constexpr`, so
 # `test_mode_selection.cpp` exercises the real headers with no extra source.
 #
-# The pin-free HAL stubs (hal_stub's led, push button, onewire bus,
-# chip temperature, wifi radio, one-shot timer, and the aggregate board) are
-# host-testable too and are pulled in via PRIV_REQUIRES below; test_hal_led.cpp,
-# test_hal_push_button.cpp, test_hal_onewire.cpp, test_hal_chip_temperature.cpp,
-# test_hal_wifi.cpp, test_hal_timer_stub.cpp, and test_hal_board.cpp exercise
-# them. The `hal_common` concepts and vocabulary are tested in the separate
-# `test-hal-common/` project. test_led_runner.cpp instantiates the templated
-# LedRunner<Board> against the stub board.
+# `hal_stub` is still pulled in via PRIV_REQUIRES below, but only because
+# test_led_runner.cpp instantiates the templated `LedRunner<Board>` against the
+# pin-free `BoardStub`. The stub devices themselves are tested in the separate
+# `test-hal-stub/` project, and the `hal_common` concepts and vocabulary in
+# `test-hal-common/`.
 #
 # The LED task itself lives in the shared `logic` component
 # (`components/logic/include/logic/led_task.hpp`), not in `mcgowan/src/`, so
@@ -43,15 +40,7 @@ set(test_srcs
     "test_rom_id.cpp"
     "test_rtc_buffer.cpp"
     "test_mode_selection.cpp"
-    "test_hal_led.cpp"
-    "test_hal_push_button.cpp"
-    "test_hal_onewire.cpp"
-    "test_hal_chip_temperature.cpp"
-    "test_hal_wifi.cpp"
-    "test_hal_board.cpp"
     "test_led_runner.cpp"
-    "test_freertos_timers.cpp"
-    "test_hal_timer_stub.cpp"
 )
 
 # Production sources under test (paths are relative to this component dir).
