@@ -5,7 +5,7 @@
 // menu non-interactively when stdin is not a TTY.
 //
 // Run with:
-//   scripts/dev.py test-linux
+//   scripts/dev.py test-espidf-cpp     (or `test`, which runs every suite)
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #pragma GCC diagnostic pop

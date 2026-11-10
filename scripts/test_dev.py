@@ -1184,6 +1184,156 @@ class CommandRegistryTests(unittest.TestCase):
             )
 
 
+class HostTestCommandTests(unittest.TestCase):
+    """`test`, `test-linux`, and `test-espidf-cpp` run the suites they name.
+
+    There are two host test suites (the `test/` application tests and the
+    `espidf_cpp` wrapper tests). `test` is the aggregate the pre-commit hook
+    and CI call, so it must run both; each suite also has a command of its
+    own so one can be run alone while working on it.
+    """
+
+    def setUp(self):
+        # Record the commands `run()` would execute instead of executing them.
+        self.calls = []
+        self._original_run = dev.run
+
+        def fake_run(cmd, cwd=dev.REPO_ROOT):
+            self.calls.append(list(cmd))
+            return 0
+
+        dev.run = fake_run
+
+    def tearDown(self):
+        dev.run = self._original_run
+
+    def test_both_suite_commands_are_registered(self):
+        for name, handler in (
+            ("test-linux", dev.cmd_test_linux),
+            ("test-espidf-cpp", dev.cmd_test_espidf_cpp),
+        ):
+            with self.subTest(command=name):
+                self.assertIn(name, dev.COMMANDS)
+                self.assertIs(dev.COMMANDS[name], handler)
+
+    def test_test_espidf_cpp_uses_the_build_commands_project(self):
+        # `build-espidf-cpp-test` builds the wrapper suite and
+        # `test-espidf-cpp` builds and runs it: both must resolve to the same
+        # project, or the two commands would drift apart.
+        self.assertEqual(
+            dev._host_test_projects((dev.ESPIDF_CPP_TEST_PROJECT,)),
+            [
+                (
+                    dev.ESPIDF_CPP_TEST_PROJECT,
+                    dict(dev.HOST_TEST_PROJECTS)[dev.ESPIDF_CPP_TEST_PROJECT],
+                )
+            ],
+        )
+
+    def test_test_linux_runs_only_the_test_suite(self):
+        self.assertEqual(dev.cmd_test_linux(), 0)
+        self.assertEqual(
+            self.calls,
+            [
+                dev._idf(dev.TEST_PROJECT, dev.TEST_BUILD_DIR,
+                         "--preview", "set-target", "linux"),
+                dev._idf(dev.TEST_PROJECT, dev.TEST_BUILD_DIR, "build"),
+                [f"./{dev.TEST_PROJECT}/{dev.TEST_BUILD_DIR}/"
+                 "esp32_sensors_tests.elf"],
+            ],
+        )
+
+    def test_test_espidf_cpp_runs_only_the_wrapper_suite(self):
+        self.assertEqual(dev.cmd_test_espidf_cpp(), 0)
+        self.assertEqual(
+            self.calls,
+            [
+                dev._idf(dev.ESPIDF_CPP_TEST_PROJECT, dev.TEST_BUILD_DIR,
+                         "--preview", "set-target", "linux"),
+                dev._idf(dev.ESPIDF_CPP_TEST_PROJECT, dev.TEST_BUILD_DIR,
+                         "build"),
+                [f"./{dev.ESPIDF_CPP_TEST_PROJECT}/{dev.TEST_BUILD_DIR}/"
+                 "esp32_sensors_espidf_cpp_tests.elf"],
+            ],
+        )
+
+    def test_test_runs_both_suites_in_table_order(self):
+        # The regression this pins: `test` used to be an alias of
+        # `test-linux`, so the espidf_cpp suite was never run by the gate.
+        self.assertEqual(dev.cmd_test(), 0)
+        executed = [
+            Path(cmd[-1]).name
+            for cmd in self.calls
+            if cmd[-1].endswith(".elf")
+        ]
+        self.assertEqual(
+            executed,
+            [elf for _, elf in dev.HOST_TEST_PROJECTS],
+        )
+        expected = [
+            cmd
+            for project, elf in dev.HOST_TEST_PROJECTS
+            for cmd in (
+                dev._idf(project, dev.TEST_BUILD_DIR,
+                         "--preview", "set-target", "linux"),
+                dev._idf(project, dev.TEST_BUILD_DIR, "build"),
+                [f"./{project}/{dev.TEST_BUILD_DIR}/{elf}"],
+            )
+        ]
+        self.assertEqual(self.calls, expected)
+
+    def test_a_failing_suite_stops_the_run_and_fails_the_command(self):
+        # A red suite (here: the first ELF to run) must fail `test`, not be
+        # swallowed while the second suite is run anyway.
+        failing = (
+            f"./{dev.TEST_PROJECT}/{dev.TEST_BUILD_DIR}/"
+            "esp32_sensors_tests.elf"
+        )
+
+        def fake_run(cmd, cwd=dev.REPO_ROOT):
+            self.calls.append(list(cmd))
+            return 3 if list(cmd) == [failing] else 0
+
+        dev.run = fake_run
+        self.assertEqual(dev.cmd_test(), 1)
+        executed = [cmd[-1] for cmd in self.calls if cmd[-1].endswith(".elf")]
+        self.assertEqual(executed, [failing])
+
+    def test_every_host_test_project_has_a_command_that_runs_it(self):
+        # `test` covers the table, but each suite is also runnable alone. This
+        # pins that the two "run one suite" commands between them cover the
+        # whole table, so a third suite cannot be reachable only through
+        # `test`.
+        covered = {
+            project
+            for handler in (dev.cmd_test_linux, dev.cmd_test_espidf_cpp)
+            for project, _ in dev._host_test_projects(
+                self._projects_run_by(handler)
+            )
+        }
+        self.assertEqual(covered, {p for p, _ in dev.HOST_TEST_PROJECTS})
+
+    def _projects_run_by(self, handler):
+        """The host-test projects `handler` selects (by intercepting `run`)."""
+        self.calls = []
+        handler()
+        return tuple(
+            cmd[2]
+            for cmd in self.calls
+            if cmd[:2] == ["idf.py", "-C"]
+            and cmd[-1] == "build"
+        )
+
+    def test_unknown_project_trips_an_assertion(self):
+        # A stale constant would silently run fewer suites; fail loudly.
+        with self.assertRaises(AssertionError):
+            dev._host_test_projects(("mcgowan",))
+
+    def test_no_project_trips_an_assertion(self):
+        with self.assertRaises(AssertionError):
+            dev._run_host_tests(())
+
+
 class BuildProjectTests(unittest.TestCase):
     """`_build_project` picks the target-specific build directory."""
 

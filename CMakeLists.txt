@@ -123,7 +123,7 @@ endif()
 
 # --- espidf-cpp-test: host tests for espidf_cpp (linux) -> *_build --------
 # Same `linux` target rules as `test/`; built (not run) here, since running is
-# `scripts/dev.py test-linux`'s job.
+# `scripts/dev.py test-espidf-cpp`'s job (`test` runs every host suite).
 if(espidf-cpp-test IN_LIST SUBPROJECTS)
     _idf_subproject(espidf-cpp-test build_linux
         "--preview|set-target|linux" "build")

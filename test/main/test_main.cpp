@@ -5,6 +5,8 @@
 // menu non-interactively when stdin is not a TTY.
 //
 // Run with:
+//   scripts/dev.py test-linux     (or `test`, which runs every suite)
+// or directly in the container:
 //   docker compose run --rm dev bash -lc 'cd test && idf.py --preview
 //   -B build_linux set-target linux && idf.py -B build_linux build &&
 //   ./build_linux/esp32_sensors_tests.elf'

@@ -10,9 +10,9 @@
 #
 # Usage:
 #   scripts/dev.py [pull|image|submodules|build|build-espidf-cpp-test|flash|\
-#                   monitor|menuconfig|test|test-linux|self-check|format|\
-#                   format-check|format-check-staged|pycodestyle|clang-tidy|\
-#                   install-hooks|shell|cn]
+#                   monitor|menuconfig|test|test-linux|test-espidf-cpp|\
+#                   self-check|format|format-check|format-check-staged|\
+#                   pycodestyle|clang-tidy|install-hooks|shell|cn]
 #   scripts/dev.py --help        # full help, including per-command details
 #
 # Environment:
@@ -160,6 +160,12 @@ FW_BINARY = "mcgowan.bin"
 
 # The host-test projects (linux target) and the ELF each one produces (named
 # after its ESP-IDF project). Each is pinned to `linux`, built, then run.
+#
+# `test` runs every entry (the pre-commit hook and CI call it), so a suite
+# added here is run by both without further wiring. Each suite also has its
+# own command (`test-linux`, `test-espidf-cpp`) so it can be run alone;
+# `self-check` pins that those commands between them cover this table, so no
+# suite is reachable only through the aggregate `test`.
 HOST_TEST_PROJECTS = (
     (TEST_PROJECT, "esp32_sensors_tests.elf"),
     (ESPIDF_CPP_TEST_PROJECT, "esp32_sensors_espidf_cpp_tests.elf"),
@@ -167,7 +173,7 @@ HOST_TEST_PROJECTS = (
 
 # Subprojects that build for the ESP-IDF `linux` target (into build_linux).
 # `donny` is an application rather than a test suite, so it is built but is not
-# run by `test-linux` (see HOST_TEST_PROJECTS).
+# run by `test` (see HOST_TEST_PROJECTS).
 LINUX_PROJECTS = (
     TEST_PROJECT,
     ESPIDF_CPP_TEST_PROJECT,
@@ -710,17 +716,39 @@ def cmd_menuconfig() -> int:
     return run(_idf(FIRMWARE_PROJECT, FW_BUILD_DIR, "menuconfig"))
 
 
-def _run_host_tests() -> int:
-    """Build and run every host test suite (ESP-IDF `linux` target).
+def _host_test_projects(projects: tuple[str, ...]) -> list[tuple[str, str]]:
+    """The `HOST_TEST_PROJECTS` entries for `projects`, in table order. Pure.
+
+    Keeping the table as the single source of truth means a suite cannot be
+    added to one command and forgotten in another: `test` asks for every entry
+    (`HOST_TEST_PROJECTS`), while `test-linux` / `test-espidf-cpp` ask for the
+    one project they name. An unknown project means a stale constant, so it
+    trips an assertion rather than silently running fewer suites.
+    """
+    known = dict(HOST_TEST_PROJECTS)
+    unknown = [project for project in projects if project not in known]
+    assert not unknown, f"not a host test project: {unknown}"
+    wanted = set(projects)
+    return [
+        (project, elf)
+        for project, elf in HOST_TEST_PROJECTS
+        if project in wanted
+    ]
+
+
+def _run_host_tests(projects: tuple[str, ...]) -> int:
+    """Build and run the host test suites named by `projects`.
 
     No container hop; assumes it is already running inside the dev container.
-    Each project in `HOST_TEST_PROJECTS` is pinned to `linux`, built, and its
-    ELF run; the first failing suite stops the run with a non-zero status.
+    Each project is pinned to `linux`, built, and its ELF run; the first
+    failing suite stops the run with a non-zero status.
     """
     rc = _ensure_submodules()
     if rc != 0:
         return rc
-    for project, elf in HOST_TEST_PROJECTS:
+    suites = _host_test_projects(projects)
+    assert suites, f"no host test suites selected from {projects}"
+    for project, elf in suites:
         for cmd in (
             _idf(project, TEST_BUILD_DIR, "--preview", "set-target", "linux"),
             _idf(project, TEST_BUILD_DIR, "build"),
@@ -731,20 +759,30 @@ def _run_host_tests() -> int:
                 print(f"FAILED: host tests '{project}'", file=sys.stderr)
                 return 1
 
-    print("SUCCESS: host tests passed")
+    print(f"SUCCESS: host tests passed ({', '.join(projects)})")
     return 0
 
 
 def cmd_test_linux() -> int:
-    """Host-based Unity tests on the ESP-IDF `linux` target."""
+    """Host-based Unity tests on the ESP-IDF `linux` target (`test/`)."""
     change_to_container()
-    return _run_host_tests()
+    return _run_host_tests((TEST_PROJECT,))
+
+
+def cmd_test_espidf_cpp() -> int:
+    """Host tests for components/espidf_cpp (`linux` target)."""
+    change_to_container()
+    return _run_host_tests((ESPIDF_CPP_TEST_PROJECT,))
 
 
 def cmd_test() -> int:
-    """Run the host unit test suites (alias of `test-linux`)."""
+    """Run every host unit test suite: `test-linux` then `test-espidf-cpp`.
+
+    The aggregate the pre-commit hook and CI call, so a suite added to
+    `HOST_TEST_PROJECTS` is picked up here without touching either.
+    """
     change_to_container()
-    return _run_host_tests()
+    return _run_host_tests(tuple(project for project, _ in HOST_TEST_PROJECTS))
 
 
 def cmd_self_check() -> int:
@@ -1343,6 +1381,7 @@ COMMANDS = {
     "menuconfig": cmd_menuconfig,
     "test": cmd_test,
     "test-linux": cmd_test_linux,
+    "test-espidf-cpp": cmd_test_espidf_cpp,
     "self-check": cmd_self_check,
     "format": cmd_format,
     "format-check": cmd_format_check,
