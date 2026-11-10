@@ -5,7 +5,9 @@
 # ESP-IDF-free logic modules are exercised here — payload formatting (§9),
 # temperature serialization (§9.3), configuration validation (§5.1), the RTC
 # sample buffer (§4.2), ROM-ID/CRC helpers (§5.1.3) — along with the pin-free
-# `hal_stub` mode switch (`components/hal_stub`).
+# `hal_stub` devices (`components/hal_stub`). The implementation-free
+# `hal_common` concepts and vocabulary have their own project
+# (`test-hal-common/`).
 #
 # Run with:
 #   docker compose run --rm dev bash -lc 'cd test && idf.py --preview

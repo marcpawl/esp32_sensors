@@ -41,7 +41,6 @@
 #include "hal/chip_temperature.hpp"
 #include "hal/led.hpp"
 #include "hal/onewire.hpp"
-#include "hal/pin_map.hpp"
 #include "hal/push_button.hpp"
 #include "hal/sleep_types.hpp"
 #include "hal/timer_stub.hpp"
@@ -118,19 +117,11 @@ int calls_after_quiet_period(std::atomic<int>& calls) {
 
 // --- Construction / factory -------------------------------------------------
 
-TEST_CASE("hal board: BoardPins defaults to the board pin map (§2.4)",
-          "[hal_board]") {
-    // The default wiring comes from `hal/pin_map.hpp`, so a board can be built
-    // on the reference hardware without repeating the numbers.
-    const BoardPins def{};
-    TEST_ASSERT_EQUAL(thermo::pins::kWireBus, def.one_wire);
-    TEST_ASSERT_EQUAL(thermo::pins::kGreenLed, def.green_led);
-    TEST_ASSERT_EQUAL(thermo::pins::kRedLed, def.red_led);
-    TEST_ASSERT_EQUAL(thermo::pins::kConfig, def.config_button);
-    TEST_ASSERT_EQUAL(thermo::pins::kRun, def.run_button);
-
-    // A default-constructed board still initializes and works (the stub
-    // ignores the pins, but this proves `create({})` is usable).
+TEST_CASE("hal board: create() accepts the default BoardPins", "[hal_board]") {
+    // The defaults come from `hal/pin_map.hpp`; the stub ignores the pins, but
+    // this proves `BoardStub::create({})` is usable on the reference wiring.
+    // The pin values themselves are tested with the vocabulary that defines
+    // them (`test-hal-common/main/test_hal_board_types.cpp`).
     BoardStub b = BoardStub::create({});
     TEST_ASSERT_EQUAL(ESP_OK, b.init_all());
 }
@@ -400,19 +391,6 @@ TEST_CASE("hal board: set_wakeup_causes() overrides the modelled wake",
 
     b.set_wakeup_causes(0);
     TEST_ASSERT_EQUAL_UINT32(0, b.sleep_get_wakeup_causes());
-}
-
-TEST_CASE("hal board: the wake-cause vocabulary is a bit per wake source",
-          "[hal_board]") {
-    // One bit per source, in the position named by the enumerator, so the
-    // hardware board can pass ESP-IDF's `BIT(ESP_SLEEP_WAKEUP_*)` bitmap
-    // through unchanged.
-    TEST_ASSERT_EQUAL_UINT32(1u << 0, wake_cause_bit(WakeCause::kUndefined));
-    TEST_ASSERT_EQUAL_UINT32(1u << 4, wake_cause_bit(WakeCause::kTimer));
-    // `kTimer` is ESP_SLEEP_WAKEUP_TIMER (4) in ESP-IDF, and `kUndefined` is
-    // 0; `board.cpp` asserts the same thing on the hardware side.
-    static_assert(static_cast<std::uint32_t>(WakeCause::kUndefined) == 0);
-    static_assert(static_cast<std::uint32_t>(WakeCause::kTimer) == 4);
 }
 
 // --- The board exposes the const accessors too ------------------------------

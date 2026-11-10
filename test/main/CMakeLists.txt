@@ -16,11 +16,9 @@
 # host-testable too and are pulled in via PRIV_REQUIRES below; test_hal_led.cpp,
 # test_hal_push_button.cpp, test_hal_onewire.cpp, test_hal_chip_temperature.cpp,
 # test_hal_wifi.cpp, test_hal_timer_stub.cpp, and test_hal_board.cpp exercise
-# them. test_hal_board_types.cpp models the shared `BoardLike` contract to prove
-# it rejects a board that is missing a piece — chiefly the one-shot timer's
-# `TimerHandle` typedef and `register_timer()`.
-# test_led_runner.cpp instantiates the templated LedRunner<Board> against the
-# stub board.
+# them. The `hal_common` concepts and vocabulary are tested in the separate
+# `test-hal-common/` project. test_led_runner.cpp instantiates the templated
+# LedRunner<Board> against the stub board.
 #
 # The LED task itself lives in the shared `logic` component
 # (`components/logic/include/logic/led_task.hpp`), not in `mcgowan/src/`, so
@@ -51,10 +49,8 @@ set(test_srcs
     "test_hal_chip_temperature.cpp"
     "test_hal_wifi.cpp"
     "test_hal_board.cpp"
-    "test_hal_board_types.cpp"
     "test_led_runner.cpp"
     "test_freertos_timers.cpp"
-    "test_hal_timer_types.cpp"
     "test_hal_timer_stub.cpp"
 )
 
