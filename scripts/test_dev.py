@@ -1197,15 +1197,26 @@ class HostTestCommandTests(unittest.TestCase):
         # Record the commands `run()` would execute instead of executing them.
         self.calls = []
         self._original_run = dev.run
+        self._original_change_to_container = dev.change_to_container
+        self.hops = []
 
         def fake_run(cmd, cwd=dev.REPO_ROOT):
             self.calls.append(list(cmd))
             return 0
 
+        def fake_change_to_container():
+            # The real one re-execs `sys.argv` under `docker compose` and then
+            # `sys.exit()`s, so on the host the command under test would never
+            # run. Record the hop instead: the commands are tested from
+            # whichever side `self-check` runs on.
+            self.hops.append(True)
+
         dev.run = fake_run
+        dev.change_to_container = fake_change_to_container
 
     def tearDown(self):
         dev.run = self._original_run
+        dev.change_to_container = self._original_change_to_container
 
     def test_both_suite_commands_are_registered(self):
         for name, handler in (
@@ -1215,6 +1226,19 @@ class HostTestCommandTests(unittest.TestCase):
             with self.subTest(command=name):
                 self.assertIn(name, dev.COMMANDS)
                 self.assertIs(dev.COMMANDS[name], handler)
+
+    def test_every_suite_command_hops_into_the_container(self):
+        # `idf.py` only exists inside the dev image, so each command must hand
+        # off to it exactly once (`_run_host_tests` itself never hops).
+        for handler in (
+            dev.cmd_test_linux,
+            dev.cmd_test_espidf_cpp,
+            dev.cmd_test,
+        ):
+            with self.subTest(command=handler.__name__):
+                self.hops = []
+                handler()
+                self.assertEqual(len(self.hops), 1)
 
     def test_test_espidf_cpp_uses_the_build_commands_project(self):
         # `build-espidf-cpp-test` builds the wrapper suite and
