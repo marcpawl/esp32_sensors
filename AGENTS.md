@@ -2,7 +2,7 @@
 
 ## Project Description
 
-This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its software specification (Rev 15). Firmware implementation is **in progress**: Configure mode is fully implemented; Run mode is scaffolded with the network paths (Wi-Fi station, batch upload, backoff) intentionally stubbed.
+This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its software specification. Firmware implementation is **in progress**: Configure mode is fully implemented; Run mode is scaffolded with the network paths (Wi-Fi station, batch upload, backoff) intentionally stubbed.
 
 **What it does:**
 - A solar-powered, battery-backed ESP32 samples three **DS18B20** thermometers on a shared **1-Wire bus**.
@@ -23,7 +23,7 @@ This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its s
 | Host OS | Linux Mint |
 | IDE | CLion 2026.2 |
 | Container runtime | Docker |
-| Container image | `marcpawl/esp-idf:20261109` (prebuilt: `espressif/idf:release-v6.1` + project tooling) |
+| Container image | `marcpawl/esp-idf:20261109b` (prebuilt: `espressif/idf:release-v6.1` + project tooling) |
 | Source language | **C++26** (GNU extensions, `-std=gnu++26`) |
 | Target framework | ESP-IDF v6.1 |
 | Toolchain | GCC 15.2.0 (Xtensa `esp-15.2.0_20251204`, bundled with ESP-IDF v6.1) |
@@ -36,7 +36,7 @@ This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its s
 > - **Run mode — scaffolded/stubbed.** Real: boot self-test LEDs, battery read + hysteresis, sensor read with cached ROM IDs (first-boot scan), sample append to the RTC buffer, deep sleep. **Stubbed:** Wi-Fi station connect + cached fast-reconnect (§3.9), batch upload + payload wire-out (§9, payload is formatted and logged but not sent), exponential backoff (§3.7).
 > - **Host unit tests.** `test/` and `espidf-cpp-test/` build for the ESP-IDF `linux` target (Unity) and run via `scripts/dev.py test` (alias of `test-linux` / `build-espidf-cpp-test`). On-target tests for hardware-dependent code are planned.
 
-> **Toolchain note:** The host's locally installed ESP-IDF is **v6.1** with **Xtensa GCC 15.2.0** (`esp-15.2.0_20251204`), which matches the pinned Docker image `marcpawl/esp-idf:20261109` exactly (it is built on `espressif/idf:release-v6.1`). Keep both in sync: if you upgrade the host toolchain, change the base image in `Dockerfile`, publish a new image under a **new** date-stamped tag (never move an existing tag), and bump the pin in `docker-compose.yml` + `scripts/dev.py` (`DEV_IMAGE`) and this document.
+> **Toolchain note:** The host's locally installed ESP-IDF is **v6.1** with **Xtensa GCC 15.2.0** (`esp-15.2.0_20251204`), which matches the pinned Docker image `marcpawl/esp-idf:20261109b` exactly (it is built on `espressif/idf:release-v6.1`). Keep both in sync: if you upgrade the host toolchain, change the base image in `Dockerfile`, publish a new image under a **new** date-stamped tag (never move an existing tag), and bump the pin in `docker-compose.yml` + `scripts/dev.py` (`DEV_IMAGE`) and this document.
 
 ## Architecture Overview
 
@@ -68,7 +68,7 @@ Refer to `Specification.md` for the detailed contracts: operating modes, sample 
 
 ```
 esp32_sensors/
-├── Specification.md     # Authoritative software spec (Rev 15) — read this first
+├── Specification.md     # Authoritative software spec — read this first
 ├── CMakeLists.txt       # Root aggregator (plain CMake) — builds all subprojects
 ├── mcgowan/             # Firmware subproject (ESP32-S3, hal_board) -> mcgowan.bin
 │   ├── CMakeLists.txt   #   standalone ESP-IDF project (project(mcgowan))
@@ -140,9 +140,9 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 - `CMakeLists.txt` (root) — the generator-agnostic aggregator: one prefixed target per subproject invoking `idf.py -C <sub> -B <sub>/<build-dir>`. `-DSUBPROJECTS="mcgowan;test;espidf-cpp-test;donny"` (default: all) selects what is built.
 - `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash environment. Extend these (not ad-hoc `docker run`) when adding tooling. The compose `dev` service is also the target of the Dev Container (see below).
 - `.devcontainer/devcontainer.json` — the CLion / VS Code **Dev Container** definition. It **reuses the compose `dev` service** (it does not define its own image), so CLion pulls/starts the same container the CLI uses. Edit `docker-compose.yml` for image/mount/user changes; edit `devcontainer.json` only for IDE-level wiring.
-- `scripts/dev.py` — the single container task runner (`pull`, `image`, `submodules`, `build`, `flash`, `monitor`, `menuconfig`, `test`, `test-linux`, `self-check`, `format`, `format-check`, `format-check-staged`, `clang-tidy`, `install-hooks`, `shell`, `cn`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. `submodules` fetches the pinned git submodules (`third_party/sml`); `build`, `test`, and `clang-tidy` call the same helper first, so a bare clone builds without a manual step. `shell` is the preferred way to run a container command from the host: with no arguments it opens an interactive login shell, and with arguments it runs them in the container (e.g. `./scripts/dev.py shell ls -1d /`). `cn` runs the Continue CLI in the container: it passes `--config <container HOME>/.continue/config.yaml` explicitly (cn's own default lookup is not reliable), and forwards its arguments to `cn` verbatim (`./scripts/dev.py cn -p "prompt"`). The pre-commit hook (`.githooks/pre-commit`) runs `scripts/dev.py clang-tidy`, then `format-check-staged`, then `test`. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
+- `scripts/dev.py` — the single container task runner (`pull`, `image`, `submodules`, `build`, `flash`, `monitor`, `menuconfig`, `test`, `test-linux`, `self-check`, `format`, `format-check`, `format-check-staged`, `pycodestyle`, `clang-tidy`, `install-hooks`, `shell`, `cn`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. `submodules` fetches the pinned git submodules (`third_party/sml`); `build`, `test`, and `clang-tidy` call the same helper first, so a bare clone builds without a manual step. `shell` is the preferred way to run a container command from the host: with no arguments it opens an interactive login shell, and with arguments it runs them in the container (e.g. `./scripts/dev.py shell ls -1d /`). `cn` runs the Continue CLI in the container: it passes `--config <container HOME>/.continue/config.yaml` explicitly (cn's own default lookup is not reliable), and forwards its arguments to `cn` verbatim (`./scripts/dev.py cn -p "prompt"`). The pre-commit hook (`.githooks/pre-commit`) runs `scripts/dev.py pycodestyle`, then `clang-tidy`, then `format-check-staged`, then `test`. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
 - `scripts/idf.sh` — runs a command (normally `idf.py`) with the ESP-IDF environment established, sourcing `$IDF_PATH/export.sh` when `IDF_PYTHON_ENV_PATH`/`ESP_IDF_VERSION` are absent. The image's entrypoint sources `export.sh` for the container's own command only; anything started later — notably the CMake/Ninja build CLion spawns — inherits a bare environment, where `idf.py` dies with `TypeError: expected string or bytes-like object, got 'NoneType'` (`Version.coerce(os.getenv('ESP_IDF_VERSION'))`). So the root aggregator's targets invoke `idf.py` through this wrapper (`set(IDF_RUNNER ...)` in `CMakeLists.txt`), which makes `cmake --build build_root` correct however it was started. `BASH_ENV` cannot substitute: bash sources it only for non-interactive shells and the image's `~/.bashrc` returns early for those. The wrapper is idempotent — it execs the command directly when the variables are already present — and exits non-zero when `IDF_PATH` is not an ESP-IDF checkout.
-- `scripts/test_dev.py` — host-side unit tests for `dev.py` itself (stdlib `unittest`, run by `scripts/dev.py self-check`). Imports `dev.py` in-process and covers its pure helpers — chiefly the command line `shell` builds (so shell syntax like pipes/semicolons is passed through verbatim) and `shell -C` path resolution. `SourceFileDiscoveryTests` pins that `format`/`format-check` see untracked sources: `_source_file_command` enumerates `--cached --others --exclude-standard` scoped to `ROOTS`, `_select_sources` keeps only the C/C++ extensions and drops paths that are not on disk, and end-to-end checks against a scratch repository prove an untracked source is listed while a `.gitignore`d build file is not (the bug where `format` skipped files that had not been `git add`ed). `StagedFormatCheckTests` pins `format-check-staged`'s style handling against throwaway git repositories: the ancestor search that finds nested `.clang-format` / `.clang-format-ignore` files, that the *staged* blob (not the working copy) is materialized, that a style file staged for deletion is skipped while an untracked one is honored — plus two end-to-end checks that a nested `DisableFormat: true` exempts unformatted code while the root style still rejects it (they skip on the host, where `clang-format` is not installed). It also pins the `scripts/idf.sh` contract (`IdfRunnerTests`): the wrapper exists, is executable, is tracked by git, establishes the environment, passes the command through unmodified, and is used by the root aggregator's per-subproject helper. `ClionRunConfigurationTests` pins the four CMake run configurations to the CMake project they are actually bound to: `PROJECT_NAME` must be the root `project()` name, `CONFIG_NAME` must name a profile declared in `.idea/cmake.xml`, and `TARGET_NAME` must be one of the root aggregator's `*_build` targets (a subproject's `<name>.elf` is not resolvable from the root and fails with "cannot find target"). The `Tidy*` classes cover `clang-tidy`: `TidyCompileArgumentsTests` pins which GCC flags are stripped and that the source file and the `-D`/`-I` flags survive; `TidyUnitSelectionTests` pins the one-entry-per-source reduction (non-C++ and out-of-tree entries skipped, first occurrence wins); `TidyConfigurationTests` pins the project list, the build directories it reads, and the header filter; and `TidyGateTests` pins the hook and CI ordering (tidy before format-check, tidy after build). `SubmoduleTests` pins the `third_party/sml` git submodule: `.gitmodules` records the upstream URL, the **index** records a `160000` gitlink at the v1.2.0 commit (the index, not `HEAD`, because the submodule is only staged until it is committed), every entry in `dev.SUBMODULES` has a marker file inside it, `_submodule_update_command` builds the `git submodule update --init --recursive -- <path>` argv, the fetch helper is called by `build` / `build-espidf-cpp-test` / `test` / `clang-tidy`, `submodules` runs through the container, and CI fetches submodules **before** it builds. It also pins that `third_party/` is outside `dev.ROOTS` and that `_is_vendored` excludes the submodule from `clang-tidy` while leaving `components/sml` and `components/logic` in scope. `ContinueCliCommandTests` pins `dev.py cn`: `_cn_command` puts `--config` first with the path under the container `$HOME` that `_container_home` picks (so it matches a compose `~/.continue` mount target for both the image user and the pinned `/tmp` home), arguments after `cn` are forwarded verbatim, `main` bypasses argparse for them, and the compose `environment:` passes `DEEPSEEK_API_KEY` through from the host with no value (never hardcoded).
+- `scripts/test_dev.py` — host-side unit tests for `dev.py` itself (stdlib `unittest`, run by `scripts/dev.py self-check`). Imports `dev.py` in-process and covers its pure helpers — chiefly the command line `shell` builds (so shell syntax like pipes/semicolons is passed through verbatim) and `shell -C` path resolution. `SourceFileDiscoveryTests` pins that `format`/`format-check` see untracked sources: `_source_file_command` enumerates `--cached --others --exclude-standard` scoped to `ROOTS`, `_select_sources` keeps only the C/C++ extensions and drops paths that are not on disk, and end-to-end checks against a scratch repository prove an untracked source is listed while a `.gitignore`d build file is not (the bug where `format` skipped files that had not been `git add`ed). `StagedFormatCheckTests` pins `format-check-staged`'s style handling against throwaway git repositories: the ancestor search that finds nested `.clang-format` / `.clang-format-ignore` files, that the *staged* blob (not the working copy) is materialized, that a style file staged for deletion is skipped while an untracked one is honored — plus two end-to-end checks that a nested `DisableFormat: true` exempts unformatted code while the root style still rejects it (they skip on the host, where `clang-format` is not installed). It also pins the `scripts/idf.sh` contract (`IdfRunnerTests`): the wrapper exists, is executable, is tracked by git, establishes the environment, passes the command through unmodified, and is used by the root aggregator's per-subproject helper. `ClionRunConfigurationTests` pins the four CMake run configurations to the CMake project they are actually bound to: `PROJECT_NAME` must be the root `project()` name, `CONFIG_NAME` must name a profile declared in `.idea/cmake.xml`, and `TARGET_NAME` must be one of the root aggregator's `*_build` targets (a subproject's `<name>.elf` is not resolvable from the root and fails with "cannot find target"). The `Tidy*` classes cover `clang-tidy`: `TidyCompileArgumentsTests` pins which GCC flags are stripped and that the source file and the `-D`/`-I` flags survive; `TidyUnitSelectionTests` pins the one-entry-per-source reduction (non-C++ and out-of-tree entries skipped, first occurrence wins); `TidyConfigurationTests` pins the project list, the build directories it reads, and the header filter; and `TidyGateTests` pins the hook and CI ordering (tidy before format-check, tidy after build). `SubmoduleTests` pins the `third_party/sml` git submodule: `.gitmodules` records the upstream URL, the **index** records a `160000` gitlink at the v1.2.0 commit (the index, not `HEAD`, because the submodule is only staged until it is committed), every entry in `dev.SUBMODULES` has a marker file inside it, `_submodule_update_command` builds the `git submodule update --init --recursive -- <path>` argv, the fetch helper is called by `build` / `build-espidf-cpp-test` / `test` / `clang-tidy`, `submodules` runs through the container, and CI fetches submodules **before** it builds. It also pins that `third_party/` is outside `dev.ROOTS` and that `_is_vendored` excludes the submodule from `clang-tidy` while leaving `components/sml` and `components/logic` in scope. `ContinueCliCommandTests` pins `dev.py cn`: `_cn_command` puts `--config` first with the path under the container `$HOME` that `_container_home` picks (so it matches a compose `~/.continue` mount target for both the image user and the pinned `/tmp` home), arguments after `cn` are forwarded verbatim, `main` bypasses argparse for them, and the compose `environment:` passes `DEEPSEEK_API_KEY` through from the host with no value (never hardcoded). `PythonSourceDiscoveryTests` pins the `pycodestyle` file list: `_is_vendored_path` matches only a top-level `third_party`, `_select_python_sources` keeps `*.py` **and** extensionless Python shebang scripts (so `.githooks/pre-commit` is checked), rejects a non-Python shebang, a `python` mention that is not a shebang, deleted paths and non-UTF-8 first lines, and that the real repository enumerates exactly the two dev.py scripts plus the hook with nothing vendored. `PycodestyleGateTests` pins the wiring: `_pycodestyle_command` uses `python3 -m pycodestyle` with no options of its own (so a bare `pycodestyle` agrees), the command hops into the container, and it is the **first** gate in the hook and runs before `build` in CI.
 - `scripts/dev.py-completion.bash` — bash tab-completion for `scripts/dev.py`. Source it to complete subcommands (e.g. `./scripts/dev.py form<TAB>` → `format`, `format-check`, `format-check-staged`, or `./scripts/dev.py clang-<TAB>` → `clang-tidy`). It asks `dev.py complete <prefix>` for candidates, so the command list is defined in exactly one place.
 - `.idea/cmake.xml` / `.idea/runConfigurations/*.xml` — **committed** shared CLion configuration. `cmake.xml` defines one CMake profile per subproject, so each subproject is indexed and buildable inside the Dev Container; the run configurations drive the build, test, format, flash, and shell tasks (six via `python3 scripts/dev.py`, four native CMake configs — one per profile — for build/refactor). `.idea/workspace.xml` (local, git-ignored) holds per-machine state. **Known limitation:** those profiles do not yet give the code model they were designed for. `GENERATION_DIR` is only the build directory; the source directory comes from the single CMake workspace in `.idea/misc.xml` (the repo root), so all four `cmake-build-*` trees configure the root aggregator (`CMAKE_HOME_DIRECTORY=/project`), contain no `compile_commands.json`, and expose only the four aggregate targets as `UTILITY` targets. Navigation/refactorings are therefore not driven by them; `scripts/dev.py build` is the way to build everything. Fixing it needs either one CLion project per subproject or a merged `compile_commands.json` at the root. **CLion rewrites these XML files from its in-memory model**: it drops XML comments and the trailing newline, and it restores the real `PROJECT_NAME` (`esp32_sensors_subprojects`, the root `project()` name) whenever it has resolved the project. Do not commit its wholesale rewrite — keep the comments and edit only the attribute that genuinely changed.
 - `LICENSE` — GPL-3.0.
@@ -600,15 +600,15 @@ extern "C" void app_main(void);
 
 ## Development Workflow
 
-> **Important:** All builds run inside the ESP-IDF Docker environment. The environment is defined by the committed `Dockerfile` + `docker-compose.yml`, but the image itself is **prebuilt and pulled** (`marcpawl/esp-idf:20261109`); use `docker compose run --rm dev <cmd>` (or `./scripts/dev.py shell <cmd>`) rather than ad-hoc `docker run`. `sdkconfig` is generated (git-ignored) — edit `sdkconfig.defaults` instead when changing configuration intent.
+> **Important:** All builds run inside the ESP-IDF Docker environment. The environment is defined by the committed `Dockerfile` + `docker-compose.yml`, but the image itself is **prebuilt and pulled** (`marcpawl/esp-idf:20261109b`); use `docker compose run --rm dev <cmd>` (or `./scripts/dev.py shell <cmd>`) rather than ad-hoc `docker run`. `sdkconfig` is generated (git-ignored) — edit `sdkconfig.defaults` instead when changing configuration intent.
 
 ### Development environment setup
 
-All builds run inside the prebuilt ESP-IDF Docker image to guarantee a reproducible toolchain (ESP-IDF v6.1, Xtensa GCC 15.2.0, CMake, Ninja, Python venv). The image `marcpawl/esp-idf:20261109` is pinned in `docker-compose.yml`, is never moved, and is the same image CI pulls, so there is nothing to build locally:
+All builds run inside the prebuilt ESP-IDF Docker image to guarantee a reproducible toolchain (ESP-IDF v6.1, Xtensa GCC 15.2.0, CMake, Ninja, Python venv). The image `marcpawl/esp-idf:20261109b` is pinned in `docker-compose.yml`, is never moved, and is the same image CI pulls, so there is nothing to build locally:
 
 ```bash
 # From the repository root, pull the pinned dev image (first time, or to refresh)
-./scripts/dev.py pull       # == docker pull marcpawl/esp-idf:20261109
+./scripts/dev.py pull       # == docker pull marcpawl/esp-idf:20261109b
 
 # Interactive shell with the ESP-IDF environment auto-sourced
 docker compose run --rm dev
@@ -652,7 +652,7 @@ required.
   it never defines its own image).
 - **Connect:** open the repo in CLion and accept the Dev Container prompt, or use
   *Remote Development → Dev Containers → docker-compose.yml → `dev`*. CLion
-  pulls `marcpawl/esp-idf:20261109` if it is not cached and starts the service on
+  pulls `marcpawl/esp-idf:20261109b` if it is not cached and starts the service on
   demand. Note that compose falls back to building the local `Dockerfile` if the
   pull fails, so run `./scripts/dev.py pull` first if you want that failure to be
   loud.
@@ -785,6 +785,7 @@ enacted on the host.
 |both|format|clang-format all source code (tracked **and** untracked, so a new file needs no `git add` first)|
 |both|format-check|Check if code is formatted, non-zero exit if anything is unformatted |
 |both|format-check-staged|Check if staged code is formatted, non-zero exit if anything is unformatted |
+|both|pycodestyle|Python style check (PEP 8, 79 columns) over every Python source in the repository — `*.py` plus extensionless Python shebang scripts such as `.githooks/pre-commit`; `third_party/` is excluded; non-zero exit on any finding|
 |both|clang-tidy [PROJECT...]|Static analysis over the built projects' C++ sources (needs a prior `build`); non-zero exit on any finding|
 |both|shell|Run a bash command in the container (arguments after `shell` are executed); with no arguments, an interactive login shell|
 |both|cn|Run the Continue CLI (`cn`) in the container with the host's `~/.continue/config.yaml` passed as `--config`; arguments after `cn` go to `cn` verbatim (e.g. `cn -p "prompt"`)|
@@ -933,6 +934,39 @@ formats), not under a component with a nested style file — that is why the
 never formatted.
 
 - **Static checks:** `scripts/dev.py clang-tidy` (see below); ensure C++26 compatibility with the ESP-IDF toolchain.
+
+### Python style (pycodestyle)
+
+`scripts/dev.py pycodestyle` runs `python3 -m pycodestyle` over every Python
+source in the repository and exits non-zero on any finding. It is the **first**
+gate in the pre-commit hook and the first check in CI, because it needs no
+compile database, no build, and no test run — a long line is reported in
+seconds instead of after the toolchain.
+
+```bash
+./scripts/dev.py pycodestyle
+```
+
+**pycodestyle's defaults are enforced** (PEP 8, 79 columns). No
+`--max-line-length` or other option is passed, so the gate and a bare
+`pycodestyle` run agree; the repository conforms to the tool rather than the
+other way round. Add an option only by changing `PYCODESTYLE_ARGS` in
+`scripts/dev.py`, which is the single place the argv is built.
+
+**Which files.** Enumeration reuses `_source_file_command` with the repository
+root as the only pathspec, so the same `--cached --others --exclude-standard`
+semantics as `format` apply: a file that has not been `git add`ed is checked,
+and `.gitignore`d build output is not. Selection keeps a path when it ends in
+`.py` **or** its first line is a Python shebang (`#!/usr/bin/env python3`,
+`#!/usr/bin/python3.12`, …). The shebang half is what catches
+`.githooks/pre-commit` — the gate that runs before every commit, and Python
+with no extension. `third_party/` is dropped (`_is_vendored_path`, a top-level
+match only), so the `third_party/json` and `third_party/sml` trees stay
+byte-identical to upstream.
+
+The tool is installed in the dev image (`PYCODESTYLE_VERSION`, pinned and
+verified at build time), so `pycodestyle` runs inside the container like every
+other task.
 
 ### Static analysis (clang-tidy)
 

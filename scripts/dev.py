@@ -3,21 +3,21 @@
 # ESP32 Solar-Powered Thermometer Logger — container task runner.
 #
 # Every build/flash/test/lint task runs inside the ESP-IDF dev container so the
-# host stays clean and the toolchain is reproducible. This wrapper is the single
-# entry point used by the CLion run configurations (see
-# .idea/runConfigurations/*.xml) and the AGENTS.md workflow, so `docker compose`
+# host stays clean and the toolchain is reproducible. This wrapper is the
+# single entry point used by the CLion run configurations (see
+# .idea/runConfigurations/*.xml) and the AGENTS.md workflow, so the compose
 # specifics live in one place.
 #
 # Usage:
 #   scripts/dev.py [pull|image|submodules|build|build-espidf-cpp-test|flash|\
 #                   monitor|menuconfig|test|test-linux|self-check|format|\
-#                   format-check|format-check-staged|clang-tidy|\
+#                   format-check|format-check-staged|pycodestyle|clang-tidy|\
 #                   install-hooks|shell|cn]
 #   scripts/dev.py --help        # full help, including per-command details
 #
 # Environment:
 #   ESP32_PORT   Serial device for flash/monitor (optional)
-#                docker-compose.yml will pass into the container the value 
+#                docker-compose.yml will pass into the container the value
 #                on the host.
 #   GH_TOKEN     GitHub token for `gh` inside the container (optional;
 #                GITHUB_TOKEN is accepted too). docker-compose.yml passes
@@ -63,9 +63,35 @@ ROOTS = (
 )
 EXTENSIONS = (".cpp", ".hpp", ".h", ".cc", ".cxx")
 
+# Vendored third-party trees (both the `third_party/json` component and the
+# `third_party/sml` submodule). Nothing here is ours to fix, so it is excluded
+# from every check: clang-format and pycodestyle skip it outright, and
+# clang-tidy skips it through `_is_vendored`.
+VENDORED_DIRS = ("third_party",)
+
+# Python sources are linted by `pycodestyle` (see `cmd_pycodestyle`). Unlike
+# the C/C++ list, the search covers the whole repository rather than ROOTS,
+# for two reasons: the interesting files are `.githooks/pre-commit` (scripts
+# that are Python but carry no `.py` suffix) and future tooling outside the
+# C/C++ trees. `third_party/` is dropped by `_select_python_sources`, and
+# `.gitignore`d build output never appears because git is the enumerator.
+PYTHON_EXTENSIONS = (".py",)
+
+# A first line naming a Python interpreter: `#!/usr/bin/env python3`,
+# `#!/usr/bin/python`, `#!python3.12`, ... Matched against bytes, because the
+# file is read in binary to avoid decoding a shebang that is not valid UTF-8.
+PYTHON_SHEBANG = re.compile(rb"^#![^\n]*\bpython[0-9.]*\b")
+
+# pycodestyle's own defaults are used deliberately: PEP 8, 79 columns. Passing
+# `--max-line-length` or any other flag here would make this command and a bare
+# `pycodestyle` disagree, so the repository conforms to the tool rather than
+# the other way round. Kept as a constant so the argv is built in one place.
+PYCODESTYLE_ARGS: tuple[str, ...] = ()
+
 # Git submodules holding vendored third-party code the build needs. A bare
 # clone leaves each submodule directory empty, so the build/test/lint commands
-# fetch them first, and `scripts/dev.py submodules` (CI step) does so explicitly.
+# fetch them first, and `scripts/dev.py submodules` (CI step) does so
+# explicitly.
 #
 # `third_party/sml` is boost-ext/sml (https://github.com/boost-ext/sml),
 # pinned to tag **v1.2.0** via the gitlink recorded in .gitmodules. The
@@ -76,7 +102,8 @@ EXTENSIONS = (".cpp", ".hpp", ".h", ".cc", ".cxx")
 SUBMODULES = ("third_party/sml",)
 
 # A file whose presence proves a submodule is actually checked out. Its absence
-# means the gitlink was not fetched (fresh clone, or `--no-recurse-submodules`).
+# means the gitlink was not fetched (fresh clone, or
+# `--no-recurse-submodules`).
 SUBMODULE_MARKERS = {
     "third_party/sml": "third_party/sml/include/boost/sml.hpp",
 }
@@ -93,7 +120,7 @@ STYLE_FILE_NAMES = (".clang-format", ".clang-format-ignore")
 # never moved, so update it in both places (test_dev.py asserts they agree).
 # `LOCAL_IMAGE` is only what `image` (a local rebuild) produces, for trying out
 # Dockerfile changes.
-DEV_IMAGE = "marcpawl/esp-idf:20261109"
+DEV_IMAGE = "marcpawl/esp-idf:20261109b"
 LOCAL_IMAGE = "esp32-sensors-dev:local"
 
 # User baked into DEV_IMAGE, and where ccache lives under a writable HOME. A
@@ -109,7 +136,8 @@ FORMAT_ARGS = ("--dry-run", "--Werror")
 # The repo root is not an ESP-IDF project; it aggregates the subprojects
 # (each a standalone ESP-IDF project with its own build directory):
 #
-#   mcgowan/  ESP32-S3 firmware (hal_board) -> mcgowan/build_esp32s3/mcgowan.bin
+#   mcgowan/  ESP32-S3 firmware (hal_board)
+#                                        -> mcgowan/build_esp32s3/mcgowan.bin
 #   test/     host unit tests (linux target)      -> test/build_linux
 #   espidf-cpp-test/
 #             host unit tests for components/espidf_cpp (linux target)
@@ -204,9 +232,11 @@ TIDY_DROP_FLAG_PREFIXES = (
 def is_in_container():
     return os.environ.get("DOCKER_IMAGE") == "esp32_sensors"
 
+
 def split_list(items, max_size):
     # Step through the list from 0 to n, skipping by max_size each time
-    return [items[i : i + max_size] for i in range(0, len(items), max_size)]
+    return [items[i:i + max_size] for i in range(0, len(items), max_size)]
+
 
 def _source_file_command(roots: tuple[str, ...] = ROOTS) -> list[str]:
     """The `git ls-files` argv that enumerates the sources to format. Pure.
@@ -265,14 +295,114 @@ def source_files() -> list[str]:
             check=True,
         )
     except subprocess.CalledProcessError as e:
-        print(f"Git command failed with exit code {e.returncode}", file=sys.stderr)
+        print(
+            f"Git command failed with exit code {e.returncode}",
+            file=sys.stderr,
+        )
         print(f"Error output: {e.stderr}", file=sys.stderr)
         raise
     except FileNotFoundError:
-        print("Error: 'git' command-line tool not found on this system.", file=sys.stderr)
+        print(
+            "Error: 'git' command-line tool not found on this system.",
+            file=sys.stderr,
+        )
         raise
 
     return _select_sources(result.stdout.splitlines())
+
+
+def _is_vendored_path(path: str) -> bool:
+    """True when repo-relative `path` lives under a vendored tree. Pure.
+
+    String-based rather than `Path`-based so it can be used while filtering
+    before touching the filesystem; a top-level match only, so a directory
+    *named* `third_party` deeper in the tree is not accidentally exempt.
+    """
+    return any(
+        path == vendored or path.startswith(f"{vendored}/")
+        for vendored in VENDORED_DIRS
+    )
+
+
+def _select_python_sources(
+    paths: list[str], root: Path = REPO_ROOT
+) -> list[str]:
+    """Filter `paths` down to the Python files to lint. Pure.
+
+    A path counts when it ends in `.py` **or** its first line is a Python
+    shebang. The shebang half is what picks up `.githooks/pre-commit`, which is
+    Python with no extension; it is the one place this check looks past the
+    file name, and it costs a single small read per candidate.
+
+    Vendored trees are dropped (`_is_vendored_path`) and paths that are not
+    regular files are skipped: git still lists a tracked file that has been
+    deleted, and pycodestyle cannot read it. The result is sorted for a stable,
+    reviewable order. Pure except for reading first lines, and `root` is a
+    parameter so it can be exercised against a scratch tree.
+    """
+    selected = set()
+    for path in paths:
+        if _is_vendored_path(path) or not (root / path).is_file():
+            continue
+        if path.endswith(PYTHON_EXTENSIONS):
+            selected.add(path)
+            continue
+        with open(root / path, "rb") as handle:
+            first_line = handle.readline()
+        if PYTHON_SHEBANG.match(first_line):
+            selected.add(path)
+    return sorted(selected)
+
+
+def python_sources() -> list[str]:
+    """Every Python source in the repository, tracked or untracked.
+
+    Repository-wide on purpose: see `PYTHON_EXTENSIONS`. It reuses
+    `_source_file_command` with the repository root as the only pathspec, so
+    the same `--cached --others --exclude-standard` semantics apply — a new
+    file that has not been `git add`ed is still checked, and build output that
+    `.gitignore` covers is not.
+    """
+    result = subprocess.run(
+        _source_file_command(roots=(".",)),
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return _select_python_sources(result.stdout.splitlines())
+
+
+def _pycodestyle_command(files: list[str]) -> list[str]:
+    """The `pycodestyle` argv for `files`. Pure (testable).
+
+    `python3 -m pycodestyle` rather than the console script, so the checker is
+    the one belonging to the interpreter that runs in the container (the
+    ESP-IDF venv) even if PATH is odd — e.g. through a login shell.
+    """
+    return ["python3", "-m", "pycodestyle", *PYCODESTYLE_ARGS, *files]
+
+
+def cmd_pycodestyle() -> int:
+    """Python style check (pycodestyle, PEP 8) over the repository's Python.
+
+    Covers `scripts/dev.py`, `scripts/test_dev.py`, and any Python shebang
+    script such as `.githooks/pre-commit`; `third_party/` is excluded.
+    pycodestyle's defaults are enforced (79 columns), so the result matches a
+    bare `pycodestyle` run.
+
+    This is the FIRST gate in the pre-commit hook and a CI step: it is the
+    cheapest check, so a long line or a stray blank line is reported before
+    clang-tidy, clang-format, or the test suite start.
+    """
+    change_to_container()
+
+    files = python_sources()
+    if not files:
+        print("pycodestyle: no Python sources to check", file=sys.stderr)
+        return 1
+    print(f"pycodestyle: checking {len(files)} Python sources")
+    return run(_pycodestyle_command(files))
 
 
 def run(cmd: list[str], cwd: Path | str = REPO_ROOT) -> int:
@@ -384,7 +514,9 @@ def _missing_submodules(markers: dict[str, str] = SUBMODULE_MARKERS,
     (e.g. `include/boost/sml.hpp`), which only exists once it is fetched.
     """
     return [
-        path for path, marker in markers.items() if not (root / marker).is_file()
+        path
+        for path, marker in markers.items()
+        if not (root / marker).is_file()
     ]
 
 
@@ -396,7 +528,9 @@ def _submodule_update_command(paths: list[str]) -> list[str]:
     future one from silently staying empty). Only the named paths are touched,
     so an unrelated submodule is left exactly as the caller left it.
     """
-    return ["git", "submodule", "update", "--init", "--recursive", "--", *paths]
+    return [
+        "git", "submodule", "update", "--init", "--recursive", "--", *paths
+    ]
 
 
 def _ensure_submodules() -> int:
@@ -411,7 +545,8 @@ def _ensure_submodules() -> int:
     if not missing:
         return 0
     print(
-        f"Fetching {len(missing)} missing git submodule(s): {' '.join(missing)}"
+        f"Fetching {len(missing)} missing git submodule(s): "
+        f"{' '.join(missing)}"
     )
     return run(_submodule_update_command(missing))
 
@@ -441,7 +576,7 @@ def cmd_pull() -> int:
 
 
 def cmd_image() -> int:
-    """Build the dev image locally from the Dockerfile (not needed normally)."""
+    """Build the dev image locally from the Dockerfile. Not needed normally."""
     if is_in_container():
         print("Image cannot be built while in container", file=sys.stderr)
         return 1
@@ -628,7 +763,7 @@ def cmd_format() -> int:
     change_to_container()
 
     for file in source_files():
-        cmd = [ "clang-format", "-i", file ]
+        cmd = ["clang-format", "-i", file]
         rc = run(cmd)
         if rc != 0:
             print(f"Format failed: {file}", file=sys.stderr)
@@ -641,7 +776,7 @@ def cmd_format_check() -> int:
     change_to_container()
 
     for file in source_files():
-        cmd = [ "clang-format", "--dry-run", "--Werror", file ]
+        cmd = ["clang-format", "--dry-run", "--Werror", file]
         rc = run(cmd)
         if rc != 0:
             print(f"Format check failed: {file}", file=sys.stderr)
@@ -683,7 +818,9 @@ def _tidy_compile_arguments(argv: list[str]) -> list[str]:
     return kept
 
 
-def _compiler_system_include_flags(compiler: str, args: list[str]) -> list[str]:
+def _compiler_system_include_flags(
+    compiler: str, args: list[str]
+) -> list[str]:
     """Ask `compiler` for its system include dirs, as clang `-isystem` flags.
 
     clang's driver resolves `<cstdint>`, `<string>`, ... from its own resource
@@ -711,8 +848,8 @@ def _tidy_target_arguments(compiler: str, args: list[str]) -> list[str]:
     The compile database says *how* to compile but not *for what*: the target
     triple comes from the driver's name, which clang-tidy replaces with its own
     (defaulting to a host target). Taking `-dumpmachine` from the recorded
-    compiler restores it — `xtensa-esp-elf` for the firmware, `x86_64-linux-gnu`
-    for the `linux`-target host projects.
+    compiler restores it — `xtensa-esp-elf` for the firmware,
+    `x86_64-linux-gnu` for the `linux`-target host projects.
 
     `-Wno-unused-command-line-argument` keeps a stray GCC-only flag from
     failing the run: clang ignores those, and a diagnostic about the flag says
@@ -897,7 +1034,9 @@ def cmd_install_hooks() -> int:
     The hook rejects commits whose staged C/C++ files are not
     clang-formatted.
     """
-    rc = run(["git", "-C", str(REPO_ROOT), "config", "core.hooksPath", ".githooks"])
+    rc = run([
+        "git", "-C", str(REPO_ROOT), "config", "core.hooksPath", ".githooks"
+    ])
     if rc == 0:
         print("Installed git hooks: core.hooksPath -> .githooks")
     return rc
@@ -968,7 +1107,8 @@ def cmd_shell(extra: list[str], directory: str | None = None) -> int:
 
     Use `-C DIR` / `--directory DIR` to change into DIR before running the
     command. DIR is a path in the container: a relative path is resolved under
-    the project mount (`test` -> /project/test), an absolute path is used as-is:
+    the project mount (`test` -> /project/test), an absolute path is used
+    as-is:
 
         scripts/dev.py shell -C test ls -1
         scripts/dev.py shell -C /project/test idf.py build
@@ -1185,7 +1325,10 @@ def cmd_format_check_staged() -> int:
     )
     print("", file=sys.stderr)
     print("Fix with:  scripts/dev.py format", file=sys.stderr)
-    print("Or bypass (not recommended):  git commit --no-verify", file=sys.stderr)
+    print(
+        "Or bypass (not recommended):  git commit --no-verify",
+        file=sys.stderr,
+    )
     return 1
 
 
@@ -1204,6 +1347,7 @@ COMMANDS = {
     "format": cmd_format,
     "format-check": cmd_format_check,
     "format-check-staged": cmd_format_check_staged,
+    "pycodestyle": cmd_pycodestyle,
     "clang-tidy": cmd_clang_tidy,
     "install-hooks": cmd_install_hooks,
     "shell": cmd_shell,

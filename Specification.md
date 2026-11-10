@@ -1,8 +1,6 @@
 # Software Specification: ESP32 Solar-Powered Thermometer Logger
 
-**Version:** Rev 15
 **Status:** Ready for implementation
-**Date:** 2026-10-25
 
 A solar-powered, battery-backed ESP32-S3 that samples three DS18B20 thermometers on a shared 1-Wire bus and uploads readings to a remote URL over WiFi at a configurable cadence. Behavior is controlled by a 3-position ON-OFF-ON switch (Configure / Off / Run). Between samples the device uses **deep sleep** to minimize power; the sample buffer and Wi-Fi connection cache live in **RTC memory** so they survive sleep and backoff reboots.
 
@@ -21,7 +19,6 @@ A solar-powered, battery-backed ESP32-S3 that samples three DS18B20 thermometers
 9. [Payload Format](#9-payload-format)
 10. [Power Budget — Hourly, Batched, Deep Sleep](#10-power-budget--hourly-batched-deep-sleep)
 11. [Open Questions](#11-open-questions)
-12. [Change History](#12-change-history)
 
 ---
 
@@ -31,18 +28,19 @@ A solar-powered, battery-backed ESP32-S3 that samples three DS18B20 thermometers
 |---|---|
 | Host OS | Linux Mint |
 | Container runtime | Docker |
-| Container image | `marcpawl/esp-idf:20261109` (prebuilt) |
+| Container image | `marcpawl/esp-idf:20261109b` (prebuilt) |
 | Source language | **C++26** (GNU extensions, `-std=gnu++26`) |
 | Target framework | ESP-IDF v6.1 |
 
 ### Why This Image
 
-`marcpawl/esp-idf:20261109` is the **prebuilt, published** development image.
+`marcpawl/esp-idf:20261109b` is the **prebuilt, published** development image.
 It extends the official `espressif/idf:release-v6.1` image (the officially
 supported build environment for ESP-IDF: cross-compiler toolchain, CMake,
 Ninja, Python virtual environment, and all required packages) with this
-project's tooling — `gh`, PyGithub, and esp-clang (which supplies the
-`clang-format` used by the pre-commit hook).
+project's tooling — `gh`, PyGithub, esp-clang (which supplies the
+`clang-format` used by the pre-commit hook), the Node.js runtime + Continue
+CLI (`cn`), and `pycodestyle` (which enforces PEP 8 on the Python sources).
 
 The tag is **date-stamped and never moved**, and it is pinned in exactly two
 places: `docker-compose.yml` (`image:`) and `scripts/dev.py` (`DEV_IMAGE`).
@@ -60,7 +58,7 @@ supplies the user mapping and environment flags described below:
 
 ```bash
 # Pull the pinned image (host only; not run inside a container)
-./scripts/dev.py pull       # == docker pull marcpawl/esp-idf:20261109
+./scripts/dev.py pull       # == docker pull marcpawl/esp-idf:20261109b
 
 # Build the firmware, run the host tests, check formatting
 ./scripts/dev.py build
@@ -79,7 +77,7 @@ The equivalent ad-hoc form, if a command must bypass `dev.py`:
 ```bash
 docker run --rm -v $PWD:/project -w /project -u "$(id -u):$(id -g)" \
   -e HOME=/tmp -e CCACHE_DIR=/tmp/.cache/ccache \
-  marcpawl/esp-idf:20261109 idf.py build
+  marcpawl/esp-idf:20261109b idf.py build
 ```
 
 > **Docker note (Linux):** Your user must have access to the Docker daemon (typically via the `docker` group) and to the serial device (via the `dialout` group). Add with:
@@ -108,7 +106,7 @@ defines its own image). CLion pulls the pinned image when it is not cached and
 starts the container on demand.
 
 - Point CLion at the standard Docker socket (`unix:///var/run/docker.sock`).
-- Select the `marcpawl/esp-idf:20261109` image (or open the repo as a Dev
+- Select the `marcpawl/esp-idf:20261109b` image (or open the repo as a Dev
   Container, which takes it from `docker-compose.yml`).
 - CLion will run commands inside the container transparently.
 
@@ -729,25 +727,3 @@ Panel ≈ 8 / 0.504 / 3 ≈ 5.3 mW
 14. **Wi-Fi cache invalidation on total failure** — also clear when `fail_count` exceeds threshold (e.g., 5)? **Recommendation: yes.**
 15. ~~NTP server default confirmation~~ — **resolved: `time.nrc.ca` confirmed valid.**
 16. ~~Docker vs. Podman~~ — **resolved: Docker.**
-
----
-
-## 12. Change History
-
-| Rev | Changes |
-|---|---|
-| 1 | Initial specification: 3 thermometers, LEDs, ON-OFF-ON switch, solar/battery, configure/run modes. |
-| 2 | DS18B20 clarified as 1-Wire (not I²C). Added Station SSID/password. Config page now includes device ID → name mapping and current temperature readings. Run-mode error path: red LED → deep sleep for Error Retry Interval → reboot → re-attempt. |
-| 3 | Exponential backoff via RTC memory; batch size N (≥ 1) with per-sample `age_s`; skip WiFi when battery low and buffer samples; light sleep between samples (default); charge controller left TBD. |
-| 4 | Low-battery behavior replaced with high-water / low-water hysteresis state machine (`TX_OK` ↔ `TX_INHIBITED`). |
-| 5 | Temperatures explicitly in **degrees Celsius**; payload includes `"unit": "C"`. |
-| 6 | Buffer overflow: drop oldest sample. JSON temperature format: one decimal place. |
-| 7 | Rounding mode fixed to **round-half-away-from-zero**. Serialization detail added for preserving one decimal. |
-| 8 | Battery voltage added to `/scan` and JSON payload. Google Sheets column layout: A = UTC datetime, **B = battery mV**, C… = thermometers. |
-| 9 | **Deep sleep adopted** (light sleep path removed). Wi-Fi connection parameters cached in RTC memory. Cache cleared on any communication failure. |
-| 10 | `saved_time` field added (non-editable, UTC, set on save via NTP). NTP server field added (default `time.nrc.ca`, confirmed valid). |
-| 11 | Development environment: Linux Mint, Podman, CLion 2026.2, `espressif/idf:release-v6.1`, C++26. |
-| 12 | Container runtime switched from Podman to **Docker**. |
-| 13 | Container image pinned to the prebuilt `marcpawl/esp-idf:20261025` (the official `espressif/idf:release-v6.1` image plus project tooling: `gh`, PyGithub, esp-clang), pulled by developers and CI rather than built locally. Container runs as the calling user (no chown); `HOME`/`CCACHE_DIR` are pinned for non-1000 uids so ccache works on CI (runner uid 1001). CLion attaches through the Dev Container. |
-| 14 | §8 RTC layout: `buffer` and `rom_ids` are fixed-capacity vectors with inline storage that carry their own element counts, so the separate `buffer_len` / `rom_count` counters are removed. The block remains trivially copyable and is still restored verbatim across deep sleep. |
-| 15 | Container image republished as `marcpawl/esp-idf:20261109`: the Rev 13 image rebuilt to add the Node.js runtime and Continue CLI (`cn`), and to create the `~/.continue`, `~/.ssh`, and `~/.config/gh` mount points the compose service bind-mounts. Same base image and toolchain as Rev 13. |

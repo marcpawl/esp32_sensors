@@ -7,7 +7,7 @@ on:
     branches: [ "v0.1" ]
 
 # The dev image is PREBUILT and pinned in docker-compose.yml
-# (`image: marcpawl/esp-idf:20261109`); CI pulls it instead of building it from
+# (`image: marcpawl/esp-idf:20261109b`); CI pulls it instead of building it from
 # the Dockerfile, so a run does not spend minutes rebuilding a toolchain image
 # that never changes. Bump the tag in docker-compose.yml + scripts/dev.py
 # (`DEV_IMAGE`) — and only there — when a new image is published; `dev.py
@@ -43,6 +43,13 @@ jobs:
         # No container and no Docker: runs the host stdlib unit tests.
         run: |
           python3 ./scripts/dev.py self-check
+
+      # Python style is the cheapest gate, so it runs first — it needs no
+      # compile database and no build, and a long line is fixed in seconds
+      # compared with waiting for the toolchain below.
+      - name: pycodestyle
+        run: |
+          python3 ./scripts/dev.py pycodestyle
 
       - name: Run build
         run: |

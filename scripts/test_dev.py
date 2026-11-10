@@ -115,7 +115,8 @@ class ResolveContainerDirectoryTests(unittest.TestCase):
 
     def test_relative_is_resolved_under_project_root(self):
         self.assertEqual(
-            dev._resolve_container_directory("components"), "/project/components"
+            dev._resolve_container_directory("components"),
+            "/project/components",
         )
 
     def test_nested_relative_is_resolved_under_project_root(self):
@@ -311,12 +312,16 @@ class SubmoduleTests(unittest.TestCase):
             "cmd_clang_tidy",
         ):
             with self.subTest(function=name):
-                self.assertIn("_ensure_submodules()", self._function_body(name))
+                self.assertIn(
+                    "_ensure_submodules()", self._function_body(name)
+                )
 
     def test_submodules_command_does_not_hop_into_a_container(self):
         # `git submodule update` runs on whichever side invoked dev.py, so the
         # vendored sources land in the real working tree either way.
-        self.assertIn("change_to_container()", self._function_body("cmd_submodules"))
+        self.assertIn(
+            "change_to_container()", self._function_body("cmd_submodules")
+        )
 
     def test_ci_fetches_submodules_before_building(self):
         workflow = (
@@ -333,7 +338,9 @@ class SubmoduleTests(unittest.TestCase):
         self.assertTrue(
             dev._is_vendored(Path(f"{self.SML_PATH}/include/boost/sml.hpp"))
         )
-        self.assertFalse(dev._is_vendored(Path("components/sml/CMakeLists.txt")))
+        self.assertFalse(
+            dev._is_vendored(Path("components/sml/CMakeLists.txt"))
+        )
         self.assertFalse(
             dev._is_vendored(Path("components/logic/include/logic/mode.hpp"))
         )
@@ -479,7 +486,8 @@ class ClionRunConfigurationTests(unittest.TestCase):
         only ones resolvable from a run configuration.
         """
         root_cmake = (dev.REPO_ROOT / "CMakeLists.txt").read_text()
-        # `add_custom_target(${sub}_build ALL ...)` is the one target statement.
+        # `add_custom_target(${sub}_build ALL ...)` is the one target
+        # statement.
         self.assertIn("add_custom_target(${sub}_build", root_cmake)
         # The concrete names come from the `_idf_subproject(<name> ...)` calls.
         return {
@@ -499,12 +507,13 @@ class ClionRunConfigurationTests(unittest.TestCase):
         self.assertTrue(root, "root CMakeLists.txt defines no *_build targets")
         for name, configuration in self._cmake_run_configurations():
             with self.subTest(configuration=name):
+                project_name = configuration.get("PROJECT_NAME")
                 self.assertIn(
                     configuration.get("TARGET_NAME"),
                     root,
                     f"{name}: TARGET_NAME "
                     f"{configuration.get('TARGET_NAME')!r} is not a target of "
-                    f"{configuration.get('PROJECT_NAME')!r} (has {sorted(root)})",
+                    f"{project_name!r} (has {sorted(root)})",
                 )
 
 
@@ -517,7 +526,7 @@ class DevImageTests(unittest.TestCase):
     """
 
     def test_dev_image_is_the_pinned_prebuilt_tag(self):
-        self.assertEqual(dev.DEV_IMAGE, "marcpawl/esp-idf:20261109")
+        self.assertEqual(dev.DEV_IMAGE, "marcpawl/esp-idf:20261109b")
 
     def test_compose_pins_the_same_image(self):
         compose = (dev.REPO_ROOT / "docker-compose.yml").read_text()
@@ -549,16 +558,25 @@ class DevImageTests(unittest.TestCase):
     def test_dev_image_tag_is_date_stamped(self):
         # Published tags are date-stamped and never moved, so a rebuild is
         # always published under a new tag rather than overwriting a pinned
-        # one that CI and every developer already reference.
+        # one that CI and every developer already reference. A second publish
+        # on the same day takes a letter suffix (20261109 -> 20261109b); it is
+        # a new tag, never a moved one.
         repository, _, tag = dev.DEV_IMAGE.partition(":")
         self.assertEqual(repository, "marcpawl/esp-idf")
-        self.assertRegex(tag, r"^\d{8}$")
+        self.assertRegex(tag, r"^\d{8}[a-z]?$")
 
     def test_dockerfile_extends_the_official_espressif_image(self):
         # The pinned image is the official ESP-IDF v6.1 image plus project
         # tooling; AGENTS.md's toolchain note relies on this.
         dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
         self.assertIn("FROM espressif/idf:release-v6.1", dockerfile)
+
+    def test_spec_names_the_pinned_image(self):
+        # The spec's environment table is the first thing a new contributor
+        # reads, so it must not contradict the pinned image. (The spec keeps no
+        # change history of its own; git log is the record.)
+        spec = (dev.REPO_ROOT / "Specification.md").read_text()
+        self.assertIn(dev.DEV_IMAGE, spec)
 
     def test_local_image_is_not_the_pinned_tag(self):
         # `image` (a local rebuild) must not overwrite the pinned tag, which
@@ -609,7 +627,9 @@ class DevContainerTests(unittest.TestCase):
     def test_post_create_verifies_the_toolchain(self):
         # Whatever the create hook runs, it must fail loudly if the pinned
         # image is missing or the ESP-IDF environment cannot be sourced.
-        self.assertIn("idf.py --version", self._devcontainer()["postCreateCommand"])
+        self.assertIn(
+            "idf.py --version", self._devcontainer()["postCreateCommand"]
+        )
 
     def test_uses_the_compose_dev_service(self):
         # The Dev Container must not define its own image: it inherits the
@@ -625,7 +645,9 @@ class DevContainerTests(unittest.TestCase):
         # `~/.ssh`, and `~/.config/gh` are inherited. A `mounts` entry here
         # would layer another mount over the compose one, shadowing its source,
         # so all of them must stay in docker-compose.yml alone.
-        text = (dev.REPO_ROOT / ".devcontainer" / "devcontainer.json").read_text()
+        text = (
+            dev.REPO_ROOT / ".devcontainer" / "devcontainer.json"
+        ).read_text()
         self.assertNotIn('"mounts"', text)
 
 
@@ -671,7 +693,10 @@ class ContainerUserTests(unittest.TestCase):
         calls = []
         original = dev.run
         try:
-            dev.run = lambda cmd, cwd=dev.REPO_ROOT: calls.append(list(cmd)) or 0
+            dev.run = (
+                lambda cmd, cwd=dev.REPO_ROOT:
+                calls.append(list(cmd)) or 0
+            )
             self.assertEqual(dev.compose_run(["dev.py", "build"]), 0)
         finally:
             dev.run = original
@@ -689,7 +714,10 @@ class ContainerUserTests(unittest.TestCase):
         calls = []
         original_run, original_env = dev.run, dev._container_environment
         try:
-            dev.run = lambda cmd, cwd=dev.REPO_ROOT: calls.append(list(cmd)) or 0
+            dev.run = (
+                lambda cmd, cwd=dev.REPO_ROOT:
+                calls.append(list(cmd)) or 0
+            )
             dev._container_environment = lambda user: ["-e", "HOME=/tmp"]
             dev.compose_run(["dev.py", "build"])
         finally:
@@ -698,7 +726,9 @@ class ContainerUserTests(unittest.TestCase):
         # Everything after the service name belongs to the command.
         self.assertLess(command.index("-e"), command.index("dev"))
         self.assertLess(command.index("--rm"), command.index("dev"))
-        self.assertEqual(command[command.index("dev") + 1:], ["dev.py", "build"])
+        self.assertEqual(
+            command[command.index("dev") + 1:], ["dev.py", "build"]
+        )
 
 
 def _compose_home_bind_mounts() -> dict[str, tuple[str, str]]:
@@ -765,7 +795,8 @@ class ContinueCliMountTests(unittest.TestCase):
     expect `ls ~/.continue` to list the same files on the host and inside the
     container (`./scripts/dev.py shell ls '~/.continue'`), which needs a bind
     mount. A Dockerfile cannot mount host paths, so the mount lives in
-    docker-compose.yml — which the Dev Container reuses, so the IDE gets it too.
+    docker-compose.yml — which the Dev Container reuses, so the IDE gets it
+    too.
 
     The container's HOME depends on the uid it runs as (see
     ContainerUserTests), so a single mount point cannot cover every user.
@@ -792,7 +823,7 @@ class ContinueCliMountTests(unittest.TestCase):
             ),
         )
 
-    def test_host_continue_dir_is_mounted_where_dev_py_puts_other_uids_home(self):
+    def test_host_continue_dir_is_mounted_where_other_uids_home_points(self):
         # The coupling that matters: `dev.py` pins HOME for any uid other than
         # the image's 1000, so the mount must be made at *that* path too. If
         # HOME ever changes, this mount silently stops applying.
@@ -1104,39 +1135,6 @@ class GhCliMountTests(unittest.TestCase):
             self.assertIsNone(service[name], f"{name} must not be hardcoded")
 
 
-class SpecRevisionTests(unittest.TestCase):
-    """`Specification.md` is the source of truth; docs must cite its revision.
-
-    AGENTS.md names the spec revision in two places, and the spec's own change
-    history must end at that revision. They drifted before (the spec was at
-    Rev 12 while its readers assumed a later one), so this pins them together.
-    """
-
-    def _spec(self) -> str:
-        return (dev.REPO_ROOT / "Specification.md").read_text()
-
-    def _revision(self) -> int:
-        match = re.search(r"^\*\*Version:\*\* Rev (\d+)$", self._spec(), re.M)
-        self.assertIsNotNone(match, "Specification.md has no '**Version:** Rev N'")
-        return int(match.group(1))
-
-    def test_spec_header_and_change_history_agree(self):
-        # The last change-history row must be the revision in the header.
-        rows = re.findall(r"^\| (\d+) \| ", self._spec(), re.M)
-        self.assertTrue(rows, "Specification.md has no change-history table")
-        self.assertEqual(int(rows[-1]), self._revision())
-
-    def test_agents_cites_the_current_revision(self):
-        agents = (dev.REPO_ROOT / "AGENTS.md").read_text()
-        revision = self._revision()
-        self.assertIn(f"software specification (Rev {revision})", agents)
-        self.assertIn(f"Authoritative software spec (Rev {revision})", agents)
-
-    def test_spec_names_the_pinned_image(self):
-        # The spec's environment table must not contradict the pinned image.
-        self.assertIn(dev.DEV_IMAGE, self._spec())
-
-
 class CommandRegistryTests(unittest.TestCase):
     """The `COMMANDS` table and the argparse wiring stay in sync."""
 
@@ -1255,9 +1253,9 @@ class BuildProjectTests(unittest.TestCase):
 class GitHooksInstallationTests(unittest.TestCase):
     """`install-hooks` invariants: the tracked hook is present and active.
 
-    These guard the bug where `install-hooks` reported success (because it only
-    set `core.hooksPath`) while the hook file itself was missing, so commit-time
-    checks were silently skipped.
+    These guard the bug where `install-hooks` reported success (because it
+    only set `core.hooksPath`) while the hook file itself was missing, so
+    commit-time checks were silently skipped.
     """
 
     GITHOOKS_DIR = Path(".githooks")
@@ -1358,7 +1356,9 @@ class GitHooksInstallationTests(unittest.TestCase):
                 tracked = proc.stdout
                 break
         self.assertIsNotNone(tracked, f"{rel} is not tracked by git")
-        on_disk = (dev.REPO_ROOT / self.GITHOOKS_DIR / self.HOOK_NAME).read_text()
+        on_disk = (
+            dev.REPO_ROOT / self.GITHOOKS_DIR / self.HOOK_NAME
+        ).read_text()
         self.assertEqual(on_disk, tracked)
 
 
@@ -1445,7 +1445,7 @@ class TidyCompileArgumentsTests(unittest.TestCase):
 
 
 class TidyUnitSelectionTests(unittest.TestCase):
-    """`_unique_tidy_units` picks one entry per C++ source in the repository."""
+    """`_unique_tidy_units` picks one entry per C++ source in the repo."""
 
     ROOT = Path("/project")
 
@@ -1838,7 +1838,7 @@ class SourceFileDiscoveryTests(unittest.TestCase):
         return path
 
     def _listed(self, repo):
-        """The paths `_source_file_command` reports for a scratch repository."""
+        """The paths `_source_file_command` reports for a scratch repo."""
         # `_source_file_command` starts with "git"; `_git` adds that itself.
         argv = dev._source_file_command(roots=(".",))[1:]
         return self._git(repo, *argv).splitlines()
@@ -1912,7 +1912,9 @@ class SourceFileDiscoveryTests(unittest.TestCase):
         self._write(repo, "build/generated.cpp", "int x;\n")
         self._write(repo, "src/real.cpp", "int x;\n")
         listed = self._listed(repo)
-        self.assertTrue(any(p.endswith("src/real.cpp") for p in listed), listed)
+        self.assertTrue(
+            any(p.endswith("src/real.cpp") for p in listed), listed
+        )
         self.assertFalse(
             any("generated.cpp" in p for p in listed), listed
         )
@@ -1931,6 +1933,246 @@ class SourceFileDiscoveryTests(unittest.TestCase):
         self.assertTrue(
             any(p.endswith("src/untracked.cpp") for p in listed), listed
         )
+
+
+class PythonSourceDiscoveryTests(unittest.TestCase):
+    """`python_sources` must find Python that is not named `*.py`.
+
+    The one script that matters most is `.githooks/pre-commit`: Python by
+    shebang, with no extension, and the gate that runs before every commit. A
+    file-name-only walk would silently skip it, which is why selection also
+    reads the first line. Vendored trees (`third_party/`) are ours to keep
+    byte-identical, so they are dropped even though the walk is
+    repository-wide.
+    """
+
+    def _git(self, repo, *args):
+        """Run git in `repo` (a scratch repository) and return stdout."""
+        return subprocess.run(
+            ("git", *args),
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+
+    def _scratch_repo(self):
+        """A throwaway git repository, so no test touches the real index."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        repo = Path(tmp.name)
+        self._git(repo, "init", "-q", ".")
+        self._git(repo, "config", "user.email", "test@example.com")
+        self._git(repo, "config", "user.name", "test")
+        return repo
+
+    def _write(self, repo, relative, content):
+        """Write `content` to `repo/relative`, creating parent directories."""
+        path = repo / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+        return path
+
+    # -- vendored trees -----------------------------------------------------
+
+    def test_vendored_paths_are_recognised(self):
+        # Only a top-level `third_party`; a directory merely *named* that
+        # deeper in the tree is ours and must stay in scope.
+        self.assertTrue(dev._is_vendored_path("third_party/json/json.hpp"))
+        self.assertTrue(dev._is_vendored_path("third_party"))
+        self.assertFalse(dev._is_vendored_path("components/third_party/x.py"))
+        self.assertFalse(dev._is_vendored_path("scripts/dev.py"))
+        self.assertFalse(dev._is_vendored_path("third_partyish/x.py"))
+
+    # -- command ------------------------------------------------------------
+
+    def test_command_uses_the_container_interpreter_module_form(self):
+        # `python3 -m pycodestyle` (not the console script) so the checker is
+        # the one belonging to the container's interpreter; defaults only, so
+        # the result matches a bare `pycodestyle` run.
+        self.assertEqual(
+            dev._pycodestyle_command(["a.py", "b.py"]),
+            ["python3", "-m", "pycodestyle", "a.py", "b.py"],
+        )
+
+    def test_command_passes_no_options_of_its_own(self):
+        # An option here would make this gate and `pycodestyle` disagree; the
+        # repository conforms to the tool's defaults (79 columns).
+        self.assertEqual(dev.PYCODESTYLE_ARGS, ())
+
+    # -- selection ----------------------------------------------------------
+
+    def test_selection_keeps_dot_py_files(self):
+        repo = self._scratch_repo()
+        self._write(repo, "scripts/a.py", "")
+        self._write(repo, "scripts/b.cpp", "")
+        self.assertEqual(
+            dev._select_python_sources(
+                ["scripts/a.py", "scripts/b.cpp"], repo
+            ),
+            ["scripts/a.py"],
+        )
+
+    def test_selection_finds_a_python_shebang_without_an_extension(self):
+        # The regression class: `.githooks/pre-commit` is Python with no
+        # suffix, so a name-only filter drops the most important script.
+        repo = self._scratch_repo()
+        self._write(repo, ".githooks/pre-commit", "#!/usr/bin/env python3\n")
+        self.assertEqual(
+            dev._select_python_sources([".githooks/pre-commit"], repo),
+            [".githooks/pre-commit"],
+        )
+
+    def test_selection_accepts_the_other_python_shebang_forms(self):
+        repo = self._scratch_repo()
+        for name, first_line in (
+            ("bin/a", "#!/usr/bin/python\n"),
+            ("bin/b", "#!/usr/bin/env python3.12\n"),
+            ("bin/c", "#!/opt/esp/python_env/bin/python3\n"),
+        ):
+            with self.subTest(name=name):
+                self._write(repo, name, first_line)
+                self.assertEqual(
+                    dev._select_python_sources([name], repo), [name]
+                )
+
+    def test_selection_rejects_a_non_python_shebang(self):
+        # A bash script is not a Python file just because it has a shebang.
+        repo = self._scratch_repo()
+        self._write(repo, "bin/run.sh", "#!/bin/bash\necho hi\n")
+        self.assertEqual(dev._select_python_sources(["bin/run.sh"], repo), [])
+
+    def test_selection_rejects_a_python_mention_that_is_not_a_shebang(self):
+        # Only the FIRST line counts, and it must start with `#!`.
+        repo = self._scratch_repo()
+        self._write(repo, "notes.txt", "run this with python3\n")
+        self.assertEqual(dev._select_python_sources(["notes.txt"], repo), [])
+
+    def test_selection_drops_vendored_trees(self):
+        repo = self._scratch_repo()
+        self._write(repo, "third_party/json/setup.py", "")
+        self._write(repo, "scripts/ours.py", "")
+        self.assertEqual(
+            dev._select_python_sources(
+                ["third_party/json/setup.py", "scripts/ours.py"], repo
+            ),
+            ["scripts/ours.py"],
+        )
+
+    def test_selection_drops_paths_that_are_not_files(self):
+        # git still lists a tracked file that has been deleted; pycodestyle
+        # would fail on it.
+        repo = self._scratch_repo()
+        self._write(repo, "kept.py", "")
+        self.assertEqual(
+            dev._select_python_sources(["kept.py", "gone.py"], repo),
+            ["kept.py"],
+        )
+
+    def test_selection_is_sorted_and_deduplicated(self):
+        repo = self._scratch_repo()
+        for name in ("b.py", "a.py"):
+            self._write(repo, name, "")
+        self.assertEqual(
+            dev._select_python_sources(["b.py", "a.py", "a.py"], repo),
+            ["a.py", "b.py"],
+        )
+
+    def test_selection_survives_a_non_utf8_shebang(self):
+        # The first line is read as bytes, so a file that is not valid UTF-8
+        # does not raise on a candidate that is not Python at all.
+        repo = self._scratch_repo()
+        self._write(repo, "bin/blob", "")
+        (repo / "bin" / "blob").write_bytes(b"#!\xff\xfe binary\n")
+        self.assertEqual(dev._select_python_sources(["bin/blob"], repo), [])
+
+    # -- end to end, against a scratch repository ---------------------------
+
+    def _listed(self, repo):
+        """The paths `python_sources`' enumeration reports for a repo."""
+        argv = dev._source_file_command(roots=(".",))[1:]
+        listed = self._git(repo, *argv).splitlines()
+        return dev._select_python_sources(listed, repo)
+
+    def test_untracked_python_is_included(self):
+        # The same `--cached --others --exclude-standard` semantics as
+        # `format`, so a new file needs no `git add` first.
+        repo = self._scratch_repo()
+        self._write(repo, "scripts/new.py", "")
+        self.assertIn("scripts/new.py", self._listed(repo))
+
+    def test_ignored_python_is_excluded(self):
+        repo = self._scratch_repo()
+        self._write(repo, ".gitignore", "build/\n")
+        self._write(repo, "build/generated.py", "")
+        self._write(repo, "scripts/real.py", "")
+        listed = self._listed(repo)
+        self.assertIn("scripts/real.py", listed)
+        self.assertNotIn("build/generated.py", listed)
+
+    # -- the real repository ------------------------------------------------
+
+    def test_the_repository_enumerates_its_expected_python_sources(self):
+        # Pins the actual set: the two dev.py scripts plus the extensionless
+        # hook. A new Python source is meant to be noticed here, so this list
+        # is a deliberate tripwire rather than an over-broad assertion.
+        self.assertEqual(
+            dev.python_sources(),
+            [".githooks/pre-commit", "scripts/dev.py", "scripts/test_dev.py"],
+        )
+
+    def test_no_vendored_python_is_enumerated(self):
+        # `third_party/sml` and `third_party/json` must never reach the gate.
+        for path in dev.python_sources():
+            with self.subTest(path=path):
+                self.assertFalse(dev._is_vendored_path(path), path)
+
+
+class PycodestyleGateTests(unittest.TestCase):
+    """`pycodestyle` is wired into the pre-commit hook and into CI."""
+
+    def test_command_is_registered_and_documented(self):
+        self.assertIn("pycodestyle", dev.COMMANDS)
+        self.assertIs(dev.COMMANDS["pycodestyle"], dev.cmd_pycodestyle)
+        self.assertTrue((dev.cmd_pycodestyle.__doc__ or "").strip())
+
+    def test_command_runs_in_the_container(self):
+        # pycodestyle is installed in the dev image, not on the host.
+        source = (dev.REPO_ROOT / "scripts" / "dev.py").read_text()
+        body = source.split("def cmd_pycodestyle", 1)[1].split("\ndef ", 1)[0]
+        self.assertIn("change_to_container()", body)
+
+    def test_hook_runs_pycodestyle_first(self):
+        # The cheapest gate: it needs no compile database, no build, and no
+        # test run, so it must come before the others rather than after them.
+        hook = (dev.REPO_ROOT / ".githooks" / "pre-commit").read_text()
+        style = hook.index('run_check(dev, "pycodestyle")')
+        for later in (
+            '"clang-tidy"',
+            '"format-check-staged"',
+            '"test"',
+        ):
+            with self.subTest(later=later):
+                self.assertLess(style, hook.index(f"run_check(dev, {later})"))
+
+    def test_ci_runs_pycodestyle_before_the_build(self):
+        # It needs no compile database, so there is no reason to wait for the
+        # toolchain: a long line is reported in seconds.
+        workflow = (
+            dev.REPO_ROOT / ".github" / "workflows" / "ci.yml"
+        ).read_text()
+        style = workflow.index("python3 ./scripts/dev.py pycodestyle")
+        self.assertLess(
+            style, workflow.index("python3 ./scripts/dev.py build")
+        )
+
+    def test_the_image_installs_pycodestyle(self):
+        # The gate would otherwise fail with "No module named pycodestyle".
+        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        self.assertIn("pycodestyle==", dockerfile)
+        # Pinned, and verified at build time so a bad install fails the build.
+        self.assertIn("ARG PYCODESTYLE_VERSION=", dockerfile)
+        self.assertIn("pycodestyle --version", dockerfile)
 
 
 class SelfCheckModuleTests(unittest.TestCase):

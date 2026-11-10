@@ -3,7 +3,7 @@
 # ESP32 Solar-Powered Thermometer Logger — development container.
 #
 # NOTE: this image is normally NOT built. `docker-compose.yml` pins the
-# prebuilt, published image `marcpawl/esp-idf:20261025`, and both developers
+# prebuilt, published image `marcpawl/esp-idf:20261109b`, and both developers
 # and CI pull it. Build this Dockerfile only when changing it, then publish the
 # result under a NEW date-stamped tag (see Developer.md).
 #
@@ -31,6 +31,8 @@
 #   - PyGithub (`import github`) in the ESP-IDF Python venv.
 #   - Node.js (pinned LTS, official tarball) — the base image ships none.
 #   - Continue CLI (`cn`), the command line coding agent used in this repo.
+#   - esp-clang, providing `clang-format` / `clang-tidy`.
+#   - pycodestyle (pinned) for the Python style check.
 
 FROM espressif/idf:release-v6.1
 
@@ -186,6 +188,37 @@ RUN cd $IDF_PATH && \
      "$IDF_PATH/tools/idf_tools.py" --non-interactive install \
           esp-clang
 
+# ---------------------------------------------------------------------------
+# pycodestyle: PEP 8 checker for this repository's Python, driven by
+# `scripts/dev.py pycodestyle` (the first gate in the pre-commit hook, and a CI
+# step). It covers `scripts/dev.py`, `scripts/test_dev.py`, and
+# `.githooks/pre-commit` — the last is Python despite its missing `.py` suffix,
+# so it is checked by shebang, not by extension.
+#
+# Installed into the ESP-IDF venv for the same reason as PyGithub: `python3` on
+# PATH inside the container IS that venv, and the venv is created with
+# `include-system-site-packages = false`, so a system-wide install would not be
+# importable. `python3 -m pycodestyle` is how `dev.py` invokes it.
+#
+# The version is pinned so a rebuild cannot silently change the rules being
+# enforced, and the install is self-checking: the final `--version` fails the
+# build rather than deferring a broken install to the first lint run.
+#
+# Deliberately the LAST tooling layer. Everything above is cached, and the
+# layers that follow are a few hundred kilobytes, so placing this here costs a
+# trivial rebuild; sitting next to PyGithub would invalidate the ~3 GB
+# esp-clang layer above it.
+#
+# Defaults are used (no setup.cfg): pycodestyle's PEP 8 rule set, with its
+# 79-column limit.
+# ---------------------------------------------------------------------------
+ARG PYCODESTYLE_VERSION=2.15.0
+RUN PYTHON="$(ls -d "${IDF_PATH%/idf}"/python_env/idf*_py*/bin/python | head -n 1)" \
+    && test -x "$PYTHON" \
+    && "$PYTHON" -m pip install --no-cache-dir \
+        "pycodestyle==${PYCODESTYLE_VERSION}" \
+    && "$PYTHON" -m pycodestyle --version \
+    && test "$("$PYTHON" -m pycodestyle --version)" = "${PYCODESTYLE_VERSION}"
 
 # Ensure a `dialout` group exists with the requested GID (create/skip safely).
 RUN getent group "${DIALOUT_GID}" >/dev/null 2>&1 \

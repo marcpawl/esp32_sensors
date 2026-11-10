@@ -49,10 +49,10 @@ $ esptool --port /dev/ttyACM0
 ## Setup the Docker Environment
 
 The development container uses the **prebuilt** image
-`marcpawl/esp-idf:20261109` (ESP-IDF v6.1 plus the project tooling: gh,
-PyGithub, esp-clang, Node.js, and the Continue CLI `cn`). The tag is pinned in
-`docker-compose.yml`, is never moved, and is the same image CI pulls, so there
-is nothing to build on a fresh machine — just pull it.
+`marcpawl/esp-idf:20261109b` (ESP-IDF v6.1 plus the project tooling: gh,
+PyGithub, esp-clang, Node.js, the Continue CLI `cn`, and `pycodestyle`). The tag
+is pinned in `docker-compose.yml`, is never moved, and is the same image CI
+pulls, so there is nothing to build on a fresh machine — just pull it.
 
 Pull the image and start the container:
 
@@ -279,14 +279,19 @@ $ docker build \
     --build-arg UID=1000 --build-arg GID=1000 --build-arg DIALOUT_GID=20 \
     -t marcpawl/esp-idf:YYYYMMDD .
 
-# 2. Sanity-check it (build, tests, format inside the container).
-$ ...
+# 2. Sanity-check it (build, tests, format and Python style in the container).
+$ docker run --rm -v "$PWD:/project" -w /project marcpawl/esp-idf:YYYYMMDD \
+    bash -lc 'python3 -m pycodestyle --version && ./scripts/dev.py build'
 
 # 3. Publish, then bump the tag in exactly two places:
 #      docker-compose.yml  (image: ...)
 #      scripts/dev.py      (DEV_IMAGE)
 $ docker push marcpawl/esp-idf:YYYYMMDD
 ```
+
+> **Pushing is a host command, outside the container.** It needs your Docker
+> Hub credentials, which live on the host — do not run `docker push` from
+> inside `./scripts/dev.py shell` or `cn`.
 
 `scripts/test_dev.py` asserts that `DEV_IMAGE` and the compose `image:` agree,
 so `./scripts/dev.py self-check` catches a half-done bump.
@@ -338,7 +343,7 @@ officially supported. Configure it under **Settings | Build, Execution,
 Deployment | Toolchains → Add → Docker**.
 
 - Point CLion at the standard Docker socket (`unix:///var/run/docker.sock`).
-- Select the pinned dev image `marcpawl/esp-idf:20261109` (the one
+- Select the pinned dev image `marcpawl/esp-idf:20261109b` (the one
   `docker-compose.yml` uses; pull it first with `./scripts/dev.py pull`).
 - CLion will build and run commands inside the container transparently.
 
