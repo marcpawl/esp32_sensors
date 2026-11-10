@@ -2113,12 +2113,18 @@ class PythonSourceDiscoveryTests(unittest.TestCase):
     # -- the real repository ------------------------------------------------
 
     def test_the_repository_enumerates_its_expected_python_sources(self):
-        # Pins the actual set: the two dev.py scripts plus the extensionless
-        # hook. A new Python source is meant to be noticed here, so this list
-        # is a deliberate tripwire rather than an over-broad assertion.
+        # Pins the actual set: the two dev.py scripts, the extensionless hook,
+        # and the deepseek_alert package module. A new Python source is meant
+        # to be noticed here, so this list is a deliberate tripwire rather
+        # than an over-broad assertion.
         self.assertEqual(
             dev.python_sources(),
-            [".githooks/pre-commit", "scripts/dev.py", "scripts/test_dev.py"],
+            [
+                ".githooks/pre-commit",
+                "deepseek_alert/src/deepseek_alert/__init__.py",
+                "scripts/dev.py",
+                "scripts/test_dev.py",
+            ],
         )
 
     def test_no_vendored_python_is_enumerated(self):
