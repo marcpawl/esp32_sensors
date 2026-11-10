@@ -115,7 +115,8 @@ class ResolveContainerDirectoryTests(unittest.TestCase):
 
     def test_relative_is_resolved_under_project_root(self):
         self.assertEqual(
-            dev._resolve_container_directory("components"), "/project/components"
+            dev._resolve_container_directory("components"),
+            "/project/components",
         )
 
     def test_nested_relative_is_resolved_under_project_root(self):
@@ -311,12 +312,16 @@ class SubmoduleTests(unittest.TestCase):
             "cmd_clang_tidy",
         ):
             with self.subTest(function=name):
-                self.assertIn("_ensure_submodules()", self._function_body(name))
+                self.assertIn(
+                    "_ensure_submodules()", self._function_body(name)
+                )
 
     def test_submodules_command_does_not_hop_into_a_container(self):
         # `git submodule update` runs on whichever side invoked dev.py, so the
         # vendored sources land in the real working tree either way.
-        self.assertIn("change_to_container()", self._function_body("cmd_submodules"))
+        self.assertIn(
+            "change_to_container()", self._function_body("cmd_submodules")
+        )
 
     def test_ci_fetches_submodules_before_building(self):
         workflow = (
@@ -333,7 +338,9 @@ class SubmoduleTests(unittest.TestCase):
         self.assertTrue(
             dev._is_vendored(Path(f"{self.SML_PATH}/include/boost/sml.hpp"))
         )
-        self.assertFalse(dev._is_vendored(Path("components/sml/CMakeLists.txt")))
+        self.assertFalse(
+            dev._is_vendored(Path("components/sml/CMakeLists.txt"))
+        )
         self.assertFalse(
             dev._is_vendored(Path("components/logic/include/logic/mode.hpp"))
         )
@@ -479,7 +486,8 @@ class ClionRunConfigurationTests(unittest.TestCase):
         only ones resolvable from a run configuration.
         """
         root_cmake = (dev.REPO_ROOT / "CMakeLists.txt").read_text()
-        # `add_custom_target(${sub}_build ALL ...)` is the one target statement.
+        # `add_custom_target(${sub}_build ALL ...)` is the one target
+        # statement.
         self.assertIn("add_custom_target(${sub}_build", root_cmake)
         # The concrete names come from the `_idf_subproject(<name> ...)` calls.
         return {
@@ -499,12 +507,13 @@ class ClionRunConfigurationTests(unittest.TestCase):
         self.assertTrue(root, "root CMakeLists.txt defines no *_build targets")
         for name, configuration in self._cmake_run_configurations():
             with self.subTest(configuration=name):
+                project_name = configuration.get("PROJECT_NAME")
                 self.assertIn(
                     configuration.get("TARGET_NAME"),
                     root,
                     f"{name}: TARGET_NAME "
                     f"{configuration.get('TARGET_NAME')!r} is not a target of "
-                    f"{configuration.get('PROJECT_NAME')!r} (has {sorted(root)})",
+                    f"{project_name!r} (has {sorted(root)})",
                 )
 
 
@@ -517,7 +526,7 @@ class DevImageTests(unittest.TestCase):
     """
 
     def test_dev_image_is_the_pinned_prebuilt_tag(self):
-        self.assertEqual(dev.DEV_IMAGE, "marcpawl/esp-idf:20261025")
+        self.assertEqual(dev.DEV_IMAGE, "marcpawl/esp-idf:20261109b")
 
     def test_compose_pins_the_same_image(self):
         compose = (dev.REPO_ROOT / "docker-compose.yml").read_text()
@@ -549,16 +558,25 @@ class DevImageTests(unittest.TestCase):
     def test_dev_image_tag_is_date_stamped(self):
         # Published tags are date-stamped and never moved, so a rebuild is
         # always published under a new tag rather than overwriting a pinned
-        # one that CI and every developer already reference.
+        # one that CI and every developer already reference. A second publish
+        # on the same day takes a letter suffix (20261109 -> 20261109b); it is
+        # a new tag, never a moved one.
         repository, _, tag = dev.DEV_IMAGE.partition(":")
         self.assertEqual(repository, "marcpawl/esp-idf")
-        self.assertRegex(tag, r"^\d{8}$")
+        self.assertRegex(tag, r"^\d{8}[a-z]?$")
 
     def test_dockerfile_extends_the_official_espressif_image(self):
         # The pinned image is the official ESP-IDF v6.1 image plus project
         # tooling; AGENTS.md's toolchain note relies on this.
         dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
         self.assertIn("FROM espressif/idf:release-v6.1", dockerfile)
+
+    def test_spec_names_the_pinned_image(self):
+        # The spec's environment table is the first thing a new contributor
+        # reads, so it must not contradict the pinned image. (The spec keeps no
+        # change history of its own; git log is the record.)
+        spec = (dev.REPO_ROOT / "Specification.md").read_text()
+        self.assertIn(dev.DEV_IMAGE, spec)
 
     def test_local_image_is_not_the_pinned_tag(self):
         # `image` (a local rebuild) must not overwrite the pinned tag, which
@@ -609,7 +627,9 @@ class DevContainerTests(unittest.TestCase):
     def test_post_create_verifies_the_toolchain(self):
         # Whatever the create hook runs, it must fail loudly if the pinned
         # image is missing or the ESP-IDF environment cannot be sourced.
-        self.assertIn("idf.py --version", self._devcontainer()["postCreateCommand"])
+        self.assertIn(
+            "idf.py --version", self._devcontainer()["postCreateCommand"]
+        )
 
     def test_uses_the_compose_dev_service(self):
         # The Dev Container must not define its own image: it inherits the
@@ -619,6 +639,16 @@ class DevContainerTests(unittest.TestCase):
         self.assertEqual(text["service"], "dev")
         self.assertNotIn("image", text)
         self.assertNotIn("build", text)
+
+    def test_inherits_the_host_home_mounts_from_compose(self):
+        # The Dev Container reuses the compose service, so `~/.continue`,
+        # `~/.ssh`, and `~/.config/gh` are inherited. A `mounts` entry here
+        # would layer another mount over the compose one, shadowing its source,
+        # so all of them must stay in docker-compose.yml alone.
+        text = (
+            dev.REPO_ROOT / ".devcontainer" / "devcontainer.json"
+        ).read_text()
+        self.assertNotIn('"mounts"', text)
 
 
 class ContainerUserTests(unittest.TestCase):
@@ -663,7 +693,10 @@ class ContainerUserTests(unittest.TestCase):
         calls = []
         original = dev.run
         try:
-            dev.run = lambda cmd, cwd=dev.REPO_ROOT: calls.append(list(cmd)) or 0
+            dev.run = (
+                lambda cmd, cwd=dev.REPO_ROOT:
+                calls.append(list(cmd)) or 0
+            )
             self.assertEqual(dev.compose_run(["dev.py", "build"]), 0)
         finally:
             dev.run = original
@@ -681,7 +714,10 @@ class ContainerUserTests(unittest.TestCase):
         calls = []
         original_run, original_env = dev.run, dev._container_environment
         try:
-            dev.run = lambda cmd, cwd=dev.REPO_ROOT: calls.append(list(cmd)) or 0
+            dev.run = (
+                lambda cmd, cwd=dev.REPO_ROOT:
+                calls.append(list(cmd)) or 0
+            )
             dev._container_environment = lambda user: ["-e", "HOME=/tmp"]
             dev.compose_run(["dev.py", "build"])
         finally:
@@ -690,40 +726,413 @@ class ContainerUserTests(unittest.TestCase):
         # Everything after the service name belongs to the command.
         self.assertLess(command.index("-e"), command.index("dev"))
         self.assertLess(command.index("--rm"), command.index("dev"))
-        self.assertEqual(command[command.index("dev") + 1:], ["dev.py", "build"])
+        self.assertEqual(
+            command[command.index("dev") + 1:], ["dev.py", "build"]
+        )
 
 
-class SpecRevisionTests(unittest.TestCase):
-    """`Specification.md` is the source of truth; docs must cite its revision.
+def _compose_home_bind_mounts() -> dict[str, tuple[str, str]]:
+    """The host `$HOME` bind mounts in docker-compose.yml, keyed by target.
 
-    AGENTS.md names the spec revision in two places, and the spec's own change
-    history must end at that revision. They drifted before (the spec was at
-    Rev 12 while its readers assumed a later one), so this pins them together.
+    Parses the `- ${HOME:?...}/<dir>:<target>[:<mode>]` entries of the `dev`
+    service and returns `{target: (source, mode)}`, where `mode` is "ro" for a
+    read-only mount and "rw" otherwise.
+
+    The source starts with a `${HOME:?...}` expansion, which contains a colon
+    of its own, so splitting has to skip past the closing brace first. Reading
+    the file (rather than running `docker compose config`) keeps this
+    dependency-free, so `self-check` needs no Docker.
+    """
+    compose = (dev.REPO_ROOT / "docker-compose.yml").read_text()
+    mounts = {}
+    for line in compose.splitlines():
+        entry = line.strip().removeprefix("- ").strip()
+        if entry.startswith("#") or not entry.startswith("${HOME:"):
+            continue
+        brace = entry.index("}")
+        suffix, _, rest = entry[brace + 1:].partition(":")
+        source = entry[: brace + 1] + suffix
+        target, _, mode = rest.partition(":")
+        mounts[target] = (source, mode or "rw")
+    return mounts
+
+
+def _compose_dev_environment() -> dict[str, str | None]:
+    """The `dev` service's `environment:` mapping in docker-compose.yml.
+
+    Returns `{name: value}`, where `None` means the entry was written with no
+    value at all. That is compose's spelling of "take it from the host
+    environment": an unset host variable stays unset instead of being passed
+    as an empty string (which tools like `gh` would read as a bad credential).
+
+    Parsed line by line, like `_compose_home_bind_mounts`, so `self-check`
+    needs no Docker and no YAML library. The block ends at the first line
+    indented no deeper than the `environment:` key itself.
+    """
+    compose = (dev.REPO_ROOT / "docker-compose.yml").read_text()
+    lines = compose.splitlines()
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped != "environment:":
+            continue
+        depth = len(line) - len(line.lstrip())
+        environment: dict[str, str | None] = {}
+        for entry in lines[index + 1:]:
+            if not entry.strip() or entry.strip().startswith("#"):
+                continue
+            if len(entry) - len(entry.lstrip()) <= depth:
+                return environment
+            name, _, value = entry.strip().partition(":")
+            environment[name] = value.strip() or None
+        return environment
+    raise AssertionError("docker-compose.yml has no `environment:` block")
+
+
+class ContinueCliMountTests(unittest.TestCase):
+    """The host's `~/.continue` is shared with the container.
+
+    `cn` keeps its config, models, and sessions under `$HOME/.continue`. Users
+    expect `ls ~/.continue` to list the same files on the host and inside the
+    container (`./scripts/dev.py shell ls '~/.continue'`), which needs a bind
+    mount. A Dockerfile cannot mount host paths, so the mount lives in
+    docker-compose.yml — which the Dev Container reuses, so the IDE gets it
+    too.
+
+    The container's HOME depends on the uid it runs as (see
+    ContainerUserTests), so a single mount point cannot cover every user.
     """
 
-    def _spec(self) -> str:
-        return (dev.REPO_ROOT / "Specification.md").read_text()
+    TARGET_UID_HOME = "/home/dev"
+    OTHER_UID_HOME = "/tmp"
 
-    def _revision(self) -> int:
-        match = re.search(r"^\*\*Version:\*\* Rev (\d+)$", self._spec(), re.M)
-        self.assertIsNotNone(match, "Specification.md has no '**Version:** Rev N'")
-        return int(match.group(1))
+    def _mounts(self) -> dict[str, tuple[str, str]]:
+        """The `~/.continue` bind mounts, keyed by target."""
+        return {
+            target: mount
+            for target, mount in _compose_home_bind_mounts().items()
+            if target.endswith("/.continue")
+        }
 
-    def test_spec_header_and_change_history_agree(self):
-        # The last change-history row must be the revision in the header.
-        rows = re.findall(r"^\| (\d+) \| ", self._spec(), re.M)
-        self.assertTrue(rows, "Specification.md has no change-history table")
-        self.assertEqual(int(rows[-1]), self._revision())
+    def test_host_continue_dir_is_mounted_at_the_image_users_home(self):
+        self.assertEqual(
+            self._mounts().get(f"{self.TARGET_UID_HOME}/.continue"),
+            (
+                "${HOME:?HOME must be set to share the Continue CLI config}"
+                "/.continue",
+                "rw",
+            ),
+        )
 
-    def test_agents_cites_the_current_revision(self):
-        agents = (dev.REPO_ROOT / "AGENTS.md").read_text()
-        revision = self._revision()
-        self.assertIn(f"software specification (Rev {revision})", agents)
-        self.assertIn(f"Authoritative software spec (Rev {revision})", agents)
+    def test_host_continue_dir_is_mounted_where_other_uids_home_points(self):
+        # The coupling that matters: `dev.py` pins HOME for any uid other than
+        # the image's 1000, so the mount must be made at *that* path too. If
+        # HOME ever changes, this mount silently stops applying.
+        flags = dev._container_environment("1001:1001")
+        [home_flag] = [flag for flag in flags if flag.startswith("HOME=")]
+        other_home = home_flag.split("=", 1)[1]
+        self.assertEqual(other_home, self.OTHER_UID_HOME)
+        self.assertIn(f"{other_home}/.continue", self._mounts())
 
-    def test_spec_names_the_pinned_image(self):
-        # The spec's environment table must not contradict the pinned image.
-        self.assertIn(dev.DEV_IMAGE, self._spec())
+    def test_mount_refuses_to_fall_back_to_the_filesystem_root(self):
+        # `${HOME}` unset would make the source `/.continue`. The `:?` form
+        # fails the run loudly instead.
+        mounts = self._mounts()
+        # Guard against passing vacuously if the mount lines are ever renamed.
+        self.assertEqual(len(mounts), 2, mounts)
+        for source, _ in mounts.values():
+            self.assertIn("${HOME:?", source)
+
+    def test_image_creates_both_mount_points(self):
+        # A bind mount needs an existing destination with the right owner;
+        # Docker would otherwise create it as root. Both paths are created, and
+        # /tmp/.continue is world-writable like /tmp so it works without the
+        # mount too.
+        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        self.assertIn("mkdir -p /tmp/.continue", dockerfile)
+        self.assertIn('"/home/${USERNAME}/.continue"', dockerfile)
+        self.assertIn("chmod 1777 /tmp/.continue", dockerfile)
+
+    def test_image_installs_the_continue_cli_and_its_node_runtime(self):
+        # `cn` needs Node >= 20.20.1 and the base image ships no Node at all.
+        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        self.assertIn("@continuedev/cli@${CONTINUE_CLI_VERSION}", dockerfile)
+        self.assertIn("ARG NODE_VERSION=", dockerfile)
+        # The tarball is pinned by checksum, not just by URL.
+        self.assertIn("sha256sum --check --strict", dockerfile)
+        # Installed globally (/usr/local) so every uid finds it on PATH.
+        self.assertIn("npm install --global", dockerfile)
+
+
+class ContinueCliCommandTests(unittest.TestCase):
+    """`dev.py cn` runs the Continue CLI with the host's mounted config.
+
+    `cn` is installed in the image, and its config is the host's
+    `~/.continue/config.yaml` (bind-mounted by docker-compose.yml). That config
+    is named explicitly with `--config`: cn's own default lookup is not
+    reliable (it can fall back to the remote default config), and only this
+    file declares the DeepSeek models and the `secrets.DEEPSEEK_API_KEY` they
+    authenticate with.
+    """
+
+    # The two homes `dev.py` can give the container (see `_container_home`).
+    IMAGE_USER = "1000:1000"
+    OTHER_USER = "1001:1001"
+
+    def _config_flag(self, argv: list[str]) -> str:
+        """The value of `--config` in a `cn` argv."""
+        self.assertIn("--config", argv, argv)
+        return argv[argv.index("--config") + 1]
+
+    def test_command_is_registered(self):
+        self.assertIn("cn", dev.COMMANDS)
+        self.assertIs(dev.COMMANDS["cn"], dev.cmd_cn)
+        self.assertTrue((dev.cmd_cn.__doc__ or "").strip())
+
+    def test_config_is_the_mounted_continue_config_of_the_image_user(self):
+        argv = dev._cn_command([], home=dev._container_home(self.IMAGE_USER))
+        self.assertEqual(argv[:2], ["cn", "--config"])
+        self.assertEqual(
+            self._config_flag(argv), "/home/dev/.continue/config.yaml"
+        )
+
+    def test_config_follows_the_home_dev_py_pins_for_other_uids(self):
+        # A uid other than the image's 1000 gets HOME=/tmp, and compose mounts
+        # the host's `~/.continue` there too. The same helper must agree, or
+        # `--config` would name a path that is not the host's config.
+        home = dev._container_home(self.OTHER_USER)
+        self.assertEqual(home, "/tmp")
+        self.assertEqual(
+            self._config_flag(dev._cn_command([], home=home)),
+            "/tmp/.continue/config.yaml",
+        )
+
+    def test_config_path_matches_a_compose_mount_target(self):
+        # `--config` names a file under the container's HOME; that directory is
+        # the host's `~/.continue` only because compose mounts it there.
+        mounts = _compose_home_bind_mounts()
+        for user in (self.IMAGE_USER, self.OTHER_USER):
+            with self.subTest(user=user):
+                home = dev._container_home(user)
+                self.assertIn(f"{home}/.continue", mounts)
+
+    def test_extra_arguments_are_passed_through_verbatim(self):
+        # `--config` comes first and the caller's arguments follow unchanged,
+        # so every `cn` flag works (the last `--config` would still win).
+        argv = dev._cn_command(
+            ["--format", "json", "-p", "list the files"], home="/home/dev"
+        )
+        self.assertEqual(
+            argv,
+            [
+                "cn",
+                "--config", "/home/dev/.continue/config.yaml",
+                "--format", "json", "-p", "list the files",
+            ],
+        )
+
+    def test_command_runs_in_the_container(self):
+        # `cn` only exists inside the dev image.
+        source = (dev.REPO_ROOT / "scripts" / "dev.py").read_text()
+        body = source.split("def cmd_cn", 1)[1].split("\ndef ", 1)[0]
+        self.assertIn("change_to_container()", body)
+
+    def test_main_forwards_cn_arguments_without_parsing_them(self):
+        # Every cn argument is a flag argparse would claim (`--help`) or reject
+        # (`-p`), so `main` must hand them over untouched.
+        calls = []
+        original = dev.cmd_cn
+        try:
+            dev.cmd_cn = lambda extra: calls.append(extra) or 0
+            rc = dev.main(
+                [str(dev.REPO_ROOT / "scripts" / "dev.py"),
+                 "cn", "-p", "hello world"]
+            )
+        finally:
+            dev.cmd_cn = original
+        self.assertEqual(rc, 0)
+        self.assertEqual(calls, [["-p", "hello world"]])
+
+    def test_main_rewrites_the_script_path_before_re_executing(self):
+        # `cmd_cn` -> `change_to_container` re-execs `sys.argv` inside the
+        # container, so `sys.argv[0]` must already be repo-relative when `cn`
+        # is dispatched: an absolute host path (e.g. when dev.py is invoked by
+        # absolute path from another directory) does not exist there. This
+        # pins the dispatch below the rewrite, not merely somewhere in `main`.
+        seen = []
+        original = dev.cmd_cn
+        original_argv = sys.argv
+        try:
+            dev.cmd_cn = lambda extra: seen.append(sys.argv[0]) or 0
+            sys.argv = [str(dev.REPO_ROOT / "scripts" / "dev.py"), "cn"]
+            rc = dev.main(sys.argv)
+        finally:
+            dev.cmd_cn = original
+            sys.argv = original_argv
+        self.assertEqual(rc, 0)
+        self.assertEqual(seen, ["scripts/dev.py"])
+
+    def test_cn_is_listed_in_help(self):
+        # It is registered in COMMANDS, so it shows up in `--help` even though
+        # its arguments are not parsed by argparse.
+        buf = io.StringIO()
+        with redirect_stdout(buf), self.assertRaises(SystemExit):
+            dev._build_parser().parse_args(["--help"])
+        listing = " ".join(buf.getvalue().split())
+        self.assertIn("cn ", listing)
+
+    def test_deepseek_key_is_passed_through_from_the_host_environment(self):
+        # The config's `${{ secrets.DEEPSEEK_API_KEY }}` is resolved from the
+        # environment, so the key is passed through like GH_TOKEN: a null value
+        # means "take it from the host env" and is never written here.
+        service = _compose_dev_environment()
+        self.assertIn("DEEPSEEK_API_KEY", service, service)
+        self.assertIsNone(service["DEEPSEEK_API_KEY"])
+        compose = (dev.REPO_ROOT / "docker-compose.yml").read_text()
+        for line in compose.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("DEEPSEEK_API_KEY:"):
+                self.assertEqual(stripped, "DEEPSEEK_API_KEY:")
+
+
+class SshMountTests(unittest.TestCase):
+    """The host's `~/.ssh` is shared with the container, read-only.
+
+    `git push` over SSH needs the host's private key and a matching
+    `known_hosts`. Mounting the directory (rather than copying keys into the
+    image) means the key never leaves the host filesystem and there is nothing
+    per-developer to keep out of the image.
+
+    Read-only is deliberate: the container can authenticate but cannot modify
+    or delete the host's private keys, nor rewrite `known_hosts`. The cost is
+    that a host key missing from the host's `known_hosts` cannot be added from
+    inside the container.
+
+    Like `~/.continue`, the target is duplicated because the container's HOME
+    is uid-dependent (see ContainerUserTests).
+    """
+
+    def _mounts(self) -> dict[str, tuple[str, str]]:
+        """The `~/.ssh` bind mounts, keyed by target."""
+        return {
+            target: mount
+            for target, mount in _compose_home_bind_mounts().items()
+            if target.endswith("/.ssh")
+        }
+
+    def test_host_ssh_dir_is_mounted_at_both_possible_homes(self):
+        # Both the image user's home and the HOME `dev.py` pins for any other
+        # uid, so `~/.ssh` resolves to the host directory either way.
+        self.assertIn("/home/dev/.ssh", self._mounts())
+        self.assertIn("/tmp/.ssh", self._mounts())
+
+    def test_ssh_mount_is_read_only(self):
+        # The private key must be usable but not mutable from the container.
+        modes = {mode for _, mode in self._mounts().values()}
+        self.assertEqual(modes, {"ro"}, self._mounts())
+
+    def test_ssh_mount_comes_from_the_host_home(self):
+        # Not a named volume and not baked into the image: every source must be
+        # the host's `$HOME/.ssh`, with `:?` so an unset HOME fails loudly.
+        mounts = self._mounts()
+        self.assertEqual(len(mounts), 2, mounts)
+        for source, _ in mounts.values():
+            self.assertTrue(source.startswith("${HOME:?"), source)
+            self.assertTrue(source.endswith("/.ssh"), source)
+
+    def test_image_creates_the_ssh_mount_points(self):
+        # A bind mount needs a destination. Both are created 0700 and owned by
+        # the container user, which is what ssh requires before it will use a
+        # key (the read-only host mount carries the host's own modes).
+        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        self.assertIn('"/home/${USERNAME}/.ssh"', dockerfile)
+        self.assertIn("install -d -m 700", dockerfile)
+        self.assertIn("/tmp/.ssh", dockerfile)
+
+
+class GhCliMountTests(unittest.TestCase):
+    """The host's `~/.config/gh` is shared with the container, read/write.
+
+    `gh` is an API client, so the host's `~/.ssh` does not log it in: its
+    commands (pr, release, api, issue, ...) call the GitHub REST API with an
+    OAuth token or a PAT, which `gh` reads from `$HOME/.config/gh` or from
+    `GH_TOKEN` / `GITHUB_TOKEN`.
+
+    Two independent paths are provided on purpose:
+
+    * the environment passthrough below is the recommended one — `GH_TOKEN`
+      takes precedence over any stored credential, and it works even when the
+      host keeps its token in a desktop keyring the container cannot reach;
+    * the bind mount covers the case where `gh auth login` stored the token in
+      `hosts.yml`, and it needs no token in the environment at all.
+
+    Read/write (unlike `~/.ssh`) so that `gh auth login` inside the container
+    persists to the host, which is what makes the two logins one.
+    """
+
+    def _mounts(self) -> dict[str, tuple[str, str]]:
+        """The `~/.config/gh` bind mounts, keyed by target."""
+        return {
+            target: mount
+            for target, mount in _compose_home_bind_mounts().items()
+            if target.endswith("/.config/gh")
+        }
+
+    def test_host_gh_config_is_mounted_at_both_possible_homes(self):
+        # Both the image user's home and the HOME `dev.py` pins for any other
+        # uid, so `gh` finds its state whichever uid the container runs as.
+        self.assertIn("/home/dev/.config/gh", self._mounts())
+        self.assertIn("/tmp/.config/gh", self._mounts())
+
+    def test_gh_mount_is_read_write(self):
+        # `gh auth login` in the container must persist back to the host, so
+        # unlike `~/.ssh` this mount cannot be read-only.
+        modes = {mode for _, mode in self._mounts().values()}
+        self.assertEqual(modes, {"rw"}, self._mounts())
+
+    def test_gh_mount_comes_from_the_host_home(self):
+        # Not a named volume and not baked into the image. `${HOME:?...}`
+        # fails the run loudly rather than mounting `/.config/gh` when the host
+        # HOME is unset.
+        mounts = self._mounts()
+        self.assertEqual(len(mounts), 2, mounts)
+        for source, _ in mounts.values():
+            self.assertTrue(source.startswith("${HOME:?"), source)
+            self.assertTrue(source.endswith("/.config/gh"), source)
+
+    def test_image_creates_the_gh_mount_points(self):
+        # A bind mount needs a destination owned by the container user, or
+        # Docker creates it as root and `gh` cannot write to it without the
+        # mount.
+        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        self.assertIn('"/home/${USERNAME}/.config/gh"', dockerfile)
+        self.assertIn("/tmp/.config/gh", dockerfile)
+
+    def test_other_uids_home_is_world_writable(self):
+        # `dev.py` gives every uid but the image's 1000 a HOME of /tmp, and
+        # this mount is skipped whenever the host has no `gh` login. A 0700
+        # /tmp/.config/gh owned by uid 1000 makes gh die with
+        # "failed to read configuration: ... permission denied" for those
+        # uids, instead of the intended "You are not logged into any GitHub
+        # hosts" (which is what a bare `docker run -u 1234` showed).
+        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        install = dockerfile.index("install -d -m 700")
+        [chmod_line] = [
+            line
+            for line in dockerfile[:install].splitlines()
+            if line.strip().startswith("&& chmod 1777")
+        ]
+        self.assertIn("/tmp/.config/gh", chmod_line)
+        self.assertIn("/tmp/.continue", chmod_line)
+
+    def test_token_is_passed_through_from_the_host_environment(self):
+        # The recommended path. A null value in the compose `environment:`
+        # mapping means "take it from the host env", so the token is never
+        # written into the committed file and an unset variable stays unset
+        # (rather than becoming an empty string gh would read as a credential).
+        service = _compose_dev_environment()
+        for name in ("GH_TOKEN", "GITHUB_TOKEN"):
+            self.assertIn(name, service, service)
+            self.assertIsNone(service[name], f"{name} must not be hardcoded")
 
 
 class CommandRegistryTests(unittest.TestCase):
@@ -844,9 +1253,9 @@ class BuildProjectTests(unittest.TestCase):
 class GitHooksInstallationTests(unittest.TestCase):
     """`install-hooks` invariants: the tracked hook is present and active.
 
-    These guard the bug where `install-hooks` reported success (because it only
-    set `core.hooksPath`) while the hook file itself was missing, so commit-time
-    checks were silently skipped.
+    These guard the bug where `install-hooks` reported success (because it
+    only set `core.hooksPath`) while the hook file itself was missing, so
+    commit-time checks were silently skipped.
     """
 
     GITHOOKS_DIR = Path(".githooks")
@@ -947,7 +1356,9 @@ class GitHooksInstallationTests(unittest.TestCase):
                 tracked = proc.stdout
                 break
         self.assertIsNotNone(tracked, f"{rel} is not tracked by git")
-        on_disk = (dev.REPO_ROOT / self.GITHOOKS_DIR / self.HOOK_NAME).read_text()
+        on_disk = (
+            dev.REPO_ROOT / self.GITHOOKS_DIR / self.HOOK_NAME
+        ).read_text()
         self.assertEqual(on_disk, tracked)
 
 
@@ -1034,7 +1445,7 @@ class TidyCompileArgumentsTests(unittest.TestCase):
 
 
 class TidyUnitSelectionTests(unittest.TestCase):
-    """`_unique_tidy_units` picks one entry per C++ source in the repository."""
+    """`_unique_tidy_units` picks one entry per C++ source in the repo."""
 
     ROOT = Path("/project")
 
@@ -1427,7 +1838,7 @@ class SourceFileDiscoveryTests(unittest.TestCase):
         return path
 
     def _listed(self, repo):
-        """The paths `_source_file_command` reports for a scratch repository."""
+        """The paths `_source_file_command` reports for a scratch repo."""
         # `_source_file_command` starts with "git"; `_git` adds that itself.
         argv = dev._source_file_command(roots=(".",))[1:]
         return self._git(repo, *argv).splitlines()
@@ -1501,7 +1912,9 @@ class SourceFileDiscoveryTests(unittest.TestCase):
         self._write(repo, "build/generated.cpp", "int x;\n")
         self._write(repo, "src/real.cpp", "int x;\n")
         listed = self._listed(repo)
-        self.assertTrue(any(p.endswith("src/real.cpp") for p in listed), listed)
+        self.assertTrue(
+            any(p.endswith("src/real.cpp") for p in listed), listed
+        )
         self.assertFalse(
             any("generated.cpp" in p for p in listed), listed
         )
@@ -1520,6 +1933,246 @@ class SourceFileDiscoveryTests(unittest.TestCase):
         self.assertTrue(
             any(p.endswith("src/untracked.cpp") for p in listed), listed
         )
+
+
+class PythonSourceDiscoveryTests(unittest.TestCase):
+    """`python_sources` must find Python that is not named `*.py`.
+
+    The one script that matters most is `.githooks/pre-commit`: Python by
+    shebang, with no extension, and the gate that runs before every commit. A
+    file-name-only walk would silently skip it, which is why selection also
+    reads the first line. Vendored trees (`third_party/`) are ours to keep
+    byte-identical, so they are dropped even though the walk is
+    repository-wide.
+    """
+
+    def _git(self, repo, *args):
+        """Run git in `repo` (a scratch repository) and return stdout."""
+        return subprocess.run(
+            ("git", *args),
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+
+    def _scratch_repo(self):
+        """A throwaway git repository, so no test touches the real index."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        repo = Path(tmp.name)
+        self._git(repo, "init", "-q", ".")
+        self._git(repo, "config", "user.email", "test@example.com")
+        self._git(repo, "config", "user.name", "test")
+        return repo
+
+    def _write(self, repo, relative, content):
+        """Write `content` to `repo/relative`, creating parent directories."""
+        path = repo / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+        return path
+
+    # -- vendored trees -----------------------------------------------------
+
+    def test_vendored_paths_are_recognised(self):
+        # Only a top-level `third_party`; a directory merely *named* that
+        # deeper in the tree is ours and must stay in scope.
+        self.assertTrue(dev._is_vendored_path("third_party/json/json.hpp"))
+        self.assertTrue(dev._is_vendored_path("third_party"))
+        self.assertFalse(dev._is_vendored_path("components/third_party/x.py"))
+        self.assertFalse(dev._is_vendored_path("scripts/dev.py"))
+        self.assertFalse(dev._is_vendored_path("third_partyish/x.py"))
+
+    # -- command ------------------------------------------------------------
+
+    def test_command_uses_the_container_interpreter_module_form(self):
+        # `python3 -m pycodestyle` (not the console script) so the checker is
+        # the one belonging to the container's interpreter; defaults only, so
+        # the result matches a bare `pycodestyle` run.
+        self.assertEqual(
+            dev._pycodestyle_command(["a.py", "b.py"]),
+            ["python3", "-m", "pycodestyle", "a.py", "b.py"],
+        )
+
+    def test_command_passes_no_options_of_its_own(self):
+        # An option here would make this gate and `pycodestyle` disagree; the
+        # repository conforms to the tool's defaults (79 columns).
+        self.assertEqual(dev.PYCODESTYLE_ARGS, ())
+
+    # -- selection ----------------------------------------------------------
+
+    def test_selection_keeps_dot_py_files(self):
+        repo = self._scratch_repo()
+        self._write(repo, "scripts/a.py", "")
+        self._write(repo, "scripts/b.cpp", "")
+        self.assertEqual(
+            dev._select_python_sources(
+                ["scripts/a.py", "scripts/b.cpp"], repo
+            ),
+            ["scripts/a.py"],
+        )
+
+    def test_selection_finds_a_python_shebang_without_an_extension(self):
+        # The regression class: `.githooks/pre-commit` is Python with no
+        # suffix, so a name-only filter drops the most important script.
+        repo = self._scratch_repo()
+        self._write(repo, ".githooks/pre-commit", "#!/usr/bin/env python3\n")
+        self.assertEqual(
+            dev._select_python_sources([".githooks/pre-commit"], repo),
+            [".githooks/pre-commit"],
+        )
+
+    def test_selection_accepts_the_other_python_shebang_forms(self):
+        repo = self._scratch_repo()
+        for name, first_line in (
+            ("bin/a", "#!/usr/bin/python\n"),
+            ("bin/b", "#!/usr/bin/env python3.12\n"),
+            ("bin/c", "#!/opt/esp/python_env/bin/python3\n"),
+        ):
+            with self.subTest(name=name):
+                self._write(repo, name, first_line)
+                self.assertEqual(
+                    dev._select_python_sources([name], repo), [name]
+                )
+
+    def test_selection_rejects_a_non_python_shebang(self):
+        # A bash script is not a Python file just because it has a shebang.
+        repo = self._scratch_repo()
+        self._write(repo, "bin/run.sh", "#!/bin/bash\necho hi\n")
+        self.assertEqual(dev._select_python_sources(["bin/run.sh"], repo), [])
+
+    def test_selection_rejects_a_python_mention_that_is_not_a_shebang(self):
+        # Only the FIRST line counts, and it must start with `#!`.
+        repo = self._scratch_repo()
+        self._write(repo, "notes.txt", "run this with python3\n")
+        self.assertEqual(dev._select_python_sources(["notes.txt"], repo), [])
+
+    def test_selection_drops_vendored_trees(self):
+        repo = self._scratch_repo()
+        self._write(repo, "third_party/json/setup.py", "")
+        self._write(repo, "scripts/ours.py", "")
+        self.assertEqual(
+            dev._select_python_sources(
+                ["third_party/json/setup.py", "scripts/ours.py"], repo
+            ),
+            ["scripts/ours.py"],
+        )
+
+    def test_selection_drops_paths_that_are_not_files(self):
+        # git still lists a tracked file that has been deleted; pycodestyle
+        # would fail on it.
+        repo = self._scratch_repo()
+        self._write(repo, "kept.py", "")
+        self.assertEqual(
+            dev._select_python_sources(["kept.py", "gone.py"], repo),
+            ["kept.py"],
+        )
+
+    def test_selection_is_sorted_and_deduplicated(self):
+        repo = self._scratch_repo()
+        for name in ("b.py", "a.py"):
+            self._write(repo, name, "")
+        self.assertEqual(
+            dev._select_python_sources(["b.py", "a.py", "a.py"], repo),
+            ["a.py", "b.py"],
+        )
+
+    def test_selection_survives_a_non_utf8_shebang(self):
+        # The first line is read as bytes, so a file that is not valid UTF-8
+        # does not raise on a candidate that is not Python at all.
+        repo = self._scratch_repo()
+        self._write(repo, "bin/blob", "")
+        (repo / "bin" / "blob").write_bytes(b"#!\xff\xfe binary\n")
+        self.assertEqual(dev._select_python_sources(["bin/blob"], repo), [])
+
+    # -- end to end, against a scratch repository ---------------------------
+
+    def _listed(self, repo):
+        """The paths `python_sources`' enumeration reports for a repo."""
+        argv = dev._source_file_command(roots=(".",))[1:]
+        listed = self._git(repo, *argv).splitlines()
+        return dev._select_python_sources(listed, repo)
+
+    def test_untracked_python_is_included(self):
+        # The same `--cached --others --exclude-standard` semantics as
+        # `format`, so a new file needs no `git add` first.
+        repo = self._scratch_repo()
+        self._write(repo, "scripts/new.py", "")
+        self.assertIn("scripts/new.py", self._listed(repo))
+
+    def test_ignored_python_is_excluded(self):
+        repo = self._scratch_repo()
+        self._write(repo, ".gitignore", "build/\n")
+        self._write(repo, "build/generated.py", "")
+        self._write(repo, "scripts/real.py", "")
+        listed = self._listed(repo)
+        self.assertIn("scripts/real.py", listed)
+        self.assertNotIn("build/generated.py", listed)
+
+    # -- the real repository ------------------------------------------------
+
+    def test_the_repository_enumerates_its_expected_python_sources(self):
+        # Pins the actual set: the two dev.py scripts plus the extensionless
+        # hook. A new Python source is meant to be noticed here, so this list
+        # is a deliberate tripwire rather than an over-broad assertion.
+        self.assertEqual(
+            dev.python_sources(),
+            [".githooks/pre-commit", "scripts/dev.py", "scripts/test_dev.py"],
+        )
+
+    def test_no_vendored_python_is_enumerated(self):
+        # `third_party/sml` and `third_party/json` must never reach the gate.
+        for path in dev.python_sources():
+            with self.subTest(path=path):
+                self.assertFalse(dev._is_vendored_path(path), path)
+
+
+class PycodestyleGateTests(unittest.TestCase):
+    """`pycodestyle` is wired into the pre-commit hook and into CI."""
+
+    def test_command_is_registered_and_documented(self):
+        self.assertIn("pycodestyle", dev.COMMANDS)
+        self.assertIs(dev.COMMANDS["pycodestyle"], dev.cmd_pycodestyle)
+        self.assertTrue((dev.cmd_pycodestyle.__doc__ or "").strip())
+
+    def test_command_runs_in_the_container(self):
+        # pycodestyle is installed in the dev image, not on the host.
+        source = (dev.REPO_ROOT / "scripts" / "dev.py").read_text()
+        body = source.split("def cmd_pycodestyle", 1)[1].split("\ndef ", 1)[0]
+        self.assertIn("change_to_container()", body)
+
+    def test_hook_runs_pycodestyle_first(self):
+        # The cheapest gate: it needs no compile database, no build, and no
+        # test run, so it must come before the others rather than after them.
+        hook = (dev.REPO_ROOT / ".githooks" / "pre-commit").read_text()
+        style = hook.index('run_check(dev, "pycodestyle")')
+        for later in (
+            '"clang-tidy"',
+            '"format-check-staged"',
+            '"test"',
+        ):
+            with self.subTest(later=later):
+                self.assertLess(style, hook.index(f"run_check(dev, {later})"))
+
+    def test_ci_runs_pycodestyle_before_the_build(self):
+        # It needs no compile database, so there is no reason to wait for the
+        # toolchain: a long line is reported in seconds.
+        workflow = (
+            dev.REPO_ROOT / ".github" / "workflows" / "ci.yml"
+        ).read_text()
+        style = workflow.index("python3 ./scripts/dev.py pycodestyle")
+        self.assertLess(
+            style, workflow.index("python3 ./scripts/dev.py build")
+        )
+
+    def test_the_image_installs_pycodestyle(self):
+        # The gate would otherwise fail with "No module named pycodestyle".
+        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        self.assertIn("pycodestyle==", dockerfile)
+        # Pinned, and verified at build time so a bad install fails the build.
+        self.assertIn("ARG PYCODESTYLE_VERSION=", dockerfile)
+        self.assertIn("pycodestyle --version", dockerfile)
 
 
 class SelfCheckModuleTests(unittest.TestCase):
