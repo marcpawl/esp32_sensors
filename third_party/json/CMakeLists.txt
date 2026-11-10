@@ -8,7 +8,7 @@
 #
 # **Location: repo-root `third_party/`.** `third_party/` is deliberately outside
 # every directory `scripts/dev.py` walks (`mcgowan`, `components`, `test`,
-# `espidf-cpp-test`, `donny`, `scripts`), because those are clang-formatted and
+# `test-espidf-cpp`, `donny`, `scripts`), because those are clang-formatted and
 # a vendored header must not be. It is also not any project's default component
 # search path: a project opts in with
 # `list(APPEND EXTRA_COMPONENT_DIRS .../third_party)` and then names `json` in

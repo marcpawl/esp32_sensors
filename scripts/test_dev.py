@@ -146,7 +146,7 @@ class SubprojectBuildTests(unittest.TestCase):
                 "test-hal-stub",
                 "test-hal-common",
                 "test",
-                "espidf-cpp-test",
+                "test-espidf-cpp",
                 "donny",
             ),
         )
@@ -208,7 +208,7 @@ class SubprojectBuildTests(unittest.TestCase):
                     "-S", ".",
                     "-B", dev.ROOT_BUILD_DIR,
                     "-DSUBPROJECTS=mcgowan;test-hal-stub;test-hal-common;"
-                    "test;espidf-cpp-test;donny",
+                    "test;test-espidf-cpp;donny",
                 ],
                 ["cmake", "--build", dev.ROOT_BUILD_DIR],
             ],
@@ -321,7 +321,7 @@ class SubmoduleTests(unittest.TestCase):
         # so each entry point checks first.
         for name in (
             "cmd_build",
-            "cmd_build_espidf_cpp_test",
+            "cmd_build_test_espidf_cpp",
             "_run_host_tests",
             "cmd_clang_tidy",
         ):
@@ -1156,11 +1156,11 @@ class CommandRegistryTests(unittest.TestCase):
         self.assertIn("self-check", dev.COMMANDS)
         self.assertIs(dev.COMMANDS["self-check"], dev.cmd_self_check)
 
-    def test_build_espidf_cpp_test_is_registered(self):
-        self.assertIn("build-espidf-cpp-test", dev.COMMANDS)
+    def test_build_test_espidf_cpp_is_registered(self):
+        self.assertIn("build-test-espidf-cpp", dev.COMMANDS)
         self.assertIs(
-            dev.COMMANDS["build-espidf-cpp-test"],
-            dev.cmd_build_espidf_cpp_test,
+            dev.COMMANDS["build-test-espidf-cpp"],
+            dev.cmd_build_test_espidf_cpp,
         )
 
     def test_host_test_projects_cover_every_suite(self):
@@ -1272,7 +1272,7 @@ class HostTestCommandTests(unittest.TestCase):
                 self.assertEqual(len(self.hops), 1)
 
     def test_test_espidf_cpp_uses_the_build_commands_project(self):
-        # `build-espidf-cpp-test` builds the wrapper suite and
+        # `build-test-espidf-cpp` builds the wrapper suite and
         # `test-espidf-cpp` builds and runs it: both must resolve to the same
         # project, or the two commands would drift apart.
         self.assertEqual(
@@ -1336,7 +1336,7 @@ class HostTestCommandTests(unittest.TestCase):
                 dev._idf(dev.ESPIDF_CPP_TEST_PROJECT, dev.TEST_BUILD_DIR,
                          "build"),
                 [f"./{dev.ESPIDF_CPP_TEST_PROJECT}/{dev.TEST_BUILD_DIR}/"
-                 "esp32_sensors_espidf_cpp_tests.elf"],
+                 "test-espidf-cpp.elf"],
             ],
         )
 
@@ -1776,7 +1776,7 @@ class TidyConfigurationTests(unittest.TestCase):
             f"{root}/mcgowan/src/include/battery_monitor.hpp",
             f"{root}/components/logic/include/logic/payload.hpp",
             f"{root}/test/main/test_main.cpp",
-            f"{root}/espidf-cpp-test/main/test_main.cpp",
+            f"{root}/test-espidf-cpp/main/test_main.cpp",
             f"{root}/donny/main/console_task.hpp",
         ):
             self.assertIsNotNone(pattern.match(path), path)

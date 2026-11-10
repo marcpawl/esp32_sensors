@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-# `espidf-cpp-test` — host unit tests for the `espidf_cpp` component.
+# `test-espidf-cpp` — host unit tests for the `espidf_cpp` component.
 #
 # This is a standalone ESP-IDF project that targets the `linux` target only
 # (never a chip): it builds the Unity test runner for the wrappers in
@@ -11,10 +11,10 @@ cmake_minimum_required(VERSION 3.22)
 # Build and run with:
 #   scripts/dev.py test-espidf-cpp     (or `test`, which runs every suite)
 # or directly in the container:
-#   scripts/dev.py shell -C espidf-cpp-test idf.py -B build_linux \
+#   scripts/dev.py shell -C test-espidf-cpp idf.py -B build_linux \
 #       --preview set-target linux
-#   scripts/dev.py shell -C espidf-cpp-test idf.py -B build_linux build
-#   ./espidf-cpp-test/build_linux/esp32_sensors_espidf_cpp_tests.elf
+#   scripts/dev.py shell -C test-espidf-cpp idf.py -B build_linux build
+#   ./test-espidf-cpp/build_linux/test-espidf-cpp.elf
 #
 # The build directory is named after the target (`build_linux`), like the
 # other subprojects'.
@@ -25,7 +25,7 @@ cmake_minimum_required(VERSION 3.22)
 # workflow into the container documented in AGENTS.md.
 if(NOT "$ENV{DOCKER_IMAGE}" STREQUAL "esp32_sensors")
     message(FATAL_ERROR
-        "The espidf-cpp-test host tests must be built inside the ESP-IDF dev "
+        "The test-espidf-cpp host tests must be built inside the ESP-IDF dev "
         "container.\n"
         "DOCKER_IMAGE is not 'esp32_sensors', so this looks like a host "
         "invocation.\n"
@@ -36,7 +36,7 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
 # The component under test lives in the repo-root `components/` directory,
 # which is not on this project's default search path (that would be
-# `espidf-cpp-test/components/`).
+# `test-espidf-cpp/components/`).
 set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../components")
 
 # Restrict the component set to `main` (and its requirements, which pull in
@@ -49,5 +49,5 @@ set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../components")
 set(COMPONENTS main hal_stub)
 set(EXCLUDE_COMPONENTS hal_board)
 
-# The test ELF is named after this project: esp32_sensors_espidf_cpp_tests.
-project(esp32_sensors_espidf_cpp_tests)
+# The test ELF is named after this project: test-espidf-cpp.
+project(test-espidf-cpp)

@@ -31,7 +31,7 @@
 # The wrappers add typing and ownership, not policy; they stay close enough to
 # the C API that their behaviour is predictable.
 #
-# The wrappers are host-testable: `espidf-cpp-test` (ESP-IDF `linux` target)
+# The wrappers are host-testable: `test-espidf-cpp` (ESP-IDF `linux` target)
 # exercises one_message_queue, static_vector/static_string, and HttpServer
 # (both its vocabulary and the server itself over a loopback socket).
 # `task.hpp` needs a real FreeRTOS scheduler, so it is verified on target and by
