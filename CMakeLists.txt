@@ -13,8 +13,8 @@ cmake_minimum_required(VERSION 3.22)
 #   test-hal-common/ host tests for components/hal_common, `linux`
 #                                                -> test-hal-common/build_linux/
 #   test/            host unit tests, `linux` target (hal_stub) -> test/build_linux/
-#   espidf-cpp-test/ host tests for components/espidf_cpp, `linux`
-#                                                -> espidf-cpp-test/build_linux/
+#   test-espidf-cpp/ host tests for components/espidf_cpp, `linux`
+#                                                -> test-espidf-cpp/build_linux/
 #
 # This file only aggregates them, so ONE build covers all of them. It is plain
 # CMake (no repo-root sdkconfig): each target invokes `idf.py` for its
@@ -32,7 +32,7 @@ cmake_minimum_required(VERSION 3.22)
 #
 # Every target in this file is prefixed with its subproject name (e.g.
 # mcgowan_build, test-hal-stub_build, test-hal-common_build, test_build,
-# espidf-cpp-test_build; a
+# test-espidf-cpp_build; a
 # HAL component's would be hal_board_test) so it cannot collide with another
 # target in this project,
 # with names CMake / ESP-IDF define for themselves (test, build_test, ...), or
@@ -65,14 +65,14 @@ project(esp32_sensors_subprojects NONE)
 
 # Which subprojects to build. Default: all of them.
 set(SUBPROJECTS
-    "mcgowan;test-hal-stub;test-hal-common;test;espidf-cpp-test;donny"
+    "mcgowan;test-hal-stub;test-hal-common;test;test-espidf-cpp;donny"
     CACHE STRING
-    "Subprojects to build: mcgowan, test-hal-stub, test-hal-common, test, espidf-cpp-test, donny")
+    "Subprojects to build: mcgowan, test-hal-stub, test-hal-common, test, test-espidf-cpp, donny")
 set_property(CACHE SUBPROJECTS PROPERTY STRINGS
-    mcgowan test-hal-stub test-hal-common test espidf-cpp-test donny)
+    mcgowan test-hal-stub test-hal-common test test-espidf-cpp donny)
 
 set(KNOWN_SUBPROJECTS
-    mcgowan test-hal-stub test-hal-common test espidf-cpp-test donny)
+    mcgowan test-hal-stub test-hal-common test test-espidf-cpp donny)
 foreach(sub IN LISTS SUBPROJECTS)
     if(NOT sub IN_LIST KNOWN_SUBPROJECTS)
         message(FATAL_ERROR
@@ -146,11 +146,11 @@ if(test IN_LIST SUBPROJECTS)
     _idf_subproject(test build_linux "--preview|set-target|linux" "build")
 endif()
 
-# --- espidf-cpp-test: host tests for espidf_cpp (linux) -> *_build --------
+# --- test-espidf-cpp: host tests for espidf_cpp (linux) -> *_build --------
 # Same `linux` target rules as `test/`; built (not run) here, since running is
 # `scripts/dev.py test-espidf-cpp`'s job (`test` runs every host suite).
-if(espidf-cpp-test IN_LIST SUBPROJECTS)
-    _idf_subproject(espidf-cpp-test build_linux
+if(test-espidf-cpp IN_LIST SUBPROJECTS)
+    _idf_subproject(test-espidf-cpp build_linux
         "--preview|set-target|linux" "build")
 endif()
 

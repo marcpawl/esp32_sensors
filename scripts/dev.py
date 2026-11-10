@@ -9,7 +9,7 @@
 # specifics live in one place.
 #
 # Usage:
-#   scripts/dev.py [pull|image|submodules|build|build-espidf-cpp-test|flash|\
+#   scripts/dev.py [pull|image|submodules|build|build-test-espidf-cpp|flash|\
 #                   monitor|menuconfig|test|test-hal-common|test-hal-stub|\
 #                   test-linux|test-espidf-cpp|self-check|format|format-check|\
 #                   format-check-staged|pycodestyle|clang-tidy|install-hooks|\
@@ -60,7 +60,7 @@ ROOTS = (
     "test",
     "test-hal-stub",
     "test-hal-common",
-    "espidf-cpp-test",
+    "test-espidf-cpp",
     "donny",
     "scripts",
 )
@@ -148,9 +148,9 @@ FORMAT_ARGS = ("--dry-run", "--Werror")
 #             host tests for components/hal_common (linux target)
 #                                                -> test-hal-common/build_linux
 #   test/     host unit tests (linux target)      -> test/build_linux
-#   espidf-cpp-test/
+#   test-espidf-cpp/
 #             host unit tests for components/espidf_cpp (linux target)
-#                                                -> espidf-cpp-test/build_linux
+#                                                -> test-espidf-cpp/build_linux
 #   donny/    linux-emulated application (hal_stub, linux target)
 #                                                -> donny/build_linux
 #
@@ -160,7 +160,7 @@ FIRMWARE_PROJECT = "mcgowan"
 TEST_PROJECT = "test"
 HAL_STUB_TEST_PROJECT = "test-hal-stub"
 HAL_COMMON_TEST_PROJECT = "test-hal-common"
-ESPIDF_CPP_TEST_PROJECT = "espidf-cpp-test"
+ESPIDF_CPP_TEST_PROJECT = "test-espidf-cpp"
 DONNY_PROJECT = "donny"
 FW_BUILD_DIR = "build_esp32s3"
 TEST_BUILD_DIR = "build_linux"
@@ -184,7 +184,7 @@ HOST_TEST_PROJECTS = (
     (HAL_COMMON_TEST_PROJECT, "esp32_sensors_hal_common_tests.elf"),
     (HAL_STUB_TEST_PROJECT, "esp32_sensors_hal_stub_tests.elf"),
     (TEST_PROJECT, "esp32_sensors_tests.elf"),
-    (ESPIDF_CPP_TEST_PROJECT, "esp32_sensors_espidf_cpp_tests.elf"),
+    (ESPIDF_CPP_TEST_PROJECT, "test-espidf-cpp.elf"),
 )
 
 # Subprojects that build for the ESP-IDF `linux` target (into build_linux).
@@ -679,7 +679,7 @@ def _build_project(project: str) -> int:
     """Build one subproject with its own target and build directory.
 
     The host-test projects (`test-hal-stub`, `test-hal-common`, `test`,
-    `espidf-cpp-test`) are pinned to the `linux` target and build into
+    `test-espidf-cpp`) are pinned to the `linux` target and build into
     `build_linux`; the firmware builds for ESP32-S3 into `build_esp32s3`.
     """
     if project in LINUX_PROJECTS:
@@ -697,7 +697,7 @@ def cmd_build(args: list[str]) -> int:
     `build`               → every subproject (firmware, host tests)
     `build mcgowan`       → just the ESP32-S3 firmware (mcgowan/build_esp32s3)
     `build test-hal-stub` → any of: mcgowan test-hal-stub test-hal-common
-                            test espidf-cpp-test donny
+                            test test-espidf-cpp donny
     """
     change_to_container()
     rc = _ensure_submodules()
@@ -709,7 +709,7 @@ def cmd_build(args: list[str]) -> int:
     return _build_subprojects(subprojects)
 
 
-def cmd_build_espidf_cpp_test() -> int:
+def cmd_build_test_espidf_cpp() -> int:
     """Build the espidf_cpp unit tests for the ESP-IDF `linux` target."""
     change_to_container()
     rc = _ensure_submodules()
@@ -851,7 +851,7 @@ def cmd_self_check() -> int:
             "\n"
             "Inside the container use `./scripts/dev.py test`, which builds\n"
             "and runs the ESP-IDF `linux`-target suites (`test-hal-stub/`,\n"
-            "`test-hal-common/`, `test/`, and `espidf-cpp-test/`).",
+            "`test-hal-common/`, `test/`, and `test-espidf-cpp/`).",
             file=sys.stderr,
         )
         return 1
@@ -1437,7 +1437,7 @@ COMMANDS = {
     "image": cmd_image,
     "submodules": cmd_submodules,
     "build": cmd_build,
-    "build-espidf-cpp-test": cmd_build_espidf_cpp_test,
+    "build-test-espidf-cpp": cmd_build_test_espidf_cpp,
     "flash": cmd_flash,
     "monitor": cmd_monitor,
     "menuconfig": cmd_menuconfig,

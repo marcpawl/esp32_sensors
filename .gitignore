@@ -1,6 +1,6 @@
 # ESP-IDF build output. The repo root is not an ESP-IDF project; it aggregates
 # the subprojects (mcgowan/, test-hal-stub/, test-hal-common/, test/,
-# espidf-cpp-test/, donny/), and each subproject keeps its build tree inside
+# test-espidf-cpp/, donny/), and each subproject keeps its build tree inside
 # its own directory, named after the target so the firmware (esp32s3) and
 # host-test (linux) builds stay separate:
 #
@@ -8,7 +8,7 @@
 #   test-hal-stub/build_linux/    host tests for components/hal_stub
 #   test-hal-common/build_linux/  host tests for components/hal_common
 #   test/build_linux/             host unit tests
-#   espidf-cpp-test/build_linux/  host tests for components/espidf_cpp
+#   test-espidf-cpp/build_linux/  host tests for components/espidf_cpp
 #   donny/build_linux/            linux-emulated application (donny)
 #
 # The root aggregator's own CMake/Ninja tree (scripts/dev.py build).
@@ -31,20 +31,20 @@ __pycache__/
 # sdkconfig is produced from sdkconfig.defaults by `idf.py`; keep only the
 # committed defaults (sdkconfig.defaults) under version control.
 # One per ESP-IDF project (mcgowan/, test-hal-stub/, test-hal-common/, test/,
-# espidf-cpp-test/, donny/), plus the root aggregator's.
+# test-espidf-cpp/, donny/), plus the root aggregator's.
 sdkconfig
 mcgowan/sdkconfig
 test-hal-stub/sdkconfig
 test-hal-common/sdkconfig
 test/sdkconfig
-espidf-cpp-test/sdkconfig
+test-espidf-cpp/sdkconfig
 donny/sdkconfig
 sdkconfig.old
 mcgowan/sdkconfig.old
 test-hal-stub/sdkconfig.old
 test-hal-common/sdkconfig.old
 test/sdkconfig.old
-espidf-cpp-test/sdkconfig.old
+test-espidf-cpp/sdkconfig.old
 donny/sdkconfig.old
 
 # CMake / ninja ephemera

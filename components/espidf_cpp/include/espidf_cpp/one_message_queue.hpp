@@ -12,7 +12,7 @@
 //
 // `send()` and `receive()` use only the parts of the FreeRTOS API that the
 // ESP-IDF `linux` target also provides, so this header is host-testable (see
-// the `espidf-cpp-test` project).
+// the `test-espidf-cpp` project).
 #pragma once
 
 // NOLINTBEGIN
