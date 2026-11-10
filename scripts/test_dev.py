@@ -141,13 +141,24 @@ class SubprojectBuildTests(unittest.TestCase):
     def test_subprojects_are_firmware_host_tests_and_donny(self):
         self.assertEqual(
             dev.SUBPROJECTS,
-            ("mcgowan", "test", "espidf-cpp-test", "donny"),
+            (
+                "mcgowan",
+                "test-hal-common",
+                "test",
+                "espidf-cpp-test",
+                "donny",
+            ),
         )
 
     def test_linux_projects_are_the_host_target_subprojects(self):
         self.assertEqual(
             dev.LINUX_PROJECTS,
-            (dev.TEST_PROJECT, dev.ESPIDF_CPP_TEST_PROJECT, dev.DONNY_PROJECT),
+            (
+                dev.HAL_COMMON_TEST_PROJECT,
+                dev.TEST_PROJECT,
+                dev.ESPIDF_CPP_TEST_PROJECT,
+                dev.DONNY_PROJECT,
+            ),
         )
         # Every linux project is also a buildable subproject.
         for project in dev.LINUX_PROJECTS:
@@ -194,7 +205,8 @@ class SubprojectBuildTests(unittest.TestCase):
                     "cmake",
                     "-S", ".",
                     "-B", dev.ROOT_BUILD_DIR,
-                    "-DSUBPROJECTS=mcgowan;test;espidf-cpp-test;donny",
+                    "-DSUBPROJECTS="
+                    "mcgowan;test-hal-common;test;espidf-cpp-test;donny",
                 ],
                 ["cmake", "--build", dev.ROOT_BUILD_DIR],
             ],
@@ -1149,12 +1161,19 @@ class CommandRegistryTests(unittest.TestCase):
             dev.cmd_build_espidf_cpp_test,
         )
 
-    def test_host_test_projects_cover_both_suites(self):
+    def test_host_test_projects_cover_every_suite(self):
         projects = [project for project, _ in dev.HOST_TEST_PROJECTS]
         self.assertEqual(
             projects,
-            [dev.TEST_PROJECT, dev.ESPIDF_CPP_TEST_PROJECT],
+            [
+                dev.HAL_COMMON_TEST_PROJECT,
+                dev.TEST_PROJECT,
+                dev.ESPIDF_CPP_TEST_PROJECT,
+            ],
         )
+        # `test` runs `hal_common` first: it covers the shared vocabulary the
+        # other suites build on.
+        self.assertEqual(projects[0], dev.HAL_COMMON_TEST_PROJECT)
         # Every host-test project is also a buildable subproject.
         for project in projects:
             self.assertIn(project, dev.SUBPROJECTS)
@@ -1185,12 +1204,13 @@ class CommandRegistryTests(unittest.TestCase):
 
 
 class HostTestCommandTests(unittest.TestCase):
-    """`test`, `test-linux`, and `test-espidf-cpp` run the suites they name.
+    """The `test*` commands run the suites they name.
 
-    There are two host test suites (the `test/` application tests and the
-    `espidf_cpp` wrapper tests). `test` is the aggregate the pre-commit hook
-    and CI call, so it must run both; each suite also has a command of its
-    own so one can be run alone while working on it.
+    There are three host test suites (the `hal_common` vocabulary tests, the
+    `test/` application tests, and the `espidf_cpp` wrapper tests). `test` is
+    the aggregate the pre-commit hook and CI call, so it must run all three,
+    with `test-hal-common` first; each suite also has a command of its own so
+    one can be run alone while working on it.
     """
 
     def setUp(self):
@@ -1220,8 +1240,9 @@ class HostTestCommandTests(unittest.TestCase):
         dev.run = self._original_run
         dev.change_to_container = self._original_change_to_container
 
-    def test_both_suite_commands_are_registered(self):
+    def test_every_suite_command_is_registered(self):
         for name, handler in (
+            ("test-hal-common", dev.cmd_test_hal_common),
             ("test-linux", dev.cmd_test_linux),
             ("test-espidf-cpp", dev.cmd_test_espidf_cpp),
         ):
@@ -1233,6 +1254,7 @@ class HostTestCommandTests(unittest.TestCase):
         # `idf.py` only exists inside the dev image, so each command must hand
         # off to it exactly once (`_run_host_tests` itself never hops).
         for handler in (
+            dev.cmd_test_hal_common,
             dev.cmd_test_linux,
             dev.cmd_test_espidf_cpp,
             dev.cmd_test,
@@ -1253,6 +1275,20 @@ class HostTestCommandTests(unittest.TestCase):
                     dev.ESPIDF_CPP_TEST_PROJECT,
                     dict(dev.HOST_TEST_PROJECTS)[dev.ESPIDF_CPP_TEST_PROJECT],
                 )
+            ],
+        )
+
+    def test_test_hal_common_runs_only_the_hal_common_suite(self):
+        self.assertEqual(dev.cmd_test_hal_common(), 0)
+        self.assertEqual(
+            self.calls,
+            [
+                dev._idf(dev.HAL_COMMON_TEST_PROJECT, dev.TEST_BUILD_DIR,
+                         "--preview", "set-target", "linux"),
+                dev._idf(dev.HAL_COMMON_TEST_PROJECT, dev.TEST_BUILD_DIR,
+                         "build"),
+                [f"./{dev.HAL_COMMON_TEST_PROJECT}/{dev.TEST_BUILD_DIR}/"
+                 "esp32_sensors_hal_common_tests.elf"],
             ],
         )
 
@@ -1283,7 +1319,7 @@ class HostTestCommandTests(unittest.TestCase):
             ],
         )
 
-    def test_test_runs_both_suites_in_table_order(self):
+    def test_test_runs_every_suite_in_table_order(self):
         # The regression this pins: `test` used to be an alias of
         # `test-linux`, so the espidf_cpp suite was never run by the gate.
         self.assertEqual(dev.cmd_test(), 0)
@@ -1310,11 +1346,9 @@ class HostTestCommandTests(unittest.TestCase):
 
     def test_a_failing_suite_stops_the_run_and_fails_the_command(self):
         # A red suite (here: the first ELF to run) must fail `test`, not be
-        # swallowed while the second suite is run anyway.
-        failing = (
-            f"./{dev.TEST_PROJECT}/{dev.TEST_BUILD_DIR}/"
-            "esp32_sensors_tests.elf"
-        )
+        # swallowed while the later suites are run anyway.
+        first_project, first_elf = dev.HOST_TEST_PROJECTS[0]
+        failing = f"./{first_project}/{dev.TEST_BUILD_DIR}/{first_elf}"
 
         def fake_run(cmd, cwd=dev.REPO_ROOT):
             self.calls.append(list(cmd))
@@ -1327,12 +1361,15 @@ class HostTestCommandTests(unittest.TestCase):
 
     def test_every_host_test_project_has_a_command_that_runs_it(self):
         # `test` covers the table, but each suite is also runnable alone. This
-        # pins that the two "run one suite" commands between them cover the
-        # whole table, so a third suite cannot be reachable only through
-        # `test`.
+        # pins that the per-suite commands between them cover the whole table,
+        # so a suite cannot be reachable only through `test`.
         covered = {
             project
-            for handler in (dev.cmd_test_linux, dev.cmd_test_espidf_cpp)
+            for handler in (
+                dev.cmd_test_hal_common,
+                dev.cmd_test_linux,
+                dev.cmd_test_espidf_cpp,
+            )
             for project, _ in dev._host_test_projects(
                 self._projects_run_by(handler)
             )

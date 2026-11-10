@@ -1,7 +1,8 @@
 // Tests for the board HAL vocabulary (`hal/board_types.hpp`).
 //
-// `BoardLike` is the shared contract both aggregate boards satisfy, and the
-// concrete boards are pinned where they live (`test_hal_board.cpp` for the
+// `BoardPins` is the board's wiring description, defaulting to the §2.4 pin
+// map. `BoardLike` is the shared contract both aggregate boards satisfy, and
+// the concrete boards are pinned where they live (`test_hal_board.cpp` for the
 // stub, the firmware build for `hal_board`). What a bare
 // `static_assert(BoardLike<BoardStub>)` cannot prove is that the concept
 // *rejects* a board missing a piece: a concept that is too loose compiles
@@ -32,6 +33,7 @@
 #include "hal/chip_temperature.hpp"
 #include "hal/led.hpp"
 #include "hal/onewire.hpp"
+#include "hal/pin_map.hpp"
 #include "hal/push_button.hpp"
 #include "hal/sleep_types.hpp"
 #include "hal/timer_stub.hpp"
@@ -182,6 +184,24 @@ struct NoRegisterTimer : BoardWithoutTimer {
 };
 
 }  // namespace
+
+// --- BoardPins defaults -----------------------------------------------------
+
+TEST_CASE("hal board types: BoardPins defaults to the board pin map (§2.4)",
+          "[hal_board_types]") {
+    // The default wiring comes from `hal/pin_map.hpp`, so a board can be built
+    // on the reference hardware without repeating the numbers.
+    const BoardPins def{};
+    TEST_ASSERT_EQUAL(thermo::pins::kWireBus, def.one_wire);
+    TEST_ASSERT_EQUAL(thermo::pins::kGreenLed, def.green_led);
+    TEST_ASSERT_EQUAL(thermo::pins::kRedLed, def.red_led);
+    TEST_ASSERT_EQUAL(thermo::pins::kConfig, def.config_button);
+    TEST_ASSERT_EQUAL(thermo::pins::kRun, def.run_button);
+    // The plain button has no dedicated pin on the reference board.
+    TEST_ASSERT_EQUAL(0, def.button);
+    TEST_ASSERT_EQUAL_STRING("Green", def.green_name);
+    TEST_ASSERT_EQUAL_STRING("Red", def.red_name);
+}
 
 // --- The concept accepts a complete board ----------------------------------
 

@@ -8,6 +8,8 @@ cmake_minimum_required(VERSION 3.22)
 # `sdkconfig.defaults`, and build directory inside its own folder:
 #
 #   mcgowan/         ESP32-S3 firmware (hal_board)   -> mcgowan/build_esp32s3/mcgowan.bin
+#   test-hal-common/ host tests for components/hal_common, `linux`
+#                                                -> test-hal-common/build_linux/
 #   test/            host unit tests, `linux` target (hal_stub) -> test/build_linux/
 #   espidf-cpp-test/ host tests for components/espidf_cpp, `linux`
 #                                                -> espidf-cpp-test/build_linux/
@@ -27,8 +29,9 @@ cmake_minimum_required(VERSION 3.22)
 #                                   && cmake --build build_root
 #
 # Every target in this file is prefixed with its subproject name (e.g.
-# mcgowan_build, test_build, espidf-cpp-test_build; a HAL component's would be
-# hal_board_test) so it cannot collide with another target in this project,
+# mcgowan_build, test-hal-common_build, test_build, espidf-cpp-test_build; a
+# HAL component's would be hal_board_test) so it cannot collide with another
+# target in this project,
 # with names CMake / ESP-IDF define for themselves (test, build_test, ...), or
 # with a subproject directory name.
 
@@ -58,12 +61,13 @@ set(IDF_RUNNER "${CMAKE_CURRENT_SOURCE_DIR}/scripts/idf.sh")
 project(esp32_sensors_subprojects NONE)
 
 # Which subprojects to build. Default: all of them.
-set(SUBPROJECTS "mcgowan;test;espidf-cpp-test;donny" CACHE STRING
-    "Subprojects to build: mcgowan, test, espidf-cpp-test, donny")
+set(SUBPROJECTS "mcgowan;test-hal-common;test;espidf-cpp-test;donny"
+    CACHE STRING
+    "Subprojects to build: mcgowan, test-hal-common, test, espidf-cpp-test, donny")
 set_property(CACHE SUBPROJECTS PROPERTY STRINGS
-    mcgowan test espidf-cpp-test donny)
+    mcgowan test-hal-common test espidf-cpp-test donny)
 
-set(KNOWN_SUBPROJECTS mcgowan test espidf-cpp-test donny)
+set(KNOWN_SUBPROJECTS mcgowan test-hal-common test espidf-cpp-test donny)
 foreach(sub IN LISTS SUBPROJECTS)
     if(NOT sub IN_LIST KNOWN_SUBPROJECTS)
         message(FATAL_ERROR
@@ -112,6 +116,14 @@ endfunction()
 # --- mcgowan: ESP32-S3 firmware (mcgowan.bin) -> target mcgowan_build ------
 if(mcgowan IN_LIST SUBPROJECTS)
     _idf_subproject(mcgowan build_esp32s3 "build")
+endif()
+
+# --- test-hal-common: hal_common vocabulary tests (linux) -> *_build ------
+# Same `linux` target rules as `test/`; built (not run) here, since running is
+# `scripts/dev.py test-hal-common`'s job (`test` runs every host suite).
+if(test-hal-common IN_LIST SUBPROJECTS)
+    _idf_subproject(test-hal-common build_linux
+        "--preview|set-target|linux" "build")
 endif()
 
 # --- test: host unit tests (linux target) -> target test_build ------------

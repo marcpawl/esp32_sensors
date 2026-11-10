@@ -1,0 +1,5 @@
+# Host (linux) target for the unit tests.
+CONFIG_IDF_TARGET="linux"
+
+# Keep logging quiet during test runs; Unity prints the results we care about.
+CONFIG_LOG_DEFAULT_LEVEL_WARN=y
