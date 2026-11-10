@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 #
-# pre-commit hook. Four gates, all delegated to scripts/dev.py (the single
+# pre-commit hook. Five gates, all delegated to scripts/dev.py (the single
 # source of truth for container/lint/test tasks):
 #
 #   1. `pycodestyle` — reject the commit if any Python source is not PEP 8
 #      clean (pycodestyle's defaults: 79 columns). Runs first because it is the
 #      cheapest gate by far, so a long line or a stray blank line is reported
 #      before clang-tidy, clang-format, or the test suite start.
-#   2. `clang-tidy` — reject the commit if static analysis reports a finding
+#   2. `build` — reject the commit if there are build errors.
+#   3. `clang-tidy` — reject the commit if static analysis reports a finding
 #      (clang-diagnostic-*, clang-analyzer-*) in our own sources. Runs before
 #      the slower gates so an analyzer finding is reported early.
-#   3. `format-check-staged` — reject the commit if any staged C/C++ source is
+#   4. `format-check-staged` — reject the commit if any staged C/C++ source is
 #      not clang-format clean (style governed by the committed .clang-format).
 #      That command runs clang-format on the *staged* content of each changed
 #      file, so it never complains about unrelated working-tree edits.
-#   4. `test` — reject the commit unless the full test suite passes
+#   5. `test` — reject the commit unless the full test suite passes
 #      (`./scripts/dev.py test`). A red test run is a broken build; never
 #      commit.
 #
@@ -68,7 +69,18 @@ def main() -> int:
         )
         return rc
 
-    # 2. Static analysis (clang-tidy): runs before the format and test gates
+    # 2. Source code builds
+    rc = run_check(dev, "build")
+    if rc != 0:
+        print(
+            "pre-commit: `./scripts/dev.py build` failed"
+            "commit rejected.\n"
+            "            (bypass with `git commit --no-verify` if you must)",
+            file=sys.stderr,
+        )
+        return rc
+
+    # 3. Static analysis (clang-tidy): runs before the format and test gates
     #    so an analyzer finding is reported before them.
     rc = run_check(dev, "clang-tidy")
     if rc != 0:
@@ -80,12 +92,12 @@ def main() -> int:
         )
         return rc
 
-    # 3. Staged clang-format check (fast; runs before the test suite).
+    # 4. Staged clang-format check (fast; runs before the test suite).
     rc = run_check(dev, "format-check-staged")
     if rc != 0:
         return rc
 
-    # 4. Full test suite: `./scripts/dev.py test` must pass before committing.
+    # 5. Full test suite: `./scripts/dev.py test` must pass before committing.
     rc = run_check(dev, "test")
     if rc != 0:
         print(
