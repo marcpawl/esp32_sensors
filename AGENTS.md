@@ -149,7 +149,7 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 - `CMakeLists.txt` (root) — the generator-agnostic aggregator: one prefixed target per subproject invoking `idf.py -C <sub> -B <sub>/<build-dir>`. `-DSUBPROJECTS="mcgowan;test-hal-stub;test-hal-common;test-logic;test-espidf-cpp;donny"` (default: all) selects what is built.
 - `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash environment. Extend these (not ad-hoc `docker run`) when adding tooling. The compose `dev` service is also the target of the Dev Container (see below).
 - `.devcontainer/devcontainer.json` — the CLion / VS Code **Dev Container** definition. It **reuses the compose `dev` service** (it does not define its own image), so CLion pulls/starts the same container the CLI uses. Edit `docker-compose.yml` for image/mount/user changes; edit `devcontainer.json` only for IDE-level wiring.
-- `scripts/dev.py` — the single container task runner (`pull`, `image`, `submodules`, `build`, `flash`, `monitor`, `menuconfig`, `test`, `test-hal-common`, `test-hal-stub`, `test-logic`, `test-espidf-cpp`, `self-check`, `format`, `format-check`, `format-check-staged`, `pycodestyle`, `clang-tidy`, `install-hooks`, `shell`, `cn`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. `submodules` fetches the pinned git submodules (`third_party/sml`); `build`, `test`, and `clang-tidy` call the same helper first, so a bare clone builds without a manual step. `shell` is the preferred way to run a container command from the host: with no arguments it opens an interactive login shell, and with arguments it runs them in the container (e.g. `./scripts/dev.py shell ls -1d /`). `cn` runs the Continue CLI in the container: it passes `--config <container HOME>/.continue/config.yaml` explicitly (cn's own default lookup is not reliable), and forwards its arguments to `cn` verbatim (`./scripts/dev.py cn -p "prompt"`). The pre-commit hook (`.githooks/pre-commit`) runs `scripts/dev.py pycodestyle`, then `clang-tidy`, then `format-check-staged`, then `test`. `pull`, `image`, and `self-check` are host-only — the tasks whose *decisions* only exist on the host — so each refuses to run in the container with an explanatory message. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
+- `scripts/dev.py` — the single container task runner (`pull`, `image`, `submodules`, `build`, `flash`, `monitor`, `menuconfig`, `test`, `test-hal-common`, `test-hal-stub`, `test-logic`, `test-espidf-cpp`, `self-check`, `format`, `format-check`, `format-check-staged`, `pycodestyle`, `clang-tidy`, `install-hooks`, `shell`, `cn`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. `submodules` fetches the pinned git submodules (`third_party/sml`); `build`, `test`, and `clang-tidy` call the same helper first, so a bare clone builds without a manual step. `shell` is the preferred way to run a container command from the host: with no arguments it opens an interactive login shell, and with arguments it runs them in the container (e.g. `./scripts/dev.py shell ls -1d /`). `cn` runs the Continue CLI in the container: it passes `--config <container HOME>/.continue/config.yaml` explicitly (cn's own default lookup is not reliable), and forwards its arguments to `cn` verbatim (`./scripts/dev.py cn -p "prompt"`). The pre-commit hook (`.githooks/pre-commit`) runs the quality gates; see the `quality_checks` skill. `pull`, `image`, and `self-check` are host-only — the tasks whose *decisions* only exist on the host — so each refuses to run in the container with an explanatory message. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
 - `scripts/idf.sh` — runs a command (normally `idf.py`) with the ESP-IDF environment established, sourcing `$IDF_PATH/export.sh` when `IDF_PYTHON_ENV_PATH`/`ESP_IDF_VERSION` are absent. The image's entrypoint sources `export.sh` for the container's own command only; anything started later — notably the CMake/Ninja build CLion spawns — inherits a bare environment, where `idf.py` dies with `TypeError: expected string or bytes-like object, got 'NoneType'` (`Version.coerce(os.getenv('ESP_IDF_VERSION'))`). So the root aggregator's targets invoke `idf.py` through this wrapper (`set(IDF_RUNNER ...)` in `CMakeLists.txt`), which makes `cmake --build build_root` correct however it was started. `BASH_ENV` cannot substitute: bash sources it only for non-interactive shells and the image's `~/.bashrc` returns early for those. The wrapper is idempotent — it execs the command directly when the variables are already present — and exits non-zero when `IDF_PATH` is not an ESP-IDF checkout.
 - `scripts/test_dev.py` — host-side unit tests for `dev.py` itself (stdlib `unittest`, run by `scripts/dev.py self-check`). Imports `dev.py` in-process and covers its pure helpers — chiefly the command line `shell` builds (so shell syntax like pipes/semicolons is passed through verbatim) and `shell -C` path resolution. `SourceFileDiscoveryTests` pins that `format`/`format-check` see untracked sources: `_source_file_command` enumerates `--cached --others --exclude-standard` scoped to `ROOTS`, `_select_sources` keeps only the C/C++ extensions and drops paths that are not on disk, and end-to-end checks against a scratch repository prove an untracked source is listed while a `.gitignore`d build file is not (the bug where `format` skipped files that had not been `git add`ed). `StagedFormatCheckTests` pins `format-check-staged`'s style handling against throwaway git repositories: the ancestor search that finds nested `.clang-format` / `.clang-format-ignore` files, that the *staged* blob (not the working copy) is materialized, that a style file staged for deletion is skipped while an untracked one is honored — plus two end-to-end checks that a nested `DisableFormat: true` exempts unformatted code while the root style still rejects it (they skip on the host, where `clang-format` is not installed). It also pins the `scripts/idf.sh` contract (`IdfRunnerTests`): the wrapper exists, is executable, is tracked by git, establishes the environment, passes the command through unmodified, and is used by the root aggregator's per-subproject helper. `ClionRunConfigurationTests` pins the four CMake run configurations to the CMake project they are actually bound to: `PROJECT_NAME` must be the root `project()` name, `CONFIG_NAME` must name a profile declared in `.idea/cmake.xml`, and `TARGET_NAME` must be one of the root aggregator's `*_build` targets (a subproject's `<name>.elf` is not resolvable from the root and fails with "cannot find target"). `HostTestCommandTests` pins the four host suites: the `test-hal-common`, `test-hal-stub`, `test-logic`, and `test-espidf-cpp` commands each build and run only their own project, and the aggregate `test` runs every `HOST_TEST_PROJECTS` entry in table order with `test-hal-common` first and `test-hal-stub` next, stopping at the first failing suite. The `Tidy*` classes cover `clang-tidy`: `TidyCompileArgumentsTests` pins which GCC flags are stripped and that the source file and the `-D`/`-I` flags survive; `TidyUnitSelectionTests` pins the one-entry-per-source reduction (non-C++ and out-of-tree entries skipped, first occurrence wins); `TidyConfigurationTests` pins the project list, the build directories it reads, and the header filter; and `TidyGateTests` pins the hook and CI ordering (tidy before format-check, tidy after build). `SubmoduleTests` pins the `third_party/sml` git submodule: `.gitmodules` records the upstream URL, the **index** records a `160000` gitlink at the v1.2.0 commit (the index, not `HEAD`, because the submodule is only staged until it is committed), every entry in `dev.SUBMODULES` has a marker file inside it, `_submodule_update_command` builds the `git submodule update --init --recursive -- <path>` argv, the fetch helper is called by `build` / `build-test-espidf-cpp` / `test` / `clang-tidy`, `submodules` runs through the container, and CI fetches submodules **before** it builds. It also pins that `third_party/` is outside `dev.ROOTS` and that `_is_vendored` excludes the submodule from `clang-tidy` while leaving `components/sml` and `components/logic` in scope. `ContinueCliCommandTests` pins `dev.py cn`: `_cn_command` puts `--config` first with the path under the container `$HOME` that `_container_home` picks (so it matches a compose `~/.continue` mount target for both the image user and the pinned `/tmp` home), arguments after `cn` are forwarded verbatim, `main` bypasses argparse for them, and the compose `environment:` passes `DEEPSEEK_API_KEY` through from the host with no value (never hardcoded). `PythonSourceDiscoveryTests` pins the `pycodestyle` file list: `_is_vendored_path` matches only a top-level `third_party`, `_select_python_sources` keeps `*.py` **and** extensionless Python shebang scripts (so `.githooks/pre-commit` is checked), rejects a non-Python shebang, a `python` mention that is not a shebang, deleted paths and non-UTF-8 first lines, and that the real repository enumerates exactly the two dev.py scripts and the extensionless hook, with nothing vendored. `PycodestyleGateTests` pins the wiring: `_pycodestyle_command` uses `python3 -m pycodestyle` with no options of its own (so a bare `pycodestyle` agrees), the command hops into the container, and it is the **first** gate in the hook and runs before `build` in CI. `SelfCheckModuleTests` pins the `self-check` command itself and, in particular, that it is **host-only**: inside the container none of the decisions the suite pins ever happen (a command never re-execs itself), so the run would pass vacuously — `cmd_self_check()` therefore returns 1 with a message naming `./scripts/dev.py self-check` for the host and `./scripts/dev.py test` for the container's own suites, never runs the suite there, never calls `change_to_container()`, and on the host runs exactly `python3 -m unittest -v scripts/test_dev.py`.
 - `scripts/dev.py-completion.bash` — bash tab-completion for `scripts/dev.py`. Source it to complete subcommands (e.g. `./scripts/dev.py form<TAB>` → `format`, `format-check`, `format-check-staged`, or `./scripts/dev.py clang-<TAB>` → `clang-tidy`). It asks `dev.py complete <prefix>` for candidates, so the command list is defined in exactly one place.
@@ -901,164 +901,19 @@ There are two kinds of test suite, runnable from the host via `scripts/dev.py`:
   its `SRCS`); when it is firmware-only, add it to both
   `mcgowan/main/CMakeLists.txt` and `test-logic/main/CMakeLists.txt`.
 
-```bash
-# Run the host unit test suites (`test-hal-common/`, `test-hal-stub/`,
-# `test-logic/`, and `test-espidf-cpp/`), hal_common first.
-./scripts/dev.py test
+Run the suites with `./scripts/dev.py test` (all four, stopping at the first
+failure), or run one with `test-hal-common`, `test-hal-stub`, `test-logic`, or
+`test-espidf-cpp`. See the `quality_checks` skill for the gates and the fixing
+policy.
 
-# Run just one suite.
-./scripts/dev.py test-hal-stub     # hal_stub devices (linux)
-./scripts/dev.py test-hal-common   # hal_common vocabulary (linux)
-./scripts/dev.py test-logic        # test-logic/ Unity tests (linux, build_linux/)
-./scripts/dev.py test-espidf-cpp   # test-espidf-cpp/ Unity tests (linux)
+### Quality checks
 
-# Run the host-side unit tests for dev.py itself (no container/hardware).
-./scripts/dev.py self-check
-```
-
-Every command exits non-zero if its suite fails, so all of them are CI-friendly.
-Each host test binary prints Unity `PASS`/`FAIL` lines.
-
-**`self-check`** runs `scripts/test_dev.py` — host-side `unittest` tests for
-`dev.py`'s own pure helpers (notably the `shell` command line it builds, so
-shell syntax like pipes and semicolons is passed through verbatim, and the
-`shell -C DIR` path resolution). It needs no hardware or third-party
-dependency, and it is **host-only**: it pins the decisions the *host* side
-makes — above all whether a command re-execs itself under `docker compose` —
-and inside the container none of those decisions happen, so the suite would
-pass vacuously without testing anything. The command therefore refuses to run
-in the container with an explanatory error (pointing at `./scripts/dev.py
-test` for the container's own suites), the same way `pull` and `image` are
-host-only. `SelfCheckModuleTests` pins both halves of that contract.
-
-### Lint and format
-
-Formatting is governed by the committed **`.clang-format`** (Google base, 4-space
-indent, 80 columns). The existing sources already conform, so a format run is a
-no-op on clean code — keep it that way and format before committing.
-
-**Always run clang-format via the container task runner**, which formats all
-`.hpp` and `.cpp` source files under `mcgowan/`, `components/`,
-`test-hal-stub/`, `test-hal-common/`, `test-logic/`, `test-espidf-cpp/`, and
-`donny/`:
-
-```bash
-# Apply clang-format to every .hpp and .cpp source file.
-scripts/dev.py format
-
-# Check only (non-zero exit if anything is unformatted) — CI-friendly.
-scripts/dev.py format-check
-```
-
-**`format` covers untracked files.** It enumerates the sources under `ROOTS`
-with `git ls-files --cached --others --exclude-standard`, so a brand-new source
-that has not been `git add`ed is formatted too. (Enumerating only the index
-meant `format` silently skipped new files, and the pre-commit hook's
-`format-check-staged` — which reads the staged content by definition — then
-rejected the commit with a wall of violations.) `--exclude-standard` keeps
-`.gitignore`d build output out of the walk, and the pathspec is scoped to
-`ROOTS` so `third_party/` is never touched. `format-check` uses the same list,
-so it reports an unformatted untracked file as well.
-
-The Espressif toolchain ships a compatible `clang-format` (20.x) inside the
-container. Note `.clang-format` sets `Standard: c++20` — clang-format has no
-C++26 token set, and the codebase uses no C++23+ *syntax* that would confuse it.
-
-A **nested** `.clang-format` / `.clang-format-ignore` is honored: clang-format
-finds style by searching *upward* from each source file and stops at the first
-one it finds. `format-check-staged` reproduces that search in its temp tree by
-copying every style file on the ancestors of the staged files, so a staged
-check applies exactly the style `format` would (and does not reject files a
-nested `DisableFormat: true` exempts). Vendored code that must stay
-byte-identical belongs in `third_party/` (outside the `ROOTS` `dev.py`
-formats), not under a component with a nested style file — that is why the
-`third_party/sml` submodule, whose `components/sml` wrapper *is* in scope, is
-never formatted.
-
-- **Static checks:** `scripts/dev.py clang-tidy` (see below); ensure C++26 compatibility with the ESP-IDF toolchain.
-
-### Python style (pycodestyle)
-
-`scripts/dev.py pycodestyle` runs `python3 -m pycodestyle` over every Python
-source in the repository and exits non-zero on any finding. It is the **first**
-gate in the pre-commit hook and the first check in CI, because it needs no
-compile database, no build, and no test run — a long line is reported in
-seconds instead of after the toolchain.
-
-```bash
-./scripts/dev.py pycodestyle
-```
-
-**pycodestyle's defaults are enforced** (PEP 8, 79 columns). No
-`--max-line-length` or other option is passed, so the gate and a bare
-`pycodestyle` run agree; the repository conforms to the tool rather than the
-other way round. Add an option only by changing `PYCODESTYLE_ARGS` in
-`scripts/dev.py`, which is the single place the argv is built.
-
-**Which files.** Enumeration reuses `_source_file_command` with the repository
-root as the only pathspec, so the same `--cached --others --exclude-standard`
-semantics as `format` apply: a file that has not been `git add`ed is checked,
-and `.gitignore`d build output is not. Selection keeps a path when it ends in
-`.py` **or** its first line is a Python shebang (`#!/usr/bin/env python3`,
-`#!/usr/bin/python3.12`, …). The shebang half is what catches
-`.githooks/pre-commit` — the gate that runs before every commit, and Python
-with no extension. `third_party/` is dropped (`_is_vendored_path`, a top-level
-match only), so the `third_party/json` and `third_party/sml` trees stay
-byte-identical to upstream.
-
-The tool is installed in the dev image (`PYCODESTYLE_VERSION`, pinned and
-verified at build time), so `pycodestyle` runs inside the container like every
-other task.
-
-### Static analysis (clang-tidy)
-
-`scripts/dev.py clang-tidy [PROJECT...]` runs clang-tidy over the C++ sources of
-every subproject (or just the named ones) and exits non-zero on any finding. It
-is a gate in both the pre-commit hook and CI, and it uses clang-tidy's
-**default** check set (`clang-diagnostic-*`, `clang-analyzer-*`) — the
-repository commits **no** `.clang-tidy`, so there is nothing to keep in sync:
-
-```bash
-./scripts/dev.py build         # first: produces the compile databases
-./scripts/dev.py clang-tidy    # all subprojects
-./scripts/dev.py clang-tidy donny   # just one
-```
-
-**It reads the ESP-IDF compile databases; it never builds them itself.** A
-project with no `compile_commands.json` is reported and the run fails (rather
-than silently analyzing nothing), so run `build` first — in the pre-commit hook
-that means at least once after a clone or pull.
-
-Three things make the ESP-IDF databases usable by the Espressif clang:
-
-1. **GCC-only flags are stripped.** ESP-IDF compiles with Xtensa GCC, whose
-   command lines carry `-mlongcalls`, `-mno-target-align`,
-   `-fstrict-volatile-bitfields`, `-fno-tree-switch-conversion`,
-   `-fno-jump-tables`, `-freorder-blocks`, `-specs=…`, and `-f…-prefix-map=`;
-   clang rejects them or warns "argument unused", which
-   `--warnings-as-errors=*` would promote to a failure.
-2. **The target triple is restored.** The database says *how* to compile but not
-   *for what* — the triple normally comes from the driver's name, and
-   clang-tidy substitutes its own. It is recovered with
-   `<recorded compiler> -dumpmachine` (`xtensa-esp-elf` for the firmware,
-   `x86_64-linux-gnu` for the `linux` projects).
-3. **The compiler's system headers are passed in.** clang's resource directory
-   has no libstdc++/newlib for the Xtensa target, so GCC's search list is read
-   from `-E -v` and supplied as `-isystem` flags together with `-nostdinc`.
-
-Diagnostics are filtered to this repository's own headers
-(`--header-filter`), so findings in ESP-IDF or libstdc++ — which we cannot fix —
-never fail the gate, and shared sources compiled by several subprojects are
-analyzed once. Vendored code is excluded outright: `_unique_tidy_units()` drops
-every entry under `third_party/`, so the `third_party/sml` submodule is never
-analyzed (its `components/sml` wrapper is, since that file is ours).
-
-Findings are fixed, not suppressed, with one deliberate exception: a NOLINT is
-acceptable only when the analyzer is right but the code must stay as it is, and
-then it carries a comment explaining why. The two current instances are
-`clang-analyzer-optin.core.EnumCastOutOfRange` on `HTTP_ANY` (an `INT_MAX`
-wildcard ESP-IDF accepts by design, not an enumerator) and on
-`pins::kDividerGate` (a **parked defect** — see below).
+Run every quality gate through `scripts/dev.py` and fix what it reports. The
+gates — clang-format, pycodestyle, clang-tidy, the build, the four host test
+suites, and the `dev.py` self-check — their order, and the fixing policy are
+documented in the `quality_checks` skill
+(`.continue/skills/quality_checks/SKILL.md`). `.githooks/pre-commit` enforces
+them before every commit.
 
 > **Parked defect:** `pins::kDividerGate` is 25, but the ESP32-S3 has no GPIO
 > 22–25 at all (`soc/gpio_num.h` jumps `GPIO_NUM_21` straight to
@@ -1067,11 +922,6 @@ wildcard ESP-IDF accepts by design, not an enumerator) and on
 > (optional)", which is classic-ESP32 numbering, so the spec and this SoC
 > disagree. The pin map is deliberately left alone until that is settled; the
 > analyzer finding is suppressed there with a comment pointing at this note.
-
-**The ESP-IDF tree under `$IDF_PATH` is read-only.** Never edit an ESP-IDF
-header (or anything else under `/opt/esp/idf`) to make a check pass — fixes
-belong in this repository, and a local edit would be lost on the next image
-pull and would not reproduce in CI.
 
 ### Conventions to follow
 
