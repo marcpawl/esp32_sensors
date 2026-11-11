@@ -17,10 +17,12 @@ temporary file first, then commit with `-F`:
 $EDITOR "$(mktemp)"
 # ...or write it with the Write tool to a path under /tmp.
 
-# 2. Commit, reading the message from that file.
+# 2. Show it to the user and wait for their approval.
+
+# 3. Commit, reading the message from that file.
 git commit -F /tmp/commit_msg.txt
 
-# 3. Remove the file.
+# 4. Remove the file.
 rm /tmp/commit_msg.txt
 ```
 
@@ -35,7 +37,22 @@ rm /tmp/commit_msg.txt
   well as the diff.
 - **The work is about to be committed.** Same file, same `-F` flag.
 
-Both moments use one file. Write it once, review it, then commit from it.
+Both moments use one file. Write it once, let the user review it, then commit
+from it.
+
+## Let the user verify the message
+
+A written file is not a committed message. Once the file exists, show it to
+the user — `cat` it, or copy it into the response — and wait for their
+approval before running `git commit`. Commit only after they approve, and
+commit that exact file.
+
+Do this even when the commit looks routine. The point is that the user may
+want to edit the message before it is committed: the diff shows what changed,
+but the message explains why, and the user is the one who knows whether that
+reasoning reads right. Changing it afterwards costs a rebase. If they ask for
+a rewording, edit the same file and show it again; never commit a version
+they have not seen.
 
 ## Why a file, not `-m`
 
@@ -124,6 +141,9 @@ Generated with [Continue](https://continue.dev)
 
 Co-Authored-By: Continue <noreply@continue.dev>
 EOF
+
+# Show the message and wait for the user's OK before committing.
+cat /tmp/commit_msg.txt
 
 git add -A
 git commit -F /tmp/commit_msg.txt
