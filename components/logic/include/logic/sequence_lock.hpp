@@ -8,11 +8,11 @@
 //
 // `read()` returns a `VersionedModel`: the model plus the sequence number that
 // produced it. A writer modifies `versioned_model.model` and passes it back to
-// `write()`. The write succeeds only when `versioned_model.version` is still
-// the current sequence; a writer working from an older snapshot therefore gets
-// `false` instead of overwriting a newer model with stale data. After a
-// successful write the sequence has advanced, so the caller must `read()` again
-// before its next write.
+// `write()`. The write reports `WriteResult::kStored` only when
+// `versioned_model.version` is still the current sequence; a writer working
+// from an older snapshot gets `WriteResult::kRejected` instead of overwriting a
+// newer model with stale data. After a successful write the sequence has
+// advanced, so the caller must `read()` again before its next write.
 //
 // Writers are serialized with a mutex, so two writers never interleave their
 // sequence updates. Reads never take that mutex.
@@ -40,6 +40,12 @@ class SequenceLock {
                   "SequenceLock<Model> requires a default-constructible Model");
 
   public:
+    // The outcome of a write: only a current version is stored.
+    enum class WriteResult {
+        kStored,    // The version was current; the model was stored.
+        kRejected,  // Another writer published first; nothing was stored.
+    };
+
     // A consistent model snapshot together with the sequence number it was
     // read at. Pass it back to `write()` after modifying `model`.
     struct VersionedModel {
@@ -72,14 +78,15 @@ class SequenceLock {
 
     // Store `versioned_model.model` if `versioned_model.version` is still
     // current. A stale model (another writer got there first) is rejected
-    // without changing the cell.
-    bool write(VersionedModel const& versioned_model) noexcept {
+    // without changing the cell and reported as `kRejected`.
+    [[nodiscard]] WriteResult write(
+        VersionedModel const& versioned_model) noexcept {
         std::lock_guard<std::mutex> writer(writer_mutex_);
 
         const std::uint32_t current =
             cell_.version.load(std::memory_order_relaxed);
         if (versioned_model.version != current) {
-            return false;
+            return WriteResult::kRejected;
         }
 
         // Mark the cell as being written before replacing the model.
@@ -89,7 +96,7 @@ class SequenceLock {
         // Publish the completed model by returning the version to even. The
         // next successful write must use this new version.
         cell_.version.store(current + 2, std::memory_order_release);
-        return true;
+        return WriteResult::kStored;
     }
 
   private:
