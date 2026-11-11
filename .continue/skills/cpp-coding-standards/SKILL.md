@@ -599,21 +599,26 @@ enum { RED, GREEN, BLUE };           // Enum.3 + Enum.5 + Enum.6 violation
 
 | Rule | Summary |
 |------|---------|
-| **SF.1** | Use `.cpp` for code files and `.h` for interface files |
+| **SF.1** | Use `.cpp` for code files and `.hpp` for interface files (overridden — see below) |
 | **SF.7** | Don't write `using namespace` at global scope in a header |
-| **SF.8** | Use `#include` guards for all `.h` files |
 | **SF.11** | Header files should be self-contained |
 | **NL.5** | Avoid encoding type information in names (no Hungarian notation) |
 | **NL.8** | Use a consistent naming style |
 | **NL.9** | Use ALL_CAPS for macro names only |
 | **NL.10** | Prefer `underscore_style` names |
 
+> **SF.1 is deliberately overridden.** Upstream SF.1 asks for `.h` interface
+> files; this repository uses `.hpp` for every C++ header so a header is
+> never mistaken for a C header. Wherever the upstream rules say `.h`, read
+> `.hpp`.
+
 ### Header Guard
 
+This repository does not use `#ifndef` include guards, so upstream SF.8 is
+dropped: a header starts with `#pragma once` instead.
+
 ```cpp
-// SF.8: Include guard (or #pragma once)
-#ifndef PROJECT_MODULE_WIDGET_H
-#define PROJECT_MODULE_WIDGET_H
+#pragma once
 
 // SF.11: Self-contained -- include everything this header needs
 #include <string>
@@ -631,8 +636,6 @@ private:
 };
 
 }  // namespace project::module
-
-#endif  // PROJECT_MODULE_WIDGET_H
 ```
 
 ### Naming Conventions
@@ -717,7 +720,7 @@ Before marking C++ work complete:
 - [ ] Base class destructors are public virtual or protected non-virtual (C.35)
 - [ ] Templates are constrained with concepts (T.10)
 - [ ] No `using namespace` in headers at global scope (SF.7)
-- [ ] Headers have include guards and are self-contained (SF.8, SF.11)
+- [ ] Headers start with `#pragma once` and are self-contained (SF.11)
 - [ ] Locks use RAII (`scoped_lock`/`lock_guard`) (CP.20)
 - [ ] Exceptions are custom types, thrown by value, caught by reference (E.14, E.15)
 - [ ] `'\n'` instead of `std::endl` (SL.io.50)
