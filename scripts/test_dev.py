@@ -145,7 +145,7 @@ class SubprojectBuildTests(unittest.TestCase):
                 "mcgowan",
                 "test-hal-stub",
                 "test-hal-common",
-                "test",
+                "test-logic",
                 "test-espidf-cpp",
                 "donny",
             ),
@@ -188,8 +188,8 @@ class SubprojectBuildTests(unittest.TestCase):
 
     def test_named_subprojects_are_kept_in_argument_order(self):
         self.assertEqual(
-            dev._parse_subprojects(["test", "mcgowan"]),
-            ["test", "mcgowan"],
+            dev._parse_subprojects(["test-logic", "mcgowan"]),
+            ["test-logic", "mcgowan"],
         )
 
     def test_unknown_subproject_is_rejected(self):
@@ -208,7 +208,7 @@ class SubprojectBuildTests(unittest.TestCase):
                     "-S", ".",
                     "-B", dev.ROOT_BUILD_DIR,
                     "-DSUBPROJECTS=mcgowan;test-hal-stub;test-hal-common;"
-                    "test;test-espidf-cpp;donny",
+                    "test-logic;test-espidf-cpp;donny",
                 ],
                 ["cmake", "--build", dev.ROOT_BUILD_DIR],
             ],
@@ -1249,7 +1249,7 @@ class HostTestCommandTests(unittest.TestCase):
         for name, handler in (
             ("test-hal-stub", dev.cmd_test_hal_stub),
             ("test-hal-common", dev.cmd_test_hal_common),
-            ("test-linux", dev.cmd_test_linux),
+            ("test-logic", dev.cmd_test_logic),
             ("test-espidf-cpp", dev.cmd_test_espidf_cpp),
         ):
             with self.subTest(command=name):
@@ -1262,7 +1262,7 @@ class HostTestCommandTests(unittest.TestCase):
         for handler in (
             dev.cmd_test_hal_stub,
             dev.cmd_test_hal_common,
-            dev.cmd_test_linux,
+            dev.cmd_test_logic,
             dev.cmd_test_espidf_cpp,
             dev.cmd_test,
         ):
@@ -1313,8 +1313,8 @@ class HostTestCommandTests(unittest.TestCase):
             ],
         )
 
-    def test_test_linux_runs_only_the_test_suite(self):
-        self.assertEqual(dev.cmd_test_linux(), 0)
+    def test_test_logic_runs_only_the_logic_suite(self):
+        self.assertEqual(dev.cmd_test_logic(), 0)
         self.assertEqual(
             self.calls,
             [
@@ -1322,7 +1322,7 @@ class HostTestCommandTests(unittest.TestCase):
                          "--preview", "set-target", "linux"),
                 dev._idf(dev.TEST_PROJECT, dev.TEST_BUILD_DIR, "build"),
                 [f"./{dev.TEST_PROJECT}/{dev.TEST_BUILD_DIR}/"
-                 "esp32_sensors_tests.elf"],
+                 "test-logic.elf"],
             ],
         )
 
@@ -1342,7 +1342,7 @@ class HostTestCommandTests(unittest.TestCase):
 
     def test_test_runs_every_suite_in_table_order(self):
         # The regression this pins: `test` used to be an alias of
-        # `test-linux`, so the espidf_cpp suite was never run by the gate.
+        # `test-logic`, so the espidf_cpp suite was never run by the gate.
         self.assertEqual(dev.cmd_test(), 0)
         executed = [
             Path(cmd[-1]).name
@@ -1389,7 +1389,7 @@ class HostTestCommandTests(unittest.TestCase):
             for handler in (
                 dev.cmd_test_hal_stub,
                 dev.cmd_test_hal_common,
-                dev.cmd_test_linux,
+                dev.cmd_test_logic,
                 dev.cmd_test_espidf_cpp,
             )
             for project, _ in dev._host_test_projects(
@@ -1473,7 +1473,7 @@ class BuildProjectTests(unittest.TestCase):
         )
 
     def test_donny_is_built_but_not_run_as_a_host_test(self):
-        # `donny` is an application (app_main spins forever), so `test-linux`
+        # `donny` is an application (app_main spins forever), so `test-logic`
         # must build it but never run it.
         self.assertNotIn(dev.DONNY_PROJECT, dict(dev.HOST_TEST_PROJECTS))
 
@@ -1775,7 +1775,7 @@ class TidyConfigurationTests(unittest.TestCase):
         for path in (
             f"{root}/mcgowan/src/include/battery_monitor.hpp",
             f"{root}/components/logic/include/logic/payload.hpp",
-            f"{root}/test/main/test_main.cpp",
+            f"{root}/test-logic/main/test_main.cpp",
             f"{root}/test-espidf-cpp/main/test_main.cpp",
             f"{root}/donny/main/console_task.hpp",
         ):

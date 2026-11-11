@@ -13,7 +13,7 @@
 # Run with:
 #   docker compose run --rm dev bash -lc 'cd test && idf.py --preview
 #   -B build_linux set-target linux && idf.py -B build_linux build &&
-#   ./build_linux/esp32_sensors_tests.elf'
+#   ./build_linux/test-logic.elf'
 # (or simply `scripts/dev.py test`). The build directory is named after the
 # target (`build_linux`) so it never clashes with the firmware `build_esp32s3`.
 #
@@ -36,7 +36,7 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
 # Reusable components (`hal_*`, `logic`, `espidf_cpp`) live in the repo-root
 # `components/` directory, which is not the default search path for this project
-# (that would be `test/components/`). Point at it so `hal_stub` (and its
+# (that would be `test-logic/components/`). Point at it so `hal_stub` (and its
 # `hal_common` dependency) and the `logic` component are found.
 set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../components")
 
@@ -50,4 +50,4 @@ set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../components")
 set(COMPONENTS main hal_stub logic)
 set(EXCLUDE_COMPONENTS hal_board)
 
-project(esp32_sensors_tests)
+project(test-logic)

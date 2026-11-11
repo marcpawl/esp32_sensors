@@ -20,7 +20,7 @@
 #
 #   * `mcgowan/` — production firmware, driving the GPIO-backed `hal::Board`
 #                  from `hal_board`.
-#   * `test/`    — host unit tests (`linux` target), which instantiate the
+#   * `test-logic/` — host unit tests (`linux` target), which instantiate the
 #                  templated logic against the pin-free stub board.
 #
 # This component must NOT require `hal_board` or `hal_stub`: the logic
