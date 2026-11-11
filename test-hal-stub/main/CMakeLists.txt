@@ -12,6 +12,8 @@
 #   test_hal_timer_stub.cpp       The stub one-shot timer and its factory.
 #   test_freertos_timers.cpp      The FreeRTOS software timers the stub timer
 #                                 is built on (`freertos/timers.h`).
+#   test_freertos_task.cpp        The FreeRTOS task primitive the firmware
+#                                 relies on (`vTaskDelay()`).
 #   test_hal_board.cpp            The aggregate `BoardStub`: device wiring and
 #                                 the board-wide deep sleep.
 #
@@ -28,6 +30,7 @@ set(test_srcs
     "test_hal_wifi.cpp"
     "test_hal_timer_stub.cpp"
     "test_freertos_timers.cpp"
+    "test_freertos_task.cpp"
     "test_hal_board.cpp"
 )
 
