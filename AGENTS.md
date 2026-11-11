@@ -96,7 +96,8 @@ esp32_sensors/
 ├── docker-compose.yml   # `dev` service with serial (/dev) passthrough
 ├── .devcontainer/       # CLion / VS Code Dev Container definition (reuses compose)
 ├── .continue/           # Continue CLI config: `rules/` (slash commands), `skills/`
-│   └── skills/git/      #   SKILL.md — how to write and pass a commit message
+│   └── skills/          #   one SKILL.md per topic: cpp-coding-standards, git,
+│                        #   platform_layers, quality_checks
 ├── scripts/dev.py       # Container task runner (build/flash/test/format/shell)
 ├── scripts/idf.sh       # Runs idf.py with the ESP-IDF env, sourcing export.sh if absent
 ├── scripts/test_dev.py  # Host unit tests for dev.py (`dev.py self-check`)
@@ -888,12 +889,37 @@ them before every commit.
 > disagree. The pin map is deliberately left alone until that is settled; the
 > analyzer finding is suppressed there with a comment pointing at this note.
 
+### C++ coding standards
+
+How the C++ itself is written — naming, RAII and ownership, smart pointers,
+`const`/`constexpr` and immutability, Rule of Zero/Five, `enum class` over
+plain `enum`, templates and concepts, concurrency, standard library use, and
+the `.hpp` header convention — is in the `cpp-coding-standards` skill
+(`.continue/skills/cpp-coding-standards/SKILL.md`), derived from the C++ Core
+Guidelines and ending with a review checklist. Load it when writing,
+reviewing, or refactoring C++.
+
+The skill already records this repository's two deviations from upstream —
+`.hpp` headers instead of `.h`, and `#pragma once` instead of `#ifndef`
+include guards — so follow the skill's wording and never reintroduce the
+upstream form.
+
+The skill's `try`/`catch` guidance does not apply here either. The firmware
+builds with `CONFIG_COMPILER_CXX_EXCEPTIONS=n` and
+`CONFIG_COMPILER_CXX_RTTI=n` (`mcgowan/sdkconfig.defaults`), so there is
+nothing to throw or catch and no `dynamic_cast`; failures take the
+`assert()`/`abort()` path described under "Fail loudly" below.
+
 ### Conventions to follow
 
+The bullets below are this repository's additions to, and overrides of, the
+`cpp-coding-standards` skill; anything the skill already states is not
+repeated here.
+
 - Target **ESP-IDF v6.1** APIs only.
-- Use **C++26** with GNU extensions; do not introduce the C-only style where C++ is appropriate.
+- Use **C++26** with GNU extensions (`-std=gnu++26`, the ESP-IDF v6.1 default
+  for chip targets).
 - Declare `app_main` with `extern "C"` linkage.
-- Use constexpr and noexcept as much as possible
 - Treat RTC-memory structures carefully: they must be **trivially copyable / `POD`-like** with stable layout and `RTC_DATA_ATTR` placement, and must survive both deep sleep and reboots.
 - Conform payload format, LED semantics, and RTC memory layout exactly to `Specification.md`.
 - Keep power draw within the hourly budget defined in the spec (batch uploads, deep sleep between samples).
