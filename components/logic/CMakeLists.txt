@@ -11,7 +11,8 @@
 # `logic/mode_selection.hpp`), the Configure-mode self-signed TLS certificate
 # (`logic/self_signed_cert.hpp`, `src/self_signed_cert.cpp`), the ROM-ID hex
 # conversions (`logic/rom_id.hpp`, `src/rom_id.cpp`), the §9 upload payload
-# (`logic/payload.hpp`, `src/payload.cpp`) and, as it grows, the rest of the
+# (`logic/payload.hpp`, `src/payload.cpp`), the reboot helper
+# (`logic/reboot.hpp`, `src/reboot.cpp`) and, as it grows, the rest of the
 # logic shared by the firmware and the host tests. It
 # depends on `espidf_cpp`, the HAL *vocabulary* (`hal_common`), and `sml` — the
 # thin wrapper component around the `third_party/sml` git submodule, which
@@ -42,6 +43,7 @@ idf_component_register(
         "src/self_signed_cert.cpp"
         "src/rom_id.cpp"
         "src/payload.cpp"
+        "src/reboot.cpp"
     INCLUDE_DIRS
         "include"
     REQUIRES
