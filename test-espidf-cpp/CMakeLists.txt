@@ -1,12 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
-# `test-espidf-cpp` — host unit tests for the `espidf_cpp` component.
-#
-# This is a standalone ESP-IDF project that targets the `linux` target only
-# (never a chip): it builds the Unity test runner for the wrappers in
-# `components/espidf_cpp` and runs natively inside the dev container, so no
-# ESP32 hardware is needed. Keeping the wrappers' tests in their own project
-# means they build (and fail) independently of the firmware's tests.
+# The wrappers' tests live in their own project so they build (and fail)
+# independently of the firmware's tests.
 #
 # Build and run with:
 #   scripts/dev.py test-espidf-cpp     (or `test`, which runs every suite)

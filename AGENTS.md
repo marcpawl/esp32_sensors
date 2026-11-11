@@ -145,7 +145,7 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 
 **Key files:**
 - `Specification.md` — the single source of truth for hardware, modes, RTC memory layout, payload format, and power budget. Any implementation must conform to it.
-- `mcgowan/main/CMakeLists.txt` — the firmware's component definition: lists all sources under `mcgowan/src/` and the IDF component `REQUIRES`. **Add new sources here** or they will not compile. Board-independent logic belongs in `components/logic` instead.
+- `mcgowan/main/CMakeLists.txt` — the firmware's component definition. **Add new sources here** or they will not compile. Board-independent logic belongs in `components/logic` instead.
 - `mcgowan/sdkconfig.defaults` — the committed configuration intent (target, C++ exceptions/RTTI off, partition table, `-Os`). `mcgowan/sdkconfig` is generated from this and is **not** tracked.
 - `CMakeLists.txt` (root) — the generator-agnostic aggregator: one prefixed target per subproject invoking `idf.py -C <sub> -B <sub>/<build-dir>`. `-DSUBPROJECTS="mcgowan;test-hal-stub;test-hal-common;test-logic;test-espidf-cpp;donny"` (default: all) selects what is built.
 - `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash environment. Extend these (not ad-hoc `docker run`) when adding tooling. The compose `dev` service is also the target of the Dev Container (see below).
@@ -909,6 +909,13 @@ builds with `CONFIG_COMPILER_CXX_EXCEPTIONS=n` and
 `CONFIG_COMPILER_CXX_RTTI=n` (`mcgowan/sdkconfig.defaults`), so there is
 nothing to throw or catch and no `dynamic_cast`; failures take the
 `assert()`/`abort()` path described under "Fail loudly" below.
+
+### CMake
+
+How the `CMakeLists.txt` files are written — including the rule that they
+document the build and never the sources — is in the `cmake` skill
+(`.continue/skills/cmake/SKILL.md`). Read it before editing a build file or
+adding a source.
 
 ### Conventions to follow
 
