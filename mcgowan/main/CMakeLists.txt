@@ -1,16 +1,8 @@
-# Application component for the `mcgowan` firmware.
+# ESP-IDF requires the component that defines `app_main` to be named `main`,
+# so the application sources live under `mcgowan/src/` and are compiled here.
 #
-# `idf.py` requires the component that defines `app_main` to be named `main`,
-# so two names are in play:
-#
-#   * `main/`       — this ESP-IDF component directory (fixed by ESP-IDF).
-#   * `mcgowan/src/` — the C++ sources and headers it compiles, so the
-#                      application code is clearly owned by the mcgowan project.
-#
-# The reusable components (`hal_*`, `logic`, `espidf_cpp`) are shared from the
-# repo-root `components/` directory (see ../CMakeLists.txt). **Add new sources
-# here** or they will not compile. Board-independent logic (e.g. the LED task in
-# `logic/led_task.hpp`) lives in the `logic` component, not in `src/`.
+# **Add new sources here** or they will not compile. Board-independent logic
+# lives in the `logic` component instead.
 
 set(mcgowan_src "${CMAKE_CURRENT_LIST_DIR}/../src")
 

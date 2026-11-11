@@ -1,16 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
 
-# `donny` — linux-emulated application.
-#
-# A standalone ESP-IDF project pinned to the `linux` target: it builds and runs
-# natively on the host (inside the dev container), needing no ESP32 hardware.
-# Unlike the host *test* projects it is a plain application (its `app_main`
-# simply spins on `vTaskDelay`), not a test runner.
-#
-# The point of the project is to link the *production* HAL — `hal_board`, not
-# `hal_stub` — so the same driver-facing code paths can be exercised under the
-# linux emulation. It requires `hal_board`, `espidf_cpp`, and `logic`.
-#
 # Build and run with:
 #   scripts/dev.py build
 # or directly in the container:
@@ -36,9 +25,9 @@ endif()
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
-# The reusable components (`hal_stub`, `hal_common`, `logic`, `espidf_cpp`)
-# live in the repo-root `components/` directory, which is not on this project's
-# default search path (that would be `donny/components/`). Point at it.
+# The reusable components live in the repo-root `components/` directory, which
+# is not on this project's default search path (that would be
+# `donny/components/`). Point at it.
 set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../components")
 
 # Vendored third-party components live in the repo-root `third_party/`, not

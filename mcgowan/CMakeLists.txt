@@ -1,15 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-# `mcgowan` — the ESP32 Solar-Powered Thermometer Logger firmware.
-#
-# This is the ESP-IDF project that produces the flashable application image
-# `mcgowan.bin` (the binary name derives from the project name below). It is a
-# standalone project whose `main/` component holds the application sources in
-# `mcgowan/src/`; the reusable HAL components are shared from the repo-root
-# `components/` directory.
-#
-# The repo root is NOT an ESP-IDF project: it only builds the subprojects
-# (`mcgowan/`, `test-logic/`, `test-espidf-cpp/`). Build this one on its own with:
+# Build this project on its own with:
 #   scripts/dev.py build
 # or directly in the container:
 #   scripts/dev.py shell -C mcgowan idf.py -B build_esp32s3 build
@@ -32,8 +23,7 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
 # Reusable HAL components live in the repo-root `components/` directory, which
 # is not on this project's default search path (that would be
-# `mcgowan/components/`). Point at it so `hal_board` (and its `hal_common`
-# dependency) are found.
+# `mcgowan/components/`). Point at it.
 list(APPEND EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../components")
 
 # This project links `hal_board` (GPIO-backed drivers). `hal_stub` exposes the

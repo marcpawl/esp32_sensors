@@ -1,17 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
 
-# `test-hal-stub` — host unit tests for the pin-free `hal_stub` devices.
-#
-# This is a standalone ESP-IDF project that targets the `linux` target only
-# (never a chip): it builds the Unity test runner for the software-driven
-# implementations in `components/hal_stub` (LED, push button, 1-Wire bus, chip
-# temperature, WiFi radio, one-shot timer, and the aggregate `BoardStub`) and
-# runs natively inside the dev container, so no ESP32 hardware is needed.
-#
-# The shared vocabulary those devices implement (`hal_common`) has its own
-# project, `test-hal-common/`; the pure application logic and the firmware
-# sources are covered by `test/`.
-#
 # Build and run with:
 #   scripts/dev.py test-hal-stub       (or `test`, which runs every suite)
 # or directly in the container:

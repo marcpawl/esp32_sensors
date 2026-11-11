@@ -3,12 +3,11 @@
 # The library itself is NOT in this directory. It is a git submodule at
 # `third_party/sml`, pinned to tag **v1.2.0** (commit 2d8485d) and recorded in
 # `.gitmodules`. This directory only teaches the ESP-IDF build about it: the
-# upstream tree is header-only (`include/boost/sml.hpp` plus
-# `include/boost/sml/utility/dispatch_table.hpp`) and ships its own
-# `CMakeLists.txt` full of upstream tests and examples, so it must not be
-# treated as a component itself — the wrapper keeps `idf_component_register`
-# out of the vendored tree, exactly like `third_party/json` keeps its own
-# component file next to the header.
+# upstream tree is header-only and ships its own `CMakeLists.txt` full of
+# upstream tests and examples, so it must not be treated as a component itself
+# — the wrapper keeps `idf_component_register` out of the vendored tree,
+# exactly like `third_party/json` keeps its own component file next to the
+# header.
 #
 # **Why a submodule rather than a copied tree.** The library is used by the
 # shared `logic` component (state machines for the operating modes and the

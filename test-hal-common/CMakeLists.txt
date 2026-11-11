@@ -1,17 +1,8 @@
 cmake_minimum_required(VERSION 3.22)
 
-# `test-hal-common` — host unit tests for the `hal_common` vocabulary.
-#
-# This is a standalone ESP-IDF project that targets the `linux` target only
-# (never a chip): it builds the Unity test runner for the implementation-free
-# contracts in `components/hal_common` and runs natively inside the dev
-# container, so no ESP32 hardware is needed.
-#
 # The concepts name concrete device types through each implementation's public
 # header (`hal/led.hpp`, `hal/wifi.hpp`, ...), so this project links the
-# pin-free `hal_stub` implementation — the only one with a `linux` target. The
-# tests still cover the shared vocabulary and the concept rejections; the stub
-# devices themselves are tested in `test-hal-stub/`.
+# pin-free `hal_stub` implementation — the only one with a `linux` target.
 #
 # Build and run with:
 #   scripts/dev.py test-hal-common     (or `test`, which runs every suite)

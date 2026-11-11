@@ -1,33 +1,11 @@
-# Unit-test component.
+# The ESP-IDF-free production sources are compiled directly from the `mcgowan`
+# subproject (`../../mcgowan/src`) rather than linked, so the tests exercise
+# real firmware code and not copies; modules that need chip-specific drivers
+# are covered by on-target tests instead.
 #
-# Compiles the ESP-IDF-free production sources directly from the `mcgowan`
-# subproject (../../mcgowan/src) so the tests exercise real firmware code rather
-# than copies. Only modules that do
-# not depend on chip-specific IDF drivers are listed here; hardware-facing code
-# (1-Wire GPIO, Wi-Fi, HTTPS) is covered by on-target tests instead.
-#
-# Header-only modules need no `sut_srcs` entry — they are included directly by
-# the test sources. `logic/mode.hpp` / `logic/mode_selection.hpp` are the
-# example: the mode-sense pole mapping is pure and `constexpr`, so
-# `test_mode_selection.cpp` exercises the real headers with no extra source.
-#
-# `hal_stub` is still pulled in via PRIV_REQUIRES below, but only because
-# test_led_runner.cpp instantiates the templated `LedRunner<Board>` against the
-# pin-free `BoardStub`. The stub devices themselves are tested in the separate
-# `test-hal-stub/` project, and the `hal_common` concepts and vocabulary in
-# `test-hal-common/`.
-#
-# The LED task itself lives in the shared `logic` component
-# (`components/logic/include/logic/led_task.hpp`), not in `mcgowan/src/`, so
-# the tests include it as `logic/led_task.hpp` and pull the component in via
-# PRIV_REQUIRES below. The same goes for the RTC state and its buffer
-# operations (`logic/rtc_state.hpp`, `logic/src/rtc_buffer.cpp`), the ROM-ID hex
-# conversions (`logic/rom_id.hpp`), the §9 payload builder
-# (`logic/payload.hpp`), and the reboot helper (`logic/reboot.hpp`): they are
-# compiled by the `logic` component, so `test_rtc_buffer.cpp`,
-# `test_rom_id.cpp`, `test_payload.cpp`, and `test_reboot.cpp` include the
-# `logic/...` headers and list no source in `sut_srcs`. Every .cpp file in
-# `logic` is compiled by that component, not listed here.
+# Header-only modules need no `sut_srcs` entry — the test sources include them
+# directly. The `logic` component compiles its own sources, so its `.cpp` files
+# are never listed here; the tests pull them in via PRIV_REQUIRES.
 #
 # WHOLE_ARCHIVE is required so the TEST_CASE registrations in the test sources
 # are linked into the final executable even though nothing references them.
