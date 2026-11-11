@@ -1,0 +1,131 @@
+---
+name: platform_layers
+description: The repository's platform layers and their dependency rules. Use
+  when adding, moving, or reviewing a component or test project, when choosing
+  which HAL implementation or ESP-IDF dependency to link, or when listing
+  components and tests.
+---
+
+# Platform layers
+
+The code is organized in layers. A layer may use the layers below it; a lower
+layer must never use a higher one. The rule applies to both CMake requirements
+(`REQUIRES` / `PRIV_REQUIRES`) and `#include`s — a header-only dependency is
+still a dependency.
+
+## The layers
+
+| Layer | Components | Test / application projects |
+|---|---|---|
+| 1 (lowest) | `hal_common` | `test-hal-common` |
+| 2 | `hal_board`, `hal_stub` | `test-hal-stub` |
+| 3 | `espidf_cpp` | `test-espidf-cpp` |
+| 4 | `logic` | `test-logic` |
+| 5 (highest) | — | `mcgowan`, `donny` |
+
+`hal_common` is header-only. 
+
+`hal_board` is the GPIO-backed implementation
+(ESP32-S3); 
+
+`hal_stub` is the pin-free implementation (`linux`). 
+
+`espidf_cpp` provides C++ wrappers around esp-idf code, to make
+usage less error prone.
+
+Logic in the main application business logic.
+
+`mcgowan` is the ESP32-S3 firmware
+
+`donny` is the `linux`-emulated application. 
+
+## Dependency direction
+
+- Layer N may require layers `< N`, never `> N`.
+- Never include a higher layer's header, even a header-only one.
+- A higher layer may freely use the lower layers: `logic` uses the `hal_common`
+  vocabulary, and `mcgowan` links `hal_board` and `logic`.
+- third_part may be used by any layer.
+
+## Platform rules
+
+| Target | May link | Must not link |
+|---|---|---|
+| ESP32-S3 (`mcgowan`) | `hal_board` | `hal_stub` |
+| `linux` (`test-hal-common`, `test-hal-stub`, `test-logic`, `test-espidf-cpp`, `donny`) | `hal_stub` | `hal_board` |
+| Platform-neutral components (`hal_common`, `espidf_cpp`, `logic`) | neither | both |
+
+`espidf_cpp` and `logic` build for both the chip and the host, so they must not
+name either HAL implementation. They use the `hal_common` vocabulary instead
+and stay implementation-agnostic with templates and concepts: for example
+`logic/led_task.hpp` is templated on `hal::BoardLike`, and `mcgowan` supplies
+`hal::Board` while the host tests supply `hal::BoardStub`.
+
+`hal_common` is shared by everything and is never excluded.
+
+## Walk order
+
+When writing or editing a list of components or test projects, go from the
+lowest layer to the highest:
+
+- Components: `hal_common`, `hal_board`, `hal_stub`, `espidf_cpp`, `logic`.
+- Test projects: `test-hal-common`, `test-hal-stub`, `test-espidf-cpp`,
+  `test-logic`.
+- Applications: `mcgowan`, `donny`.
+
+`./scripts/dev.py test` currently runs `test-logic` before `test-espidf-cpp`;
+that is the command's existing order, not the layer order to use for a new
+list.
+
+## Current dependency edges
+
+| Component / project | Repository-layer requirements |
+|---|---|
+| `hal_common` | none (ESP-IDF `esp_common` only) |
+| `hal_board` | `hal_common` |
+| `hal_stub` | `hal_common` |
+| `espidf_cpp` | none (ESP-IDF `esp_http_server` only) |
+| `logic` | `espidf_cpp`, `hal_common`, `sml` |
+| `mcgowan` | `hal_board`, `logic`, `espidf_cpp` |
+| `donny` | `hal_stub`, `logic`, `espidf_cpp`, vendored `json` |
+| `test-hal-common` | `hal_common`; privately `hal_stub` |
+| `test-hal-stub` | `hal_stub` |
+| `test-espidf-cpp` | `espidf_cpp`; privately `hal_stub` |
+| `test-logic` | `logic`; privately `espidf_cpp`, `hal_stub` |
+
+Test projects may privately link `hal_stub` even when their component is
+platform-neutral: `test-hal-common` needs the concrete device types because the
+`hal_common` concepts name them, and `test-espidf-cpp` keeps the requirement
+for parity and future HAL-facing tests. This is a test-project allowance, not a
+precedent for a component — `espidf_cpp` and `logic` themselves must never
+require either implementation.
+
+## Where the rule is enforced
+
+- Each subproject's top-level `CMakeLists.txt` points `EXTRA_COMPONENT_DIRS` at
+  the repo-root `components/` (its own project root is not on the default
+  search path) and sets `EXCLUDE_COMPONENTS` before `project()`: `mcgowan`
+  excludes `hal_stub`; every `linux` project excludes `hal_board`.
+  `hal_common` is never excluded.
+- The `linux` projects also narrow `set(COMPONENTS ...)` to `main` plus
+  `hal_stub` (and `logic` in `test-logic`, so the component is built now that
+  it has `.cpp` files), so the host target does not try to build chip-only
+  ESP-IDF components.
+- A component's requirements live in `components/<name>/CMakeLists.txt`; an
+  application's live in `<project>/main/CMakeLists.txt`. Use `REQUIRES` when
+  the dependency appears in public headers, `PRIV_REQUIRES` when only `.cpp`
+  files use it.
+
+## Adding or moving code
+
+1. Place the new code in a layer first, then declare only downward
+   requirements.
+2. If it needs something from a higher layer, move the code up or invert the
+   dependency. A template parameter constrained by a `hal_common` concept is
+   the usual answer — see `logic::LedTask<Board>`.
+3. Never make `espidf_cpp` or `logic` depend on `hal_board` or `hal_stub`; that
+   breaks one of the two builds.
+4. Before moving an existing class to another component, check what it depends
+   on and what depends on it. If a dependency would have to move too, ask the
+   user before starting: dependencies may need to move in their own steps
+   first.

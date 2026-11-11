@@ -70,7 +70,7 @@ Refer to `Specification.md` for the detailed contracts: operating modes, sample 
 esp32_sensors/
 ├── Specification.md     # Authoritative software spec — read this first
 ├── CMakeLists.txt       # Root aggregator (plain CMake) — builds all subprojects
-├── mcgowan/             # Firmware subproject (ESP32-S3, hal_board) -> mcgowan.bin
+├── mcgowan/             # Firmware subproject (ESP32-S3) -> mcgowan.bin
 │   ├── CMakeLists.txt   #   standalone ESP-IDF project (project(mcgowan))
 │   ├── sdkconfig.defaults
 │   ├── main/            #   ESP-IDF `main` component (must be named main)
@@ -80,8 +80,8 @@ esp32_sensors/
 │   ├── espidf_cpp/      # C++ wrappers over ESP-IDF/FreeRTOS (Task, queue, handles, ...)
 │   ├── logic/           # Board-independent application logic (temp_format, rom_id, payload, limits, led_manager, mode*, led_task, self_signed_cert)
 │   ├── hal_common/      # Shared, header-only HAL vocabulary (types/concepts)
-│   ├── hal_board/       # Real, GPIO-backed HAL (linked by mcgowan)
-│   ├── hal_stub/        # Pin-free HAL stub (linked by host tests)
+│   ├── hal_board/       # Real, GPIO-backed HAL
+│   ├── hal_stub/        # Pin-free HAL stub
 │   └── sml/             # Wrapper component exposing the third_party/sml submodule
 ├── third_party/         # Vendored third-party code (never formatted, never tidy'd)
 │   ├── json/            #   nlohmann/json v3.11.3 (header-only, MIT)
@@ -90,13 +90,14 @@ esp32_sensors/
 ├── test-hal-common/     # Host tests for components/hal_common (IDF `linux`, Unity)
 ├── test-logic/          # Host-based unit tests subproject (IDF `linux`, Unity)
 ├── test-espidf-cpp/     # Host tests for components/espidf_cpp (IDF `linux`, Unity)
-├── donny/               # Linux-emulated application (IDF `linux`, hal_stub)
+├── donny/               # Linux-emulated application (IDF `linux`)
 │   └── main/            #   app_main + the JSON console task (test driver)
 ├── Dockerfile           # Dev container: ESP-IDF v6.1 + non-root host-mapped user
 ├── docker-compose.yml   # `dev` service with serial (/dev) passthrough
 ├── .devcontainer/       # CLion / VS Code Dev Container definition (reuses compose)
 ├── .continue/           # Continue CLI config: `rules/` (slash commands), `skills/`
-│   └── skills/git/      #   SKILL.md — how to write and pass a commit message
+│   └── skills/          #   one SKILL.md per topic: cpp-coding-standards, git,
+│                        #   platform_layers, quality_checks
 ├── scripts/dev.py       # Container task runner (build/flash/test/format/shell)
 ├── scripts/idf.sh       # Runs idf.py with the ESP-IDF env, sourcing export.sh if absent
 ├── scripts/test_dev.py  # Host unit tests for dev.py (`dev.py self-check`)
@@ -144,12 +145,12 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 
 **Key files:**
 - `Specification.md` — the single source of truth for hardware, modes, RTC memory layout, payload format, and power budget. Any implementation must conform to it.
-- `mcgowan/main/CMakeLists.txt` — the firmware's component definition: lists all sources under `mcgowan/src/` and the IDF component `REQUIRES` (hal_board, logic, nvs_flash, esp_wifi, esp_https_server, esp_http_client, esp_adc, esp_driver_gpio, mbedtls, …). **Add new sources here** or they will not compile. Board-independent logic belongs in `components/logic` instead.
+- `mcgowan/main/CMakeLists.txt` — the firmware's component definition: lists all sources under `mcgowan/src/` and the IDF component `REQUIRES`. **Add new sources here** or they will not compile. Board-independent logic belongs in `components/logic` instead.
 - `mcgowan/sdkconfig.defaults` — the committed configuration intent (target, C++ exceptions/RTTI off, partition table, `-Os`). `mcgowan/sdkconfig` is generated from this and is **not** tracked.
 - `CMakeLists.txt` (root) — the generator-agnostic aggregator: one prefixed target per subproject invoking `idf.py -C <sub> -B <sub>/<build-dir>`. `-DSUBPROJECTS="mcgowan;test-hal-stub;test-hal-common;test-logic;test-espidf-cpp;donny"` (default: all) selects what is built.
 - `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash environment. Extend these (not ad-hoc `docker run`) when adding tooling. The compose `dev` service is also the target of the Dev Container (see below).
 - `.devcontainer/devcontainer.json` — the CLion / VS Code **Dev Container** definition. It **reuses the compose `dev` service** (it does not define its own image), so CLion pulls/starts the same container the CLI uses. Edit `docker-compose.yml` for image/mount/user changes; edit `devcontainer.json` only for IDE-level wiring.
-- `scripts/dev.py` — the single container task runner (`pull`, `image`, `submodules`, `build`, `flash`, `monitor`, `menuconfig`, `test`, `test-hal-common`, `test-hal-stub`, `test-logic`, `test-espidf-cpp`, `self-check`, `format`, `format-check`, `format-check-staged`, `pycodestyle`, `clang-tidy`, `install-hooks`, `shell`, `cn`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. `submodules` fetches the pinned git submodules (`third_party/sml`); `build`, `test`, and `clang-tidy` call the same helper first, so a bare clone builds without a manual step. `shell` is the preferred way to run a container command from the host: with no arguments it opens an interactive login shell, and with arguments it runs them in the container (e.g. `./scripts/dev.py shell ls -1d /`). `cn` runs the Continue CLI in the container: it passes `--config <container HOME>/.continue/config.yaml` explicitly (cn's own default lookup is not reliable), and forwards its arguments to `cn` verbatim (`./scripts/dev.py cn -p "prompt"`). The pre-commit hook (`.githooks/pre-commit`) runs `scripts/dev.py pycodestyle`, then `clang-tidy`, then `format-check-staged`, then `test`. `pull`, `image`, and `self-check` are host-only — the tasks whose *decisions* only exist on the host — so each refuses to run in the container with an explanatory message. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
+- `scripts/dev.py` — the single container task runner (`pull`, `image`, `submodules`, `build`, `flash`, `monitor`, `menuconfig`, `test`, `test-hal-common`, `test-hal-stub`, `test-logic`, `test-espidf-cpp`, `self-check`, `format`, `format-check`, `format-check-staged`, `pycodestyle`, `clang-tidy`, `install-hooks`, `shell`, `cn`). CLion run configurations and the docs both call it, so `docker compose` specifics live in one place. `submodules` fetches the pinned git submodules (`third_party/sml`); `build`, `test`, and `clang-tidy` call the same helper first, so a bare clone builds without a manual step. `shell` is the preferred way to run a container command from the host: with no arguments it opens an interactive login shell, and with arguments it runs them in the container (e.g. `./scripts/dev.py shell ls -1d /`). `cn` runs the Continue CLI in the container: it passes `--config <container HOME>/.continue/config.yaml` explicitly (cn's own default lookup is not reliable), and forwards its arguments to `cn` verbatim (`./scripts/dev.py cn -p "prompt"`). The pre-commit hook (`.githooks/pre-commit`) runs the quality gates; see the `quality_checks` skill. `pull`, `image`, and `self-check` are host-only — the tasks whose *decisions* only exist on the host — so each refuses to run in the container with an explanatory message. An internal `complete` command lists subcommands matching a prefix (used only by the completion script).
 - `scripts/idf.sh` — runs a command (normally `idf.py`) with the ESP-IDF environment established, sourcing `$IDF_PATH/export.sh` when `IDF_PYTHON_ENV_PATH`/`ESP_IDF_VERSION` are absent. The image's entrypoint sources `export.sh` for the container's own command only; anything started later — notably the CMake/Ninja build CLion spawns — inherits a bare environment, where `idf.py` dies with `TypeError: expected string or bytes-like object, got 'NoneType'` (`Version.coerce(os.getenv('ESP_IDF_VERSION'))`). So the root aggregator's targets invoke `idf.py` through this wrapper (`set(IDF_RUNNER ...)` in `CMakeLists.txt`), which makes `cmake --build build_root` correct however it was started. `BASH_ENV` cannot substitute: bash sources it only for non-interactive shells and the image's `~/.bashrc` returns early for those. The wrapper is idempotent — it execs the command directly when the variables are already present — and exits non-zero when `IDF_PATH` is not an ESP-IDF checkout.
 - `scripts/test_dev.py` — host-side unit tests for `dev.py` itself (stdlib `unittest`, run by `scripts/dev.py self-check`). Imports `dev.py` in-process and covers its pure helpers — chiefly the command line `shell` builds (so shell syntax like pipes/semicolons is passed through verbatim) and `shell -C` path resolution. `SourceFileDiscoveryTests` pins that `format`/`format-check` see untracked sources: `_source_file_command` enumerates `--cached --others --exclude-standard` scoped to `ROOTS`, `_select_sources` keeps only the C/C++ extensions and drops paths that are not on disk, and end-to-end checks against a scratch repository prove an untracked source is listed while a `.gitignore`d build file is not (the bug where `format` skipped files that had not been `git add`ed). `StagedFormatCheckTests` pins `format-check-staged`'s style handling against throwaway git repositories: the ancestor search that finds nested `.clang-format` / `.clang-format-ignore` files, that the *staged* blob (not the working copy) is materialized, that a style file staged for deletion is skipped while an untracked one is honored — plus two end-to-end checks that a nested `DisableFormat: true` exempts unformatted code while the root style still rejects it (they skip on the host, where `clang-format` is not installed). It also pins the `scripts/idf.sh` contract (`IdfRunnerTests`): the wrapper exists, is executable, is tracked by git, establishes the environment, passes the command through unmodified, and is used by the root aggregator's per-subproject helper. `ClionRunConfigurationTests` pins the four CMake run configurations to the CMake project they are actually bound to: `PROJECT_NAME` must be the root `project()` name, `CONFIG_NAME` must name a profile declared in `.idea/cmake.xml`, and `TARGET_NAME` must be one of the root aggregator's `*_build` targets (a subproject's `<name>.elf` is not resolvable from the root and fails with "cannot find target"). `HostTestCommandTests` pins the four host suites: the `test-hal-common`, `test-hal-stub`, `test-logic`, and `test-espidf-cpp` commands each build and run only their own project, and the aggregate `test` runs every `HOST_TEST_PROJECTS` entry in table order with `test-hal-common` first and `test-hal-stub` next, stopping at the first failing suite. The `Tidy*` classes cover `clang-tidy`: `TidyCompileArgumentsTests` pins which GCC flags are stripped and that the source file and the `-D`/`-I` flags survive; `TidyUnitSelectionTests` pins the one-entry-per-source reduction (non-C++ and out-of-tree entries skipped, first occurrence wins); `TidyConfigurationTests` pins the project list, the build directories it reads, and the header filter; and `TidyGateTests` pins the hook and CI ordering (tidy before format-check, tidy after build). `SubmoduleTests` pins the `third_party/sml` git submodule: `.gitmodules` records the upstream URL, the **index** records a `160000` gitlink at the v1.2.0 commit (the index, not `HEAD`, because the submodule is only staged until it is committed), every entry in `dev.SUBMODULES` has a marker file inside it, `_submodule_update_command` builds the `git submodule update --init --recursive -- <path>` argv, the fetch helper is called by `build` / `build-test-espidf-cpp` / `test` / `clang-tidy`, `submodules` runs through the container, and CI fetches submodules **before** it builds. It also pins that `third_party/` is outside `dev.ROOTS` and that `_is_vendored` excludes the submodule from `clang-tidy` while leaving `components/sml` and `components/logic` in scope. `ContinueCliCommandTests` pins `dev.py cn`: `_cn_command` puts `--config` first with the path under the container `$HOME` that `_container_home` picks (so it matches a compose `~/.continue` mount target for both the image user and the pinned `/tmp` home), arguments after `cn` are forwarded verbatim, `main` bypasses argparse for them, and the compose `environment:` passes `DEEPSEEK_API_KEY` through from the host with no value (never hardcoded). `PythonSourceDiscoveryTests` pins the `pycodestyle` file list: `_is_vendored_path` matches only a top-level `third_party`, `_select_python_sources` keeps `*.py` **and** extensionless Python shebang scripts (so `.githooks/pre-commit` is checked), rejects a non-Python shebang, a `python` mention that is not a shebang, deleted paths and non-UTF-8 first lines, and that the real repository enumerates exactly the two dev.py scripts and the extensionless hook, with nothing vendored. `PycodestyleGateTests` pins the wiring: `_pycodestyle_command` uses `python3 -m pycodestyle` with no options of its own (so a bare `pycodestyle` agrees), the command hops into the container, and it is the **first** gate in the hook and runs before `build` in CI. `SelfCheckModuleTests` pins the `self-check` command itself and, in particular, that it is **host-only**: inside the container none of the decisions the suite pins ever happen (a command never re-execs itself), so the run would pass vacuously — `cmd_self_check()` therefore returns 1 with a message naming `./scripts/dev.py self-check` for the host and `./scripts/dev.py test` for the container's own suites, never runs the suite there, never calls `change_to_container()`, and on the host runs exactly `python3 -m unittest -v scripts/test_dev.py`.
 - `scripts/dev.py-completion.bash` — bash tab-completion for `scripts/dev.py`. Source it to complete subcommands (e.g. `./scripts/dev.py form<TAB>` → `format`, `format-check`, `format-check-staged`, or `./scripts/dev.py clang-<TAB>` → `clang-tidy`). It asks `dev.py complete <prefix>` for candidates, so the command list is defined in exactly one place.
@@ -178,22 +179,12 @@ included as `logic/led_task.hpp`, `logic/mode.hpp` and
 
 **HAL components (`components/`).** Hardware-specific drivers live in reusable
 ESP-IDF components rather than in `mcgowan/src/`, so host tests can swap them
-for deterministic stubs. The HAL is split into one shared component plus two
-**mutually exclusive** implementations:
-
-| Component | Kind | Linked by | Provides |
-|---|---|---|---|
-| `hal_common` | header-only | everything (firmware, tests) | shared vocabulary: types + concepts |
-| `hal_board` | `.cpp` | production firmware (`mcgowan/`) | real, GPIO-backed drivers |
-| `hal_stub` | `.cpp` | host tests (`test-hal-stub/`, `test-hal-common/`, `test-logic/`, `test-espidf-cpp/`), linux app (`donny/`) | pin-free, software-driven stubs |
-
-`hal_common` is **implementation-free**: it defines the vocabulary but no
-concrete device class, so both implementations can require it without
-duplication. `hal_board` and `hal_stub` are mutually exclusive — a project
-links exactly one. The vocabulary's own tests — `BoardLike`, `TimerLike`,
-`OneShotTimerFactoryLike`, and the deep-sleep types — live in
-`test-hal-common/`, while the stub devices' tests live in `test-hal-stub/`
-(the hardware-backed devices are covered by on-target tests).
+for deterministic stubs. The components, their layers, and the platform rules
+are documented in the `platform_layers` skill
+(`.continue/skills/platform_layers/SKILL.md`). The vocabulary's own tests —
+`BoardLike`, `TimerLike`, `OneShotTimerFactoryLike`, and the deep-sleep types —
+live in `test-hal-common/`, while the stub devices' tests live in
+`test-hal-stub/` (the hardware-backed devices are covered by on-target tests).
 
 The interface for each HAL device is a header pair: the shared vocabulary in
 `hal_common` (e.g. `hal/push_button_types.hpp`) plus a per-implementation header
@@ -372,19 +363,9 @@ sleep/backoff decision host-testable. Run mode now sleeps through the board
 policy does the same in reverse: `rtc_state_init(board)` asks
 `sleep_get_wakeup_causes()` whether the retained block survives this boot.
 
-Because `hal_board` and `hal_stub` would otherwise be discovered together (both
-live under the project's default `components/` search path), each project
-excludes the *other* via `EXCLUDE_COMPONENTS` in its top-level `CMakeLists.txt`
-(set **before** `project()`): the firmware excludes `hal_stub`; the host test
-projects add `components/` to `EXTRA_COMPONENT_DIRS` (their own project roots
-are `test-hal-stub/`, `test-hal-common/`, `test-logic/`, `test-espidf-cpp/`, and
-`donny/`, so the repo-root `components/` is not on the default path) and
-exclude `hal_board`.
-`hal_common` is shared and is never excluded.
-
-**`espidf_cpp` component (`components/espidf_cpp`).** Mostly header-only C++
-wrappers over the ESP-IDF/FreeRTOS C APIs, in namespace `thermo::espidf_cpp`
-(`HttpServer` has one `.cpp`, listed in the component's `SRCS`):
+**`espidf_cpp` component (`components/espidf_cpp`).** The headers are in
+namespace `thermo::espidf_cpp` (`HttpServer` has one `.cpp`, listed in the
+component's `SRCS`):
 
 | Header | Provides |
 |---|---|
@@ -396,8 +377,7 @@ wrappers over the ESP-IDF/FreeRTOS C APIs, in namespace `thermo::espidf_cpp`
 | `espidf_cpp/http_server_types.hpp` | `HttpServer` vocabulary: `HttpMethod`, `HttpField(s)`, `HttpRequest`, `HttpStatus`, `HttpResponse`, `HttpHandler`, `parse_int`, `normalize_url` (no ESP-IDF dependency) |
 | `espidf_cpp/http_server.hpp` | `HttpServer<BodyCapacity>` — prefix routes over `esp_http_server` with one GET/POST handler each; fixed-size request/response buffers, bad input becomes an HTTP error (never an abort) |
 
-The firmware requires this component (`REQUIRES espidf_cpp`). Its host tests
-live in `test-espidf-cpp/` (e.g. `test_one_message_queue.cpp`,
+Its host tests live in `test-espidf-cpp/` (e.g. `test_one_message_queue.cpp`,
 `test_static_vector.cpp`, `test_static_string.cpp`, `test_http_server_types.cpp`,
 and `test_http_server.cpp` — which drives a real server over a loopback socket —
 plus fork+exec `_assert` programs for the abort paths); `task.hpp` needs a real
@@ -416,11 +396,8 @@ not been checked out, naming `scripts/dev.py submodules`. The component is also
 why `third_party/` stays off every component search path: `donny` names
 `third_party/json` explicitly rather than scanning `/third_party`.
 
-**`logic` component (`components/logic`).** Board-independent application logic,
-shared by the firmware and the host tests. It requires only `espidf_cpp`,
-`hal_common` (the HAL vocabulary), and `sml` (the state-machine library, via the
-wrapper component below) — never a concrete HAL implementation — and the
-headers are included with the `logic/` prefix:
+**`logic` component (`components/logic`).** The headers are included with the
+`logic/` prefix:
 
 | Header | Provides |
 |---|---|
@@ -467,18 +444,8 @@ and movable.
 Layout: `include/logic/` for public headers, `src/` for `.cpp` files
 (`src/temp_format.cpp`, `src/rtc_buffer.cpp`, `src/self_signed_cert.cpp`,
 `src/rom_id.cpp`). **New `.cpp` files must be added to the `SRCS`
-list in `components/logic/CMakeLists.txt`**; consumers only need
-`REQUIRES logic` (firmware `mcgowan/main`) or
-`PRIV_REQUIRES logic` (host tests `test/main`), so adding sources there does not
+list in `components/logic/CMakeLists.txt`**; adding sources there does not
 change any consumer.
-
-Because `LedRunner`/`LedTask` template over `hal::BoardLike`, the *project*
-decides the hardware: `mcgowan` links `hal_board` (GPIO), `test` links
-`hal_stub` (pin-free). The component deliberately requires neither, since those
-two are mutually exclusive per project. In the `test-logic/` project the component is
-also listed in `set(COMPONENTS main hal_stub logic)` so it is built for `linux`
-(the restrict-to-`main` set would otherwise drop it now that it has `.cpp`
-files).
 
 **Host-testable modules.** The `logic` component's `temp_format.cpp`,
 `rtc_buffer.cpp`, `rom_id.cpp`, and `payload.cpp`, together with
@@ -494,16 +461,15 @@ reports as `std::nullopt` instead of rebooting. `main.cpp`'s `read_mode()` is
 the thin wrapper that turns that `std::nullopt` into the firmware's fail-loudly
 `reboot()`. The HAL's `hal_stub` component (the pin-free buttons, LEDs, 1-Wire
 bus, chip-temperature sensor, WiFi radio, one-shot timer, and aggregate board)
-is likewise built for the `linux` target and covered by
-`test-hal-stub/main/test_hal_*.cpp`.
+is likewise covered by `test-hal-stub/main/test_hal_*.cpp`.
 **Keep it that way** — put pure logic in these files and hardware/IDF calls
 behind them.
 
-**`donny/` — linux-emulated application.** A plain (non-test) `linux`-target
-application that constructs `thermo::Application<thermo::hal::BoardStub>`. It
-requires `hal_stub`, `espidf_cpp`, and `logic` (plus the vendored `json`
-component from `third_party/`). It cannot link `hal_board` on the linux target:
-`hal_board` requires `esp_driver_tsens`, whose Kconfig needs
+**`donny/`.** A plain (non-test) `linux`-target application that constructs
+`thermo::Application<thermo::hal::BoardStub>`. It uses the vendored `json`
+component from `third_party/` (its layer requirements are in the
+`platform_layers` skill). `hal_board` cannot be linked on the linux target: it
+requires `esp_driver_tsens`, whose Kconfig needs
 `CONFIG_SOC_TEMP_SENSOR_SUPPORTED`, so
 the chain ends at `esp_hal_ana_conv`, a SoC-only component with no linux
 implementation (`esp_driver_gpio`, by contrast, registers itself empty on
@@ -890,7 +856,7 @@ There are two kinds of test suite, runnable from the host via `scripts/dev.py`:
     mapping) and the firmware sources in `mcgowan/src` that need no chip driver
     (`app_config.cpp`, `config_page.cpp`, `power_source.cpp`).
     `test_led_runner.cpp` instantiates the templated `LedRunner<Board>` against
-    the stub `BoardStub`, which is why the project still links `hal_stub`.
+    the stub `BoardStub`.
   - `test-espidf-cpp/` covers the `espidf_cpp` wrappers (the headers listed
     under "`espidf_cpp` component" above).
 - **On-target tests** are planned for hardware-dependent code (1-Wire/DS18B20
@@ -901,164 +867,19 @@ There are two kinds of test suite, runnable from the host via `scripts/dev.py`:
   its `SRCS`); when it is firmware-only, add it to both
   `mcgowan/main/CMakeLists.txt` and `test-logic/main/CMakeLists.txt`.
 
-```bash
-# Run the host unit test suites (`test-hal-common/`, `test-hal-stub/`,
-# `test-logic/`, and `test-espidf-cpp/`), hal_common first.
-./scripts/dev.py test
+Run the suites with `./scripts/dev.py test` (all four, stopping at the first
+failure), or run one with `test-hal-common`, `test-hal-stub`, `test-logic`, or
+`test-espidf-cpp`. See the `quality_checks` skill for the gates and the fixing
+policy.
 
-# Run just one suite.
-./scripts/dev.py test-hal-stub     # hal_stub devices (linux)
-./scripts/dev.py test-hal-common   # hal_common vocabulary (linux)
-./scripts/dev.py test-logic        # test-logic/ Unity tests (linux, build_linux/)
-./scripts/dev.py test-espidf-cpp   # test-espidf-cpp/ Unity tests (linux)
+### Quality checks
 
-# Run the host-side unit tests for dev.py itself (no container/hardware).
-./scripts/dev.py self-check
-```
-
-Every command exits non-zero if its suite fails, so all of them are CI-friendly.
-Each host test binary prints Unity `PASS`/`FAIL` lines.
-
-**`self-check`** runs `scripts/test_dev.py` — host-side `unittest` tests for
-`dev.py`'s own pure helpers (notably the `shell` command line it builds, so
-shell syntax like pipes and semicolons is passed through verbatim, and the
-`shell -C DIR` path resolution). It needs no hardware or third-party
-dependency, and it is **host-only**: it pins the decisions the *host* side
-makes — above all whether a command re-execs itself under `docker compose` —
-and inside the container none of those decisions happen, so the suite would
-pass vacuously without testing anything. The command therefore refuses to run
-in the container with an explanatory error (pointing at `./scripts/dev.py
-test` for the container's own suites), the same way `pull` and `image` are
-host-only. `SelfCheckModuleTests` pins both halves of that contract.
-
-### Lint and format
-
-Formatting is governed by the committed **`.clang-format`** (Google base, 4-space
-indent, 80 columns). The existing sources already conform, so a format run is a
-no-op on clean code — keep it that way and format before committing.
-
-**Always run clang-format via the container task runner**, which formats all
-`.hpp` and `.cpp` source files under `mcgowan/`, `components/`,
-`test-hal-stub/`, `test-hal-common/`, `test-logic/`, `test-espidf-cpp/`, and
-`donny/`:
-
-```bash
-# Apply clang-format to every .hpp and .cpp source file.
-scripts/dev.py format
-
-# Check only (non-zero exit if anything is unformatted) — CI-friendly.
-scripts/dev.py format-check
-```
-
-**`format` covers untracked files.** It enumerates the sources under `ROOTS`
-with `git ls-files --cached --others --exclude-standard`, so a brand-new source
-that has not been `git add`ed is formatted too. (Enumerating only the index
-meant `format` silently skipped new files, and the pre-commit hook's
-`format-check-staged` — which reads the staged content by definition — then
-rejected the commit with a wall of violations.) `--exclude-standard` keeps
-`.gitignore`d build output out of the walk, and the pathspec is scoped to
-`ROOTS` so `third_party/` is never touched. `format-check` uses the same list,
-so it reports an unformatted untracked file as well.
-
-The Espressif toolchain ships a compatible `clang-format` (20.x) inside the
-container. Note `.clang-format` sets `Standard: c++20` — clang-format has no
-C++26 token set, and the codebase uses no C++23+ *syntax* that would confuse it.
-
-A **nested** `.clang-format` / `.clang-format-ignore` is honored: clang-format
-finds style by searching *upward* from each source file and stops at the first
-one it finds. `format-check-staged` reproduces that search in its temp tree by
-copying every style file on the ancestors of the staged files, so a staged
-check applies exactly the style `format` would (and does not reject files a
-nested `DisableFormat: true` exempts). Vendored code that must stay
-byte-identical belongs in `third_party/` (outside the `ROOTS` `dev.py`
-formats), not under a component with a nested style file — that is why the
-`third_party/sml` submodule, whose `components/sml` wrapper *is* in scope, is
-never formatted.
-
-- **Static checks:** `scripts/dev.py clang-tidy` (see below); ensure C++26 compatibility with the ESP-IDF toolchain.
-
-### Python style (pycodestyle)
-
-`scripts/dev.py pycodestyle` runs `python3 -m pycodestyle` over every Python
-source in the repository and exits non-zero on any finding. It is the **first**
-gate in the pre-commit hook and the first check in CI, because it needs no
-compile database, no build, and no test run — a long line is reported in
-seconds instead of after the toolchain.
-
-```bash
-./scripts/dev.py pycodestyle
-```
-
-**pycodestyle's defaults are enforced** (PEP 8, 79 columns). No
-`--max-line-length` or other option is passed, so the gate and a bare
-`pycodestyle` run agree; the repository conforms to the tool rather than the
-other way round. Add an option only by changing `PYCODESTYLE_ARGS` in
-`scripts/dev.py`, which is the single place the argv is built.
-
-**Which files.** Enumeration reuses `_source_file_command` with the repository
-root as the only pathspec, so the same `--cached --others --exclude-standard`
-semantics as `format` apply: a file that has not been `git add`ed is checked,
-and `.gitignore`d build output is not. Selection keeps a path when it ends in
-`.py` **or** its first line is a Python shebang (`#!/usr/bin/env python3`,
-`#!/usr/bin/python3.12`, …). The shebang half is what catches
-`.githooks/pre-commit` — the gate that runs before every commit, and Python
-with no extension. `third_party/` is dropped (`_is_vendored_path`, a top-level
-match only), so the `third_party/json` and `third_party/sml` trees stay
-byte-identical to upstream.
-
-The tool is installed in the dev image (`PYCODESTYLE_VERSION`, pinned and
-verified at build time), so `pycodestyle` runs inside the container like every
-other task.
-
-### Static analysis (clang-tidy)
-
-`scripts/dev.py clang-tidy [PROJECT...]` runs clang-tidy over the C++ sources of
-every subproject (or just the named ones) and exits non-zero on any finding. It
-is a gate in both the pre-commit hook and CI, and it uses clang-tidy's
-**default** check set (`clang-diagnostic-*`, `clang-analyzer-*`) — the
-repository commits **no** `.clang-tidy`, so there is nothing to keep in sync:
-
-```bash
-./scripts/dev.py build         # first: produces the compile databases
-./scripts/dev.py clang-tidy    # all subprojects
-./scripts/dev.py clang-tidy donny   # just one
-```
-
-**It reads the ESP-IDF compile databases; it never builds them itself.** A
-project with no `compile_commands.json` is reported and the run fails (rather
-than silently analyzing nothing), so run `build` first — in the pre-commit hook
-that means at least once after a clone or pull.
-
-Three things make the ESP-IDF databases usable by the Espressif clang:
-
-1. **GCC-only flags are stripped.** ESP-IDF compiles with Xtensa GCC, whose
-   command lines carry `-mlongcalls`, `-mno-target-align`,
-   `-fstrict-volatile-bitfields`, `-fno-tree-switch-conversion`,
-   `-fno-jump-tables`, `-freorder-blocks`, `-specs=…`, and `-f…-prefix-map=`;
-   clang rejects them or warns "argument unused", which
-   `--warnings-as-errors=*` would promote to a failure.
-2. **The target triple is restored.** The database says *how* to compile but not
-   *for what* — the triple normally comes from the driver's name, and
-   clang-tidy substitutes its own. It is recovered with
-   `<recorded compiler> -dumpmachine` (`xtensa-esp-elf` for the firmware,
-   `x86_64-linux-gnu` for the `linux` projects).
-3. **The compiler's system headers are passed in.** clang's resource directory
-   has no libstdc++/newlib for the Xtensa target, so GCC's search list is read
-   from `-E -v` and supplied as `-isystem` flags together with `-nostdinc`.
-
-Diagnostics are filtered to this repository's own headers
-(`--header-filter`), so findings in ESP-IDF or libstdc++ — which we cannot fix —
-never fail the gate, and shared sources compiled by several subprojects are
-analyzed once. Vendored code is excluded outright: `_unique_tidy_units()` drops
-every entry under `third_party/`, so the `third_party/sml` submodule is never
-analyzed (its `components/sml` wrapper is, since that file is ours).
-
-Findings are fixed, not suppressed, with one deliberate exception: a NOLINT is
-acceptable only when the analyzer is right but the code must stay as it is, and
-then it carries a comment explaining why. The two current instances are
-`clang-analyzer-optin.core.EnumCastOutOfRange` on `HTTP_ANY` (an `INT_MAX`
-wildcard ESP-IDF accepts by design, not an enumerator) and on
-`pins::kDividerGate` (a **parked defect** — see below).
+Run every quality gate through `scripts/dev.py` and fix what it reports. The
+gates — clang-format, pycodestyle, clang-tidy, the build, the four host test
+suites, and the `dev.py` self-check — their order, and the fixing policy are
+documented in the `quality_checks` skill
+(`.continue/skills/quality_checks/SKILL.md`). `.githooks/pre-commit` enforces
+them before every commit.
 
 > **Parked defect:** `pins::kDividerGate` is 25, but the ESP32-S3 has no GPIO
 > 22–25 at all (`soc/gpio_num.h` jumps `GPIO_NUM_21` straight to
@@ -1068,17 +889,37 @@ wildcard ESP-IDF accepts by design, not an enumerator) and on
 > disagree. The pin map is deliberately left alone until that is settled; the
 > analyzer finding is suppressed there with a comment pointing at this note.
 
-**The ESP-IDF tree under `$IDF_PATH` is read-only.** Never edit an ESP-IDF
-header (or anything else under `/opt/esp/idf`) to make a check pass — fixes
-belong in this repository, and a local edit would be lost on the next image
-pull and would not reproduce in CI.
+### C++ coding standards
+
+How the C++ itself is written — naming, RAII and ownership, smart pointers,
+`const`/`constexpr` and immutability, Rule of Zero/Five, `enum class` over
+plain `enum`, templates and concepts, concurrency, standard library use, and
+the `.hpp` header convention — is in the `cpp-coding-standards` skill
+(`.continue/skills/cpp-coding-standards/SKILL.md`), derived from the C++ Core
+Guidelines and ending with a review checklist. Load it when writing,
+reviewing, or refactoring C++.
+
+The skill already records this repository's two deviations from upstream —
+`.hpp` headers instead of `.h`, and `#pragma once` instead of `#ifndef`
+include guards — so follow the skill's wording and never reintroduce the
+upstream form.
+
+The skill's `try`/`catch` guidance does not apply here either. The firmware
+builds with `CONFIG_COMPILER_CXX_EXCEPTIONS=n` and
+`CONFIG_COMPILER_CXX_RTTI=n` (`mcgowan/sdkconfig.defaults`), so there is
+nothing to throw or catch and no `dynamic_cast`; failures take the
+`assert()`/`abort()` path described under "Fail loudly" below.
 
 ### Conventions to follow
 
+The bullets below are this repository's additions to, and overrides of, the
+`cpp-coding-standards` skill; anything the skill already states is not
+repeated here.
+
 - Target **ESP-IDF v6.1** APIs only.
-- Use **C++26** with GNU extensions; do not introduce the C-only style where C++ is appropriate.
+- Use **C++26** with GNU extensions (`-std=gnu++26`, the ESP-IDF v6.1 default
+  for chip targets).
 - Declare `app_main` with `extern "C"` linkage.
-- Use constexpr and noexcept as much as possible
 - Treat RTC-memory structures carefully: they must be **trivially copyable / `POD`-like** with stable layout and `RTC_DATA_ATTR` placement, and must survive both deep sleep and reboots.
 - Conform payload format, LED semantics, and RTC memory layout exactly to `Specification.md`.
 - Keep power draw within the hourly budget defined in the spec (batch uploads, deep sleep between samples).
@@ -1146,38 +987,16 @@ The test case should fork and exec the "_assert" program with the name of the te
 #### Committing
 
 **Write the commit message to a temporary file, then commit with `git commit
--F`.** Never pass it inline with `-m`, and never run a bare `git commit`.
+-F <file>`.** Never pass it inline with `-m`, and never run a bare
+`git commit`. Show the file to the user and wait for their approval before
+committing: they may want to edit the message, and editing it afterwards
+needs a rebase.
 
-```bash
-# 1. Write the message (the Write tool, or $EDITOR "$(mktemp)").
-# 2. Commit reading the message from that file.
-git commit -F /tmp/commit_msg.txt
-# 3. Remove the file.
-rm /tmp/commit_msg.txt
-```
-
-Two moments use the same file: when the task's work **is ready for review,
-before it is committed**, and when the work **is about to be committed**.
-
-A bare `git commit` hangs here — `EDITOR=vim`, and vim fails with "Error
-reading input" in a non-TTY session, so the commit never happens (typically
-only after the pre-commit gates have already run and timed out). `-m` dodges
-the editor but is the fragile option: these messages contain backticks,
-apostrophes, `$`, and `!`, every one of which is a shell-quoting hazard that
-silently mangles the message. A file has no quoting at all.
-
-Subject ≤ 72 columns, imperative, no trailing period; a blank line; then a
-body wrapped at 72–79 columns that explains **why**, not just what. End with
-the Continue trailer:
-
-```
-Generated with [Continue](https://continue.dev)
-
-Co-Authored-By: Continue <noreply@continue.dev>
-```
-
-The full guidance, including a worked example, is the `git` skill at
-`.continue/skills/git/SKILL.md` — read it before writing a message.
+The message shape (subject ≤ 72 columns, imperative, no trailing period; a
+blank line; a body wrapped at 72–79 columns that explains **why**; the
+Continue trailer), why a file beats `-m`, and a worked example are in the
+`git` skill at `.continue/skills/git/SKILL.md` — read it before writing a
+message.
 
 #### Model selection
 
