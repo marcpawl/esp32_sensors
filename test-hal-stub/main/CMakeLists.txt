@@ -14,6 +14,7 @@
 #                                 is built on (`freertos/timers.h`).
 #   test_freertos_task.cpp        The FreeRTOS task primitive the firmware
 #                                 relies on (`vTaskDelay()`).
+#   test_esp_restart.cpp          The ESP-IDF restart path (`esp_restart()`).
 #   test_hal_board.cpp            The aggregate `BoardStub`: device wiring and
 #                                 the board-wide deep sleep.
 #
@@ -31,6 +32,7 @@ set(test_srcs
     "test_hal_timer_stub.cpp"
     "test_freertos_timers.cpp"
     "test_freertos_task.cpp"
+    "test_esp_restart.cpp"
     "test_hal_board.cpp"
 )
 
