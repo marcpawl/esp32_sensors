@@ -32,7 +32,6 @@ idf_component_register(
         "${mcgowan_src}/wifi_ap.cpp"
         "${mcgowan_src}/ntp_client.cpp"
         "${mcgowan_src}/run_mode.cpp"
-        "${mcgowan_src}/reboot.cpp"
     INCLUDE_DIRS
         "${mcgowan_src}/include"
     REQUIRES

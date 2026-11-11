@@ -23,7 +23,7 @@
 #include "logic/led_task.hpp"
 #include "logic/mode.hpp"
 #include "logic/mode_selection.hpp"
-#include "reboot.hpp"
+#include "logic/reboot.hpp"
 #include "rtc_storage.hpp"
 #include "run_mode.hpp"
 
