@@ -14,7 +14,7 @@
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #pragma GCC diagnostic pop
-#include "../../../hal_common/include/hal/board_types.hpp"
+#include "hal/board_types.hpp"
 
 // NOLINTEND
 
