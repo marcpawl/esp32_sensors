@@ -70,7 +70,7 @@ Refer to `Specification.md` for the detailed contracts: operating modes, sample 
 esp32_sensors/
 ├── Specification.md     # Authoritative software spec — read this first
 ├── CMakeLists.txt       # Root aggregator (plain CMake) — builds all subprojects
-├── mcgowan/             # Firmware subproject (ESP32-S3, hal_board) -> mcgowan.bin
+├── mcgowan/             # Firmware subproject (ESP32-S3) -> mcgowan.bin
 │   ├── CMakeLists.txt   #   standalone ESP-IDF project (project(mcgowan))
 │   ├── sdkconfig.defaults
 │   ├── main/            #   ESP-IDF `main` component (must be named main)
@@ -80,8 +80,8 @@ esp32_sensors/
 │   ├── espidf_cpp/      # C++ wrappers over ESP-IDF/FreeRTOS (Task, queue, handles, ...)
 │   ├── logic/           # Board-independent application logic (temp_format, rom_id, payload, limits, led_manager, mode*, led_task, self_signed_cert)
 │   ├── hal_common/      # Shared, header-only HAL vocabulary (types/concepts)
-│   ├── hal_board/       # Real, GPIO-backed HAL (linked by mcgowan)
-│   ├── hal_stub/        # Pin-free HAL stub (linked by host tests)
+│   ├── hal_board/       # Real, GPIO-backed HAL
+│   ├── hal_stub/        # Pin-free HAL stub
 │   └── sml/             # Wrapper component exposing the third_party/sml submodule
 ├── third_party/         # Vendored third-party code (never formatted, never tidy'd)
 │   ├── json/            #   nlohmann/json v3.11.3 (header-only, MIT)
@@ -90,7 +90,7 @@ esp32_sensors/
 ├── test-hal-common/     # Host tests for components/hal_common (IDF `linux`, Unity)
 ├── test-logic/          # Host-based unit tests subproject (IDF `linux`, Unity)
 ├── test-espidf-cpp/     # Host tests for components/espidf_cpp (IDF `linux`, Unity)
-├── donny/               # Linux-emulated application (IDF `linux`, hal_stub)
+├── donny/               # Linux-emulated application (IDF `linux`)
 │   └── main/            #   app_main + the JSON console task (test driver)
 ├── Dockerfile           # Dev container: ESP-IDF v6.1 + non-root host-mapped user
 ├── docker-compose.yml   # `dev` service with serial (/dev) passthrough
@@ -144,7 +144,7 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 
 **Key files:**
 - `Specification.md` — the single source of truth for hardware, modes, RTC memory layout, payload format, and power budget. Any implementation must conform to it.
-- `mcgowan/main/CMakeLists.txt` — the firmware's component definition: lists all sources under `mcgowan/src/` and the IDF component `REQUIRES` (hal_board, logic, nvs_flash, esp_wifi, esp_https_server, esp_http_client, esp_adc, esp_driver_gpio, mbedtls, …). **Add new sources here** or they will not compile. Board-independent logic belongs in `components/logic` instead.
+- `mcgowan/main/CMakeLists.txt` — the firmware's component definition: lists all sources under `mcgowan/src/` and the IDF component `REQUIRES`. **Add new sources here** or they will not compile. Board-independent logic belongs in `components/logic` instead.
 - `mcgowan/sdkconfig.defaults` — the committed configuration intent (target, C++ exceptions/RTTI off, partition table, `-Os`). `mcgowan/sdkconfig` is generated from this and is **not** tracked.
 - `CMakeLists.txt` (root) — the generator-agnostic aggregator: one prefixed target per subproject invoking `idf.py -C <sub> -B <sub>/<build-dir>`. `-DSUBPROJECTS="mcgowan;test-hal-stub;test-hal-common;test-logic;test-espidf-cpp;donny"` (default: all) selects what is built.
 - `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash environment. Extend these (not ad-hoc `docker run`) when adding tooling. The compose `dev` service is also the target of the Dev Container (see below).
@@ -178,22 +178,12 @@ included as `logic/led_task.hpp`, `logic/mode.hpp` and
 
 **HAL components (`components/`).** Hardware-specific drivers live in reusable
 ESP-IDF components rather than in `mcgowan/src/`, so host tests can swap them
-for deterministic stubs. The HAL is split into one shared component plus two
-**mutually exclusive** implementations:
-
-| Component | Kind | Linked by | Provides |
-|---|---|---|---|
-| `hal_common` | header-only | everything (firmware, tests) | shared vocabulary: types + concepts |
-| `hal_board` | `.cpp` | production firmware (`mcgowan/`) | real, GPIO-backed drivers |
-| `hal_stub` | `.cpp` | host tests (`test-hal-stub/`, `test-hal-common/`, `test-logic/`, `test-espidf-cpp/`), linux app (`donny/`) | pin-free, software-driven stubs |
-
-`hal_common` is **implementation-free**: it defines the vocabulary but no
-concrete device class, so both implementations can require it without
-duplication. `hal_board` and `hal_stub` are mutually exclusive — a project
-links exactly one. The vocabulary's own tests — `BoardLike`, `TimerLike`,
-`OneShotTimerFactoryLike`, and the deep-sleep types — live in
-`test-hal-common/`, while the stub devices' tests live in `test-hal-stub/`
-(the hardware-backed devices are covered by on-target tests).
+for deterministic stubs. The components, their layers, and the platform rules
+are documented in the `platform_layers` skill
+(`.continue/skills/platform_layers/SKILL.md`). The vocabulary's own tests —
+`BoardLike`, `TimerLike`, `OneShotTimerFactoryLike`, and the deep-sleep types —
+live in `test-hal-common/`, while the stub devices' tests live in
+`test-hal-stub/` (the hardware-backed devices are covered by on-target tests).
 
 The interface for each HAL device is a header pair: the shared vocabulary in
 `hal_common` (e.g. `hal/push_button_types.hpp`) plus a per-implementation header
@@ -372,19 +362,9 @@ sleep/backoff decision host-testable. Run mode now sleeps through the board
 policy does the same in reverse: `rtc_state_init(board)` asks
 `sleep_get_wakeup_causes()` whether the retained block survives this boot.
 
-Because `hal_board` and `hal_stub` would otherwise be discovered together (both
-live under the project's default `components/` search path), each project
-excludes the *other* via `EXCLUDE_COMPONENTS` in its top-level `CMakeLists.txt`
-(set **before** `project()`): the firmware excludes `hal_stub`; the host test
-projects add `components/` to `EXTRA_COMPONENT_DIRS` (their own project roots
-are `test-hal-stub/`, `test-hal-common/`, `test-logic/`, `test-espidf-cpp/`, and
-`donny/`, so the repo-root `components/` is not on the default path) and
-exclude `hal_board`.
-`hal_common` is shared and is never excluded.
-
-**`espidf_cpp` component (`components/espidf_cpp`).** Mostly header-only C++
-wrappers over the ESP-IDF/FreeRTOS C APIs, in namespace `thermo::espidf_cpp`
-(`HttpServer` has one `.cpp`, listed in the component's `SRCS`):
+**`espidf_cpp` component (`components/espidf_cpp`).** The headers are in
+namespace `thermo::espidf_cpp` (`HttpServer` has one `.cpp`, listed in the
+component's `SRCS`):
 
 | Header | Provides |
 |---|---|
@@ -396,8 +376,7 @@ wrappers over the ESP-IDF/FreeRTOS C APIs, in namespace `thermo::espidf_cpp`
 | `espidf_cpp/http_server_types.hpp` | `HttpServer` vocabulary: `HttpMethod`, `HttpField(s)`, `HttpRequest`, `HttpStatus`, `HttpResponse`, `HttpHandler`, `parse_int`, `normalize_url` (no ESP-IDF dependency) |
 | `espidf_cpp/http_server.hpp` | `HttpServer<BodyCapacity>` — prefix routes over `esp_http_server` with one GET/POST handler each; fixed-size request/response buffers, bad input becomes an HTTP error (never an abort) |
 
-The firmware requires this component (`REQUIRES espidf_cpp`). Its host tests
-live in `test-espidf-cpp/` (e.g. `test_one_message_queue.cpp`,
+Its host tests live in `test-espidf-cpp/` (e.g. `test_one_message_queue.cpp`,
 `test_static_vector.cpp`, `test_static_string.cpp`, `test_http_server_types.cpp`,
 and `test_http_server.cpp` — which drives a real server over a loopback socket —
 plus fork+exec `_assert` programs for the abort paths); `task.hpp` needs a real
@@ -416,11 +395,8 @@ not been checked out, naming `scripts/dev.py submodules`. The component is also
 why `third_party/` stays off every component search path: `donny` names
 `third_party/json` explicitly rather than scanning `/third_party`.
 
-**`logic` component (`components/logic`).** Board-independent application logic,
-shared by the firmware and the host tests. It requires only `espidf_cpp`,
-`hal_common` (the HAL vocabulary), and `sml` (the state-machine library, via the
-wrapper component below) — never a concrete HAL implementation — and the
-headers are included with the `logic/` prefix:
+**`logic` component (`components/logic`).** The headers are included with the
+`logic/` prefix:
 
 | Header | Provides |
 |---|---|
@@ -467,18 +443,8 @@ and movable.
 Layout: `include/logic/` for public headers, `src/` for `.cpp` files
 (`src/temp_format.cpp`, `src/rtc_buffer.cpp`, `src/self_signed_cert.cpp`,
 `src/rom_id.cpp`). **New `.cpp` files must be added to the `SRCS`
-list in `components/logic/CMakeLists.txt`**; consumers only need
-`REQUIRES logic` (firmware `mcgowan/main`) or
-`PRIV_REQUIRES logic` (host tests `test/main`), so adding sources there does not
+list in `components/logic/CMakeLists.txt`**; adding sources there does not
 change any consumer.
-
-Because `LedRunner`/`LedTask` template over `hal::BoardLike`, the *project*
-decides the hardware: `mcgowan` links `hal_board` (GPIO), `test` links
-`hal_stub` (pin-free). The component deliberately requires neither, since those
-two are mutually exclusive per project. In the `test-logic/` project the component is
-also listed in `set(COMPONENTS main hal_stub logic)` so it is built for `linux`
-(the restrict-to-`main` set would otherwise drop it now that it has `.cpp`
-files).
 
 **Host-testable modules.** The `logic` component's `temp_format.cpp`,
 `rtc_buffer.cpp`, `rom_id.cpp`, and `payload.cpp`, together with
@@ -494,16 +460,15 @@ reports as `std::nullopt` instead of rebooting. `main.cpp`'s `read_mode()` is
 the thin wrapper that turns that `std::nullopt` into the firmware's fail-loudly
 `reboot()`. The HAL's `hal_stub` component (the pin-free buttons, LEDs, 1-Wire
 bus, chip-temperature sensor, WiFi radio, one-shot timer, and aggregate board)
-is likewise built for the `linux` target and covered by
-`test-hal-stub/main/test_hal_*.cpp`.
+is likewise covered by `test-hal-stub/main/test_hal_*.cpp`.
 **Keep it that way** — put pure logic in these files and hardware/IDF calls
 behind them.
 
-**`donny/` — linux-emulated application.** A plain (non-test) `linux`-target
-application that constructs `thermo::Application<thermo::hal::BoardStub>`. It
-requires `hal_stub`, `espidf_cpp`, and `logic` (plus the vendored `json`
-component from `third_party/`). It cannot link `hal_board` on the linux target:
-`hal_board` requires `esp_driver_tsens`, whose Kconfig needs
+**`donny/`.** A plain (non-test) `linux`-target application that constructs
+`thermo::Application<thermo::hal::BoardStub>`. It uses the vendored `json`
+component from `third_party/` (its layer requirements are in the
+`platform_layers` skill). `hal_board` cannot be linked on the linux target: it
+requires `esp_driver_tsens`, whose Kconfig needs
 `CONFIG_SOC_TEMP_SENSOR_SUPPORTED`, so
 the chain ends at `esp_hal_ana_conv`, a SoC-only component with no linux
 implementation (`esp_driver_gpio`, by contrast, registers itself empty on
@@ -890,7 +855,7 @@ There are two kinds of test suite, runnable from the host via `scripts/dev.py`:
     mapping) and the firmware sources in `mcgowan/src` that need no chip driver
     (`app_config.cpp`, `config_page.cpp`, `power_source.cpp`).
     `test_led_runner.cpp` instantiates the templated `LedRunner<Board>` against
-    the stub `BoardStub`, which is why the project still links `hal_stub`.
+    the stub `BoardStub`.
   - `test-espidf-cpp/` covers the `espidf_cpp` wrappers (the headers listed
     under "`espidf_cpp` component" above).
 - **On-target tests** are planned for hardware-dependent code (1-Wire/DS18B20
