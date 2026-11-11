@@ -987,38 +987,16 @@ The test case should fork and exec the "_assert" program with the name of the te
 #### Committing
 
 **Write the commit message to a temporary file, then commit with `git commit
--F`.** Never pass it inline with `-m`, and never run a bare `git commit`.
+-F <file>`.** Never pass it inline with `-m`, and never run a bare
+`git commit`. Show the file to the user and wait for their approval before
+committing: they may want to edit the message, and editing it afterwards
+needs a rebase.
 
-```bash
-# 1. Write the message (the Write tool, or $EDITOR "$(mktemp)").
-# 2. Commit reading the message from that file.
-git commit -F /tmp/commit_msg.txt
-# 3. Remove the file.
-rm /tmp/commit_msg.txt
-```
-
-Two moments use the same file: when the task's work **is ready for review,
-before it is committed**, and when the work **is about to be committed**.
-
-A bare `git commit` hangs here — `EDITOR=vim`, and vim fails with "Error
-reading input" in a non-TTY session, so the commit never happens (typically
-only after the pre-commit gates have already run and timed out). `-m` dodges
-the editor but is the fragile option: these messages contain backticks,
-apostrophes, `$`, and `!`, every one of which is a shell-quoting hazard that
-silently mangles the message. A file has no quoting at all.
-
-Subject ≤ 72 columns, imperative, no trailing period; a blank line; then a
-body wrapped at 72–79 columns that explains **why**, not just what. End with
-the Continue trailer:
-
-```
-Generated with [Continue](https://continue.dev)
-
-Co-Authored-By: Continue <noreply@continue.dev>
-```
-
-The full guidance, including a worked example, is the `git` skill at
-`.continue/skills/git/SKILL.md` — read it before writing a message.
+The message shape (subject ≤ 72 columns, imperative, no trailing period; a
+blank line; a body wrapped at 72–79 columns that explains **why**; the
+Continue trailer), why a file beats `-m`, and a worked example are in the
+`git` skill at `.continue/skills/git/SKILL.md` — read it before writing a
+message.
 
 #### Model selection
 
