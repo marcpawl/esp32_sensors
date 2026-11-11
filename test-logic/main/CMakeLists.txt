@@ -22,9 +22,10 @@
 # the tests include it as `logic/led_task.hpp` and pull the component in via
 # PRIV_REQUIRES below. The same goes for the RTC state and its buffer
 # operations (`logic/rtc_state.hpp`, `logic/src/rtc_buffer.cpp`), the ROM-ID hex
-# conversions (`logic/rom_id.hpp`), and the §9 payload builder
-# (`logic/payload.hpp`): they are compiled by the `logic` component, so
-# `test_rtc_buffer.cpp`, `test_rom_id.cpp`, and `test_payload.cpp` include the
+# conversions (`logic/rom_id.hpp`), the §9 payload builder
+# (`logic/payload.hpp`), and the reboot helper (`logic/reboot.hpp`): they are
+# compiled by the `logic` component, so `test_rtc_buffer.cpp`,
+# `test_rom_id.cpp`, `test_payload.cpp`, and `test_reboot.cpp` include the
 # `logic/...` headers and list no source in `sut_srcs`. Every .cpp file in
 # `logic` is compiled by that component, not listed here.
 #
@@ -41,6 +42,7 @@ set(test_srcs
     "test_rtc_buffer.cpp"
     "test_mode_selection.cpp"
     "test_led_runner.cpp"
+    "test_reboot.cpp"
 )
 
 # Production sources under test (paths are relative to this component dir).
