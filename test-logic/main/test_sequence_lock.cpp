@@ -41,8 +41,7 @@ struct Reading {
 
 using ReadingLock = SequenceLock<Reading>;
 
-constexpr ReadingLock::WriteResult kStored =
-    ReadingLock::WriteResult::kStored;
+constexpr ReadingLock::WriteResult kStored = ReadingLock::WriteResult::kStored;
 constexpr ReadingLock::WriteResult kRejected =
     ReadingLock::WriteResult::kRejected;
 
@@ -275,9 +274,9 @@ void wait_for_tasks(std::atomic<std::uint32_t>& finished,
                     std::uint32_t expected) {
     const TickType_t start = xTaskGetTickCount();
     while (finished.load(std::memory_order_relaxed) < expected) {
-        TEST_ASSERT_TRUE_MESSAGE((xTaskGetTickCount() - start) <
-                                     pdMS_TO_TICKS(10000),
-                                 "timed out waiting for a writer task");
+        TEST_ASSERT_TRUE_MESSAGE(
+            (xTaskGetTickCount() - start) < pdMS_TO_TICKS(10000),
+            "timed out waiting for a writer task");
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
