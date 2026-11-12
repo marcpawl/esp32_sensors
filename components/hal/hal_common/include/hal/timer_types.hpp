@@ -48,8 +48,11 @@ namespace thermo::hal {
 // to the contract — in particular it does not promise to report whether the
 // callback ran.
 template<typename T>
-concept TimerLike = std::is_class_v<T> && requires(T& handle) {
+concept TimerLike = std::is_class_v<T> && requires(T& handle,
+                                                   std::chrono::milliseconds delay,
+                                                   std::function<void()> callback) {
     { handle.cancel() } -> std::same_as<void>;
+    { handle.restart_timer(delay, callback) } -> std::same_as<void>;
 };
 
 // Concept: a one-shot timer *factory* — a type that arms a callback to run once
