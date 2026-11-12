@@ -32,14 +32,14 @@ So this is right:
 
 ```markdown
 The reusable components live in the repo-root `components/` directory and
-the three HAL components live in `hal/`.
+the three HAL components live in `components/hal/`.
 ```
 
 And this is not — one 138-column line, the kind a diff cannot show without
 re-flowing the whole paragraph:
 
 ```markdown
-The reusable components live in the repo-root `components/` directory and the three HAL components live in the repo-root `hal/` directory.
+The reusable components live in the repo-root `components/` directory and the three HAL components live in `components/hal/`.
 ```
 
 ## Prefer lists and subsections to run-on sentences

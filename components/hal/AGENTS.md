@@ -1,10 +1,10 @@
 # The HAL layer
 
-This file documents the three components in `hal/` — the hardware abstraction
-the firmware and the host tests share. Repository-wide guidance (the build, the
-workflow, the quality gates) is in the root `AGENTS.md`; the layering rules —
-which layer may require which — are in the `platform_layers` skill
-(`.continue/skills/platform_layers/SKILL.md`).
+This file documents the three components in `components/hal/` — the hardware
+abstraction the firmware and the host tests share. Repository-wide guidance
+(the build, the workflow, the quality gates) is in the root `AGENTS.md`; the
+layering rules — which layer may require which — are in the `platform_layers`
+skill (`.continue/skills/platform_layers/SKILL.md`).
 
 ## The three components
 

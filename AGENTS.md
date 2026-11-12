@@ -129,19 +129,19 @@ esp32_sensors/
 │   │   └── CMakeLists.txt
 │   └── src/             #   C++26 sources + include/ — see module map below
 ├── components/          # Reusable ESP-IDF components (see "HAL" section)
-│   ├── espidf_cpp/      # C++ wrappers over ESP-IDF/FreeRTOS (Task, queue, handles, ...)
-│   ├── logic/           # Board-independent application logic (temp_format, rom_id, payload, limits, led_manager, mode*, led_task, self_signed_cert)
-│   └── sml/             # Wrapper component exposing the third_party/sml submodule
-├── hal/                 # The hardware-abstraction layer (see "HAL" section)
-│   ├── AGENTS.md        #   The HAL layer in detail — devices, contract, tests
-│   ├── hal_common/      #   Shared, header-only HAL vocabulary (types/concepts)
-│   ├── hal_board/       #   Real, GPIO-backed HAL
-│   └── hal_stub/        #   Pin-free HAL stub
+│   ├── espidf_cpp/      #   C++ wrappers over ESP-IDF/FreeRTOS (Task, queue, handles, ...)
+│   ├── hal/             #   The hardware-abstraction layer (see "HAL" section)
+│   │   ├── AGENTS.md    #     The HAL layer in detail — devices, contract, tests
+│   │   ├── hal_common/  #     Shared, header-only HAL vocabulary (types/concepts)
+│   │   ├── hal_board/   #     Real, GPIO-backed HAL
+│   │   └── hal_stub/    #     Pin-free HAL stub
+│   ├── logic/           #   Board-independent application logic (temp_format, rom_id, payload, limits, led_manager, mode*, led_task, self_signed_cert)
+│   └── sml/             #   Wrapper component exposing the third_party/sml submodule
 ├── third_party/         # Vendored third-party code (never formatted, never tidy'd)
 │   ├── json/            #   nlohmann/json v3.11.3 (header-only, MIT)
 │   └── sml/             #   boost-ext/sml git SUBMODULE, pinned to v1.2.0
-├── test-hal-stub/       # Host tests for hal/hal_stub (IDF `linux`, Unity)
-├── test-hal-common/     # Host tests for hal/hal_common (IDF `linux`, Unity)
+├── test-hal-stub/       # Host tests for components/hal/hal_stub (IDF `linux`, Unity)
+├── test-hal-common/     # Host tests for components/hal/hal_common (IDF `linux`, Unity)
 ├── test-logic/          # Host-based unit tests subproject (IDF `linux`, Unity)
 ├── test-espidf-cpp/     # Host tests for components/espidf_cpp (IDF `linux`, Unity)
 ├── donny/               # Linux-emulated application (IDF `linux`)
@@ -201,9 +201,9 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 - `Specification.md` — the single source of truth for hardware, modes, RTC
   memory layout, payload format, and power budget. Any implementation must
   conform to it.
-- `hal/AGENTS.md` — the HAL layer in detail: the three components, the header
-  pair per device, the semantics-free contract, the one-shot timer, the
-  aggregate board, deep sleep, and what the HAL tests pin.
+- `components/hal/AGENTS.md` — the HAL layer in detail: the three components,
+  the header pair per device, the semantics-free contract, the one-shot timer,
+  the aggregate board, deep sleep, and what the HAL tests pin.
 - `mcgowan/main/CMakeLists.txt` — the firmware's component definition. **Add
   new sources here** or they will not compile. Board-independent logic belongs
   in `components/logic` instead.
@@ -377,18 +377,18 @@ The LED task (`led_task.hpp`) and the operating modes and their pole mapping
 board-independent logic and live in the `logic` component (see below), included
 as `logic/led_task.hpp`, `logic/mode.hpp` and `logic/mode_selection.hpp`.
 
-**HAL components (`hal/`).** Hardware-specific drivers live in reusable ESP-IDF
-components rather than in `mcgowan/src/`, so host tests can swap them for
-deterministic stubs. The three of them — the vocabulary, the GPIO-backed
-implementation and the pin-free stub — sit in the repo-root `hal/` directory,
-which every project adds to `EXTRA_COMPONENT_DIRS` next to `components/`:
-ESP-IDF scans a component directory one level deep, so a grouping directory
-needs an entry of its own. A project links exactly one implementation:
-`hal_board` and `hal_stub` expose the same headers, so each excludes the other.
-The components, their layers, and the platform rules are documented in the
-`platform_layers` skill (`.continue/skills/platform_layers/SKILL.md`); the HAL
-itself — the header pair per device, the semantics-free contract, the one-shot
-timer, the aggregate board and deep sleep — is documented in `hal/AGENTS.md`.
+**HAL components (`components/hal/`).** Hardware-specific drivers live in
+reusable ESP-IDF components rather than in `mcgowan/src/`, so host tests can
+swap them for deterministic stubs. The three of them — the vocabulary, the
+GPIO-backed implementation and the pin-free stub — sit in `components/hal/`,
+which every project adds to `EXTRA_COMPONENT_DIRS` as an entry of its own:
+ESP-IDF scans a component directory one level deep, so a grouping directory is
+not descended into. A project links exactly one implementation: `hal_board` and
+`hal_stub` expose the same headers, so each excludes the other. The components,
+their layers, and the platform rules are documented in the `platform_layers`
+skill (`.continue/skills/platform_layers/SKILL.md`); the HAL itself — the
+header pair per device, the semantics-free contract, the one-shot timer, the
+aggregate board and deep sleep — is documented in `components/hal/AGENTS.md`.
 
 **`espidf_cpp` component (`components/espidf_cpp`).** The headers are in
 namespace `thermo::espidf_cpp` (`HttpServer` has one `.cpp`, listed in the
@@ -708,8 +708,8 @@ required.
   (`$IDF_PATH/tools/cmake/project.cmake`), so each one produces a database that
   CLion turns into a full resolve configuration. The four profiles coexist
   rather than being merged because the projects share sources (`mcgowan/src` is
-  compiled by both `mcgowan` and `test`; `components/*` and `hal/*` by three or
-  four of them) and genuinely need different defines/include paths — notably
+  compiled by both `mcgowan` and `test`; `components/*` by three or four of
+  them) and genuinely need different defines/include paths — notably
   `hal_board` (Xtensa) vs `hal_stub` (host/linux). The active profile is chosen
   by the run configuration's `CONFIG_NAME`.
 
@@ -874,9 +874,9 @@ There are two kinds of test suite, runnable from the host via `scripts/dev.py`:
   no hardware needed — in four projects:
 
   - `test-hal-stub/` — the pin-free `hal_stub` devices; what each test pins is
-described in `hal/AGENTS.md`.
+    described in `components/hal/AGENTS.md`.
   - `test-hal-common/` — the implementation-free `hal_common` vocabulary; what
-    each test pins is described in `hal/AGENTS.md`.
+    each test pins is described in `components/hal/AGENTS.md`.
   - `test-logic/` covers the pure-logic modules (`temp_format`, `limits`,
     `led_manager`, `payload`, `app_config` validation, `rom_id`, `rtc_buffer` —
     including the cold-boot `rtc_state_reset()`, and the `mode_selection` pole
@@ -987,9 +987,9 @@ test case, wait for the child, and confirm that it was aborted.
   separated into the groups below:
 
   1. **The file's own header**, outside the wrapper (a `.cpp`'s own header, or
-a `.hpp` that includes itself by name) — parsed before the suppression scope so
-its diagnostics are never masked. Test sources, whose first include is
-`unity.h`, have no own header and start at step 2.
+     a `.hpp` that includes itself by name) — parsed before the suppression
+     scope so its diagnostics are never masked. Test sources, whose first
+     include is `unity.h`, have no own header and start at step 2.
   2. **Turn off clang-tidy** for the block (`// NOLINTBEGIN`).
   3. **`#pragma GCC diagnostic push`**, then (only if needed) disable the
      warnings that come from FreeRTOS/ESP-IDF headers, so third-party warnings
