@@ -31,8 +31,14 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
 # The component under test lives in the repo-root `components/` directory,
 # which is not on this project's default search path (that would be
-# `test-espidf-cpp/components/`).
-set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../components")
+# `test-espidf-cpp/components/`). The three HAL components live in the
+# repo-root `hal/` directory and need their own entry: ESP-IDF scans a
+# component directory one level deep, so a grouping directory is not
+# descended into.
+set(EXTRA_COMPONENT_DIRS
+    "${CMAKE_CURRENT_LIST_DIR}/../components"
+    "${CMAKE_CURRENT_LIST_DIR}/../hal"
+)
 
 # Restrict the component set to `main` (and its requirements, which pull in
 # `espidf_cpp`) plus `hal_stub`. Without this the `linux` target also tries to

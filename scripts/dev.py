@@ -57,6 +57,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 ROOTS = (
     "mcgowan",
     "components",
+    "hal",
     "test-logic",
     "test-hal-stub",
     "test-hal-common",
@@ -142,10 +143,10 @@ FORMAT_ARGS = ("--dry-run", "--Werror")
 #   mcgowan/  ESP32-S3 firmware (hal_board)
 #                                        -> mcgowan/build_esp32s3/mcgowan.bin
 #   test-hal-stub/
-#             host tests for components/hal_stub (linux target)
+#             host tests for hal/hal_stub (linux target)
 #                                                -> test-hal-stub/build_linux
 #   test-hal-common/
-#             host tests for components/hal_common (linux target)
+#             host tests for hal/hal_common (linux target)
 #                                                -> test-hal-common/build_linux
 #   test-logic/ host unit tests (linux target)      -> test-logic/build_linux
 #   test-espidf-cpp/
@@ -788,13 +789,13 @@ def _run_host_tests(projects: tuple[str, ...]) -> int:
 
 
 def cmd_test_hal_stub() -> int:
-    """Host tests for components/hal_stub (`linux` target)."""
+    """Host tests for hal/hal_stub (`linux` target)."""
     change_to_container()
     return _run_host_tests((HAL_STUB_TEST_PROJECT,))
 
 
 def cmd_test_hal_common() -> int:
-    """Host tests for components/hal_common (`linux` target)."""
+    """Host tests for hal/hal_common (`linux` target)."""
     change_to_container()
     return _run_host_tests((HAL_COMMON_TEST_PROJECT,))
 

@@ -5,8 +5,8 @@
 # host-test (linux) builds stay separate:
 #
 #   mcgowan/build_esp32s3/        ESP32-S3 firmware (mcgowan.bin)
-#   test-hal-stub/build_linux/    host tests for components/hal_stub
-#   test-hal-common/build_linux/  host tests for components/hal_common
+#   test-hal-stub/build_linux/    host tests for hal/hal_stub
+#   test-hal-common/build_linux/  host tests for hal/hal_common
 #   test-logic/build_linux/       host unit tests
 #   test-espidf-cpp/build_linux/  host tests for components/espidf_cpp
 #   donny/build_linux/            linux-emulated application (donny)

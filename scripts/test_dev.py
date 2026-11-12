@@ -2170,6 +2170,109 @@ class SourceFileDiscoveryTests(unittest.TestCase):
         )
 
 
+class HalComponentCoverageTests(unittest.TestCase):
+    """The HAL components must stay inside the quality checks.
+
+    clang-format takes its file list from `dev.ROOTS`, and the clang-tidy
+    header filter is derived from the same list. Move the HAL components
+    into a directory `ROOTS` does not name and both gates silently stop
+    covering them: nothing under the component is formatted, and no
+    diagnostic is ever reported for one of its headers. Nothing fails, so
+    the coverage has to be asserted.
+
+    The components are therefore found by *name* rather than by a fixed
+    path. They move around — they were under `components/`, and the
+    `platform_layers` skill treats them as the hardware-abstraction layer —
+    and a test pinned to the old path would either have to be rewritten on
+    every move or, worse, keep passing while the move broke the gates.
+    """
+
+    HAL_COMPONENTS = ("hal_common", "hal_board", "hal_stub")
+
+    # Directories that never hold a component of ours: the vendored trees
+    # (copied verbatim from upstream), the git metadata, and the IDE state.
+    SKIP_DIRS = frozenset({
+        ".git", ".idea", "third_party", "build_root", "__pycache__",
+    })
+
+    def _component_dirs(self):
+        """Map each HAL component name to the directories implementing it.
+
+        A directory is a component when its name is the component name and
+        it holds a `CMakeLists.txt` that registers one. The walk prunes the
+        vendored trees and the build directories, which are large and hold
+        nothing of ours.
+        """
+        found = {}
+        for root, dirnames, _ in os.walk(dev.REPO_ROOT):
+            dirnames[:] = [
+                name
+                for name in dirnames
+                if name not in self.SKIP_DIRS
+                and not name.startswith("build_")
+                and not name.startswith("cmake-build-")
+            ]
+            name = Path(root).name
+            if name not in self.HAL_COMPONENTS:
+                continue
+            cmake = Path(root) / "CMakeLists.txt"
+            if not cmake.is_file():
+                continue
+            if "idf_component_register" not in cmake.read_text():
+                continue
+            found.setdefault(name, []).append(Path(root))
+        return found
+
+    def _sources_of(self, component_dir):
+        """The C/C++ sources of one component, relative to the repository."""
+        return sorted(
+            str(path.relative_to(dev.REPO_ROOT))
+            for path in component_dir.rglob("*")
+            if path.is_file() and path.suffix in dev.EXTENSIONS
+        )
+
+    def test_every_hal_component_is_found(self):
+        # The finder itself must work, or the checks below would pass
+        # vacuously — which is exactly the failure they exist to catch.
+        found = self._component_dirs()
+        for name in self.HAL_COMPONENTS:
+            self.assertIn(name, found, name)
+            self.assertEqual(len(found[name]), 1, name)
+
+    def test_every_hal_component_is_under_a_formatted_root(self):
+        # `ROOTS` is the pathspec `git ls-files` uses, so a component outside
+        # every root is invisible to clang-format.
+        roots = tuple(dev.REPO_ROOT / root for root in dev.ROOTS)
+        for name, dirs in self._component_dirs().items():
+            for path in dirs:
+                self.assertTrue(
+                    any(root in path.parents for root in roots),
+                    f"{name} is not under any ROOTS entry: {path}",
+                )
+
+    def test_every_hal_source_is_formatted(self):
+        # The file list `format` and `format-check` operate on must contain
+        # every source of every HAL component.
+        listed = set(dev.source_files())
+        for name, dirs in self._component_dirs().items():
+            for component_dir in dirs:
+                for source in self._sources_of(component_dir):
+                    self.assertIn(source, listed, source)
+
+    def test_the_tidy_header_filter_matches_the_hal_headers(self):
+        # A diagnostic is reported only when it lands in a file the filter
+        # matches, so a HAL header outside the filter is a header whose
+        # problems nobody ever sees.
+        pattern = re.compile(dev._tidy_header_filter())
+        for name, dirs in self._component_dirs().items():
+            for component_dir in dirs:
+                for source in self._sources_of(component_dir):
+                    path = dev.REPO_ROOT / source
+                    self.assertIsNotNone(
+                        pattern.match(str(path)), f"{name}: {path}"
+                    )
+
+
 class PythonSourceDiscoveryTests(unittest.TestCase):
     """`python_sources` must find Python that is not named `*.py`.
 

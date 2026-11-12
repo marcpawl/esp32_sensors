@@ -79,15 +79,16 @@ esp32_sensors/
 ├── components/          # Reusable ESP-IDF components (see "HAL" section)
 │   ├── espidf_cpp/      # C++ wrappers over ESP-IDF/FreeRTOS (Task, queue, handles, ...)
 │   ├── logic/           # Board-independent application logic (temp_format, rom_id, payload, limits, led_manager, mode*, led_task, self_signed_cert)
+│   └── sml/             # Wrapper component exposing the third_party/sml submodule
+├── hal/                 # The hardware-abstraction layer (see "HAL" section)
 │   ├── hal_common/      # Shared, header-only HAL vocabulary (types/concepts)
 │   ├── hal_board/       # Real, GPIO-backed HAL
-│   ├── hal_stub/        # Pin-free HAL stub
-│   └── sml/             # Wrapper component exposing the third_party/sml submodule
+│   └── hal_stub/        # Pin-free HAL stub
 ├── third_party/         # Vendored third-party code (never formatted, never tidy'd)
 │   ├── json/            #   nlohmann/json v3.11.3 (header-only, MIT)
 │   └── sml/             #   boost-ext/sml git SUBMODULE, pinned to v1.2.0
-├── test-hal-stub/       # Host tests for components/hal_stub (IDF `linux`, Unity)
-├── test-hal-common/     # Host tests for components/hal_common (IDF `linux`, Unity)
+├── test-hal-stub/       # Host tests for hal/hal_stub (IDF `linux`, Unity)
+├── test-hal-common/     # Host tests for hal/hal_common (IDF `linux`, Unity)
 ├── test-logic/          # Host-based unit tests subproject (IDF `linux`, Unity)
 ├── test-espidf-cpp/     # Host tests for components/espidf_cpp (IDF `linux`, Unity)
 ├── donny/               # Linux-emulated application (IDF `linux`)
@@ -177,10 +178,14 @@ board-independent logic and live in the `logic` component (see below),
 included as `logic/led_task.hpp`, `logic/mode.hpp` and
 `logic/mode_selection.hpp`.
 
-**HAL components (`components/`).** Hardware-specific drivers live in reusable
+**HAL components (`hal/`).** Hardware-specific drivers live in reusable
 ESP-IDF components rather than in `mcgowan/src/`, so host tests can swap them
-for deterministic stubs. The components, their layers, and the platform rules
-are documented in the `platform_layers` skill
+for deterministic stubs. The three of them — the vocabulary, the GPIO-backed
+implementation and the pin-free stub — sit in the repo-root `hal/`
+directory, which every project adds to `EXTRA_COMPONENT_DIRS` next to
+`components/`: ESP-IDF scans a component directory one level deep, so a
+grouping directory needs an entry of its own. The components, their layers,
+and the platform rules are documented in the `platform_layers` skill
 (`.continue/skills/platform_layers/SKILL.md`). The vocabulary's own tests —
 `BoardLike`, `TimerLike`, `OneShotTimerFactoryLike`, and the deep-sleep types —
 live in `test-hal-common/`, while the stub devices' tests live in
@@ -653,10 +658,10 @@ required.
   by default (`$IDF_PATH/tools/cmake/project.cmake`), so each one produces a
   database that CLion turns into a full resolve configuration. The four
   profiles coexist rather than being merged because the projects share sources
-  (`mcgowan/src` is compiled by both `mcgowan` and `test`; `components/*` by
-  three or four of them) and genuinely need different defines/include paths —
-  notably `hal_board` (Xtensa) vs `hal_stub` (host/linux). The active profile is
-  chosen by the run configuration's `CONFIG_NAME`.
+  (`mcgowan/src` is compiled by both `mcgowan` and `test`; `components/*` and
+  `hal/*` by three or four of them) and genuinely need different defines/include
+  paths — notably `hal_board` (Xtensa) vs `hal_stub` (host/linux). The active
+  profile is chosen by the run configuration's `CONFIG_NAME`.
 
   > **Verified reality (2026-10-27): the profiles do not deliver that yet.**
   > `GENERATION_DIR` sets only the *build* directory; the *source* directory is
