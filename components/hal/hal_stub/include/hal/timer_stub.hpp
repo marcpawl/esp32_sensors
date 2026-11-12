@@ -86,6 +86,25 @@ class TimerStub {
     // timer already expired, does nothing.
     void cancel() noexcept;
 
+    // ISR safe,
+    //
+    // Cancles the existing timer.
+    //
+    // Schedules `callback` to run once after `delay`, returning the handle that
+    // owns the timer. The callback takes no arguments and runs in the timer
+    // service task; capture whatever state it needs in the callable.
+    //
+    // `delay` is rounded to whole ticks (`configTICK_RATE_HZ` is 100 on the
+    // test target, so a tick is 10 ms). Fails loudly: a delay that is not at
+    // least one tick, a null callback, or a failed create/start trips an assert
+    // rather than silently dropping the request — a dropped timer would leave
+    // the caller waiting forever.
+    [[nodiscard]] TimerStub restart_timer(std::chrono::milliseconds delay,
+                                           std::function<void()> callback)
+    {
+	    // TODO(ai!) implement in the .cpp file
+    }
+
     // Whether this handle actually refers to a timer (a moved-from handle, or
     // one created empty, does not).
     [[nodiscard]] bool valid() const noexcept { return timer_ != nullptr; }
