@@ -88,22 +88,19 @@ class TimerStub {
 
     // ISR safe,
     //
-    // Cancles the existing timer.
-    //
-    // Schedules `callback` to run once after `delay`, returning the handle that
-    // owns the timer. The callback takes no arguments and runs in the timer
-    // service task; capture whatever state it needs in the callable.
+    // Re-arms this timer with a new delay and callback, so the callback runs
+    // again after `delay`. The timer instance is reused: the existing delay
+    // and callback are replaced rather than the timer being cancelled and
+    // recreated. No-op on a handle that holds no timer.
     //
     // `delay` is rounded to whole ticks (`configTICK_RATE_HZ` is 100 on the
     // test target, so a tick is 10 ms). Fails loudly: a delay that is not at
-    // least one tick, a null callback, or a failed create/start trips an assert
-    // rather than silently dropping the request — a dropped timer would leave
-    // the caller waiting forever.
-    [[nodiscard]] TimerStub restart_timer(std::chrono::milliseconds delay,
-                                           std::function<void()> callback)
-    {
-	    // TODO(ai!) implement in the .cpp file
-    }
+    // least one tick trips an assert rather than silently dropping the request.
+    //
+    // ISR-safe: uses the FreeRTOS `FromISR` primitives, so it may be called
+    // from a timer callback or any other interrupt context.
+    void restart_timer(std::chrono::milliseconds delay,
+                       std::function<void()> callback) noexcept;
 
     // Whether this handle actually refers to a timer (a moved-from handle, or
     // one created empty, does not).
@@ -113,10 +110,12 @@ class TimerStub {
     friend class OneShotTimerFactoryStub;
 
     // Takes ownership of an already-started timer and of its callback box.
-    TimerStub(TimerHandle_t timer, TimerCallbackBox* box) noexcept;
+    TimerStub(TimerHandle_t timer, TimerCallbackBox* box,
+              std::chrono::milliseconds delay) noexcept;
 
     TimerHandle_t timer_ = nullptr;
     TimerCallbackBox* box_ = nullptr;
+    std::chrono::milliseconds delay_{};  // the delay this timer was armed with
 };
 
 // Arms one-shot timers: after the requested delay each timer calls its callback
