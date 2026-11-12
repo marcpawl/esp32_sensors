@@ -9,8 +9,8 @@ description: Commit with git using a message file and `git commit -F`. Use
 
 ## The rule
 
-**Never pass the commit message on the command line.** Write it to a
-temporary file first, then commit with `-F`:
+**Never pass the commit message on the command line.** Write it to a temporary
+file first, then commit with `-F`:
 
 ```bash
 # 1. Write the message to a temporary file.
@@ -26,15 +26,15 @@ git commit -F /tmp/commit_msg.txt
 rm /tmp/commit_msg.txt
 ```
 
-`git commit -m "<message>"` is **not** used, and neither is a bare
-`git commit` (which opens an editor).
+`git commit -m "<message>"` is **not** used, and neither is a bare `git commit`
+(which opens an editor).
 
 ## When this applies
 
 - **The task's work is ready for review, before it is committed.** Write the
   message to the file at that point — it is the artifact the reviewer reads,
-  and writing it first is what makes the review a review of the message as
-  well as the diff.
+  and writing it first is what makes the review a review of the message as well
+  as the diff.
 - **The work is about to be committed.** Same file, same `-F` flag.
 
 Both moments use one file. Write it once, let the user review it, then commit
@@ -42,17 +42,17 @@ from it.
 
 ## Let the user verify the message
 
-A written file is not a committed message. Once the file exists, show it to
-the user — `cat` it, or copy it into the response — and wait for their
-approval before running `git commit`. Commit only after they approve, and
-commit that exact file.
+A written file is not a committed message. Once the file exists, show it to the
+user — `cat` it, or copy it into the response — and wait for their approval
+before running `git commit`. Commit only after they approve, and commit that
+exact file.
 
-Do this even when the commit looks routine. The point is that the user may
-want to edit the message before it is committed: the diff shows what changed,
-but the message explains why, and the user is the one who knows whether that
-reasoning reads right. Changing it afterwards costs a rebase. If they ask for
-a rewording, edit the same file and show it again; never commit a version
-they have not seen.
+Do this even when the commit looks routine. The point is that the user may want
+to edit the message before it is committed: the diff shows what changed, but
+the message explains why, and the user is the one who knows whether that
+reasoning reads right. Changing it afterwards costs a rebase. If they ask for a
+rewording, edit the same file and show it again; never commit a version they
+have not seen.
 
 ## Why a file, not `-m`
 
@@ -66,13 +66,13 @@ Please supply the message using either -m or -F option.
 ```
 
 and the commit never happens — usually only after the pre-commit gates have
-already run and timed out. Writing the file and passing `-F` removes the
-editor from the loop entirely.
+already run and timed out. Writing the file and passing `-F` removes the editor
+from the loop entirely.
 
-`-m` avoids the editor too, but it is the fragile option: the messages in
-this repository contain backticks, apostrophes, `$`, `!`, and multi-paragraph
-bodies. Each of those is a shell-quoting hazard, and one badly quoted
-character silently mangles the message. A file has no quoting at all.
+`-m` avoids the editor too, but it is the fragile option: the messages in this
+repository contain backticks, apostrophes, `$`, `!`, and multi-paragraph
+bodies. Each of those is a shell-quoting hazard, and one badly quoted character
+silently mangles the message. A file has no quoting at all.
 
 ## Message content
 
@@ -88,16 +88,16 @@ Shape:
   (`Add pycodestyle gate and republish the dev image as 20261109b`).
 - **Blank line**, then a body wrapped at **72–79 columns**. This repository
   wraps at 79; do not exceed it.
-- Explain **why**, not just what — the diff already says what changed.
-  Compare options considered and say why the chosen one won.
+- Explain **why**, not just what — the diff already says what changed. Compare
+  options considered and say why the chosen one won.
 - Reference the specific files, functions and tests that carry the change.
 - End with the trailer block (see below).
 
 Repository-specific wisdom worth carrying into the body when relevant:
 
 - A behaviour change that a reader could reasonably "fix" back to the old way
-  deserves the reason it was chosen (e.g. a new image tag rather than moving
-  an existing one, because `docker-compose.yml` uses `pull_policy: missing`).
+  deserves the reason it was chosen (e.g. a new image tag rather than moving an
+  existing one, because `docker-compose.yml` uses `pull_policy: missing`).
 - Tests are named by class where it helps the reviewer find them.
 
 ## Required trailer
@@ -151,5 +151,5 @@ rm /tmp/commit_msg.txt
 ```
 
 A quoted heredoc (`<<'EOF'`) keeps backticks and `$` literal, which matters
-when the message is built with a shell command. Writing the file with the
-Write tool avoids the heredoc entirely.
+when the message is built with a shell command. Writing the file with the Write
+tool avoids the heredoc entirely.

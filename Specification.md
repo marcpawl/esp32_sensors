@@ -2,7 +2,12 @@
 
 **Status:** Ready for implementation
 
-A solar-powered, battery-backed ESP32-S3 that samples three DS18B20 thermometers on a shared 1-Wire bus and uploads readings to a remote URL over WiFi at a configurable cadence. Behavior is controlled by a 3-position ON-OFF-ON switch (Configure / Off / Run). Between samples the device uses **deep sleep** to minimize power; the sample buffer and Wi-Fi connection cache live in **RTC memory** so they survive sleep and backoff reboots.
+A solar-powered, battery-backed ESP32-S3 that samples three DS18B20
+thermometers on a shared 1-Wire bus and uploads readings to a remote URL over
+WiFi at a configurable cadence. Behavior is controlled by a 3-position
+ON-OFF-ON switch (Configure / Off / Run). Between samples the device
+uses **deep sleep** to minimize power; the sample buffer and Wi-Fi connection
+cache live in **RTC memory** so they survive sleep and backoff reboots.
 
 ---
 
@@ -39,13 +44,13 @@ It extends the official `espressif/idf:release-v6.1` image (the officially
 supported build environment for ESP-IDF: cross-compiler toolchain, CMake,
 Ninja, Python virtual environment, and all required packages) with this
 project's tooling — `gh`, PyGithub, esp-clang (which supplies the
-`clang-format` used by the pre-commit hook), the Node.js runtime + Continue
-CLI (`cn`), and `pycodestyle` (which enforces PEP 8 on the Python sources).
+`clang-format` used by the pre-commit hook), the Node.js runtime + Continue CLI
+(`cn`), and `pycodestyle` (which enforces PEP 8 on the Python sources).
 
 The tag is **date-stamped and never moved**, and it is pinned in exactly two
-places: `docker-compose.yml` (`image:`) and `scripts/dev.py` (`DEV_IMAGE`).
-CI pulls the same tag, so developers and CI build with an identical toolchain,
-and a build never silently picks up a newer upstream image.
+places: `docker-compose.yml` (`image:`) and `scripts/dev.py` (`DEV_IMAGE`). CI
+pulls the same tag, so developers and CI build with an identical toolchain, and
+a build never silently picks up a newer upstream image.
 
 To change the image, publish a **new** date-stamped tag rather than moving an
 existing one (see `Developer.md`, "Updating / publishing the dev image").
@@ -80,7 +85,9 @@ docker run --rm -v $PWD:/project -w /project -u "$(id -u):$(id -g)" \
   marcpawl/esp-idf:20261109b idf.py build
 ```
 
-> **Docker note (Linux):** Your user must have access to the Docker daemon (typically via the `docker` group) and to the serial device (via the `dialout` group). Add with:
+> **Docker note (Linux):** Your user must have access to the Docker daemon
+> (typically via the `docker` group) and to the serial device (via the
+> `dialout` group). Add with:
 > ```bash
 > sudo usermod -aG docker,dialout $USER
 > ```
@@ -95,8 +102,8 @@ The image's own user is uid 1000, which owns `/home/dev`. Any other uid — a
 normal host user, or GitHub's runner at uid 1001 — has no passwd entry inside
 the image, so `$HOME` resolves to `/` and tools that cache there fail
 (`ccache: error: Permission denied`). `scripts/dev.py` therefore exports
-`HOME=/tmp` and `CCACHE_DIR=/tmp/.cache/ccache` for every uid except 1000;
-uid 1000 keeps `/home/dev` and its persisted cache volume.
+`HOME=/tmp` and `CCACHE_DIR=/tmp/.cache/ccache` for every uid except 1000; uid
+1000 keeps `/home/dev` and its persisted cache volume.
 
 ### CLion Configuration Notes
 
@@ -110,10 +117,10 @@ starts the container on demand.
   Container, which takes it from `docker-compose.yml`).
 - CLion will run commands inside the container transparently.
 
-**ESP-IDF environment in CLion:** Inside the container, ESP-IDF's environment is
-already sourced by the image entrypoint, so the environment-file mechanism is
-typically unnecessary. IDE-driven processes (CMake, compilers, CLion itself) do
-not run that entrypoint, so `.devcontainer/devcontainer.json` exposes
+**ESP-IDF environment in CLion:** Inside the container, ESP-IDF's environment
+is already sourced by the image entrypoint, so the environment-file mechanism
+is typically unnecessary. IDE-driven processes (CMake, compilers, CLion itself)
+do not run that entrypoint, so `.devcontainer/devcontainer.json` exposes
 `IDF_PATH`, `IDF_TOOLS_PATH=/opt/esp`, and the toolchain `PATH` explicitly. The
 image keeps its tools under `/opt/esp` — **not** the classic per-user
 `~/.espressif`. If a new image is published, re-derive the `PATH` list from
@@ -124,13 +131,21 @@ container, so serial devices appear automatically (no `--device` flag needed);
 access is granted by the `dialout` group via `group_add`. Alternatively, use
 CLion's built-in terminal to run `idf.py monitor`.
 
-**Recommended workflow:** Use CLion for editing, code navigation, and CMake configuration; use CLion's built-in terminal (`Alt+F12`) for `idf.py` operations (build, flash, monitor, menuconfig) or run `scripts/dev.py` tasks from the Run toolbar.
+**Recommended workflow:** Use CLion for editing, code navigation, and CMake
+configuration; use CLion's built-in terminal (`Alt+F12`) for `idf.py`
+operations (build, flash, monitor, menuconfig) or run `scripts/dev.py` tasks
+from the Run toolbar.
 
 ### C++26 Configuration
 
-ESP-IDF v6.1 compiles C++ code using **C++26 with GNU extensions** (`-std=gnu++26`) by default for chip targets. The toolchain includes GCC 15.2.0 (Xtensa `esp-15.2.0_20251204`), which is required for ESP-IDF v6.0 and later. No per-component compiler flag is needed to enable C++26 — it is the default standard.
+ESP-IDF v6.1 compiles C++ code using **C++26 with GNU extensions**
+(`-std=gnu++26`) by default for chip targets. The toolchain includes GCC 15.2.0
+(Xtensa `esp-15.2.0_20251204`), which is required for ESP-IDF v6.0 and later.
+No per-component compiler flag is needed to enable C++26 — it is the default
+standard.
 
-For components that mix C and C++, ensure `app_main` is declared with C linkage:
+For components that mix C and C++, ensure `app_main` is declared with C
+linkage:
 
 ```cpp
 extern "C" void app_main(void);
@@ -147,16 +162,29 @@ extern "C" void app_main(void);
 | Exceptions / RTTI | Disabled by default in ESP-IDF for code-size reasons; enable explicitly in `menuconfig` if needed |
 | `std::format` | Heavy; prefer ESP-IDF's `ESP_LOGI` for logging |
 
-**Recommended practice:** Use C++26 where it improves safety and clarity (concepts, `constexpr`, `std::array`, `std::span`, `std::optional`), but keep code compatible with embedded constraints. Avoid features that pull in large runtime support.
+**Recommended practice:** Use C++26 where it improves safety and clarity
+(concepts, `constexpr`, `std::array`, `std::span`, `std::optional`), but keep
+code compatible with embedded constraints. Avoid features that pull in large
+runtime support.
 
 ### C/C++ Interop
 
-ESP-IDF is C-first. All ESP-IDF APIs are C functions and structs. Key interop rules for C++:
+ESP-IDF is C-first. All ESP-IDF APIs are C functions and structs. Key interop
+rules for C++:
 
 1. `app_main` must be `extern "C"`.
-2. FreeRTOS types (`TaskHandle_t`, `QueueHandle_t`, etc.) are opaque C pointers — safe to store in C++ classes.
-3. Designated initializers follow **C++ rules**, not C rules. C++26 prohibits out-of-order designators, nested designators, mixing designated and regular initializers, and designated array initialization. When adapting ESP-IDF C examples, restructure these initializers.
-4. Prefer `constexpr` and `static_assert` over macros where C++ equivalents exist.
+2. FreeRTOS types (`TaskHandle_t`, `QueueHandle_t`, etc.) are opaque C pointers
+   — safe to store in C++ classes.
+3. Designated initializers follow **C++ rules**, not C rules. C++26 prohibits:
+
+   - out-of-order designators;
+   - nested designators;
+   - mixing designated and regular initializers;
+   - designated array initialization.
+
+When adapting ESP-IDF C examples, restructure these initializers.
+4. Prefer `constexpr` and `static_assert` over macros where C++ equivalents
+   exist.
 
 ### Build System Integration (C++)
 
@@ -230,20 +258,26 @@ Solar → Charge controller (TBD) → Battery → Switch → Regulator → ESP32
 | GPIO 34 | Battery voltage ADC (via divider) |
 | GPIO 25 (optional) | Divider gate (P-MOSFET control) |
 
-> **GPIO 34 note:** input-only. Choose a divider keeping the ADC input below ~2.5 V at max battery voltage.
+> **GPIO 34 note:** input-only. Choose a divider keeping the ADC input below
+> ~2.5 V at max battery voltage.
 
 ### 2.5 Battery Voltage Measurement
 
 - ADC pin: GPIO 34.
 - Divider: `R_top` from battery + to ADC, `R_bottom` from ADC to GND.
 - `V_adc = V_batt × R_bottom / (R_top + R_bottom)`.
-- Firmware multiplies by `(R_top + R_bottom) / R_bottom`, then applies calibration gain/offset.
+- Firmware multiplies by `(R_top + R_bottom) / R_bottom`, then applies
+  calibration gain/offset.
 - 16-sample average, discard high/low.
-- **Optional gating:** drive GPIO 25 low to energize the divider just before an ADC read, then high to disconnect it. Saves ~21 µA continuously.
+- **Optional gating:** drive GPIO 25 low to energize the divider just before an
+  ADC read, then high to disconnect it. Saves ~21 µA continuously.
 
 ### 2.6 Divider Quiescent Draw
 
-A 100 kΩ / 100 kΩ divider draws ~21 µA at 4.2 V. In deep sleep, this is comparable to the ESP32's ~10 µA — **gating is strongly recommended** for the deep-sleep path. If gating is used, the divider is only energized during the ADC read (a few ms), and its average contribution becomes negligible.
+A 100 kΩ / 100 kΩ divider draws ~21 µA at 4.2 V. In deep sleep, this is
+comparable to the ESP32's ~10 µA — **gating is strongly recommended** for the
+deep-sleep path. If gating is used, the divider is only energized during the
+ADC read (a few ms), and its average contribution becomes negligible.
 
 ---
 
@@ -255,8 +289,8 @@ No power to ESP32. Battery continues charging.
 ### 3.2 Switch Left — CONFIGURE MODE
 
 1. Both LEDs ON (solid).
-2. WiFi **AP** mode (credentials from NVS, factory default first boot).
-   Will try to connect to station if SSID is set, retrying periodically.
+2. WiFi **AP** mode (credentials from NVS, factory default first boot). Will
+   try to connect to station if SSID is set, retrying periodically.
 3. **HTTPS server** on port 443.
 4. Config page at `/`.
 
@@ -266,16 +300,20 @@ On boot (which occurs on every deep-sleep wake), firmware detects Run.
 
 1. Both LEDs briefly ON (self-test), then off.
 2. Read battery voltage; initialize / evaluate the power state machine (§3.6).
-3. Read all three DS18B20s (°C) — **no bus scan needed**; ROM IDs are cached in RTC (§8).
+3. Read all three DS18B20s (°C) — **no bus scan needed**; ROM IDs are cached in
+   RTC (§8).
 4. Append a sample record (age + battery + 3 temps) to the **RTC buffer** (§4).
-5. If buffer ≥ batch size **and** power state allows transmission → upload (§3.5).
+5. If buffer ≥ batch size **and** power state allows transmission → upload
+   (§3.5).
 6. Otherwise → deep sleep until next sample.
-7. On upload failure → exponential backoff via RTC memory (§3.7); Wi-Fi cache is **cleared** on comms failure (§3.10).
+7. On upload failure → exponential backoff via RTC memory (§3.7); Wi-Fi cache
+   is **cleared** on comms failure (§3.10).
 8. Between wake events → **deep sleep** (§3.8).
 
 ### 3.4 Sampling Loop (Run Mode)
 
-Each deep-sleep wake is effectively a reboot; state is restored from RTC memory before the cycle proceeds.
+Each deep-sleep wake is effectively a reboot; state is restored from RTC memory
+before the cycle proceeds.
 
 1. Read battery voltage (mV).
 2. Read all three DS18B20s (°C) using cached ROM IDs (no bus enumeration).
@@ -290,7 +328,8 @@ Configurable **Batch Size N** (integer ≥ 1): 1 = every sample; 24 = daily.
 When the buffer reaches **N** and power permits:
 
 1. Green LED ON.
-2. Connect to Station WiFi using the **cached connection parameters** (§3.9) if valid, else a full connect.
+2. Connect to Station WiFi using the **cached connection parameters** (§3.9) if
+   valid, else a full connect.
 3. POST batched JSON (§9). Temperatures °C one decimal; battery mV integer.
 4. On success:
    - Green LED 200 ms pulse.
@@ -320,7 +359,8 @@ TX_OK ─────────────────► TX_INHIBITED ──
 2. In **TX_OK**, `batt < batt_low_mv` → **TX_INHIBITED**.
 3. In **TX_INHIBITED**, `batt > batt_high_mv` → **TX_OK**.
 4. Voltage sampled at every wake.
-5. Buffered samples accumulate while inhibited; resumed batches include all buffered samples with correct `age_s`.
+5. Buffered samples accumulate while inhibited; resumed batches include all
+   buffered samples with correct `age_s`.
 6. Buffer overflow → drop oldest (§4.2).
 7. LED: red 500 ms blink every 10 s while inhibited.
 
@@ -332,7 +372,8 @@ On any upload failure:
 
 1. Red LED ON.
 2. `fail_count++` (RTC).
-3. `backoff_s = min(retry_base_s × 2^(fail_count − 1), retry_max_s)`, defaults 60 → 3600.
+3. `backoff_s = min(retry_base_s × 2^(fail_count − 1), retry_max_s)`, defaults
+   60 → 3600.
 4. Deep sleep `backoff_s`, then **reboot**, retry.
 5. On success: `fail_count = 0`.
 
@@ -364,7 +405,9 @@ esp_deep_sleep_start();
 | RTC memory retained | Yes |
 | Wake behavior | Full reboot; firmware restores state from RTC |
 
-**No bus scan on wake:** DS18B20 ROM IDs are stored in RTC memory (§8), so the 1-Wire bus is read directly by address. This saves the ~1 s enumeration cost on every wake.
+**No bus scan on wake:** DS18B20 ROM IDs are stored in RTC memory (§8), so the
+1-Wire bus is read directly by address. This saves the ~1 s enumeration cost on
+every wake.
 
 ### 3.9 Wi-Fi Connection Caching (RTC)
 
@@ -377,9 +420,12 @@ Before each deep sleep, the following are stored in RTC memory:
 | `ip` | 4 B | Assigned IP (if static/DHCP-cached) |
 | `valid` | 1 B | Cache validity flag |
 
-On wake, firmware attempts a **fast reconnect** using cached BSSID/channel/IP. This bypasses scanning and DHCP, reducing connect time from ~7.5 s to ~0.5 s and saving ~85 % of the connect energy.
+On wake, firmware attempts a **fast reconnect** using cached BSSID/channel/IP.
+This bypasses scanning and DHCP, reducing connect time from ~7.5 s to ~0.5 s
+and saving ~85 % of the connect energy.
 
-If the fast reconnect fails, firmware falls back to a full connect (scan + DHCP), and updates the cache on success.
+If the fast reconnect fails, firmware falls back to a full connect (scan +
+DHCP), and updates the cache on success.
 
 ### 3.10 Cache Invalidation on Communication Failure
 
@@ -396,13 +442,15 @@ If the fast reconnect fails, firmware falls back to a full connect (scan + DHCP)
 
 **Cleared fields:** `bssid`, `channel`, `ip`, `valid = 0`.
 
-**Retained across clear:** `fail_count` (for backoff sequencing), sample buffer (data is not discarded).
+**Retained across clear:** `fail_count` (for backoff sequencing), sample buffer
+(data is not discarded).
 
 ---
 
 ## 4. Sample Buffer (RTC Memory Only)
 
-Regular RAM is lost on deep sleep, so the sample buffer lives **exclusively in RTC memory**.
+Regular RAM is lost on deep sleep, so the sample buffer lives **exclusively in
+RTC memory**.
 
 ### 4.1 Record Format
 
@@ -420,7 +468,8 @@ Regular RAM is lost on deep sleep, so the sample buffer lives **exclusively in R
 - **On overflow: drop the oldest sample** (FIFO eviction).
 - Cleared after successful upload.
 - Accumulates freely while in **TX_INHIBITED**.
-- **Lost on power-off** (switch to center, battery removal). Acceptable per §11.2.
+- **Lost on power-off** (switch to center, battery removal). Acceptable per
+  §11.2.
 
 ### 4.3 Persistence
 
@@ -512,7 +561,8 @@ Namespace: `thermo_cfg`
 On `POST /save`:
 
 1. Validate all submitted fields.
-2. If validation fails, re-render the form with error messages; `saved_time` is **not** updated.
+2. If validation fails, re-render the form with error messages; `saved_time`
+   is **not** updated.
 3. Persist all validated fields to NVS.
 4. **Connect to the configured NTP server** and obtain the current UTC time.
 5. Store the UTC time (Unix epoch) as `saved_time` in NVS.
@@ -521,7 +571,8 @@ On `POST /save`:
 **NTP failure handling:**
 
 - Retry up to 3 times with a short timeout (e.g., 5 s each).
-- If all retries fail, **do not update** `saved_time`; persist the rest of the configuration. Display a warning on `/saved`.
+- If all retries fail, **do not update** `saved_time`; persist the rest of the
+  configuration. Display a warning on `/saved`.
 
 ### 5.4 NTP Server Field
 
@@ -530,7 +581,8 @@ On `POST /save`:
 - **Validation:** non-empty, valid hostname, no scheme prefix.
 - **Usage:** Used only during the save handler (§5.3).
 
-> **Confirmed:** `time.nrc.ca` is a valid NTP server provided by the National Research Council of Canada. NRC recommends using the hostname rather than IP.
+> **Confirmed:** `time.nrc.ca` is a valid NTP server provided by the National
+> Research Council of Canada. NRC recommends using the hostname rather than IP.
 
 ---
 
@@ -696,7 +748,8 @@ temp_1..temp_N = named sensor values       → columns C…
 
 ### 10.4 Solar Panel Sizing
 
-Daily energy ≈ 2.16 mAh/day @ 3.7 V ≈ **8 mWh/day**. With 0.504 efficiency and 3 sun hours:
+Daily energy ≈ 2.16 mAh/day @ 3.7 V ≈ **8 mWh/day**. With 0.504 efficiency and
+3 sun hours:
 
 ```
 Panel ≈ 8 / 0.504 / 3 ≈ 5.3 mW
@@ -711,19 +764,27 @@ Panel ≈ 8 / 0.504 / 3 ≈ 5.3 mW
 
 ## 11. Open Questions
 
-1. **Charge controller** — TBD (quiescent current matters most now that everything else is ~250 µA).
-2. **Buffer persistence across power-off** — acceptable to lose buffered samples on switch-to-center? (Current answer: yes.)
+1. **Charge controller** — TBD (quiescent current matters most now that
+   everything else is ~250 µA).
+2. **Buffer persistence across power-off** — acceptable to lose buffered
+   samples on switch-to-center? (Current answer: yes.)
 3. ~~Light sleep vs. deep sleep~~ — **resolved: deep sleep + caching.**
 4. **Default thresholds** — `3400 / 3700 mV` correct for your chemistry?
 5. ~~Battery ADC pin~~ — **resolved: GPIO 34 with divider.**
 6. ~~Buffer cap during inhibition~~ — **resolved: drop oldest sample.**
 7. ~~JSON number formatting~~ — **resolved: one decimal place.**
 8. ~~Rounding mode~~ — **resolved: round-half-away-from-zero.**
-9. **Temperature serialization form** — `%.1f` JSON numbers still recommended; confirm.
-10. ~~Divider gating~~ — **resolved: gating recommended; configurable flag default false.** Confirm MOSFET in hardware.
-11. **Sensor column order** — spreadsheet columns C… assigned in mapping-table order; confirm stable.
+9. **Temperature serialization form** — `%.1f` JSON numbers still recommended;
+   confirm.
+10. ~~Divider gating~~ — **resolved: gating recommended; configurable flag
+    default false.** Confirm MOSFET in hardware.
+11. **Sensor column order** — spreadsheet columns C… assigned in mapping-table
+    order; confirm stable.
 12. **Battery voltage in `/scan`** — raw mV only, or add derived percentage?
-13. **Absolute scheduling** — track `next_sample_at` in RTC to avoid drift? **Recommendation: yes.**
-14. **Wi-Fi cache invalidation on total failure** — also clear when `fail_count` exceeds threshold (e.g., 5)? **Recommendation: yes.**
-15. ~~NTP server default confirmation~~ — **resolved: `time.nrc.ca` confirmed valid.**
+13. **Absolute scheduling** — track `next_sample_at` in RTC to avoid
+    drift? **Recommendation: yes.**
+14. **Wi-Fi cache invalidation on total failure** — also clear when
+    `fail_count` exceeds threshold (e.g., 5)? **Recommendation: yes.**
+15. ~~NTP server default confirmation~~ — **resolved: `time.nrc.ca` confirmed
+    valid.**
 16. ~~Docker vs. Podman~~ — **resolved: Docker.**

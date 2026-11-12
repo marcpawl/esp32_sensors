@@ -2,16 +2,15 @@ cmake_minimum_required(VERSION 3.22)
 
 # Repository root — NOT an ESP-IDF project.
 #
-# The root holds the documentation, the shared `components/` and `hal/`
-# directories, the dev tooling (scripts/, Docker*, .devcontainer/, .idea/),
-# and the subprojects.
+# The root holds the documentation, the shared `components/` directory, the dev
+# tooling (scripts/, Docker*, .devcontainer/, .idea/), and the subprojects.
 # Each subproject is a standalone ESP-IDF project with its own `CMakeLists.txt`,
 # `sdkconfig.defaults`, and build directory inside its own folder:
 #
 #   mcgowan/         ESP32-S3 firmware (hal_board)   -> mcgowan/build_esp32s3/mcgowan.bin
-#   test-hal-stub/   host tests for hal/hal_stub, `linux`
+#   test-hal-stub/   host tests for components/hal/hal_stub, `linux`
 #                                                -> test-hal-stub/build_linux/
-#   test-hal-common/ host tests for hal/hal_common, `linux`
+#   test-hal-common/ host tests for components/hal/hal_common, `linux`
 #                                                -> test-hal-common/build_linux/
 #   test-logic/      host unit tests, `linux` target (hal_stub) -> test-logic/build_linux/
 #   test-espidf-cpp/ host tests for components/espidf_cpp, `linux`

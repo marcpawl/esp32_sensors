@@ -2,16 +2,15 @@
 
 ## Terminolgy
 
-host: Computer running docker.  Physical connections are made from
-the host to the dev board.
+host: Computer running docker. Physical connections are made from the host to
+the dev board.
 
 dev board: ESP32 development board
 
-container: Docker container used for development.  Contains the
-ESP-IDF toolset.
+container: Docker container used for development. Contains the ESP-IDF toolset.
 
-IDE: Integrated Development Environment.  CLion instance running
-on the host that will connect to the container for development.
+IDE: Integrated Development Environment. CLion instance running on the host
+that will connect to the container for development.
 
 ## Hardware Setup to Laptop
 
@@ -24,8 +23,8 @@ Use the buttons on the hub to disable USB1 and USB2.
 
 Wait 30 seconds.
 
-Use the buttons on the hub to enable
-USB1 and USB2; the ESP32 dev board should have a red light.
+Use the buttons on the hub to enable USB1 and USB2; the ESP32 dev board should
+have a red light.
 
 On the host, verify that the ESP dev board is seen:
 
@@ -50,8 +49,8 @@ $ esptool --port /dev/ttyACM0
 
 The development container uses the **prebuilt** image
 `marcpawl/esp-idf:20261109b` (ESP-IDF v6.1 plus the project tooling: gh,
-PyGithub, esp-clang, Node.js, the Continue CLI `cn`, and `pycodestyle`). The tag
-is pinned in `docker-compose.yml`, is never moved, and is the same image CI
+PyGithub, esp-clang, Node.js, the Continue CLI `cn`, and `pycodestyle`). The
+tag is pinned in `docker-compose.yml`, is never moved, and is the same image CI
 pulls, so there is nothing to build on a fresh machine — just pull it.
 
 Pull the image and start the container:
@@ -91,7 +90,8 @@ $
 
 ### Continue CLI (`cn`) in the container
 
-The image installs the [Continue CLI](https://github.com/continuedev/continue/tree/main/extensions/cli)
+The image installs the
+[Continue CLI](https://github.com/continuedev/continue/tree/main/extensions/cli)
 (`cn`) plus the Node.js runtime it needs, so the coding agent is available
 inside the container without a host install:
 
@@ -117,13 +117,14 @@ config.yaml  index  logs  sessions  ...
 ```
 
 The mount is declared in `docker-compose.yml` (a `Dockerfile` cannot mount host
-paths), which is also why the Dev Container gets it: `.devcontainer/devcontainer.json`
-reuses the compose `dev` service. It is listed **twice** because the container's
-`HOME` depends on the uid it runs as — uid 1000 keeps `/home/dev`, any other uid
-is given `HOME=/tmp` by `scripts/dev.py` (so ccache has a writable home) — and
-both locations are created in the image so the mount always has a destination.
-CI's checkout has no `~/.continue`; Docker creates the host directory when it
-is missing, and the runner never uses it.
+paths), which is also why the Dev Container gets it:
+`.devcontainer/devcontainer.json` reuses the compose `dev` service. It is
+listed **twice** because the container's `HOME` depends on the uid it runs as —
+uid 1000 keeps `/home/dev`, any other uid is given `HOME=/tmp` by
+`scripts/dev.py` (so ccache has a writable home) — and both locations are
+created in the image so the mount always has a destination. CI's checkout has
+no `~/.continue`; Docker creates the host directory when it is missing, and the
+runner never uses it.
 
 The service fails to start if `HOME` is unset (`${HOME:?...}`), rather than
 silently mounting `/.continue`.
@@ -165,16 +166,16 @@ passes the service environment to every command it runs), but not the
 
 ### GitHub CLI (`gh`) in the container: no SSH login
 
-The image ships the [GitHub CLI](https://cli.github.com/)
-(`gh`), but **the host's SSH keys do not log it in**. `gh` is an API client:
-`git push` uses `~/.ssh`, while `gh pr create`, `gh release`, `gh api`, and the
-rest call the GitHub REST API, which accepts only an OAuth token or a personal
-access token. So there are two independent ways to get an authenticated `gh`
-inside the container, and both are wired up:
+The image ships the [GitHub CLI](https://cli.github.com/) (`gh`), but **the
+host's SSH keys do not log it in**. `gh` is an API client: `git push` uses
+`~/.ssh`, while `gh pr create`, `gh release`, `gh api`, and the rest call the
+GitHub REST API, which accepts only an OAuth token or a personal access token.
+So there are two independent ways to get an authenticated `gh` inside the
+container, and both are wired up:
 
-**1. Pass the token through the environment (recommended).** `docker-compose.yml`
-declares `GH_TOKEN:` and `GITHUB_TOKEN:` with no value, which makes compose take
-them from your host environment when they are set:
+**1. Pass the token through the environment (recommended).**
+`docker-compose.yml` declares `GH_TOKEN:` and `GITHUB_TOKEN:` with no value,
+which makes compose take them from your host environment when they are set:
 
 ```console
 $ export GH_TOKEN=$(gh auth token)     # host: the token gh is logged in with
@@ -183,33 +184,34 @@ github.com
   ✓ Logged in to github.com account <you> (GH_TOKEN)
 ```
 
-`GH_TOKEN` takes precedence over any stored credential, and this path works even
-when the host keeps its token in a **desktop keyring** — which the container
-cannot reach, and which is the default on a desktop Linux install. Because the
-value is never written to a file, it also stays out of the committed
-`docker-compose.yml`. Note that an *unset* host variable passes nothing (compose
-keeps the variable absent rather than making it empty), so a machine without the
-variable simply gets an unauthenticated `gh`.
+`GH_TOKEN` takes precedence over any stored credential, and this path works
+even when the host keeps its token in a **desktop keyring** — which the
+container cannot reach, and which is the default on a desktop Linux install.
+Because the value is never written to a file, it also stays out of the
+committed `docker-compose.yml`. Note that an *unset* host variable passes
+nothing (compose keeps the variable absent rather than making it empty), so a
+machine without the variable simply gets an unauthenticated `gh`.
 
 **2. Share the host's `gh` state.** `docker-compose.yml` bind-mounts the host's
-`~/.config/gh` (read/write) at both possible container homes, like `~/.continue`
-and `~/.ssh`, so when `gh auth login` stored the token in `hosts.yml` the
-container reads the same login:
+`~/.config/gh` (read/write) at both possible container homes, like
+`~/.continue` and `~/.ssh`, so when `gh auth login` stored the token in
+`hosts.yml` the container reads the same login:
 
 ```console
 $ ./scripts/dev.py shell gh auth status
 ```
 
-Read/write on purpose: `gh auth login` inside the container then persists to the
-host, so the container and the host keep a single login instead of two. If the
-host stored its token in the keyring instead, `hosts.yml` holds only the account
-name and this mount alone authenticates nothing — use path 1, or run
-`gh auth login` on the host (or in the container, which then writes `hosts.yml`).
+Read/write on purpose: `gh auth login` inside the container then persists to
+the host, so the container and the host keep a single login instead of two. If
+the host stored its token in the keyring instead, `hosts.yml` holds only the
+account name and this mount alone authenticates nothing — use path 1, or run
+`gh auth login` on the host (or in the container, which then writes
+`hosts.yml`).
 
 If the host has no `~/.config/gh` at all (CI, a fresh machine), Docker creates
-that directory as root when it satisfies the mount, so the container can read it
-but not write it. `gh` still runs — it simply reports that you are not logged in
-— and path 1 is the one to use there.
+that directory as root when it satisfies the mount, so the container can read
+it but not write it. `gh` still runs — it simply reports that you are not
+logged in — and path 1 is the one to use there.
 
 Check the host first — a token can expire or be revoked, and `gh` then reports
 `The token in keyring is invalid`:
@@ -220,24 +222,25 @@ $ gh auth login -h github.com    # host, if it says the token is invalid
 ```
 
 Only a token needs to be passed: the container reaches `github.com` over its
-normal network access, and `GH_HOST` / enterprise hosts are not configured here.
+normal network access, and `GH_HOST` / enterprise hosts are not configured
+here.
 
 ### SSH keys and pushing to GitHub from the container
 
 The host's `~/.ssh` is bind-mounted (read-only) into the container at the same
 place `ssh` looks for it, so `git push` works from inside the container with
-the host's keys — nothing is copied into the image and there is no per-developer
-key setup:
+the host's keys — nothing is copied into the image and there is no
+per-developer key setup:
 
 ```console
 $ ./scripts/dev.py shell ssh -T git@github.com
 Hi <you>! You've successfully authenticated, but GitHub does not provide shell access.
 ```
 
-It is mounted **read-only**: the container can authenticate but cannot modify or
-delete the host's private keys or rewrite `known_hosts`. The one consequence is
-that a host key missing from the host's `known_hosts` cannot be added from the
-container — `ssh` fails with "Host key verification failed" rather than
+It is mounted **read-only**: the container can authenticate but cannot modify
+or delete the host's private keys or rewrite `known_hosts`. The one consequence
+is that a host key missing from the host's `known_hosts` cannot be added from
+the container — `ssh` fails with "Host key verification failed" rather than
 prompting. Record it on the host first:
 
 ```console
@@ -252,26 +255,26 @@ is handled" below. Like `~/.continue`, the mount is declared twice in
 
 ### How the container user is handled
 
-The container is run as **your own** UID/GID
-(`scripts/dev.py` passes `--user "$(id -u):$(id -g)"`), so every file the build
-writes into the bind-mounted checkout belongs to you on the host. No `chown`
-and no user-namespace remapping is involved: a bind mount does not translate
-uids, so the uid the container runs as *is* the uid the host sees.
+The container is run as **your own** UID/GID (`scripts/dev.py` passes
+`--user "$(id -u):$(id -g)"`), so every file the build writes into the
+bind-mounted checkout belongs to you on the host. No `chown` and no
+user-namespace remapping is involved: a bind mount does not translate uids, so
+the uid the container runs as *is* the uid the host sees.
 
 The consequence is that the image's own user (uid 1000) is not used, so a
 different uid has no passwd entry inside the image and `$HOME` resolves to `/`.
-Anything caching there breaks — ccache reports `ccache: error: Permission
-denied`. `scripts/dev.py` therefore sets `HOME=/tmp` and
-`CCACHE_DIR=/tmp/.cache/ccache` for every uid except 1000 (uid 1000 owns
+Anything caching there breaks — ccache reports
+`ccache: error: Permission denied`. `scripts/dev.py` therefore sets `HOME=/tmp`
+and `CCACHE_DIR=/tmp/.cache/ccache` for every uid except 1000 (uid 1000 owns
 `/home/dev` and keeps it, including the persisted cache volume). GitHub's
 runners are uid 1001, so CI depends on this.
 
 ### Updating / publishing the dev image
 
-The `Dockerfile` is kept so the image can still be rebuilt, but a rebuild is
-**not** part of the normal workflow. When the `Dockerfile` changes (or the base
-ESP-IDF image moves), publish a new image under a **new** date-stamped tag —
-never move an existing tag, since CI and every developer pin it:
+The `Dockerfile` is kept so the image can still be rebuilt, but a rebuild
+is **not** part of the normal workflow. When the `Dockerfile` changes (or the
+base ESP-IDF image moves), publish a new image under a **new** date-stamped tag
+— never move an existing tag, since CI and every developer pin it:
 
 ```console
 # 1. Build locally from the committed Dockerfile.
@@ -354,8 +357,9 @@ point its **Environment file** setting at `/opt/esp/idf/export.sh` (path inside
 the image) or leave it blank and rely on the container's entrypoint.
 
 **Serial monitor in CLion:** Pass the serial device through to the container
-with `--device=/dev/ttyUSB0` (add this to the CLion Docker toolchain's container
-options). Alternatively, use CLion's built-in terminal to run `idf.py monitor`.
+with `--device=/dev/ttyUSB0` (add this to the CLion Docker toolchain's
+container options). Alternatively, use CLion's built-in terminal to run
+`idf.py monitor`.
 
 **Recommended workflow:** Use CLion for editing, code navigation, and CMake
 configuration; use CLion's built-in terminal (`Alt+F12`) for `idf.py`

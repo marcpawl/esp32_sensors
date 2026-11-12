@@ -13,6 +13,9 @@ layer must never use a higher one. The rule applies to both CMake requirements
 (`REQUIRES` / `PRIV_REQUIRES`) and `#include`s — a header-only dependency is
 still a dependency.
 
+The hardware-abstraction layer (layers 1 and 2 below) is documented in
+`components/hal/AGENTS.md`; this skill owns the rules that connect the layers.
+
 ## The layers
 
 | Layer | Components | Test / application projects |
@@ -23,21 +26,20 @@ still a dependency.
 | 4 | `logic` | `test-logic` |
 | 5 (highest) | — | `mcgowan`, `donny` |
 
-`hal_common` is header-only. 
+`hal_common` is header-only.
 
-`hal_board` is the GPIO-backed implementation
-(ESP32-S3); 
+`hal_board` is the GPIO-backed implementation (ESP32-S3);
 
-`hal_stub` is the pin-free implementation (`linux`). 
+`hal_stub` is the pin-free implementation (`linux`).
 
-`espidf_cpp` provides C++ wrappers around esp-idf code, to make
-usage less error prone.
+`espidf_cpp` provides C++ wrappers around esp-idf code, to make usage less
+error prone.
 
 Logic in the main application business logic.
 
 `mcgowan` is the ESP32-S3 firmware
 
-`donny` is the `linux`-emulated application. 
+`donny` is the `linux`-emulated application.
 
 ## Dependency direction
 
@@ -104,28 +106,27 @@ require either implementation.
 
 - Each subproject's top-level `CMakeLists.txt` points `EXTRA_COMPONENT_DIRS` at
   the repo-root `components/` (the ESP-IDF wrappers, the application logic and
-  the `sml` wrapper) **and** at the repo-root `hal/` (the three HAL
-  components), because its own project root is not on the default search path.
-  Both entries are needed: ESP-IDF scans a component directory one level deep
-  (`__project_component_dir` globs `dir/*` and does not descend), so a
-  grouping directory is only found when it is named on its own. Each project
-  also sets `EXCLUDE_COMPONENTS` before `project()`: `mcgowan` excludes
-  `hal_stub`; every `linux` project excludes `hal_board`. `hal_common` is
-  never excluded.
+  the `sml` wrapper) **and** at `components/hal/` (the three HAL components),
+  because its own project root is not on the default search path. Both entries
+  are needed: ESP-IDF scans a component directory one level deep
+  (`__project_component_dir` globs `dir/*` and does not descend), so a grouping
+  directory is only found when it is named on its own. Each project also sets
+  `EXCLUDE_COMPONENTS` before `project()`: `mcgowan` excludes `hal_stub`; every
+  `linux` project excludes `hal_board`. `hal_common` is never excluded.
 - The `linux` projects also narrow `set(COMPONENTS ...)` to `main` plus
   `hal_stub` (and `logic` in `test-logic`, so the component is built now that
   it has `.cpp` files), so the host target does not try to build chip-only
   ESP-IDF components.
 - A component's requirements live in its own `CMakeLists.txt` — under
-  `hal/<name>/` for the HAL components, under `components/<name>/` for the
-  rest. An application's live in `<project>/main/CMakeLists.txt`. Use
+  `components/hal/<name>/` for the HAL components, under `components/<name>/`
+  for the rest. An application's live in `<project>/main/CMakeLists.txt`. Use
   `REQUIRES` when the dependency appears in public headers, `PRIV_REQUIRES`
   when only `.cpp` files use it.
-- The component *name* is the directory name, not its path: `hal/hal_common`
-  is the component `hal_common`, so every `REQUIRES`, `PRIV_REQUIRES`,
-  `EXCLUDE_COMPONENTS` and `set(COMPONENTS ...)` names the component and
-  needs no change when a component moves.
-- `scripts/dev.py` must keep the `hal/` root in `ROOTS`: it is the pathspec
+- The component *name* is the directory name, not its path:
+  `components/hal/hal_common` is the component `hal_common`, so every
+  `REQUIRES`, `PRIV_REQUIRES`, `EXCLUDE_COMPONENTS` and `set(COMPONENTS ...)`
+  names the component and needs no change when a component moves.
+- `scripts/dev.py` must keep `components` in `ROOTS`: it is the pathspec
   clang-format walks and the source of the clang-tidy header filter, so a
   component left out of it is silently unformatted and unanalyzed.
   `HalComponentCoverageTests` in `scripts/test_dev.py` pins that.

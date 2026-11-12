@@ -36,7 +36,8 @@ Cheapest first, matching `.githooks/pre-commit`:
 1. `./scripts/dev.py pycodestyle`
 2. `./scripts/dev.py build`
 3. `./scripts/dev.py clang-tidy`
-4. `./scripts/dev.py format-check-staged` (or `format-check` for the whole tree)
+4. `./scripts/dev.py format-check-staged` (or `format-check` for the whole
+   tree)
 5. `./scripts/dev.py test`
 
 The pre-commit hook runs exactly those five gates and rejects the commit on the
