@@ -98,7 +98,7 @@ esp32_sensors/
 ├── .devcontainer/       # CLion / VS Code Dev Container definition (reuses compose)
 ├── .continue/           # Continue CLI config: `rules/` (slash commands), `skills/`
 │   └── skills/          #   one SKILL.md per topic: cpp-coding-standards, git,
-│                        #   platform_layers, quality_checks
+│                        #   platform_layers, quality_checks, cmake, markdown
 ├── scripts/dev.py       # Container task runner (build/flash/test/format/shell)
 ├── scripts/idf.sh       # Runs idf.py with the ESP-IDF env, sourcing export.sh if absent
 ├── scripts/test_dev.py  # Host unit tests for dev.py (`dev.py self-check`)
@@ -921,6 +921,13 @@ How the `CMakeLists.txt` files are written — including the rule that they
 document the build and never the sources — is in the `cmake` skill
 (`.continue/skills/cmake/SKILL.md`). Read it before editing a build file or
 adding a source.
+
+### Markdown
+
+How the Markdown files are written — the line width, and the preference for
+lists and subsections over sentences that run several items together — is
+in the `markdown` skill (`.continue/skills/markdown/SKILL.md`). Read it
+before writing or editing a `.md` file.
 
 ### Conventions to follow
 
