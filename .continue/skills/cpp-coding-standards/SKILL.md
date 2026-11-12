@@ -7,7 +7,9 @@ metadata:
 
 # C++ Coding Standards (C++ Core Guidelines)
 
-Comprehensive coding standards for modern C++ (C++17/20/23) derived from the [C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines). Enforces type safety, resource safety, immutability, and clarity.
+Comprehensive coding standards for modern C++ (C++17/20/23) derived from the
+[C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines).
+Enforces type safety, resource safety, immutability, and clarity.
 
 ## When to Use
 
@@ -15,24 +17,31 @@ Comprehensive coding standards for modern C++ (C++17/20/23) derived from the [C+
 - Reviewing or refactoring existing C++ code
 - Making architectural decisions in C++ projects
 - Enforcing consistent style across a C++ codebase
-- Choosing between language features (e.g., `enum` vs `enum class`, raw pointer vs smart pointer)
+- Choosing between language features (e.g., `enum` vs `enum class`, raw pointer
+  vs smart pointer)
 
 ### When NOT to Use
 
 - Non-C++ projects
 - Legacy C codebases that cannot adopt modern C++ features
-- Embedded/bare-metal contexts where specific guidelines conflict with hardware constraints (adapt selectively)
+- Embedded/bare-metal contexts where specific guidelines conflict with hardware
+  constraints (adapt selectively)
 
 ## Cross-Cutting Principles
 
 These themes recur across the entire guidelines and form the foundation:
 
-1. **RAII everywhere** (P.8, R.1, E.6, CP.20): Bind resource lifetime to object lifetime
-2. **Immutability by default** (P.10, Con.1-5, ES.25): Start with `const`/`constexpr`; mutability is the exception
-3. **Type safety** (P.4, I.4, ES.46-49, Enum.3): Use the type system to prevent errors at compile time
-4. **Express intent** (P.3, F.1, NL.1-2, T.10): Names, types, and concepts should communicate purpose
+1. **RAII everywhere** (P.8, R.1, E.6, CP.20): Bind resource lifetime to object
+   lifetime
+2. **Immutability by default** (P.10, Con.1-5, ES.25): Start with
+   `const`/`constexpr`; mutability is the exception
+3. **Type safety** (P.4, I.4, ES.46-49, Enum.3): Use the type system to prevent
+   errors at compile time
+4. **Express intent** (P.3, F.1, NL.1-2, T.10): Names, types, and concepts
+   should communicate purpose
 5. **Minimize complexity** (F.2-3, ES.5, Per.4-5): Simple code is correct code
-6. **Value semantics over pointer semantics** (C.10, R.3-5, F.20, CP.31): Prefer returning by value and scoped objects
+6. **Value semantics over pointer semantics** (C.10, R.3-5, F.20, CP.31):
+   Prefer returning by value and scoped objects
 
 ## Philosophy & Interfaces (P.*, I.*)
 
@@ -216,7 +225,8 @@ private:
 
 - Calling virtual functions in constructors/destructors (C.82)
 - Using `memset`/`memcpy` on non-trivial types (C.90)
-- Providing different default arguments for virtual function and overrider (C.140)
+- Providing different default arguments for virtual function and overrider
+  (C.140)
 - Making data members `const` or references, which suppresses move/copy (C.12)
 
 ## Resource Management (R.*)
@@ -285,7 +295,8 @@ private:
 
 - Naked `new`/`delete` (R.11)
 - `malloc()`/`free()` in C++ code (R.10)
-- Multiple resource allocations in a single expression (R.13 -- exception safety hazard)
+- Multiple resource allocations in a single expression (R.13 -- exception
+  safety hazard)
 - `shared_ptr` where `unique_ptr` suffices (R.21)
 
 ## Expressions & Statements (ES.*)
@@ -489,7 +500,8 @@ void transfer(Account& from, Account& to, double amount) {
 
 - `volatile` for synchronization (CP.8 -- it's for hardware I/O only)
 - Detaching threads (CP.26 -- lifetime management becomes nearly impossible)
-- Unnamed lock guards: `std::lock_guard<std::mutex>(m);` destroys immediately (CP.44)
+- Unnamed lock guards: `std::lock_guard<std::mutex>(m);` destroys immediately
+  (CP.44)
 - Holding locks while calling callbacks (CP.22 -- deadlock risk)
 - Lock-free programming without deep expertise (CP.100)
 
@@ -608,9 +620,8 @@ enum { RED, GREEN, BLUE };           // Enum.3 + Enum.5 + Enum.6 violation
 | **NL.10** | Prefer `underscore_style` names |
 
 > **SF.1 is deliberately overridden.** Upstream SF.1 asks for `.h` interface
-> files; this repository uses `.hpp` for every C++ header so a header is
-> never mistaken for a C header. Wherever the upstream rules say `.h`, read
-> `.hpp`.
+> files; this repository uses `.hpp` for every C++ header so a header is never
+> mistaken for a C header. Wherever the upstream rules say `.h`, read `.hpp`.
 
 ### Header Guard
 
@@ -722,6 +733,7 @@ Before marking C++ work complete:
 - [ ] No `using namespace` in headers at global scope (SF.7)
 - [ ] Headers start with `#pragma once` and are self-contained (SF.11)
 - [ ] Locks use RAII (`scoped_lock`/`lock_guard`) (CP.20)
-- [ ] Exceptions are custom types, thrown by value, caught by reference (E.14, E.15)
+- [ ] Exceptions are custom types, thrown by value, caught by reference (E.14,
+  E.15)
 - [ ] `'\n'` instead of `std::endl` (SL.io.50)
 - [ ] No magic numbers (ES.45)
