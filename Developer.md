@@ -271,10 +271,10 @@ runners are uid 1001, so CI depends on this.
 
 ### Updating / publishing the dev image
 
-The `Dockerfile` is kept so the image can still be rebuilt, but a rebuild is
-**not** part of the normal workflow. When the `Dockerfile` changes (or the base
-ESP-IDF image moves), publish a new image under a **new** date-stamped tag —
-never move an existing tag, since CI and every developer pin it:
+The `Dockerfile` is kept so the image can still be rebuilt, but a rebuild
+is **not** part of the normal workflow. When the `Dockerfile` changes (or the
+base ESP-IDF image moves), publish a new image under a **new** date-stamped tag
+— never move an existing tag, since CI and every developer pin it:
 
 ```console
 # 1. Build locally from the committed Dockerfile.

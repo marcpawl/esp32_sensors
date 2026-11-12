@@ -5,9 +5,9 @@
 A solar-powered, battery-backed ESP32-S3 that samples three DS18B20
 thermometers on a shared 1-Wire bus and uploads readings to a remote URL over
 WiFi at a configurable cadence. Behavior is controlled by a 3-position
-ON-OFF-ON switch (Configure / Off / Run). Between samples the device uses
-**deep sleep** to minimize power; the sample buffer and Wi-Fi connection cache
-live in **RTC memory** so they survive sleep and backoff reboots.
+ON-OFF-ON switch (Configure / Off / Run). Between samples the device
+uses **deep sleep** to minimize power; the sample buffer and Wi-Fi connection
+cache live in **RTC memory** so they survive sleep and backoff reboots.
 
 ---
 
@@ -183,7 +183,6 @@ rules for C++:
    - designated array initialization.
 
 When adapting ESP-IDF C examples, restructure these initializers.
-
 4. Prefer `constexpr` and `static_assert` over macros where C++ equivalents
    exist.
 
@@ -562,8 +561,8 @@ Namespace: `thermo_cfg`
 On `POST /save`:
 
 1. Validate all submitted fields.
-2. If validation fails, re-render the form with error messages; `saved_time` is
-   **not** updated.
+2. If validation fails, re-render the form with error messages; `saved_time`
+   is **not** updated.
 3. Persist all validated fields to NVS.
 4. **Connect to the configured NTP server** and obtain the current UTC time.
 5. Store the UTC time (Unix epoch) as `saved_time` in NVS.
@@ -782,8 +781,8 @@ Panel ≈ 8 / 0.504 / 3 ≈ 5.3 mW
 11. **Sensor column order** — spreadsheet columns C… assigned in mapping-table
     order; confirm stable.
 12. **Battery voltage in `/scan`** — raw mV only, or add derived percentage?
-13. **Absolute scheduling** — track `next_sample_at` in RTC to avoid drift?
-    **Recommendation: yes.**
+13. **Absolute scheduling** — track `next_sample_at` in RTC to avoid
+    drift? **Recommendation: yes.**
 14. **Wi-Fi cache invalidation on total failure** — also clear when
     `fail_count` exceeds threshold (e.g., 5)? **Recommendation: yes.**
 15. ~~NTP server default confirmation~~ — **resolved: `time.nrc.ca` confirmed

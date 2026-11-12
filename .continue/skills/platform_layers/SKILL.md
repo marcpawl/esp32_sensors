@@ -13,6 +13,9 @@ layer must never use a higher one. The rule applies to both CMake requirements
 (`REQUIRES` / `PRIV_REQUIRES`) and `#include`s — a header-only dependency is
 still a dependency.
 
+The hardware-abstraction layer (layers 1 and 2 below) is documented in
+`hal/AGENTS.md`; this skill owns the rules that connect the layers.
+
 ## The layers
 
 | Layer | Components | Test / application projects |

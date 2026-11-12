@@ -47,11 +47,12 @@ station, batch upload, backoff) intentionally stubbed.
 > **Implementation status (current milestone):**
 > - **Configure mode — implemented.** SoftAP, HTTPS server, config UI, NVS
 >   persistence, LED semantics.
-> - **Run mode — scaffolded/stubbed.** Real: boot self-test LEDs, battery read
->   + hysteresis, sensor read with cached ROM IDs (first-boot scan), sample
->   append to the RTC buffer, deep sleep. **Stubbed:** Wi-Fi station connect +
->   cached fast-reconnect (§3.9), batch upload + payload wire-out (§9, payload
->   is formatted and logged but not sent), exponential backoff (§3.7).
+> - **Run mode — scaffolded/stubbed.** Real: boot self-test LEDs, battery
+>   read + hysteresis, sensor read with cached ROM IDs (first-boot scan),
+>   sample append to the RTC buffer, deep sleep. **Stubbed:** Wi-Fi station
+>   connect + cached fast-reconnect (§3.9), batch upload + payload wire-out
+>   (§9, payload is formatted and logged but not sent), exponential backoff
+>   (§3.7).
 > - **Host unit tests.** `test-hal-stub/`, `test-hal-common/`, `test-logic/`,
 >   and `test-espidf-cpp/` build for the ESP-IDF `linux` target (Unity) and run
 >   via `scripts/dev.py test`, which runs all four suites (`test-hal-common`
@@ -59,8 +60,8 @@ station, batch upload, backoff) intentionally stubbed.
 >   `test-logic`, and `test-espidf-cpp` run one suite each). On-target tests
 >   for hardware-dependent code are planned.
 
-> **Toolchain note:** The host's locally installed ESP-IDF is **v6.1** with
-> **Xtensa GCC 15.2.0** (`esp-15.2.0_20251204`), which matches the pinned
+> **Toolchain note:** The host's locally installed ESP-IDF is **v6.1**
+> with **Xtensa GCC 15.2.0** (`esp-15.2.0_20251204`), which matches the pinned
 > Docker image `marcpawl/esp-idf:20261109b` exactly (it is built on
 > `espressif/idf:release-v6.1`). Keep both in sync: if you upgrade the host
 > toolchain, then
@@ -132,9 +133,10 @@ esp32_sensors/
 │   ├── logic/           # Board-independent application logic (temp_format, rom_id, payload, limits, led_manager, mode*, led_task, self_signed_cert)
 │   └── sml/             # Wrapper component exposing the third_party/sml submodule
 ├── hal/                 # The hardware-abstraction layer (see "HAL" section)
-│   ├── hal_common/      # Shared, header-only HAL vocabulary (types/concepts)
-│   ├── hal_board/       # Real, GPIO-backed HAL
-│   └── hal_stub/        # Pin-free HAL stub
+│   ├── AGENTS.md        #   The HAL layer in detail — devices, contract, tests
+│   ├── hal_common/      #   Shared, header-only HAL vocabulary (types/concepts)
+│   ├── hal_board/       #   Real, GPIO-backed HAL
+│   └── hal_stub/        #   Pin-free HAL stub
 ├── third_party/         # Vendored third-party code (never formatted, never tidy'd)
 │   ├── json/            #   nlohmann/json v3.11.3 (header-only, MIT)
 │   └── sml/             #   boost-ext/sml git SUBMODULE, pinned to v1.2.0
@@ -167,8 +169,8 @@ esp32_sensors/
 **The root is not an ESP-IDF project.** The top-level `CMakeLists.txt` is plain
 CMake that only aggregates the subprojects, so a single build covers
 everything. Each subproject is a standalone ESP-IDF project with its own
-`CMakeLists.txt`, `project()`, `sdkconfig.defaults`, and a build directory
-**inside its own folder**, named after the target:
+`CMakeLists.txt`, `project()`, `sdkconfig.defaults`, and a build
+directory **inside its own folder**, named after the target:
 
 | Subproject | Directory | Target | Produces |
 |---|---|---|---|
@@ -199,6 +201,9 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 - `Specification.md` — the single source of truth for hardware, modes, RTC
   memory layout, payload format, and power budget. Any implementation must
   conform to it.
+- `hal/AGENTS.md` — the HAL layer in detail: the three components, the header
+  pair per device, the semantics-free contract, the one-shot timer, the
+  aggregate board, deep sleep, and what the HAL tests pin.
 - `mcgowan/main/CMakeLists.txt` — the firmware's component definition. **Add
   new sources here** or they will not compile. Board-independent logic belongs
   in `components/logic` instead.
@@ -378,187 +383,12 @@ deterministic stubs. The three of them — the vocabulary, the GPIO-backed
 implementation and the pin-free stub — sit in the repo-root `hal/` directory,
 which every project adds to `EXTRA_COMPONENT_DIRS` next to `components/`:
 ESP-IDF scans a component directory one level deep, so a grouping directory
-needs an entry of its own. The components, their layers, and the platform rules
-are documented in the `platform_layers` skill
-(`.continue/skills/platform_layers/SKILL.md`). The vocabulary's own tests —
-`BoardLike`, `TimerLike`, `OneShotTimerFactoryLike`, and the deep-sleep types —
-live in `test-hal-common/`, while the stub devices' tests live in
-`test-hal-stub/` (the hardware-backed devices are covered by on-target tests).
-
-The interface for each HAL device is a header pair: the shared vocabulary in
-`hal_common` (e.g. `hal/push_button_types.hpp`) plus a per-implementation
-header of the same name (e.g. `hal/push_button.hpp`) that includes it and adds
-the concrete class. For the push button:
-
-- `hal/push_button_types.hpp` (`hal_common`) defines
-  `thermo::hal::ButtonState`, `thermo::hal::ButtonCallback`,
-  `thermo::hal::ButtonHandler`, and the `thermo::hal::PushButtonLike` concept —
-  the single definition of the shared types.
-- `hal/push_button.hpp` (`hal_board` and `hal_stub`, one each) defines
-  `thermo::hal::PushButton` with an identical public interface (same ctor,
-  inline `create()` factory, `init()`, `read()`, `set_interrupt()`). Each
-  `static_assert`s `PushButtonLike<PushButton>`, so the two implementations
-  cannot drift from the shared contract (or from each other).
-
-The HAL is **semantics-free**: `PushButton::read()` returns `ButtonState::kOn`
-while the button is pressed and `kOff` while it is released, and interpreting a
-press (edge detection, debouncing, hold timing) is the caller's job.
-
-**The mode switch is not a HAL device.** ESP-IDF has no direct notion of a DPDT
-switch, so the board models each of its two mode-sense poles as an independent
-`PushButton` — `board.config_button()` and `board.run_button()` — and the DPDT
-knowledge (both poles on is a hardware fault, both off is the center/Off
-position, one of them selects Configure or Run) lives in the logic layer. The
-stub's `PushButton::set()` simulates presses, so bad hardware is reproducible
-in tests.
-
-The WiFi radio (§3.2, §3.9) follows the same header pair: `hal/wifi_types.hpp`
-(`hal_common`) defines `AccessPointConfig`, `StationConfig`, `copy_text()`, the
-length limits, and the `WifiRadioLike` concept; `hal/wifi.hpp` (`hal_board` /
-`hal_stub`) defines `WifiRadioBoard` / `WifiRadioStub` and aliases
-`using WifiRadio = ...`. The interface is `init()`, `start_ap()`/`stop_ap()`,
-`start_station()`/`stop_station()` — the API and station are **independent**
-(Configure mode may run both at once) and the radio is semantics-free (callers
-own retry policy). An empty station SSID is rejected with
-`ESP_ERR_INVALID_ARG`; callers must not start it. The stub adds observation
-accessors (`initialized()`, `ap_running()`, `station_running()`, `ap_config()`,
-`station_config()`), useful in tests.
-
-**The one-shot timer is a HAL device, but a new one.** `hal/timer_types.hpp`
-(`hal_common`) defines the `TimerLike` concept (`cancel()`) and the
-`OneShotTimerFactoryLike<Timer, TimerHandle>` concept
-(`register_timer(milliseconds, std::function<void()>) -> TimerHandle`).
-`register` cannot be the method name (it is a C++ keyword), hence
-`register_timer`. The arming class is a *factory* rather than a timer: it holds
-no timer of its own, creating one per call and handing it back through the
-handle. The handle type is a concept parameter rather than a fixed type,
-because the two implementations arm timers through different mechanisms and the
-caller only needs `cancel()`. Cancellation is **racy by contract**: the
-callback may already be running (or already be queued for the timer task) when
-`cancel()` returns, so a caller that must not act on a stale callback guards
-the callback body itself.
-
-Unlike the other HAL devices there is no shared `hal/timer.hpp` and no single
-`Timer` class: the two implementations are named after themselves, so a project
-always states which one it linked, and board-independent code targets the
-concept rather than a concrete type.
-
-- **`hal_board`:** `hal/timer_board.hpp` + `timer_board.cpp` provide
-  `OneShotTimerFactoryBoard` (the arming factory) and `TimerBoard` (the
-  move-only handle). Both `static_assert` their concepts, so the implementation
-  cannot drift from the shared contract. It is built on `esp_timer` with
-  `ESP_TIMER_TASK` dispatch, so the callback runs in the esp_timer task and may
-  use ordinary FreeRTOS APIs — but must stay short, since that one task also
-  dispatches every other `esp_timer` callback. The handle **owns** the
-  `esp_timer` instance (RAII): `cancel()` — also run by the destructor — arms
-  nothing further, stops with `esp_timer_stop_blocking(…, portMAX_DELAY)`, then
-  deletes the instance. The `std::function` lives in a `shared_ptr` the handle
-  holds while the timer's `arg` points at it; `esp_timer_stop_blocking()` from
-  task context does not return until no callback is running, which is what
-  makes releasing the box safe. A handle destroyed from *inside* its own
-  callback is the exception (the stop returns immediately there), so the
-  callback copies the callable before invoking it and touches the box no
-  further. Consequently `cancel()` on this implementation is **stronger** than
-  the abstract contract: it is not racy when called from task context. A zero
-  delay or a failed `esp_timer_create()` / `esp_timer_start_once()` trips an
-  `assert` rather than silently dropping the request (after the assert it
-  returns an empty handle, never a handle that owns no timer).
-- **`hal_stub`:** `hal/timer_stub.hpp` + `timer_stub.cpp` provide
-  `OneShotTimerFactoryStub` and `TimerStub`, likewise pinned by
-  `static_assert`. It uses FreeRTOS software timers (`freertos/timers.h`)
-  because the `linux` target has no `esp_timer` implementation —
-  `test-hal-stub/main/test_freertos_timers.cpp` first pinned that the one-shot
-  API works there, and `test-hal-stub/main/test_hal_timer_stub.cpp` covers the
-  stub itself. Each `register_timer()` allocates one `TimerCallbackBox` (the
-  caller's `std::function`) and creates a one-shot (`pdFALSE`) timer whose
-  `pvTimerID` is that box, so it too is RAII-owned by a move-only handle.
-  Lifetime is harder here than on the board, because FreeRTOS timer commands
-  are **asynchronous**: start/stop/delete only queue work for the "Tmr Svc"
-  task, so neither the timer nor its callback storage can be freed when
-  `cancel()` returns. `cancel()` therefore queues the box's free with
-  `xTimerPendFunctionCall()`, which FreeRTOS posts to the *same* command queue
-  and so processes strictly after the timer's own delete — and the timer task
-  drains expired timers before the queue, and the callback copies the callable
-  before invoking it, so neither a late callback nor a self-cancel can read
-  freed memory. Consequently `cancel()` on the stub is genuinely **racy**, as
-  the abstract contract allows: a callback already dispatched may still run
-  after `cancel()` returns. A delay that rounds to fewer than one tick (10 ms
-  at `configTICK_RATE_HZ` = 100), a null callback, or a failed create/start
-  trips an `assert`; after the assert an empty handle is returned.
-
-**The aggregate board owns one of every device**, including the WiFi radio:
-`BoardLike` (`hal/board_types.hpp`) requires `wifi()` (mutable and const), and
-`init_all()` initializes the radio last. `init_all()` does **not** start the AP
-or the station — the caller decides (Configure mode starts the AP, Run mode
-starts the station). Reach the stub controls through the board, e.g.
-`board.wifi().start_ap(cfg)` / `board.wifi().ap_running()`.
-
-**The one-shot timer is on the board too, but not as a device accessor.**
-`BoardLike` requires a public member typedef — `typename T::TimerHandle`, which
-must satisfy `TimerLike` — plus a method
-`T::TimerHandle register_timer(std::chrono::milliseconds, std::function<void()>)`.
-Each board spells the typedef for the handle it hands back
-(`Board::TimerHandle = TimerBoard`, `BoardStub::TimerHandle = TimerStub`) and
-owns a private timer factory (`OneShotTimerFactoryBoard` /
-`OneShotTimerFactoryStub`) that `register_timer()` delegates to. There is
-**no** `timer()` accessor on purpose: a caller arms a timer and immediately
-owns the handle, so exposing the factory as well would give it two ways to do
-the same thing. Because the typedef is spelled by the implementation,
-`BoardLike` stays implementation-free — it names only the `TimerLike` concept,
-so board-independent code (templated on `hal::BoardLike`) can arm and cancel a
-timer without knowing which mechanism is underneath.
-
-The two timer factories are **movable** (defaulted move constructor, move
-assignment still deleted, like every other HAL device). They hold no state —
-each `register_timer()` creates its own timer — so moving one is
-indistinguishable from copying it, and making them movable is what keeps
-`Board` / `BoardStub` movable, which `create()` plus
-`std::make_shared<Board>(Board::create({}))` relies on. `init_all()` does not
-touch the timer: neither `esp_timer` nor the FreeRTOS timer service needs
-per-board setup.
-
-The two aggregate boards are **named differently on purpose**: `hal_board`'s is
-`thermo::hal::Board` in `hal/board.hpp`, `hal_stub`'s is
-`thermo::hal::BoardStub` in `hal/board_stub.hpp`. Nothing includes one header
-hoping the other implementation is on the include path, so a project states
-which board it linked. `hal_stub`'s devices keep the shared headers
-(`hal/led.hpp`, `hal/wifi.hpp`, …), and the shared `WifiRadio` alias still
-resolves per implementation. Code that must work with either takes the
-`hal::BoardLike` template parameter and never names a concrete board — see
-`logic/led_task.hpp`, whose LED-cycle table and coverage checks are free
-functions (`thermo::ledtask::led_cycles()` / `has_cycle()`), so the
-`static_assert`s naming every `LedState` need no board at all.
-
-**Deep sleep is on the board, not a HAL device.** There is no third sleep
-implementation to swap in, and sleeping powers down the *whole* board rather
-than a peripheral, so `BoardLike` requires the two board-wide operations
-directly: `deep_sleep_start(std::chrono::seconds)` (§3.8) and
-`sleep_get_wakeup_causes()`. The vocabulary is in `hal/sleep_types.hpp`
-(`hal_common`) — `WakeCause`, `WakeCauses`, `wake_cause_bit()`, `woke_from()` —
-and is deliberately dependency-free (only `<cstdint>`): `esp_sleep.h` is not
-self-contained on the `linux` target (it includes `hal/gpio_types.h`, which is
-not on the include path of a project that links no GPIO driver), and the
-ESP-IDF linux port registers no `sleep_modes.c`, so
-`esp_sleep_get_wakeup_causes()` is unlinkable there.
-
-`WakeCause` names ESP-IDF's `esp_sleep_source_t` **bit positions**
-(`kUndefined` = 0, `kTimer` = 4) so the hardware board passes the ESP-IDF
-bitmap straight through; `board.cpp` `static_assert`s that the values still
-line up. The wake cause is a bitmap because several sources can fire at once.
-
-`hal_board` calls `esp_sleep_enable_timer_wakeup()` + `esp_deep_sleep_start()`
-(the §3.8 pair) and `deep_sleep_start()` is `[[noreturn]]` there. `hal_stub`
-records the duration (`last_deep_sleep()`), arms the wake the real board would
-produce — `deep_sleep_start()` sets the cause to `WakeCause::kTimer` — and
-**returns**. A fresh stub reports a cold boot
-(`wake_cause_bit(WakeCause::kUndefined)`), and `set_wakeup_causes()` overrides
-either, so a test can simulate any wake. The `BoardLike` concept can therefore
-only require that the call is *well-formed* — not `[[noreturn]]` — and no
-caller may rely on sleep returning. That asymmetry is deliberate: it is what
-makes the sleep/backoff decision host-testable. Run mode now sleeps through the
-board (`board.deep_sleep_start(std::chrono::seconds{sleep_s})`), and the RTC
-boot policy does the same in reverse: `rtc_state_init(board)` asks
-`sleep_get_wakeup_causes()` whether the retained block survives this boot.
+needs an entry of its own. A project links exactly one implementation:
+`hal_board` and `hal_stub` expose the same headers, so each excludes the other.
+The components, their layers, and the platform rules are documented in the
+`platform_layers` skill (`.continue/skills/platform_layers/SKILL.md`); the HAL
+itself — the header pair per device, the semantics-free contract, the one-shot
+timer, the aggregate board and deep sleep — is documented in `hal/AGENTS.md`.
 
 **`espidf_cpp` component (`components/espidf_cpp`).** The headers are in
 namespace `thermo::espidf_cpp` (`HttpServer` has one `.cpp`, listed in the
@@ -830,8 +660,8 @@ note), so ccache works.
 
 > **ccache and non-1000 uids.** A bind mount does not translate uids, so the
 > container runs as the calling user rather than remapping it. The image's own
-> user is uid 1000; any other uid (a normal host user, or GitHub's runner at
-> 1001) has no passwd entry inside the image, so `$HOME` resolves to `/` and
+> user is uid 1000; any other uid (a normal host user, or GitHub's runner
+> at 1001) has no passwd entry inside the image, so `$HOME` resolves to `/` and
 > ccache fails with `ccache: error: Permission denied`. `scripts/dev.py`
 > therefore exports `HOME=/tmp` and `CCACHE_DIR=/tmp/.cache/ccache` for any uid
 > other than 1000 (uid 1000 keeps `/home/dev`). Keep this in mind if you add
@@ -909,15 +739,15 @@ required.
 Eight shared run configurations are committed under `.idea/runConfigurations/`
 (and mirrored in the local `.idea/workspace.xml`). Six call `scripts/dev.py`,
 so a single script is the source of truth for container commands — run them
-from the CLion Run/Debug toolbar. The other two kinds are native CLion
-**CMake** run configurations: the four below (one per subproject profile) are
-meant to drive CLion's own CMake project model, which is what would make the
-compile database live and therefore enable code navigation and C++
-**refactorings** — but see the "Verified reality" note above: they currently
-all configure the root aggregator and produce no compile database, so today
-they only build. `PROJECT_NAME` in each must match the root `project()` name,
-`esp32_sensors_subprojects`, and `TARGET_NAME` must name a target **of that
-root project** — i.e. one of the `*_build` aggregate targets, not a
+from the CLion Run/Debug toolbar. The other two kinds are native
+CLion **CMake** run configurations: the four below (one per subproject profile)
+are meant to drive CLion's own CMake project model, which is what would make
+the compile database live and therefore enable code navigation and
+C++ **refactorings** — but see the "Verified reality" note above: they
+currently all configure the root aggregator and produce no compile database, so
+today they only build. `PROJECT_NAME` in each must match the root `project()`
+name, `esp32_sensors_subprojects`, and `TARGET_NAME` must name a target **of
+that root project** — i.e. one of the `*_build` aggregate targets, not a
 subproject's ESP-IDF `<name>.elf`. The root is `project(... NONE)` and defines
 only the aggregate custom targets, so an ELF name is unresolvable there and
 CLion reports "cannot find target". CLion rewrites `PROJECT_NAME` to the real
@@ -1043,37 +873,10 @@ There are two kinds of test suite, runnable from the host via `scripts/dev.py`:
 - **Host-based unit tests** build for the ESP-IDF `linux` target with Unity —
   no hardware needed — in four projects:
 
-  - `test-hal-stub/` covers the pin-free `hal_stub` devices. Each device's own
-file exercises its stub contract and its `hal_common` concept:
-`test_hal_led.cpp` (`LedLike`), `test_hal_push_button.cpp` (`PushButtonLike`,
-including the `set()` control the mode-sense poles use), `test_hal_onewire.cpp`
-(`OneWireLike` plus `set_sensors()`), `test_hal_chip_temperature.cpp`
-(`ChipTemperatureLike`), `test_hal_wifi.cpp` (`WifiRadioLike`, AP/station
-start/stop independence, and the empty-SSID rejection), and
-`test_hal_timer_stub.cpp` (`TimerStub` / `OneShotTimerFactoryStub`: firing
-exactly once, a captured callable really running, cancelling before and after
-the expiry, and move construction / move assignment transferring ownership).
-`test_freertos_timers.cpp` verifies that FreeRTOS software timers — what the
-stub timer is built on, since the `linux` target has no `esp_timer` — create,
-fire exactly once, re-arm, and stay silent after a cancel. `test_hal_board.cpp`
-covers the aggregate `BoardStub`: that `config_button()` / `run_button()` /
-`wifi()` are wired up, that `init_all()` initializes but does not start the
-radio, that `deep_sleep_start()` records the duration while
-`sleep_get_wakeup_causes()` / `set_wakeup_causes()` model the next boot's wake
-cause, and that the board names a cancelable `TimerHandle` and arms working
-timers through `register_timer()`.
-  - `test-hal-common/` covers the implementation-free `hal_common` vocabulary.
-    `test_hal_board_types.cpp` pins the `BoardLike` contract from the other
-    side: `BoardPins` defaults to the §2.4 pin map, `BoardWithoutTimer` spells
-    out every requirement except the timer using the real stub devices, and
-    `ModelBoard<Handle, Returned>` adds just the timer clause, so a model that
-    names no handle, a non-class or non-cancelable handle, a `register_timer()`
-    returning something other than the board's `TimerHandle`, or no
-    `register_timer()` at all is each rejected for that reason alone.
-    `test_hal_timer_types.cpp` models conforming and non-conforming
-    timer/handle types to prove both concepts reject what they should, and
-    `test_hal_sleep_types.cpp` pins the wake-cause vocabulary (`WakeCause` at
-    ESP-IDF's bit positions, `wake_cause_bit()`, and `woke_from()`).
+  - `test-hal-stub/` — the pin-free `hal_stub` devices; what each test pins is
+described in `hal/AGENTS.md`.
+  - `test-hal-common/` — the implementation-free `hal_common` vocabulary; what
+    each test pins is described in `hal/AGENTS.md`.
   - `test-logic/` covers the pure-logic modules (`temp_format`, `limits`,
     `led_manager`, `payload`, `app_config` validation, `rom_id`, `rtc_buffer` —
     including the cold-boot `rtc_state_reset()`, and the `mode_selection` pole
