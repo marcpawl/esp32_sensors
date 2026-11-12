@@ -64,6 +64,8 @@ struct NotCancelable {
 // own typedef" be tested without also tripping `TimerLike`.
 struct OtherHandle {
     void cancel() {}
+    void restart_timer(std::chrono::milliseconds /*delay*/,
+                       std::function<void()> /*callback*/) {}
 };
 
 // A class with none of the board interface.

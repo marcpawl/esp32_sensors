@@ -132,6 +132,50 @@ TEST_CASE("hal timer stub: register_timer fires the callback exactly once",
     TEST_ASSERT_EQUAL_INT(1, calls_after_quiet_period(calls));
 }
 
+TEST_CASE("hal timer stub: restart_timer re-arms with a new delay and callback",
+          "[hal_timer_stub]") {
+    static std::atomic<int> calls;
+    static std::atomic<int> calls2;
+    calls.store(0);
+    calls2.store(0);
+
+    OneShotTimerFactoryStub timer;
+    TimerStub handle =
+        timer.register_timer(kDelay, [] { calls.fetch_add(1); });
+    TEST_ASSERT_TRUE(handle.valid());
+
+    // Fires after the delay...
+    TEST_ASSERT_EQUAL_INT(1, wait_for_calls(calls, 1));
+    TEST_ASSERT_EQUAL_INT(1, calls_after_quiet_period(calls));
+
+    // Restart with a new delay and a new callback: the old callback must not
+    // fire again, and the new one fires after the new delay.
+    handle.restart_timer(kDelay, [] { calls2.fetch_add(1); });
+
+    TEST_ASSERT_EQUAL_INT(1, wait_for_calls(calls2, 1));
+    TEST_ASSERT_EQUAL_INT(1, calls_after_quiet_period(calls2));
+    TEST_ASSERT_EQUAL_INT(1, calls.load());
+}
+
+TEST_CASE("hal timer stub: restart_timer on an armed timer resets the countdown",
+          "[hal_timer_stub]") {
+    static std::atomic<int> calls;
+    calls.store(0);
+
+    OneShotTimerFactoryStub timer;
+    TimerStub handle =
+        timer.register_timer(kDelay * 2, [] { calls.fetch_add(1); });
+    TEST_ASSERT_TRUE(handle.valid());
+
+    // Re-arm well before the original expiry with a shorter delay and a new
+    // callback counter (reusing `calls` is fine: it should still read 0 here).
+    vTaskDelay(kPollTicks);
+    handle.restart_timer(kDelay, [] { calls.fetch_add(1); });
+
+    // The new callback fires after the shorter delay, not the original one.
+    TEST_ASSERT_EQUAL_INT(1, wait_for_calls(calls, 1));
+}
+
 TEST_CASE("hal timer stub: the callback runs the state the caller captured",
           "[hal_timer_stub]") {
     // A by-value capture is the interesting case: it proves the callable is

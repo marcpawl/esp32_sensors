@@ -81,12 +81,14 @@ TickType_t delay_to_ticks(std::chrono::milliseconds delay) {
 
 // --- TimerStub ---------------------------------------------------------------
 
-TimerStub::TimerStub(TimerHandle_t timer, TimerCallbackBox* box) noexcept
-    : timer_(timer), box_(box) {}
+TimerStub::TimerStub(TimerHandle_t timer, TimerCallbackBox* box,
+                     std::chrono::milliseconds delay) noexcept
+    : timer_(timer), box_(box), delay_(delay) {}
 
 TimerStub::TimerStub(TimerStub&& other) noexcept
     : timer_(std::exchange(other.timer_, nullptr)),
-      box_(std::exchange(other.box_, nullptr)) {}
+      box_(std::exchange(other.box_, nullptr)),
+      delay_(std::exchange(other.delay_, std::chrono::milliseconds{})) {}
 
 TimerStub::~TimerStub() {
     cancel();
@@ -98,8 +100,28 @@ TimerStub& TimerStub::operator=(TimerStub&& other) noexcept {
         cancel();
         timer_ = std::exchange(other.timer_, nullptr);
         box_ = std::exchange(other.box_, nullptr);
+        delay_ = std::exchange(other.delay_, std::chrono::milliseconds{});
     }
     return *this;
+}
+
+void TimerStub::restart_timer(std::chrono::milliseconds delay,
+                              std::function<void()> callback) noexcept {
+    if (timer_ == nullptr) {
+        return;
+    }
+    if (box_ != nullptr) {
+        *box_ = std::move(callback);
+    }
+    delay_ = delay;
+    TickType_t const ticks = delay_to_ticks(delay);
+    // Use the FromISR primitives unconditionally: they never block, so the
+    // method stays ISR-safe even when called from task context (the queue
+    // command is still processed by the timer service task).
+    BaseType_t woken = pdFALSE;
+    (void)xTimerChangePeriodFromISR(timer_, ticks, &woken);
+    (void)xTimerStartFromISR(timer_, &woken);
+    portYIELD_FROM_ISR(woken);
 }
 
 void TimerStub::cancel() noexcept {
@@ -164,7 +186,7 @@ TimerStub OneShotTimerFactoryStub::register_timer(
         return TimerStub();
     }
 
-    return TimerStub(timer, box);
+    return TimerStub(timer, box, delay);
 }
 
 }  // namespace thermo::hal

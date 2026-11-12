@@ -31,6 +31,8 @@ using thermo::hal::TimerLike;
 // The minimal conforming handle: a class with `cancel()`.
 struct GoodHandle {
     void cancel() {}
+    void restart_timer(std::chrono::milliseconds /*delay*/,
+                       std::function<void()> /*callback*/) {}
 };
 
 // No `cancel()` at all.
@@ -41,6 +43,20 @@ struct NoCancelHandle {
 // `cancel()` returns a value rather than nothing.
 struct WrongReturnHandle {
     bool cancel() { return true; }
+};
+
+// `cancel()` but no `restart_timer()`.
+struct NoRestartHandle {
+    void cancel() {}
+};
+
+// `restart_timer()` returns a value rather than nothing.
+struct WrongRestartReturnHandle {
+    void cancel() {}
+    bool restart_timer(std::chrono::milliseconds /*delay*/,
+                       std::function<void()> /*callback*/) {
+        return true;
+    }
 };
 
 // A class with no timer interface whatsoever.
@@ -116,6 +132,23 @@ TEST_CASE("hal timer types: TimerLike requires a void cancel()",
     // The concept pins the return type: a `bool cancel()` would not satisfy it,
     // so an implementation cannot silently change what cancelling reports.
     static_assert(!TimerLike<WrongReturnHandle>);
+    TEST_PASS();
+}
+
+TEST_CASE("hal timer types: TimerLike requires restart_timer()",
+          "[hal_timer_types]") {
+    // A handle that can be cancelled but not restarted does not model the
+    // contract, so an implementation cannot silently drop the method.
+    static_assert(!TimerLike<NoRestartHandle>);
+    // ...and the return type is pinned to void, so an implementation cannot
+    // silently change what restarting reports.
+    static_assert(!TimerLike<WrongRestartReturnHandle>);
+    TEST_PASS();
+}
+
+TEST_CASE("hal timer types: a handle with cancel() and restart_timer() models TimerLike",
+          "[hal_timer_types]") {
+    static_assert(TimerLike<GoodHandle>);
     TEST_PASS();
 }
 

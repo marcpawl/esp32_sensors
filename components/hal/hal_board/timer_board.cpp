@@ -56,12 +56,14 @@ void timer_callback(void* arg) {
 // --- TimerBoard --------------------------------------------------------------
 
 TimerBoard::TimerBoard(esp_timer_handle_t timer,
-                       std::shared_ptr<TimerCallbackBox> callback) noexcept
-    : timer_(timer), callback_(std::move(callback)) {}
+                       std::shared_ptr<TimerCallbackBox> callback,
+                       std::chrono::milliseconds delay) noexcept
+    : timer_(timer), callback_(std::move(callback)), delay_(delay) {}
 
 TimerBoard::TimerBoard(TimerBoard&& other) noexcept
     : timer_(std::exchange(other.timer_, nullptr)),
-      callback_(std::move(other.callback_)) {}
+      callback_(std::move(other.callback_)),
+      delay_(std::exchange(other.delay_, std::chrono::milliseconds{})) {}
 
 TimerBoard::~TimerBoard() {
     cancel();
@@ -73,8 +75,25 @@ TimerBoard& TimerBoard::operator=(TimerBoard&& other) noexcept {
         cancel();
         timer_ = std::exchange(other.timer_, nullptr);
         callback_ = std::move(other.callback_);
+        delay_ = std::exchange(other.delay_, std::chrono::milliseconds{});
     }
     return *this;
+}
+
+void TimerBoard::restart_timer(std::chrono::milliseconds delay,
+                               std::function<void()> callback) noexcept {
+    if (timer_ == nullptr) {
+        return;
+    }
+    if (callback_ != nullptr) {
+        *callback_ = std::move(callback);
+    }
+    delay_ = delay;
+    // `esp_timer` has no ISR-safe restart primitive, so this is task context
+    // only: stop first (ignore "not running"), then start with the new delay.
+    (void)esp_timer_stop(timer_);
+    auto const us = static_cast<uint64_t>(delay.count()) * 1000ULL;
+    (void)esp_timer_start_once(timer_, us);
 }
 
 void TimerBoard::cancel() noexcept {
@@ -132,7 +151,7 @@ TimerBoard OneShotTimerFactoryBoard::register_timer(
         return TimerBoard();
     }
 
-    return TimerBoard(timer, std::move(box));
+    return TimerBoard(timer, std::move(box), delay);
 }
 
 }  // namespace thermo::hal

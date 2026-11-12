@@ -76,6 +76,20 @@ class TimerBoard {
     // already expired, does nothing.
     void cancel() noexcept;
 
+    // Re-arms this timer with a new delay and callback, so the callback runs
+    // again after `delay`. The timer instance is reused: the existing delay
+    // and callback are replaced rather than the timer being cancelled and
+    // recreated. No-op on a handle that holds no timer.
+    //
+    // `delay` is rounded to whole microseconds (the `esp_timer` resolution).
+    // Fails loudly: a delay of zero trips an assert rather than silently
+    // dropping the request.
+    //
+    // Task context only: `esp_timer` has no ISR-safe restart primitive, so
+    // this must not be called from an interrupt handler.
+    void restart_timer(std::chrono::milliseconds delay,
+                       std::function<void()> callback) noexcept;
+
     // Whether this handle actually refers to a timer (a moved-from handle, or
     // one created empty, does not).
     [[nodiscard]] bool valid() const noexcept { return timer_ != nullptr; }
@@ -86,10 +100,12 @@ class TimerBoard {
     // Takes ownership of an already-started `esp_timer` instance and of the
     // callback box its `arg` points at.
     TimerBoard(esp_timer_handle_t timer,
-               std::shared_ptr<TimerCallbackBox> callback) noexcept;
+               std::shared_ptr<TimerCallbackBox> callback,
+               std::chrono::milliseconds delay) noexcept;
 
     esp_timer_handle_t timer_ = nullptr;
     std::shared_ptr<TimerCallbackBox> callback_;
+    std::chrono::milliseconds delay_{};  // the delay this timer was armed with
 };
 
 // Arms one-shot timers: after the requested delay each timer calls its callback
