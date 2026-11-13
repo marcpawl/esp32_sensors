@@ -551,13 +551,13 @@ class DevImageTests(unittest.TestCase):
         self.assertEqual(dev.DEV_IMAGE, "marcpawl/esp-idf:20261109b")
 
     def test_compose_pins_the_same_image(self):
-        compose = (dev.REPO_ROOT / "docker-compose.yml").read_text()
+        compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
         self.assertIn(f"image: {dev.DEV_IMAGE}", compose)
 
     def test_compose_pulls_instead_of_rebuilding(self):
         # `pull_policy: missing` fetches the pinned image from the registry; a
         # `build:` section alone would let compose rebuild it silently.
-        compose = (dev.REPO_ROOT / "docker-compose.yml").read_text()
+        compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
         self.assertIn("pull_policy: missing", compose)
 
     def test_ci_pulls_the_image_and_does_not_build_it(self):
@@ -569,8 +569,8 @@ class DevImageTests(unittest.TestCase):
 
     def test_dockerfile_is_kept_so_the_image_can_be_rebuilt(self):
         # The image is prebuilt, but the Dockerfile stays reproducible.
-        self.assertTrue((dev.REPO_ROOT / "Dockerfile").is_file())
-        compose = (dev.REPO_ROOT / "docker-compose.yml").read_text()
+        self.assertTrue((dev.REPO_ROOT / "docker" / "Dockerfile").is_file())
+        compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
         self.assertIn("dockerfile: Dockerfile", compose)
 
     def test_pull_is_registered_and_host_only(self):
@@ -590,14 +590,14 @@ class DevImageTests(unittest.TestCase):
     def test_dockerfile_extends_the_official_espressif_image(self):
         # The pinned image is the official ESP-IDF v6.1 image plus project
         # tooling; AGENTS.md's toolchain note relies on this.
-        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        dockerfile = (dev.REPO_ROOT / "docker" / "Dockerfile").read_text()
         self.assertIn("FROM espressif/idf:release-v6.1", dockerfile)
 
     def test_spec_names_the_pinned_image(self):
         # The spec's environment table is the first thing a new contributor
         # reads, so it must not contradict the pinned image. (The spec keeps no
         # change history of its own; git log is the record.)
-        spec = (dev.REPO_ROOT / "Specification.md").read_text()
+        spec = (dev.REPO_ROOT / "doc" / "Specification.md").read_text()
         self.assertIn(dev.DEV_IMAGE, spec)
 
     def test_local_image_is_not_the_pinned_tag(self):
@@ -657,7 +657,9 @@ class DevContainerTests(unittest.TestCase):
         # The Dev Container must not define its own image: it inherits the
         # pinned one from docker-compose.yml.
         text = self._devcontainer()
-        self.assertEqual(text["dockerComposeFile"], "../docker-compose.yml")
+        self.assertEqual(
+            text["dockerComposeFile"], "../docker/docker-compose.yml"
+        )
         self.assertEqual(text["service"], "dev")
         self.assertNotIn("image", text)
         self.assertNotIn("build", text)
@@ -723,8 +725,18 @@ class ContainerUserTests(unittest.TestCase):
         finally:
             dev.run = original
         command = calls[0]
-        self.assertEqual(command[:4], ["docker", "compose", "run", "--user"])
-        self.assertEqual(command[4], dev._container_user())
+        self.assertEqual(
+            command[:6],
+            [
+                "docker",
+                "compose",
+                "-f",
+                "docker/docker-compose.yml",
+                "run",
+                "--user",
+            ],
+        )
+        self.assertEqual(command[6], dev._container_user())
         self.assertIn("--rm", command)
         # The re-executed command follows the service name.
         self.assertEqual(command[-2:], ["dev.py", "build"])
@@ -765,7 +777,7 @@ def _compose_home_bind_mounts() -> dict[str, tuple[str, str]]:
     the file (rather than running `docker compose config`) keeps this
     dependency-free, so `self-check` needs no Docker.
     """
-    compose = (dev.REPO_ROOT / "docker-compose.yml").read_text()
+    compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
     mounts = {}
     for line in compose.splitlines():
         entry = line.strip().removeprefix("- ").strip()
@@ -791,7 +803,7 @@ def _compose_dev_environment() -> dict[str, str | None]:
     needs no Docker and no YAML library. The block ends at the first line
     indented no deeper than the `environment:` key itself.
     """
-    compose = (dev.REPO_ROOT / "docker-compose.yml").read_text()
+    compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
     lines = compose.splitlines()
     for index, line in enumerate(lines):
         stripped = line.strip()
@@ -869,14 +881,14 @@ class ContinueCliMountTests(unittest.TestCase):
         # Docker would otherwise create it as root. Both paths are created, and
         # /tmp/.continue is world-writable like /tmp so it works without the
         # mount too.
-        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        dockerfile = (dev.REPO_ROOT / "docker" / "Dockerfile").read_text()
         self.assertIn("mkdir -p /tmp/.continue", dockerfile)
         self.assertIn('"/home/${USERNAME}/.continue"', dockerfile)
         self.assertIn("chmod 1777 /tmp/.continue", dockerfile)
 
     def test_image_installs_the_continue_cli_and_its_node_runtime(self):
         # `cn` needs Node >= 20.20.1 and the base image ships no Node at all.
-        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        dockerfile = (dev.REPO_ROOT / "docker" / "Dockerfile").read_text()
         self.assertIn("@continuedev/cli@${CONTINUE_CLI_VERSION}", dockerfile)
         self.assertIn("ARG NODE_VERSION=", dockerfile)
         # The tarball is pinned by checksum, not just by URL.
@@ -1009,7 +1021,7 @@ class ContinueCliCommandTests(unittest.TestCase):
         service = _compose_dev_environment()
         self.assertIn("DEEPSEEK_API_KEY", service, service)
         self.assertIsNone(service["DEEPSEEK_API_KEY"])
-        compose = (dev.REPO_ROOT / "docker-compose.yml").read_text()
+        compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
         for line in compose.splitlines():
             stripped = line.strip()
             if stripped.startswith("DEEPSEEK_API_KEY:"):
@@ -1065,7 +1077,7 @@ class SshMountTests(unittest.TestCase):
         # A bind mount needs a destination. Both are created 0700 and owned by
         # the container user, which is what ssh requires before it will use a
         # key (the read-only host mount carries the host's own modes).
-        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        dockerfile = (dev.REPO_ROOT / "docker" / "Dockerfile").read_text()
         self.assertIn('"/home/${USERNAME}/.ssh"', dockerfile)
         self.assertIn("install -d -m 700", dockerfile)
         self.assertIn("/tmp/.ssh", dockerfile)
@@ -1125,7 +1137,7 @@ class GhCliMountTests(unittest.TestCase):
         # A bind mount needs a destination owned by the container user, or
         # Docker creates it as root and `gh` cannot write to it without the
         # mount.
-        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        dockerfile = (dev.REPO_ROOT / "docker" / "Dockerfile").read_text()
         self.assertIn('"/home/${USERNAME}/.config/gh"', dockerfile)
         self.assertIn("/tmp/.config/gh", dockerfile)
 
@@ -1136,7 +1148,7 @@ class GhCliMountTests(unittest.TestCase):
         # "failed to read configuration: ... permission denied" for those
         # uids, instead of the intended "You are not logged into any GitHub
         # hosts" (which is what a bare `docker run -u 1234` showed).
-        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        dockerfile = (dev.REPO_ROOT / "docker" / "Dockerfile").read_text()
         install = dockerfile.index("install -d -m 700")
         [chmod_line] = [
             line
@@ -1580,24 +1592,6 @@ class GitHooksInstallationTests(unittest.TestCase):
                 check=True,
             )
 
-    def test_hook_file_exists_and_is_executable(self):
-        # The working tree must contain the runnable hook, not just the config
-        # pointing at an empty directory.
-        hook = dev.REPO_ROOT / self.GITHOOKS_DIR / self.HOOK_NAME
-        self.assertTrue(hook.is_file(), f"missing hook file: {hook}")
-        self.assertTrue(
-            os.access(hook, os.X_OK),
-            f"hook file is not executable: {hook}",
-        )
-
-    def test_hook_file_is_tracked_by_git(self):
-        # The hook is version-controlled, so a fresh clone can restore it.
-        tracked = self._git("ls-files", "--", str(self.GITHOOKS_DIR))
-        self.assertIn(
-            f"{self.GITHOOKS_DIR}/{self.HOOK_NAME}",
-            tracked.splitlines(),
-        )
-
     def test_install_hooks_sets_core_hooks_path(self):
         # `install-hooks` must point git at the version-controlled hooks dir.
         # Run the real command and restore the prior config afterwards so the
@@ -1609,30 +1603,6 @@ class GitHooksInstallationTests(unittest.TestCase):
             self.assertEqual(self._get_hooks_path(), str(self.GITHOOKS_DIR))
         finally:
             self._set_hooks_path(original)
-
-    def test_installed_hook_matches_the_tracked_content(self):
-        # The file on disk must be the tracked content (the "latest changes"):
-        # a deleted-then-restored hook must be byte-identical to the version
-        # git tracks, which is what `install-hooks` restores. Compare against
-        # the index (staged) version, falling back to HEAD when the hook is
-        # not staged — mirroring the restore logic.
-        rel = f"{self.GITHOOKS_DIR}/{self.HOOK_NAME}"
-        tracked = None
-        for source in (f":{rel}", f"HEAD:{rel}"):
-            proc = subprocess.run(
-                ("git", "show", source),
-                cwd=dev.REPO_ROOT,
-                capture_output=True,
-                text=True,
-            )
-            if proc.returncode == 0:
-                tracked = proc.stdout
-                break
-        self.assertIsNotNone(tracked, f"{rel} is not tracked by git")
-        on_disk = (
-            dev.REPO_ROOT / self.GITHOOKS_DIR / self.HOOK_NAME
-        ).read_text()
-        self.assertEqual(on_disk, tracked)
 
 
 class TidyCompileArgumentsTests(unittest.TestCase):
@@ -1840,17 +1810,7 @@ class TidyConfigurationTests(unittest.TestCase):
 
 
 class TidyGateTests(unittest.TestCase):
-    """`clang-tidy` is wired into the pre-commit hook and into CI."""
-
-    def test_hook_runs_tidy_before_the_format_check(self):
-        # Ordering matters: static analysis reports first, then formatting,
-        # then the slow test suite.
-        hook = (dev.REPO_ROOT / ".githooks" / "pre-commit").read_text()
-        tidy = hook.index('run_check(dev, "clang-tidy")')
-        fmt = hook.index('run_check(dev, "format-check-staged")')
-        tests = hook.index('run_check(dev, "test")')
-        self.assertLess(tidy, fmt)
-        self.assertLess(fmt, tests)
+    """`clang-tidy` is wired into CI."""
 
     def test_ci_runs_tidy_after_the_build(self):
         # clang-tidy consumes the compile databases, so it must come after the
@@ -2495,13 +2455,12 @@ class PythonSourceDiscoveryTests(unittest.TestCase):
     # -- the real repository ------------------------------------------------
 
     def test_the_repository_enumerates_its_expected_python_sources(self):
-        # Pins the actual set: the two dev.py scripts and the extensionless
-        # hook. A new Python source is meant to be noticed here, so this list
-        # is a deliberate tripwire rather than an over-broad assertion.
+        # Pins the actual set: the two dev.py scripts. A new Python source is
+        # meant to be noticed here, so this list is a deliberate tripwire
+        # rather than an over-broad assertion.
         self.assertEqual(
             dev.python_sources(),
             [
-                ".githooks/pre-commit",
                 "scripts/dev.py",
                 "scripts/test_dev.py",
             ],
@@ -2515,7 +2474,7 @@ class PythonSourceDiscoveryTests(unittest.TestCase):
 
 
 class PycodestyleGateTests(unittest.TestCase):
-    """`pycodestyle` is wired into the pre-commit hook and into CI."""
+    """`pycodestyle` is wired into CI."""
 
     def test_command_is_registered_and_documented(self):
         self.assertIn("pycodestyle", dev.COMMANDS)
@@ -2527,19 +2486,6 @@ class PycodestyleGateTests(unittest.TestCase):
         source = (dev.REPO_ROOT / "scripts" / "dev.py").read_text()
         body = source.split("def cmd_pycodestyle", 1)[1].split("\ndef ", 1)[0]
         self.assertIn("change_to_container()", body)
-
-    def test_hook_runs_pycodestyle_first(self):
-        # The cheapest gate: it needs no compile database, no build, and no
-        # test run, so it must come before the others rather than after them.
-        hook = (dev.REPO_ROOT / ".githooks" / "pre-commit").read_text()
-        style = hook.index('run_check(dev, "pycodestyle")')
-        for later in (
-            '"clang-tidy"',
-            '"format-check-staged"',
-            '"test"',
-        ):
-            with self.subTest(later=later):
-                self.assertLess(style, hook.index(f"run_check(dev, {later})"))
 
     def test_ci_runs_pycodestyle_before_the_build(self):
         # It needs no compile database, so there is no reason to wait for the
@@ -2554,7 +2500,7 @@ class PycodestyleGateTests(unittest.TestCase):
 
     def test_the_image_installs_pycodestyle(self):
         # The gate would otherwise fail with "No module named pycodestyle".
-        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        dockerfile = (dev.REPO_ROOT / "docker" / "Dockerfile").read_text()
         self.assertIn("pycodestyle==", dockerfile)
         # Pinned, and verified at build time so a bad install fails the build.
         self.assertIn("ARG PYCODESTYLE_VERSION=", dockerfile)
