@@ -74,7 +74,7 @@ services:
         
     volumes:
       # Project source is bind-mounted so edits on the host are visible live.
-      - .:/project
+      - ..:/project
       # Expose host USB/serial device nodes (ttyUSB*, ttyACM*, etc.).
       - /dev:/dev
       # NOTE: do NOT bind-mount /tmp (e.g. ./tmp:/tmp). It replaces the

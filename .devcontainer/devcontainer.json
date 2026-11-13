@@ -33,7 +33,7 @@
   "name": "ESP32 Sensors Dev (ESP-IDF v6.1)",
 
   // Reuse the committed compose service. `runServices` starts only `dev`.
-  "dockerComposeFile": "../docker-compose.yml",
+  "dockerComposeFile": "../docker/docker-compose.yml",
   "service": "dev",
   "runServices": ["dev"],
   "workspaceFolder": "/project",

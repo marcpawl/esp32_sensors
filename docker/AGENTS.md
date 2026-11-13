@@ -1,7 +1,7 @@
 # The Docker dev environment
 
-The dev container is defined by the committed `Dockerfile` +
-`docker-compose.yml`; the image itself is prebuilt and pulled
+The dev container is defined by the committed `docker/Dockerfile` +
+`docker/docker-compose.yml`; the image itself is prebuilt and pulled
 (`marcpawl/esp-idf:20261109b`). Repository-wide guidance is in the root
 `AGENTS.md`.
 
@@ -9,8 +9,8 @@ The dev container is defined by the committed `Dockerfile` +
 
 The pinned image matches the host toolchain (ESP-IDF v6.1, Xtensa GCC 15.2.0)
 and is never moved. Pull it with `./scripts/dev.py pull`. Only rebuild when the
-`Dockerfile` changes: rebuild, publish a **new** date-stamped tag, bump the
-pin in `docker-compose.yml` and `scripts/dev.py` (`DEV_IMAGE`), and update the
+`docker/Dockerfile` changes: rebuild, publish a **new** date-stamped tag, bump the
+pin in `docker/docker-compose.yml` and `scripts/dev.py` (`DEV_IMAGE`), and update the
 docs. See `Developer.md`.
 
 ## Running commands
@@ -40,13 +40,13 @@ the image, so `$HOME` resolves to `/` and ccache fails with
 ## Container-only builds
 
 The root `CMakeLists.txt` and every subproject refuse to configure unless
-`DOCKER_IMAGE=esp32_sensors` (set by the `Dockerfile`), so a host invocation
+`DOCKER_IMAGE=esp32_sensors` (set by the `docker/Dockerfile`), so a host invocation
 fails fast. `sdkconfig` is generated and git-ignored — edit
 `sdkconfig.defaults` instead.
 
 ## Editing the image
 
-Editing the image, mounts, or user? Change `docker-compose.yml` (and
-`Dockerfile`), **not** `devcontainer.json`. The Dev Container deliberately
+Editing the image, mounts, or user? Change `docker/docker-compose.yml` (and
+`docker/Dockerfile`), **not** `devcontainer.json`. The Dev Container deliberately
 inherits everything from the compose service so the CLI and the IDE cannot
 drift apart.

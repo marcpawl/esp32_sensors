@@ -531,7 +531,7 @@ def compose_run(args: list[str]) -> int:
     (see `_container_environment`).
     """
     container_user = _container_user()
-    command = ["docker", "compose", "run",
+    command = ["docker", "compose", "-f", "docker/docker-compose.yml", "run",
                "--user", container_user,
                *_container_environment(container_user),
                "--rm", "dev"]

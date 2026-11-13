@@ -551,13 +551,13 @@ class DevImageTests(unittest.TestCase):
         self.assertEqual(dev.DEV_IMAGE, "marcpawl/esp-idf:20261109b")
 
     def test_compose_pins_the_same_image(self):
-        compose = (dev.REPO_ROOT / "docker-compose.yml").read_text()
+        compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
         self.assertIn(f"image: {dev.DEV_IMAGE}", compose)
 
     def test_compose_pulls_instead_of_rebuilding(self):
         # `pull_policy: missing` fetches the pinned image from the registry; a
         # `build:` section alone would let compose rebuild it silently.
-        compose = (dev.REPO_ROOT / "docker-compose.yml").read_text()
+        compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
         self.assertIn("pull_policy: missing", compose)
 
     def test_ci_pulls_the_image_and_does_not_build_it(self):
@@ -569,8 +569,8 @@ class DevImageTests(unittest.TestCase):
 
     def test_dockerfile_is_kept_so_the_image_can_be_rebuilt(self):
         # The image is prebuilt, but the Dockerfile stays reproducible.
-        self.assertTrue((dev.REPO_ROOT / "Dockerfile").is_file())
-        compose = (dev.REPO_ROOT / "docker-compose.yml").read_text()
+        self.assertTrue((dev.REPO_ROOT / "docker" / "Dockerfile").is_file())
+        compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
         self.assertIn("dockerfile: Dockerfile", compose)
 
     def test_pull_is_registered_and_host_only(self):
@@ -590,7 +590,7 @@ class DevImageTests(unittest.TestCase):
     def test_dockerfile_extends_the_official_espressif_image(self):
         # The pinned image is the official ESP-IDF v6.1 image plus project
         # tooling; AGENTS.md's toolchain note relies on this.
-        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        dockerfile = (dev.REPO_ROOT / "docker" / "Dockerfile").read_text()
         self.assertIn("FROM espressif/idf:release-v6.1", dockerfile)
 
     def test_spec_names_the_pinned_image(self):
@@ -657,7 +657,7 @@ class DevContainerTests(unittest.TestCase):
         # The Dev Container must not define its own image: it inherits the
         # pinned one from docker-compose.yml.
         text = self._devcontainer()
-        self.assertEqual(text["dockerComposeFile"], "../docker-compose.yml")
+        self.assertEqual(text["dockerComposeFile"], "../docker/docker-compose.yml")
         self.assertEqual(text["service"], "dev")
         self.assertNotIn("image", text)
         self.assertNotIn("build", text)
@@ -723,8 +723,8 @@ class ContainerUserTests(unittest.TestCase):
         finally:
             dev.run = original
         command = calls[0]
-        self.assertEqual(command[:4], ["docker", "compose", "run", "--user"])
-        self.assertEqual(command[4], dev._container_user())
+        self.assertEqual(command[:6], ["docker", "compose", "-f", "docker/docker-compose.yml", "run", "--user"])
+        self.assertEqual(command[6], dev._container_user())
         self.assertIn("--rm", command)
         # The re-executed command follows the service name.
         self.assertEqual(command[-2:], ["dev.py", "build"])
@@ -765,7 +765,7 @@ def _compose_home_bind_mounts() -> dict[str, tuple[str, str]]:
     the file (rather than running `docker compose config`) keeps this
     dependency-free, so `self-check` needs no Docker.
     """
-    compose = (dev.REPO_ROOT / "docker-compose.yml").read_text()
+    compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
     mounts = {}
     for line in compose.splitlines():
         entry = line.strip().removeprefix("- ").strip()
@@ -791,7 +791,7 @@ def _compose_dev_environment() -> dict[str, str | None]:
     needs no Docker and no YAML library. The block ends at the first line
     indented no deeper than the `environment:` key itself.
     """
-    compose = (dev.REPO_ROOT / "docker-compose.yml").read_text()
+    compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
     lines = compose.splitlines()
     for index, line in enumerate(lines):
         stripped = line.strip()
@@ -869,14 +869,14 @@ class ContinueCliMountTests(unittest.TestCase):
         # Docker would otherwise create it as root. Both paths are created, and
         # /tmp/.continue is world-writable like /tmp so it works without the
         # mount too.
-        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        dockerfile = (dev.REPO_ROOT / "docker" / "Dockerfile").read_text()
         self.assertIn("mkdir -p /tmp/.continue", dockerfile)
         self.assertIn('"/home/${USERNAME}/.continue"', dockerfile)
         self.assertIn("chmod 1777 /tmp/.continue", dockerfile)
 
     def test_image_installs_the_continue_cli_and_its_node_runtime(self):
         # `cn` needs Node >= 20.20.1 and the base image ships no Node at all.
-        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        dockerfile = (dev.REPO_ROOT / "docker" / "Dockerfile").read_text()
         self.assertIn("@continuedev/cli@${CONTINUE_CLI_VERSION}", dockerfile)
         self.assertIn("ARG NODE_VERSION=", dockerfile)
         # The tarball is pinned by checksum, not just by URL.
@@ -1009,7 +1009,7 @@ class ContinueCliCommandTests(unittest.TestCase):
         service = _compose_dev_environment()
         self.assertIn("DEEPSEEK_API_KEY", service, service)
         self.assertIsNone(service["DEEPSEEK_API_KEY"])
-        compose = (dev.REPO_ROOT / "docker-compose.yml").read_text()
+        compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
         for line in compose.splitlines():
             stripped = line.strip()
             if stripped.startswith("DEEPSEEK_API_KEY:"):
@@ -1065,7 +1065,7 @@ class SshMountTests(unittest.TestCase):
         # A bind mount needs a destination. Both are created 0700 and owned by
         # the container user, which is what ssh requires before it will use a
         # key (the read-only host mount carries the host's own modes).
-        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        dockerfile = (dev.REPO_ROOT / "docker" / "Dockerfile").read_text()
         self.assertIn('"/home/${USERNAME}/.ssh"', dockerfile)
         self.assertIn("install -d -m 700", dockerfile)
         self.assertIn("/tmp/.ssh", dockerfile)
@@ -1125,7 +1125,7 @@ class GhCliMountTests(unittest.TestCase):
         # A bind mount needs a destination owned by the container user, or
         # Docker creates it as root and `gh` cannot write to it without the
         # mount.
-        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        dockerfile = (dev.REPO_ROOT / "docker" / "Dockerfile").read_text()
         self.assertIn('"/home/${USERNAME}/.config/gh"', dockerfile)
         self.assertIn("/tmp/.config/gh", dockerfile)
 
@@ -1136,7 +1136,7 @@ class GhCliMountTests(unittest.TestCase):
         # "failed to read configuration: ... permission denied" for those
         # uids, instead of the intended "You are not logged into any GitHub
         # hosts" (which is what a bare `docker run -u 1234` showed).
-        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        dockerfile = (dev.REPO_ROOT / "docker" / "Dockerfile").read_text()
         install = dockerfile.index("install -d -m 700")
         [chmod_line] = [
             line
@@ -2488,7 +2488,7 @@ class PycodestyleGateTests(unittest.TestCase):
 
     def test_the_image_installs_pycodestyle(self):
         # The gate would otherwise fail with "No module named pycodestyle".
-        dockerfile = (dev.REPO_ROOT / "Dockerfile").read_text()
+        dockerfile = (dev.REPO_ROOT / "docker" / "Dockerfile").read_text()
         self.assertIn("pycodestyle==", dockerfile)
         # Pinned, and verified at build time so a bad install fails the build.
         self.assertIn("ARG PYCODESTYLE_VERSION=", dockerfile)

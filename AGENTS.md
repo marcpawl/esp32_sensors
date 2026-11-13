@@ -2,127 +2,34 @@
 
 ## Project Description
 
-This repository contains an **ESP32 Solar-Powered Thermometer Logger** and its
-software specification. Firmware implementation is **in progress**: Configure
-mode is fully implemented; Run mode is scaffolded with the network paths (Wi-Fi
-station, batch upload, backoff) intentionally stubbed.
+ESP32 project.
 
-**What it does:**
-- A solar-powered, battery-backed ESP32 samples three **DS18B20** thermometers
-  on a shared **1-Wire bus**.
-- Readings are uploaded to a remote URL over **WiFi** at a configurable
-  cadence.
-- A **3-position ON-OFF-ON switch** selects the operating mode: **Configure /
-  Off / Run**.
-- Between samples the device enters **deep sleep** to minimize power draw.
-- The sample buffer and WiFi connection cache live in **RTC memory** so they
-  survive deep sleep and backoff reboots.
+esp-idf is being used. esp target for production, and linux target
+for testing.
 
-**Main purpose and goals:**
-- Long-duration, low-power remote temperature monitoring.
-- Robust logging that survives power cycles and connectivity loss.
-- Configurable, field-servicable behavior via a local HTTPS configuration
-  server.
+C++26 with modern practices.  See the skill cpp-coding-standards and cpp_qc
+when modifying C++ code. CMake build files.
+
+Python is the preferred scripting language.  See the skill python_qc
+when modifying python code.
 
 **Key technologies:**
 
-| Item | Value |
-|---|---|
-| Host OS | Linux Mint |
-| IDE | CLion 2026.2 |
-| Container runtime | Docker |
-| Container image | `marcpawl/esp-idf:20261109b` (prebuilt: `espressif/idf:release-v6.1` + project tooling) |
-| Source language | **C++26** (GNU extensions, `-std=gnu++26`) |
-| Target framework | ESP-IDF v6.1 |
-| Toolchain | GCC 15.2.0 (Xtensa `esp-15.2.0_20251204`, bundled with ESP-IDF v6.1) |
-| License | GPL-3.0 |
-
-> **Note:** Firmware source lives in the `mcgowan/` subproject and builds
-> successfully (`mcgowan.bin` has been produced). `Specification.md` remains
-> the authoritative source of truth for all implementation work; where code and
-> spec disagree, the spec wins. The `install.sh` at the repo root is an
-> unrelated Continue CLI installer artifact and is **not** part of the
-> firmware.
-
-> **Implementation status (current milestone):**
-> - **Configure mode — implemented.** SoftAP, HTTPS server, config UI, NVS
->   persistence, LED semantics.
-> - **Run mode — scaffolded/stubbed.** Real: boot self-test LEDs, battery
->   read + hysteresis, sensor read with cached ROM IDs (first-boot scan),
->   sample append to the RTC buffer, deep sleep. **Stubbed:** Wi-Fi station
->   connect + cached fast-reconnect (§3.9), batch upload + payload wire-out
->   (§9, payload is formatted and logged but not sent), exponential backoff
->   (§3.7).
-> - **Host unit tests.** `test-hal-stub/`, `test-hal-common/`, `test-logic/`,
->   `test-espidf-cpp/`, and `test-simulator/` build for the ESP-IDF `linux`
->   target (Unity) and run via `scripts/dev.py test`, which runs all five
->   suites (`test-hal-common` first and `test-hal-stub` next; each suite also
->   has a command that runs it alone). On-target tests for hardware-dependent
->   code are planned.
-
-> **Toolchain note:** The host's locally installed ESP-IDF is **v6.1**
-> with **Xtensa GCC 15.2.0** (`esp-15.2.0_20251204`), which matches the pinned
-> Docker image `marcpawl/esp-idf:20261109b` exactly (it is built on
-> `espressif/idf:release-v6.1`). Keep both in sync: if you upgrade the host
-> toolchain, then
->
-> - change the base image in `Dockerfile`;
-> - publish a new image under a **new** date-stamped tag (never move an
->   existing tag);
-> - bump the pin in `docker-compose.yml` + `scripts/dev.py` (`DEV_IMAGE`) and
->   this document.
-
-## Architecture Overview
-
-The intended system architecture (per `Specification.md`) is a single ESP-IDF
-firmware application running on an ESP32 with the following subsystems:
-
-- **Sensor layer** — 1-Wire bus driver reading three DS18B20 temperature
-  sensors.
-- **Mode controller** — reads the two mode-sense poles of the 3-position switch
-  (`config_button()` / `run_button()`) to select Configure / Off / Run.
-- **Sample buffer** — in **RTC memory only**; accumulates readings across
-  deep-sleep cycles.
-- **WiFi / uploader** — connects to WiFi, uploads batched payloads to a remote
-  URL, with connection caching and backoff.
-- **Power manager** — drives deep sleep between samples to meet the hourly
-  power budget.
-- **Configuration** — persisted settings managed via an HTTPS configuration
-  server (Configure mode).
-- **LED semantics** — status indication for the various operating states.
-
-**Data flow (Run mode):**
-1. Wake from deep sleep → read three DS18B20 sensors over the shared 1-Wire
-   bus.
-2. Append readings to the RTC-memory sample buffer.
-3. At the configured cadence, connect to WiFi (reusing cached connection info)
-   and upload the batched payload to the remote URL.
-4. On failure, apply backoff (state survives reboot via RTC memory).
-5. Return to deep sleep.
-
-**Data flow (Configure mode):**
-1. Device starts an HTTPS server.
-2. Operator connects to read/update configuration over HTTPS.
-3. Configuration persists for subsequent Run-mode cycles.
-
-Refer to `Specification.md` for the detailed contracts:
-
-- operating modes
-- sample buffer semantics
-- configuration keys
-- HTTPS server behavior
-- LED semantics
-- RTC memory layout
-- payload format
-- the power budget
+- Host OS : Linux Mint
+- IDE : CLion 2026.2 
+-  Container runtime : Docker. 
+- Container image :  See docker/docker-compose.yml
+- Target framework : ESP-IDF v6.1 
+- Toolchain : GCC 15.2.0 (Xtensa `esp-15.2.0_20251204`, bundled with ESP-IDF v6.1) |
 
 ## Directory Structure
 
 ```
 esp32_sensors/
-├── Specification.md     # Authoritative software spec — read this first
+├── Specification.md     # Authoritative software spec. Read only when instructed
 ├── CMakeLists.txt       # Root aggregator (plain CMake) — builds all subprojects
 ├── mcgowan/             # Firmware subproject (ESP32-S3) -> mcgowan.bin
+│   ├── AGENTS.md        #   Firmware module map and configuration
 │   ├── CMakeLists.txt   #   standalone ESP-IDF project (project(mcgowan))
 │   ├── sdkconfig.defaults
 │   ├── main/            #   ESP-IDF `main` component (must be named main)
@@ -153,14 +60,17 @@ esp32_sensors/
 ├── third_party/         # Vendored third-party code (never formatted, never tidy'd)
 │   ├── json/            #   nlohmann/json v3.11.3 (header-only, MIT)
 │   └── sml/             #   boost-ext/sml git SUBMODULE, pinned to v1.2.0
-├── Dockerfile           # Dev container: ESP-IDF v6.1 + non-root host-mapped user
-├── docker-compose.yml   # `dev` service with serial (/dev) passthrough
+├── docker/              # Dev container: Dockerfile + docker-compose.yml
+│   ├── AGENTS.md        #   Dev environment, image pinning, ccache
+│   ├── Dockerfile       #   ESP-IDF v6.1 + non-root host-mapped user
+│   └── docker-compose.yml # `dev` service with serial (/dev) passthrough
 ├── .devcontainer/       # CLion / VS Code Dev Container definition (reuses compose)
 ├── .continue/           # Continue CLI config: `rules/` (slash commands), `skills/`
 │   └── skills/          #   one SKILL.md per topic: cpp-coding-standards, git,
 │                        #   platform_layers, quality_checks, cmake, markdown,
 │                        #   cpp_qc, python_qc
 ├── scripts/dev.py       # Container task runner (build/flash/test/format/shell)
+├── scripts/AGENTS.md    #   dev.py and test_dev.py documentation
 ├── scripts/idf.sh       # Runs idf.py with the ESP-IDF env, sourcing export.sh if absent
 ├── scripts/test_dev.py  # Host unit tests for dev.py (`dev.py self-check`)
 ├── scripts/dev.py-completion.bash  # Bash tab-completion for scripts/dev.py
@@ -233,7 +143,7 @@ component; it compiles the sources from `mcgowan/src/` and exposes
   target per subproject invoking `idf.py -C <sub> -B <sub>/<build-dir>`.
   `-DSUBPROJECTS="mcgowan;test-hal-stub;test-hal-common;test-logic;test-espidf-cpp;test-simulator;donny"`
   (default: all) selects what is built.
-- `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash
+- `docker/Dockerfile` / `docker/docker-compose.yml` — the reproducible ESP-IDF build/flash
   environment. Extend these (not ad-hoc `docker run`) when adding tooling. The
   compose `dev` service is also the target of the Dev Container (see below).
 - `.devcontainer/devcontainer.json` — the CLion / VS Code **Dev Container**
