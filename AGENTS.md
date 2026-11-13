@@ -674,42 +674,9 @@ above; see the "IDE / editor" section there.
 
 ### python scripts/dev.py
 
-dev.py can be executed on the host or in the container. Command Format is
-```bash
-./scripts/dev.py COMMAND
-'''
-
-Platform is either host or both.  Host only commands will fail
-when enacted in a container.  Commands that are both will
-create and execute the same command in a container when
-enacted on the host.
-
-|platform|command|action|
-|===|===|===|
-|host|pull|Pull the pinned prebuilt dev image from the registry|
-|host|image|Build the dev image locally from the Dockerfile (not needed normally)|
-|both|submodules|Fetch the pinned git submodules (`third_party/sml`)|
-|both|build [SUBPROJECT...]|Build all subprojects via the root aggregator, or just the named ones (mcgowan, test-hal-stub, test-hal-common, test, test-espidf-cpp, test-simulator, donny)|
-|both|build-test-espidf-cpp|Build the libespidfcpp unit tests for the ESP-IDF `linux` target|
-|both|test|Run every host unit test suite: `test-hal-common`, then `test-hal-stub`, then `test-logic`, then `test-espidf-cpp`, then `test-simulator`|
-|both|test-hal-stub|Build and run the `test-hal-stub/` host unit tests (ESP-IDF `linux` target)|
-|both|test-hal-common|Build and run the `test-hal-common/` host unit tests (ESP-IDF `linux` target)|
-|both|test-logic|Build and run the `components/logic/tests/test-logic/` host unit tests (ESP-IDF `linux` target)|
-|both|test-espidf-cpp|Build and run the `components/espidfcpp/tests/test-espidf-cpp/` host unit tests (ESP-IDF `linux` target)|
-|both|test-simulator|Build and run the `components/simulator/tests/test-simulator/` host unit tests (ESP-IDF `linux` target)|
-|both|self-check|Run the host unit tests for dev.py itself (stdlib `unittest`)|
-|both|flash|idf.py flash monitor|
-|both|monitor|idf.py monitor|
-|both|menuteconfig|idf.py menuconfig|
-|both|format|clang-format all source code (tracked **and** untracked, so a new file needs no `git add` first)|
-|both|format-check|Check if code is formatted, non-zero exit if anything is unformatted |
-|both|format-check-staged|Check if staged code is formatted, non-zero exit if anything is unformatted |
-|both|pycodestyle|Python style check (PEP 8, 79 columns) over every Python source in the repository — `*.py` plus extensionless Python shebang scripts; `third_party/` is excluded; non-zero exit on any finding|
-|both|clang-tidy [PROJECT...]|Static analysis over the built projects' C++ sources (needs a prior `build`); non-zero exit on any finding|
-|both|shell|Run a bash command in the container (arguments after `shell` are executed); with no arguments, an interactive login shell|
-|both|cn|Run the Continue CLI (`cn`) in the container with the host's `~/.continue/config.yaml` passed as `--config`; arguments after `cn` go to `cn` verbatim (e.g. `cn -p "prompt"`)|
-|both|complete|Print subcommands matching a prefix (internal; used by bash completion)|
-|host|install-hooks|install git commit hooks|
+The container task runner and its command table are documented in
+`scripts/AGENTS.md`. Run `./scripts/dev.py --help` for the live
+list.
 
 ### Shell completion
 
