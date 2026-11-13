@@ -53,7 +53,7 @@ error: There was a problem with the editor 'vim'.
 Please supply the message using either -m or -F option.
 ```
 
-and the commit never happens — usually only after the pre-commit gates have
+and the commit never happens — usually only after the quality gates have
 already run and timed out. Writing the file and passing `-F` removes the editor
 from the loop entirely.
 

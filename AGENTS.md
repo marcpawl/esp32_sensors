@@ -179,7 +179,7 @@ esp32_sensors/
 ├── .continue/           # Continue CLI config: `rules/` (slash commands), `skills/`
 │   └── skills/          #   one SKILL.md per topic: cpp-coding-standards, git,
 │                        #   platform_layers, quality_checks, cmake, markdown,
-│                        #   python
+│                        #   cpp_qc, python_qc
 ├── scripts/dev.py       # Container task runner (build/flash/test/format/shell)
 ├── scripts/idf.sh       # Runs idf.py with the ESP-IDF env, sourcing export.sh if absent
 ├── scripts/test_dev.py  # Host unit tests for dev.py (`dev.py self-check`)
@@ -277,7 +277,8 @@ component; it compiles the sources from `mcgowan/src/` and exposes
   container: it passes `--config <container HOME>/.continue/config.yaml`
   explicitly (cn's own default lookup is not reliable), and forwards its
   arguments to `cn` verbatim (`./scripts/dev.py cn -p "prompt"`). Quality gates
-  are run via `scripts/dev.py` (see the `quality_checks` and `python` skills);
+  are run via `scripts/dev.py` (see the `quality_checks`, `cpp_qc`, and
+  `python_qc` skills);
   `pull`, `image`, and `self-check` are host-only — the tasks whose *decisions*
   only exist on the host — so each refuses to run in the container with an
   explanatory message. An internal `complete` command lists subcommands
@@ -354,14 +355,13 @@ component; it compiles the sources from `mcgowan/src/` and exposes
   from the host with no value (never hardcoded). `PythonSourceDiscoveryTests`
   pins the `pycodestyle` file list: `_is_vendored_path` matches only a
   top-level `third_party`, `_select_python_sources` keeps `*.py` **and**
-  extensionless Python shebang scripts (so `.githooks/pre-commit` is checked),
-  rejects a non-Python shebang, a `python` mention that is not a shebang,
+  extensionless Python shebang scripts, rejects a non-Python shebang, a
+  `python` mention that is not a shebang,
   deleted paths and non-UTF-8 first lines, and that the real repository
-  enumerates exactly the two dev.py scripts and the extensionless hook, with
-  nothing vendored. `PycodestyleGateTests` pins the wiring:
+  enumerates exactly the two dev.py scripts, with nothing vendored. `PycodestyleGateTests` pins the wiring:
   `_pycodestyle_command` uses `python3 -m pycodestyle` with no options of its
   own (so a bare `pycodestyle` agrees), the command hops into the container,
-  and it is the **first** gate in the hook and runs before `build` in CI.
+  and it runs before `build` in CI.
   `SelfCheckModuleTests` pins the `self-check` command itself and, in
   particular, that it is **host-only**: inside the container none of the
   decisions the suite pins ever happen (a command never re-execs itself), so
@@ -739,7 +739,7 @@ enacted on the host.
 |both|format|clang-format all source code (tracked **and** untracked, so a new file needs no `git add` first)|
 |both|format-check|Check if code is formatted, non-zero exit if anything is unformatted |
 |both|format-check-staged|Check if staged code is formatted, non-zero exit if anything is unformatted |
-|both|pycodestyle|Python style check (PEP 8, 79 columns) over every Python source in the repository — `*.py` plus extensionless Python shebang scripts such as `.githooks/pre-commit`; `third_party/` is excluded; non-zero exit on any finding|
+|both|pycodestyle|Python style check (PEP 8, 79 columns) over every Python source in the repository — `*.py` plus extensionless Python shebang scripts; `third_party/` is excluded; non-zero exit on any finding|
 |both|clang-tidy [PROJECT...]|Static analysis over the built projects' C++ sources (needs a prior `build`); non-zero exit on any finding|
 |both|shell|Run a bash command in the container (arguments after `shell` are executed); with no arguments, an interactive login shell|
 |both|cn|Run the Continue CLI (`cn`) in the container with the host's `~/.continue/config.yaml` passed as `--config`; arguments after `cn` go to `cn` verbatim (e.g. `cn -p "prompt"`)|
@@ -828,8 +828,8 @@ gates — clang-format, pycodestyle, clang-tidy, the build, the four host test
 suites, and the `dev.py` self-check — their order, and the fixing policy are
 documented in the `quality_checks` skill
 (`.continue/skills/quality_checks/SKILL.md`). Quality gates are run via
-`scripts/dev.py`; see the `quality_checks` and `python` skills for the
-required subsets.
+`scripts/dev.py`; see the `quality_checks`, `cpp_qc`, and `python_qc` skills
+for the required subsets.
 
 > **Parked defect:** `pins::kDividerGate` is 25, but the ESP32-S3 has no GPIO
 > 22–25 at all (`soc/gpio_num.h` jumps `GPIO_NUM_21` straight to
@@ -983,7 +983,7 @@ only when something fails. The default routing is:
 | Running `./scripts/dev.py` commands | DeepSeek Chat |
 | Running `git` commands | DeepSeek Chat |
 | Fixing `.hpp` / `.cpp` clang-format failures | DeepSeek Chat |
-| Performing the pre-commit checks | DeepSeek Chat |
+| Performing the quality checks | DeepSeek Chat |
 | Making file changes once the work is figured out | DeepSeek Chat |
 | Fixing a failing `./scripts/dev.py` command | DeepSeek Reasoner |
 | Fixing a failing `git` command | DeepSeek Reasoner |
@@ -991,7 +991,7 @@ only when something fails. The default routing is:
 - **Escalate on failure, do not retry.** A failing step is handed to DeepSeek
   Reasoner rather than retried under DeepSeek Chat. This is the default; follow
   any more specific instruction given for the task at hand.
-- **Fixing a failing pre-commit check** follows the rule for whatever the check
+- **Fixing a failing quality check** follows the rule for whatever the check
   reported — a clang-format failure stays on DeepSeek Chat, while a clang-tidy
   or test failure escalates to DeepSeek Reasoner.
 - **Reason first, edit second.** Work out *what* to change with the stronger

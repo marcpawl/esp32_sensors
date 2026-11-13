@@ -3,7 +3,7 @@ name: C++ quality checks
 description: How C++ and CMake changes are checked
 ---
 
-# Python
+# C++
 
 ## Quality gates before committing
 

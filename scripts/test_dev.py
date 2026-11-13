@@ -2443,9 +2443,9 @@ class PythonSourceDiscoveryTests(unittest.TestCase):
     # -- the real repository ------------------------------------------------
 
     def test_the_repository_enumerates_its_expected_python_sources(self):
-        # Pins the actual set: the two dev.py scripts and the extensionless
-        # hook. A new Python source is meant to be noticed here, so this list
-        # is a deliberate tripwire rather than an over-broad assertion.
+        # Pins the actual set: the two dev.py scripts. A new Python source is
+        # meant to be noticed here, so this list is a deliberate tripwire
+        # rather than an over-broad assertion.
         self.assertEqual(
             dev.python_sources(),
             [

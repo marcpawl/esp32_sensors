@@ -17,7 +17,7 @@ commands with ad-hoc `docker compose run`.
 
 | Gate | Command | What it checks |
 |---|---|---|
-| Python style | `./scripts/dev.py pycodestyle` | PEP 8 with pycodestyle's defaults (79 columns). Every `*.py` file **and** every extensionless Python shebang script (e.g. `.githooks/pre-commit`); `third_party/` is excluded. |
+| Python style | `./scripts/dev.py pycodestyle` | PEP 8 with pycodestyle's defaults (79 columns). Every `*.py` file **and** every extensionless Python shebang script; `third_party/` is excluded. |
 | Build | `./scripts/dev.py build [SUBPROJECT...]` | All subprojects through the root aggregator, or just the named ones (`mcgowan`, `test-hal-stub`, `test-hal-common`, `test-logic`, `test-espidf-cpp`, `test-simulator`, `donny`). Fetches the pinned submodules first. |
 | Static analysis | `./scripts/dev.py clang-tidy [PROJECT...]` | clang-tidy's default checks (`clang-diagnostic-*`, `clang-analyzer-*`) over every subproject, with `--warnings-as-errors=*`. **Reads the compile databases; it never builds them**, so `build` must have run first. Vendored code is excluded. |
 | Formatting (apply) | `./scripts/dev.py format` | clang-format over the tracked **and untracked** C/C++ sources under `mcgowan/` and `components/` (which now holds every host suite and the simulator application). |
@@ -31,7 +31,7 @@ Individual host suites are also available as `test-hal-common`,
 
 ## Order to run them
 
-Cheapest first, matching `.githooks/pre-commit`:
+Cheapest first:
 
 1. `./scripts/dev.py pycodestyle`
 2. `./scripts/dev.py build`
@@ -40,8 +40,7 @@ Cheapest first, matching `.githooks/pre-commit`:
    tree)
 5. `./scripts/dev.py test`
 
-The pre-commit hook runs exactly those five gates and rejects the commit on the
-first failure. CI (`build-and-test` in `.github/workflows/ci.yml`) adds
+CI (`build-and-test` in `.github/workflows/ci.yml`) adds
 `./scripts/dev.py self-check` before them and runs `format-check` (not the
 staged variant) at the end.
 
