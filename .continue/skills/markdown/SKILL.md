@@ -50,14 +50,15 @@ scan it, cannot tell how many items there are, and cannot link to one of them.
 Bad — one sentence that strings three items together (the line break does not
 make it a list):
 
-> The repository holds the firmware in `mcgowan/`, the host tests in
-> `test-logic/`, and the linux application in `donny/`.
+> The repository holds the firmware in `mcgowan/`, the logic tests in
+> `components/logic/tests/test-logic/`, and the linux application in
+> `components/simulator/exe/donny/`.
 
 Good — a list:
 
 > - `mcgowan/` — the ESP32-S3 firmware
-> - `test-logic/` — the host unit tests
-> - `donny/` — the linux-emulated application
+> - `components/logic/tests/test-logic/` — the host unit tests
+> - `components/simulator/exe/donny/` — the linux-emulated application
 
 When each item needs its own explanation, give it a **subsection** instead of a
 list item:
@@ -67,10 +68,10 @@ list item:
 
 The ESP32-S3 firmware. It links `hal_board` and produces `mcgowan.bin`.
 
-### `donny/`
+### `components/simulator/exe/donny/`
 
-The linux-emulated application. It links `hal_stub` and produces
-`donny.elf`.
+The linux-emulated application. It links `hal_stub` and `libsimulator`, and
+produces `donny.elf`.
 ```
 
 A list is for items that need one line each. A table is for items that share

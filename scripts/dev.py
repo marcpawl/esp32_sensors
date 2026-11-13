@@ -11,7 +11,8 @@
 # Usage:
 #   scripts/dev.py [pull|image|submodules|build|build-test-espidf-cpp|flash|\
 #                   monitor|menuconfig|test|test-hal-common|test-hal-stub|\
-#                   test-logic|test-espidf-cpp|self-check|format|format-check|\
+#                   test-logic|test-espidf-cpp|test-simulator|self-check|\
+#                   format|format-check|\
 #                   format-check-staged|pycodestyle|clang-tidy|install-hooks|\
 #                   shell|cn]
 #   scripts/dev.py --help        # full help, including per-command details
@@ -57,11 +58,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 ROOTS = (
     "mcgowan",
     "components",
-    "test-logic",
-    "test-hal-stub",
-    "test-hal-common",
-    "test-espidf-cpp",
-    "donny",
     "scripts",
 )
 EXTENSIONS = (".cpp", ".hpp", ".h", ".cc", ".cxx")
@@ -98,9 +94,10 @@ PYCODESTYLE_ARGS: tuple[str, ...] = ()
 #
 # `third_party/sml` is boost-ext/sml (https://github.com/boost-ext/sml),
 # pinned to tag **v1.2.0** via the gitlink recorded in .gitmodules. The
-# `components/sml` component exposes its headers to `logic`, which uses it for
-# the application state machines. Its sources are NOT ours: they sit outside
-# ROOTS (so clang-format never touches them) and are excluded from clang-tidy
+# `components/sml` component exposes its headers to `liblogic`, which uses it
+# for the application state machines. Its sources are NOT ours: they sit
+# outside ROOTS (so clang-format never touches them) and are excluded from
+# clang-tidy
 # (see `_is_vendored`).
 SUBMODULES = ("third_party/sml",)
 
@@ -141,18 +138,23 @@ FORMAT_ARGS = ("--dry-run", "--Werror")
 #
 #   mcgowan/  ESP32-S3 firmware (hal_board)
 #                                        -> mcgowan/build_esp32s3/mcgowan.bin
-#   test-hal-stub/
+#   components/hal/tests/test-hal-stub/
 #             host tests for components/hal/hal_stub (linux target)
-#                                                -> test-hal-stub/build_linux
-#   test-hal-common/
+#                                             -> .../test-hal-stub/build_linux
+#   components/hal/tests/test-hal-common/
 #             host tests for components/hal/hal_common (linux target)
-#                                                -> test-hal-common/build_linux
-#   test-logic/ host unit tests (linux target)      -> test-logic/build_linux
-#   test-espidf-cpp/
-#             host unit tests for components/espidf_cpp (linux target)
-#                                                -> test-espidf-cpp/build_linux
-#   donny/    linux-emulated application (hal_stub, linux target)
-#                                                -> donny/build_linux
+#                                            -> .../test-hal-common/build_linux
+#   components/logic/tests/test-logic/
+#             host unit tests (linux target)      -> .../test-logic/build_linux
+#   components/espidfcpp/tests/test-espidf-cpp/
+#             host unit tests for components/espidfcpp/libespidfcpp
+#                                     -> .../test-espidf-cpp/build_linux
+#   components/simulator/tests/test-simulator/
+#             host tests for components/simulator/libsimulator (linux target)
+#                                          -> .../test-simulator/build_linux
+#   components/simulator/exe/donny/
+#             linux-emulated application (hal_stub, linux target)
+#                                              -> .../donny/build_linux
 #
 # Build directories are named after the ESP-IDF target so the esp32s3 and
 # linux builds stay separate.
@@ -161,7 +163,33 @@ TEST_PROJECT = "test-logic"
 HAL_STUB_TEST_PROJECT = "test-hal-stub"
 HAL_COMMON_TEST_PROJECT = "test-hal-common"
 ESPIDF_CPP_TEST_PROJECT = "test-espidf-cpp"
+TEST_SIMULATOR_PROJECT = "test-simulator"
 DONNY_PROJECT = "donny"
+
+# Directory (repo-relative) where each subproject lives. Only the firmware
+# sits at the repository root; the test projects live under
+# `components/<layer>/tests/` and the simulator application under
+# `components/simulator/exe/`. The subproject *identifier* (and the aggregate
+# target name) stays short, because CMake target names may not contain a
+# slash.
+PROJECT_DIRS = {
+    FIRMWARE_PROJECT: FIRMWARE_PROJECT,
+    HAL_STUB_TEST_PROJECT: "components/hal/tests/test-hal-stub",
+    HAL_COMMON_TEST_PROJECT: "components/hal/tests/test-hal-common",
+    TEST_PROJECT: "components/logic/tests/test-logic",
+    ESPIDF_CPP_TEST_PROJECT:
+        "components/espidfcpp/tests/test-espidf-cpp",
+    TEST_SIMULATOR_PROJECT:
+        "components/simulator/tests/test-simulator",
+    DONNY_PROJECT: "components/simulator/exe/donny",
+}
+
+
+def project_dir(project: str) -> str:
+    """Repo-relative directory of a subproject. Pure (testable)."""
+    return PROJECT_DIRS.get(project, project)
+
+
 FW_BUILD_DIR = "build_esp32s3"
 TEST_BUILD_DIR = "build_linux"
 ROOT_BUILD_DIR = "build_root"
@@ -177,14 +205,16 @@ FW_BINARY = "mcgowan.bin"
 # because it covers the shared vocabulary every other suite builds on;
 # `test-hal-stub` follows with the pin-free devices those suites link against
 # (`test/` drives `BoardStub`). Each suite also has its own command
-# (`test-hal-common`, `test-hal-stub`, `test-logic`, `test-espidf-cpp`) so it
-# can be run alone; `self-check` pins that those commands between them cover
-# this table, so no suite is reachable only through the aggregate `test`.
+# (`test-hal-common`, `test-hal-stub`, `test-logic`, `test-espidf-cpp`,
+# `test-simulator`) so it can be run alone; `self-check` pins that those
+# commands between them cover this table, so no suite is reachable only through
+# the aggregate `test`.
 HOST_TEST_PROJECTS = (
     (HAL_COMMON_TEST_PROJECT, "esp32_sensors_hal_common_tests.elf"),
     (HAL_STUB_TEST_PROJECT, "esp32_sensors_hal_stub_tests.elf"),
     (TEST_PROJECT, "test-logic.elf"),
     (ESPIDF_CPP_TEST_PROJECT, "test-espidf-cpp.elf"),
+    (TEST_SIMULATOR_PROJECT, "test-simulator.elf"),
 )
 
 # Subprojects that build for the ESP-IDF `linux` target (into build_linux).
@@ -195,6 +225,7 @@ LINUX_PROJECTS = (
     HAL_COMMON_TEST_PROJECT,
     TEST_PROJECT,
     ESPIDF_CPP_TEST_PROJECT,
+    TEST_SIMULATOR_PROJECT,
     DONNY_PROJECT,
 )
 
@@ -204,6 +235,7 @@ SUBPROJECTS = (
     HAL_COMMON_TEST_PROJECT,
     TEST_PROJECT,
     ESPIDF_CPP_TEST_PROJECT,
+    TEST_SIMULATOR_PROJECT,
     DONNY_PROJECT,
 )
 
@@ -220,6 +252,7 @@ TIDY_PROJECTS = (
     (HAL_COMMON_TEST_PROJECT, TEST_BUILD_DIR),
     (TEST_PROJECT, TEST_BUILD_DIR),
     (ESPIDF_CPP_TEST_PROJECT, TEST_BUILD_DIR),
+    (TEST_SIMULATOR_PROJECT, TEST_BUILD_DIR),
     (DONNY_PROJECT, TEST_BUILD_DIR),
 )
 
@@ -617,7 +650,8 @@ def _idf(project: str, build_dir: str, *args: str) -> list[str]:
     Pure (no I/O), so it is unit-testable. `project` is a subproject directory
     relative to the repo root; the build directory lives inside it.
     """
-    return ["idf.py", "-C", project, "-B", f"{project}/{build_dir}", *args]
+    directory = project_dir(project)
+    return ["idf.py", "-C", directory, "-B", f"{directory}/{build_dir}", *args]
 
 
 def _parse_subprojects(args: list[str]) -> list[str] | None:
@@ -679,8 +713,9 @@ def _build_project(project: str) -> int:
     """Build one subproject with its own target and build directory.
 
     The host-test projects (`test-hal-stub`, `test-hal-common`, `test-logic`,
-    `test-espidf-cpp`) are pinned to the `linux` target and build into
-    `build_linux`; the firmware builds for ESP32-S3 into `build_esp32s3`.
+    `test-espidf-cpp`, `test-simulator`) are pinned to the `linux` target and
+    build into `build_linux`; the firmware builds for ESP32-S3 into
+    `build_esp32s3`.
     """
     if project in LINUX_PROJECTS:
         rc = run(_idf(project, TEST_BUILD_DIR, "--preview", "set-target",
@@ -697,7 +732,7 @@ def cmd_build(args: list[str]) -> int:
     `build`               → every subproject (firmware, host tests)
     `build mcgowan`       → just the ESP32-S3 firmware (mcgowan/build_esp32s3)
     `build test-hal-stub` → any of: mcgowan test-hal-stub test-hal-common
-                            test test-espidf-cpp donny
+                            test test-espidf-cpp test-simulator donny
     """
     change_to_container()
     rc = _ensure_submodules()
@@ -710,7 +745,7 @@ def cmd_build(args: list[str]) -> int:
 
 
 def cmd_build_test_espidf_cpp() -> int:
-    """Build the espidf_cpp unit tests for the ESP-IDF `linux` target."""
+    """Build the libespidfcpp unit tests for the ESP-IDF `linux` target."""
     change_to_container()
     rc = _ensure_submodules()
     if rc != 0:
@@ -745,7 +780,8 @@ def _host_test_projects(projects: tuple[str, ...]) -> list[tuple[str, str]]:
     Keeping the table as the single source of truth means a suite cannot be
     added to one command and forgotten in another: `test` asks for every entry
     (`HOST_TEST_PROJECTS`), while `test-hal-stub` / `test-hal-common` /
-    `test-logic` / `test-espidf-cpp` ask for the one project they name. An
+    `test-logic` / `test-espidf-cpp` / `test-simulator` ask for the one project
+    they name. An
     unknown project means a stale constant, so it trips an assertion rather
     than silently running fewer suites.
     """
@@ -776,7 +812,7 @@ def _run_host_tests(projects: tuple[str, ...]) -> int:
         for cmd in (
             _idf(project, TEST_BUILD_DIR, "--preview", "set-target", "linux"),
             _idf(project, TEST_BUILD_DIR, "build"),
-            [f"./{project}/{TEST_BUILD_DIR}/{elf}"],
+            [f"./{project_dir(project)}/{TEST_BUILD_DIR}/{elf}"],
         ):
             rc = run(cmd)
             if rc != 0:
@@ -806,18 +842,24 @@ def cmd_test_logic() -> int:
 
 
 def cmd_test_espidf_cpp() -> int:
-    """Host tests for components/espidf_cpp (`linux` target)."""
+    """Host tests for components/espidfcpp/libespidfcpp (`linux` target)."""
     change_to_container()
     return _run_host_tests((ESPIDF_CPP_TEST_PROJECT,))
+
+
+def cmd_test_simulator() -> int:
+    """Host tests for components/simulator/libsimulator (`linux` target)."""
+    change_to_container()
+    return _run_host_tests((TEST_SIMULATOR_PROJECT,))
 
 
 def cmd_test() -> int:
     """Run every host unit test suite, `test-hal-common` first.
 
-    Then `test-hal-stub`, `test-logic`, and `test-espidf-cpp`, in
-    `HOST_TEST_PROJECTS` order. The aggregate the pre-commit hook and CI call,
-    so a suite added to `HOST_TEST_PROJECTS` is picked up here without
-    touching either.
+    Then `test-hal-stub`, `test-logic`, `test-espidf-cpp`, and
+    `test-simulator`, in `HOST_TEST_PROJECTS` order. The aggregate the
+    pre-commit hook and CI call, so a suite added to `HOST_TEST_PROJECTS` is
+    picked up here without touching either.
     """
     change_to_container()
     return _run_host_tests(tuple(project for project, _ in HOST_TEST_PROJECTS))
@@ -851,7 +893,8 @@ def cmd_self_check() -> int:
             "\n"
             "Inside the container use `./scripts/dev.py test`, which builds\n"
             "and runs the ESP-IDF `linux`-target suites (`test-hal-stub/`,\n"
-            "`test-hal-common/`, `test-logic/`, and `test-espidf-cpp/`).",
+            "`test-hal-common/`, `test-logic/`, `test-espidf-cpp/`, and\n"
+            "`test-simulator/`).",
             file=sys.stderr,
         )
         return 1
@@ -994,7 +1037,8 @@ def _unique_tidy_units(
 ) -> list[dict]:
     """The C++ compilation-database entries to analyze, one per source file.
 
-    A shared source (`components/logic/src/payload.cpp`, most of the HAL) is
+    A shared source (`components/logic/liblogic/src/payload.cpp`, most of the
+    HAL) is
     compiled by three or four subprojects, so the union of their databases
     repeats it. Analyzing it once is enough, and taking the *first* occurrence
     keeps the verdict stable: the projects are listed firmware-first, so a
@@ -1062,7 +1106,10 @@ def _tidy_units(projects: list[str]) -> list[dict] | None:
     compilations: list[dict] = []
     for project in projects:
         build_dir = dict(TIDY_PROJECTS)[project]
-        database = REPO_ROOT / project / build_dir / "compile_commands.json"
+        database = (
+            REPO_ROOT / project_dir(project) / build_dir
+            / "compile_commands.json"
+        )
         if not database.is_file():
             print(
                 f"clang-tidy: '{project}' has no "
@@ -1446,6 +1493,7 @@ COMMANDS = {
     "test-hal-stub": cmd_test_hal_stub,
     "test-logic": cmd_test_logic,
     "test-espidf-cpp": cmd_test_espidf_cpp,
+    "test-simulator": cmd_test_simulator,
     "self-check": cmd_self_check,
     "format": cmd_format,
     "format-check": cmd_format_check,

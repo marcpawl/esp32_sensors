@@ -147,6 +147,7 @@ class SubprojectBuildTests(unittest.TestCase):
                 "test-hal-common",
                 "test-logic",
                 "test-espidf-cpp",
+                "test-simulator",
                 "donny",
             ),
         )
@@ -159,6 +160,7 @@ class SubprojectBuildTests(unittest.TestCase):
                 dev.HAL_COMMON_TEST_PROJECT,
                 dev.TEST_PROJECT,
                 dev.ESPIDF_CPP_TEST_PROJECT,
+                dev.TEST_SIMULATOR_PROJECT,
                 dev.DONNY_PROJECT,
             ),
         )
@@ -208,7 +210,7 @@ class SubprojectBuildTests(unittest.TestCase):
                     "-S", ".",
                     "-B", dev.ROOT_BUILD_DIR,
                     "-DSUBPROJECTS=mcgowan;test-hal-stub;test-hal-common;"
-                    "test-logic;test-espidf-cpp;donny",
+                    "test-logic;test-espidf-cpp;test-simulator;donny",
                 ],
                 ["cmake", "--build", dev.ROOT_BUILD_DIR],
             ],
@@ -222,7 +224,10 @@ class SubprojectBuildTests(unittest.TestCase):
     def test_subproject_directories_have_a_cmakelists(self):
         for project in dev.SUBPROJECTS:
             with self.subTest(project=project):
-                cmake = dev.REPO_ROOT / project / "CMakeLists.txt"
+                cmake = (
+                    dev.REPO_ROOT / dev.project_dir(project)
+                    / "CMakeLists.txt"
+                )
                 self.assertTrue(cmake.is_file(), f"missing {cmake}")
 
     def test_root_is_not_an_espidf_project(self):
@@ -242,7 +247,7 @@ class SubmoduleTests(unittest.TestCase):
     """The vendored `sml` submodule and the commands that fetch and skip it.
 
     `third_party/sml` is a git submodule pinned to boost-ext/sml v1.2.0 and a
-    requirement of the `logic` component. A bare clone leaves it empty, so
+    requirement of the `liblogic` component. A bare clone leaves it empty, so
     `build`/`test`/`clang-tidy` fetch it and CI runs `submodules` on its own.
     Its sources are vendored: never formatted, never analyzed.
     """
@@ -356,21 +361,24 @@ class SubmoduleTests(unittest.TestCase):
             dev._is_vendored(Path("components/sml/CMakeLists.txt"))
         )
         self.assertFalse(
-            dev._is_vendored(Path("components/logic/include/logic/mode.hpp"))
+            dev._is_vendored(
+                Path("components/logic/liblogic/include/logic/mode.hpp")
+            )
         )
         self.assertNotIn("third_party", dev.ROOTS)
 
     def test_component_wraps_the_submodule_headers(self):
         # ESP-IDF needs a component with `idf_component_register`; the upstream
         # tree must never be one, so a thin wrapper points at its headers and
-        # `logic` requires that wrapper.
+        # `liblogic` requires that wrapper.
         wrapper = (
             dev.REPO_ROOT / "components" / "sml" / "CMakeLists.txt"
         ).read_text()
         self.assertIn("idf_component_register", wrapper)
         self.assertIn(f"{self.SML_PATH}/include", wrapper)
         logic = (
-            dev.REPO_ROOT / "components" / "logic" / "CMakeLists.txt"
+            dev.REPO_ROOT / "components" / "logic" / "liblogic"
+            / "CMakeLists.txt"
         ).read_text()
         self.assertIn("sml", logic.split("REQUIRES", 1)[1])
 
@@ -502,7 +510,7 @@ class ClionRunConfigurationTests(unittest.TestCase):
         root_cmake = (dev.REPO_ROOT / "CMakeLists.txt").read_text()
         # `add_custom_target(${sub}_build ALL ...)` is the one target
         # statement.
-        self.assertIn("add_custom_target(${sub}_build", root_cmake)
+        self.assertIn("add_custom_target(${name}_build", root_cmake)
         # The concrete names come from the `_idf_subproject(<name> ...)` calls.
         return {
             f"{sub}_build"
@@ -1172,6 +1180,7 @@ class CommandRegistryTests(unittest.TestCase):
                 dev.HAL_STUB_TEST_PROJECT,
                 dev.TEST_PROJECT,
                 dev.ESPIDF_CPP_TEST_PROJECT,
+                dev.TEST_SIMULATOR_PROJECT,
             ],
         )
         # `test` runs `hal_common` first: it covers the shared vocabulary the
@@ -1210,12 +1219,12 @@ class CommandRegistryTests(unittest.TestCase):
 class HostTestCommandTests(unittest.TestCase):
     """The `test*` commands run the suites they name.
 
-    There are four host test suites (the `hal_common` vocabulary tests, the
-    `hal_stub` device tests, the `test/` application tests, and the
-    `espidf_cpp` wrapper tests). `test` is the aggregate the pre-commit hook
-    and CI call, so it must run all four, with `test-hal-common` first and
-    `test-hal-stub` next; each suite also has a command of its own so one can
-    be run alone while working on it.
+    There are five host test suites (the `hal_common` vocabulary tests, the
+    `hal_stub` device tests, the `test/` application tests, the
+    `libespidfcpp` wrapper tests, and the simulator tests). `test` is the
+    aggregate the pre-commit hook and CI call, so it must run all five, with
+    `test-hal-common` first and `test-hal-stub` next; each suite also has a
+    command of its own so one can be run alone while working on it.
     """
 
     def setUp(self):
@@ -1251,6 +1260,7 @@ class HostTestCommandTests(unittest.TestCase):
             ("test-hal-common", dev.cmd_test_hal_common),
             ("test-logic", dev.cmd_test_logic),
             ("test-espidf-cpp", dev.cmd_test_espidf_cpp),
+            ("test-simulator", dev.cmd_test_simulator),
         ):
             with self.subTest(command=name):
                 self.assertIn(name, dev.COMMANDS)
@@ -1264,6 +1274,7 @@ class HostTestCommandTests(unittest.TestCase):
             dev.cmd_test_hal_common,
             dev.cmd_test_logic,
             dev.cmd_test_espidf_cpp,
+            dev.cmd_test_simulator,
             dev.cmd_test,
         ):
             with self.subTest(command=handler.__name__):
@@ -1294,7 +1305,8 @@ class HostTestCommandTests(unittest.TestCase):
                          "--preview", "set-target", "linux"),
                 dev._idf(dev.HAL_STUB_TEST_PROJECT, dev.TEST_BUILD_DIR,
                          "build"),
-                [f"./{dev.HAL_STUB_TEST_PROJECT}/{dev.TEST_BUILD_DIR}/"
+                [f"./{dev.project_dir(dev.HAL_STUB_TEST_PROJECT)}/"
+                 f"{dev.TEST_BUILD_DIR}/"
                  "esp32_sensors_hal_stub_tests.elf"],
             ],
         )
@@ -1308,7 +1320,8 @@ class HostTestCommandTests(unittest.TestCase):
                          "--preview", "set-target", "linux"),
                 dev._idf(dev.HAL_COMMON_TEST_PROJECT, dev.TEST_BUILD_DIR,
                          "build"),
-                [f"./{dev.HAL_COMMON_TEST_PROJECT}/{dev.TEST_BUILD_DIR}/"
+                [f"./{dev.project_dir(dev.HAL_COMMON_TEST_PROJECT)}/"
+                 f"{dev.TEST_BUILD_DIR}/"
                  "esp32_sensors_hal_common_tests.elf"],
             ],
         )
@@ -1321,7 +1334,8 @@ class HostTestCommandTests(unittest.TestCase):
                 dev._idf(dev.TEST_PROJECT, dev.TEST_BUILD_DIR,
                          "--preview", "set-target", "linux"),
                 dev._idf(dev.TEST_PROJECT, dev.TEST_BUILD_DIR, "build"),
-                [f"./{dev.TEST_PROJECT}/{dev.TEST_BUILD_DIR}/"
+                [f"./{dev.project_dir(dev.TEST_PROJECT)}/"
+                 f"{dev.TEST_BUILD_DIR}/"
                  "test-logic.elf"],
             ],
         )
@@ -1335,14 +1349,30 @@ class HostTestCommandTests(unittest.TestCase):
                          "--preview", "set-target", "linux"),
                 dev._idf(dev.ESPIDF_CPP_TEST_PROJECT, dev.TEST_BUILD_DIR,
                          "build"),
-                [f"./{dev.ESPIDF_CPP_TEST_PROJECT}/{dev.TEST_BUILD_DIR}/"
+                [f"./{dev.project_dir(dev.ESPIDF_CPP_TEST_PROJECT)}/"
+                 f"{dev.TEST_BUILD_DIR}/"
                  "test-espidf-cpp.elf"],
+            ],
+        )
+
+    def test_test_simulator_runs_only_the_simulator_suite(self):
+        self.assertEqual(dev.cmd_test_simulator(), 0)
+        self.assertEqual(
+            self.calls,
+            [
+                dev._idf(dev.TEST_SIMULATOR_PROJECT, dev.TEST_BUILD_DIR,
+                         "--preview", "set-target", "linux"),
+                dev._idf(dev.TEST_SIMULATOR_PROJECT, dev.TEST_BUILD_DIR,
+                         "build"),
+                [f"./{dev.project_dir(dev.TEST_SIMULATOR_PROJECT)}/"
+                 f"{dev.TEST_BUILD_DIR}/"
+                 "test-simulator.elf"],
             ],
         )
 
     def test_test_runs_every_suite_in_table_order(self):
         # The regression this pins: `test` used to be an alias of
-        # `test-logic`, so the espidf_cpp suite was never run by the gate.
+        # `test-logic`, so the libespidfcpp suite was never run by the gate.
         self.assertEqual(dev.cmd_test(), 0)
         executed = [
             Path(cmd[-1]).name
@@ -1360,7 +1390,7 @@ class HostTestCommandTests(unittest.TestCase):
                 dev._idf(project, dev.TEST_BUILD_DIR,
                          "--preview", "set-target", "linux"),
                 dev._idf(project, dev.TEST_BUILD_DIR, "build"),
-                [f"./{project}/{dev.TEST_BUILD_DIR}/{elf}"],
+                [f"./{dev.project_dir(project)}/{dev.TEST_BUILD_DIR}/{elf}"],
             )
         ]
         self.assertEqual(self.calls, expected)
@@ -1369,7 +1399,10 @@ class HostTestCommandTests(unittest.TestCase):
         # A red suite (here: the first ELF to run) must fail `test`, not be
         # swallowed while the later suites are run anyway.
         first_project, first_elf = dev.HOST_TEST_PROJECTS[0]
-        failing = f"./{first_project}/{dev.TEST_BUILD_DIR}/{first_elf}"
+        failing = (
+            f"./{dev.project_dir(first_project)}/"
+            f"{dev.TEST_BUILD_DIR}/{first_elf}"
+        )
 
         def fake_run(cmd, cwd=dev.REPO_ROOT):
             self.calls.append(list(cmd))
@@ -1391,6 +1424,7 @@ class HostTestCommandTests(unittest.TestCase):
                 dev.cmd_test_hal_common,
                 dev.cmd_test_logic,
                 dev.cmd_test_espidf_cpp,
+                dev.cmd_test_simulator,
             )
             for project, _ in dev._host_test_projects(
                 self._projects_run_by(handler)
@@ -1402,8 +1436,12 @@ class HostTestCommandTests(unittest.TestCase):
         """The host-test projects `handler` selects (by intercepting `run`)."""
         self.calls = []
         handler()
+        directory_to_project = {
+            directory: project
+            for project, directory in dev.PROJECT_DIRS.items()
+        }
         return tuple(
-            cmd[2]
+            directory_to_project.get(cmd[2], cmd[2])
             for cmd in self.calls
             if cmd[:2] == ["idf.py", "-C"]
             and cmd[-1] == "build"
@@ -1664,7 +1702,7 @@ class TidyCompileArgumentsTests(unittest.TestCase):
         args = dev._tidy_compile_arguments([
             "gcc",
             "-DTHERMO_X=1",
-            "-I/project/components/logic/include",
+            "-I/project/components/logic/liblogic/include",
             "-isystem/opt/esp/idf/components/esp_common/include",
             "a.cpp",
         ])
@@ -1672,7 +1710,7 @@ class TidyCompileArgumentsTests(unittest.TestCase):
             args,
             [
                 "-DTHERMO_X=1",
-                "-I/project/components/logic/include",
+                "-I/project/components/logic/liblogic/include",
                 "-isystem/opt/esp/idf/components/esp_common/include",
                 "a.cpp",
             ],
@@ -1718,18 +1756,22 @@ class TidyUnitSelectionTests(unittest.TestCase):
 
     def test_duplicate_sources_are_analyzed_once(self):
         # A shared component is compiled by several subprojects.
-        first = self._entry("/project/components/logic/src/payload.cpp")
+        first = self._entry(
+            "/project/components/logic/liblogic/src/payload.cpp"
+        )
         second = self._entry(
-            "/project/components/logic/src/payload.cpp",
+            "/project/components/logic/liblogic/src/payload.cpp",
             directory="/project/test/build_linux",
         )
         self.assertEqual(self._units([first, second]), [first])
 
     def test_first_occurrence_wins(self):
         # Projects are seeded firmware-first, so the chip build's flags decide.
-        firmware = self._entry("/project/components/logic/src/payload.cpp")
+        firmware = self._entry(
+            "/project/components/logic/liblogic/src/payload.cpp"
+        )
         host = self._entry(
-            "/project/components/logic/src/payload.cpp",
+            "/project/components/logic/liblogic/src/payload.cpp",
             directory="/project/test/build_linux",
         )
         self.assertEqual(self._units([firmware, host])[0], firmware)
@@ -1774,10 +1816,12 @@ class TidyConfigurationTests(unittest.TestCase):
         pattern = re.compile(dev._tidy_header_filter())
         for path in (
             f"{root}/mcgowan/src/include/battery_monitor.hpp",
-            f"{root}/components/logic/include/logic/payload.hpp",
-            f"{root}/test-logic/main/test_main.cpp",
-            f"{root}/test-espidf-cpp/main/test_main.cpp",
-            f"{root}/donny/main/console_task.hpp",
+            f"{root}/components/logic/liblogic/include/logic/payload.hpp",
+            f"{root}/components/logic/tests/test-logic/main/test_main.cpp",
+            f"{root}/components/espidfcpp/tests/test-espidf-cpp/main/"
+            "test_main.cpp",
+            f"{root}/components/simulator/exe/donny/main/"
+            "console_task.hpp",
         ):
             self.assertIsNotNone(pattern.match(path), path)
         for path in (
@@ -1909,7 +1953,7 @@ class StagedFormatCheckTests(unittest.TestCase):
         # committed root style (which must stay tracked for a fresh clone).
         self.assertEqual(
             dev._style_files_for(
-                ["components/logic/include/logic/led_task.hpp"]
+                ["components/logic/liblogic/include/logic/led_task.hpp"]
             ),
             [".clang-format"],
         )

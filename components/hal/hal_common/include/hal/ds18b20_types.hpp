@@ -9,8 +9,8 @@
 //
 // `RomId` is pure data: the struct holds the 8 raw bytes and compares by
 // value, and nothing else. Its textual form is application behaviour, not
-// hardware vocabulary, so the conversions are free functions in the `logic`
-// component (`logic/rom_id.hpp`: `thermo::rom_id_to_hex()` /
+// hardware vocabulary, so the conversions are free functions in the
+// `liblogic` component (`logic/rom_id.hpp`: `thermo::rom_id_to_hex()` /
 // `thermo::rom_id_from_hex()`).
 #pragma once
 
