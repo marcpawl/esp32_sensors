@@ -302,19 +302,6 @@ writing or editing a `.md` file.
 
 ### Agent interaction
 
-#### Committing
-
-**Write the commit message to a temporary file, then commit with
-`git commit -F <file>`.** Never pass it inline with `-m`, and never run a bare
-`git commit`. Show the file to the user and wait for their approval before
-committing: they may want to edit the message, and editing it afterwards needs
-a rebase.
-
-The message shape (subject ≤ 72 columns, imperative, no trailing period; a
-blank line; a body wrapped at 72–79 columns that explains **why**; the Continue
-trailer), why a file beats `-m`, and a worked example are in the `git` skill at
-`.continue/skills/git/SKILL.md` — read it before writing a message.
-
 ## New tasks
 - **Found a bug in that is unrelated to the current
   task? Do not fix it on the current branch.** Instead, park the work and fix
@@ -340,6 +327,12 @@ trailer), why a file beats `-m`, and a worked example are in the `git` skill at
   Do **not** print `DONE!` if there are follow-up questions, pending sub-tasks,
   or work awaiting user confirmation.
 
+## Prompting
   If more than five minutes has passed, and you have just outputted something 
   that requires a user response outputted DONE! then ring the bell
   five times.
+
+## Verbosity
+
+  Always explain the plan when asked to do something.  Explain the
+  step before you perform the work for it.
