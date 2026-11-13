@@ -496,63 +496,8 @@ extern "C" void app_main(void);
 
 ### Development environment setup
 
-All builds run inside the prebuilt ESP-IDF Docker image to guarantee a
-reproducible toolchain (ESP-IDF v6.1, Xtensa GCC 15.2.0, CMake, Ninja, Python
-venv). The image `marcpawl/esp-idf:20261109b` is pinned in
-`docker-compose.yml`, is never moved, and is the same image CI pulls, so there
-is nothing to build locally:
-
-```bash
-# From the repository root, pull the pinned dev image (first time, or to refresh)
-./scripts/dev.py pull       # == docker pull marcpawl/esp-idf:20261109b
-
-# Interactive shell with the ESP-IDF environment auto-sourced
-docker compose run --rm dev
-```
-
-Only rebuild when the `Dockerfile` itself changes:
-
-- `docker compose build` — rebuilds and tags it as the pinned image;
-- publish a **new** date-stamped tag;
-- bump the pin in `docker-compose.yml` + `scripts/dev.py` (`DEV_IMAGE`).
-
-See `Developer.md` ("Updating / publishing the dev image").
-
-> **Preferred way to run a command in the container from the host.** Use
-> `./scripts/dev.py shell <command> [args...]` instead of ad-hoc
-> `docker compose run`, which guarantees the container user mapping and the
-> ESP-IDF environment are set up exactly as the documented tasks expect:
->
-> ```bash
-> # Interactive login shell (no arguments)
-> ./scripts/dev.py shell
->
-> # Run a one-off command in the container shell (arguments passed through)
-> ./scripts/dev.py shell ls -1d /
-> ./scripts/dev.py shell "echo hi | wc -l"   # shell syntax works too
-> ```
-
-The container runs as **your own** UID/GID (`scripts/dev.py` passes
-`--user "$(id -u):$(id -g)"`), so build artifacts are owned by you and no chown
-or user-namespace remapping is involved; the `dialout` group is joined for
-serial access. `$HOME` is a directory that uid can actually write (see the next
-note), so ccache works.
-
-> **ccache and non-1000 uids.** A bind mount does not translate uids, so the
-> container runs as the calling user rather than remapping it. The image's own
-> user is uid 1000; any other uid (a normal host user, or GitHub's runner
-> at 1001) has no passwd entry inside the image, so `$HOME` resolves to `/` and
-> ccache fails with `ccache: error: Permission denied`. `scripts/dev.py`
-> therefore exports `HOME=/tmp` and `CCACHE_DIR=/tmp/.cache/ccache` for any uid
-> other than 1000 (uid 1000 keeps `/home/dev`). Keep this in mind if you add
-> another `$HOME`-caching tool.
-
-Inside the container, ESP-IDF is already on the environment; if needed, source
-it manually:
-
-```bash
-. $IDF_PATH/export.sh
-```
+The Docker dev environment, image pinning, ccache handling, and
+container-only builds are documented in `docker/AGENTS.md`.
 
 ### CLion: work inside the container
 
@@ -649,11 +594,8 @@ symptom, not a fix; `ClionRunConfigurationTests` pins both invariants.
 
 Set `ESP32_PORT` (e.g. `/dev/ttyACM0`) to target a different serial device.
 
-> **Building is container-only.** The root `CMakeLists.txt` and every
-> subproject refuse to configure unless `DOCKER_IMAGE=esp32_sensors` (set by
-> the `Dockerfile`), so a host invocation fails fast. The CMake profiles in
-> `.idea/cmake.xml` and the CMake run configurations all use the Dev Container
-> toolchain, so CLion builds and refactors through the container.
+> **Building is container-only.** See `docker/AGENTS.md` for the container-only
+> build policy.
 
 #### Shared vs. local `.idea` files
 
