@@ -1,8 +1,8 @@
 // Application entry point (§3).
 //
-// Part of the `logic` component: deciding what the device does with its power
-// budget — read the mode-sense poles, then dispatch to Configure, Off, or Run —
-// is board-independent application behaviour. It belongs next to the mode
+// Part of the `liblogic` component: deciding what the device does with its
+// power budget — read the mode-sense poles, then dispatch to Configure, Off, or
+// Run — is board-independent application behaviour. It belongs next to the mode
 // vocabulary (`logic/mode.hpp`) and the pole mapping
 // (`logic/mode_selection.hpp`) rather than in the firmware's `app_main`, which
 // stays a thin C-linkage shim.

@@ -20,7 +20,7 @@ commands with ad-hoc `docker compose run`.
 | Python style | `./scripts/dev.py pycodestyle` | PEP 8 with pycodestyle's defaults (79 columns). Every `*.py` file **and** every extensionless Python shebang script (e.g. `.githooks/pre-commit`); `third_party/` is excluded. |
 | Build | `./scripts/dev.py build [SUBPROJECT...]` | All subprojects through the root aggregator, or just the named ones (`mcgowan`, `test-hal-stub`, `test-hal-common`, `test-logic`, `test-espidf-cpp`, `donny`). Fetches the pinned submodules first. |
 | Static analysis | `./scripts/dev.py clang-tidy [PROJECT...]` | clang-tidy's default checks (`clang-diagnostic-*`, `clang-analyzer-*`) over every subproject, with `--warnings-as-errors=*`. **Reads the compile databases; it never builds them**, so `build` must have run first. Vendored code is excluded. |
-| Formatting (apply) | `./scripts/dev.py format` | clang-format over the tracked **and untracked** C/C++ sources under `mcgowan/`, `components/` (including `components/hal/tests/` and `components/espidfcpp/tests/`), `test-logic/`, and `donny/`. |
+| Formatting (apply) | `./scripts/dev.py format` | clang-format over the tracked **and untracked** C/C++ sources under `mcgowan/`, `components/` (including the HAL, wrapper, and logic suites under `components/*/tests/`), and `donny/`. |
 | Formatting (check) | `./scripts/dev.py format-check` | Same file set as `format`, fails instead of editing. |
 | Formatting (staged) | `./scripts/dev.py format-check-staged` | clang-format over the **staged** content only, honouring nested `.clang-format` / `.clang-format-ignore` files. This is the hook's variant. |
 | Tests | `./scripts/dev.py test` | Every host suite, in order: `test-hal-common`, `test-hal-stub`, `test-logic`, `test-espidf-cpp`. Stops at the first failure. |
@@ -63,10 +63,11 @@ sources changed, so `format-check` verifies rather than reports.
   make a check pass — that tree is read-only and the edit would not reproduce
   in CI.
 - **Build or test failure:** fix the code; a red build or suite means the work
-  is not ready. New host-testable logic belongs in `components/logic` (headers
-  under `include/logic/`, `.cpp` files in its `SRCS`); firmware-only sources
-  must be added to both `mcgowan/main/CMakeLists.txt` and
-  `test-logic/main/CMakeLists.txt`.
+  is not ready. New host-testable logic belongs in
+  `components/logic/liblogic` (headers under `include/logic/`, `.cpp` files in
+  its `SRCS`); firmware-only sources must be added to both
+  `mcgowan/main/CMakeLists.txt` and
+  `components/logic/tests/test-logic/main/CMakeLists.txt`.
 - **`third_party/` is off limits:** it is outside the formatted roots and
   excluded from clang-tidy, so vendored code stays byte-identical to upstream.
 

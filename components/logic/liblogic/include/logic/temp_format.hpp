@@ -1,6 +1,6 @@
 // Temperature serialization (§9.3) and the "no reading" sentinel (§4.1).
 //
-// Part of the `logic` component: the rounding/formatting rules and the
+// Part of the `liblogic` component: the rounding/formatting rules and the
 // `kTempNull` sentinel are application vocabulary shared by the sample buffer,
 // the payload builder, and the host tests, not a property of any particular
 // board. The component has no ESP-IDF dependency, so both the firmware and the

@@ -2,7 +2,7 @@
 # so the application sources live under `mcgowan/src/` and are compiled here.
 #
 # **Add new sources here** or they will not compile. Board-independent logic
-# lives in the `logic` component instead.
+# lives in the `liblogic` component instead.
 
 set(mcgowan_src "${CMAKE_CURRENT_LIST_DIR}/../src")
 
@@ -28,7 +28,7 @@ idf_component_register(
         "${mcgowan_src}/include"
     REQUIRES
         hal_board
-        logic
+        liblogic
         libespidfcpp
         nvs_flash
         esp_wifi

@@ -26,16 +26,17 @@ endif()
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
 # The reusable components live in the repo-root `components/` directory (the
-# application logic and the sml wrapper), which is not on this project's
-# default search path (that would be `donny/components/`). The three HAL
-# components live in `components/hal/` and the ESP-IDF C++ wrappers in
-# `components/espidfcpp/`, each of which needs its own entry: ESP-IDF scans a
+# sml wrapper), which is not on this project's default search path (that would
+# be `donny/components/`). The three HAL components live in `components/hal/`,
+# the ESP-IDF C++ wrappers in `components/espidfcpp/` and the application logic
+# in `components/logic/`, each of which needs its own entry: ESP-IDF scans a
 # component directory one level deep, so a grouping directory is not descended
 # into.
 set(EXTRA_COMPONENT_DIRS
     "${CMAKE_CURRENT_LIST_DIR}/../components"
     "${CMAKE_CURRENT_LIST_DIR}/../components/hal"
     "${CMAKE_CURRENT_LIST_DIR}/../components/espidfcpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../components/logic"
 )
 
 # Vendored third-party components live in the repo-root `third_party/`, not

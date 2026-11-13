@@ -32,7 +32,7 @@ jobs:
 
       - name: Fetch git submodules
         # `third_party/sml` (boost-ext/sml, pinned to v1.2.0) is a git submodule
-        # and a requirement of the `logic` component, so the build cannot
+        # and a requirement of the `liblogic` component, so the build cannot
         # configure without it. `build` fetches it automatically too, but this
         # step makes a failed clone (network, bad pin) its own visible failure
         # rather than a confusing configure error deep in the build log.

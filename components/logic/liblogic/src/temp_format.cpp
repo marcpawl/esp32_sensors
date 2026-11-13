@@ -1,6 +1,6 @@
 // Temperature serialization (§9.3).
 //
-// Part of the `logic` component so the firmware and the host tests share one
+// Part of the `liblogic` component so the firmware and the host tests share one
 // implementation; no ESP-IDF dependency, so it builds for the `linux` target.
 #include "logic/temp_format.hpp"
 // NOLINTBEGIN

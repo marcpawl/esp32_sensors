@@ -7,7 +7,8 @@
 # FreeRTOS, logging, and `esp_common` come from ESP-IDF's common requirements
 # (the same reason `libespidfcpp` lists no dependencies).
 #
-# Add new .cpp files under SRCS below; consumers already `REQUIRES logic`, so
+# Add new .cpp files under SRCS below; consumers already `REQUIRES
+# liblogic`, so
 # nothing else needs to change.
 
 idf_component_register(

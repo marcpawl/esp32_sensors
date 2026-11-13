@@ -1,7 +1,7 @@
 // RTC sample-buffer operations (§4).
 //
-// Part of the `logic` component, so the FIFO semantics run in the firmware and
-// in the host tests from one definition. The storage (the `RTC_DATA_ATTR`
+// Part of the `liblogic` component, so the FIFO semantics run in the firmware
+// and in the host tests from one definition. The storage (the `RTC_DATA_ATTR`
 // block) is deliberately not here: it belongs to the firmware, in
 // `rtc_storage.cpp`.
 #include "logic/rtc_state.hpp"

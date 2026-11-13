@@ -1,6 +1,6 @@
 // Batched-upload payload formatting (§9).
 //
-// Part of the `logic` component so the firmware and the host tests share one
+// Part of the `liblogic` component so the firmware and the host tests share one
 // implementation; free of ESP-IDF dependencies, so it builds for the `linux`
 // target (the same rationale as `logic/src/temp_format.cpp`). The temperature
 // serialization itself is `logic/temp_format.hpp`; this file owns only the

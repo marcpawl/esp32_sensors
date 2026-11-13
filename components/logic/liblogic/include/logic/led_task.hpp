@@ -1,8 +1,8 @@
 // LED status task: drives the LED indication from a message queue.
 //
-// Part of the `logic` component: the behaviour here is board-independent. The
-// LEDs are driven through a `hal::BoardLike` board, so the same code runs on
-// the real GPIO-backed board (`hal_board`, firmware), the pin-free stub
+// Part of the `liblogic` component: the behaviour here is board-independent.
+// The LEDs are driven through a `hal::BoardLike` board, so the same code runs
+// on the real GPIO-backed board (`hal_board`, firmware), the pin-free stub
 // (`hal_stub`, host tests), or any other conforming board.
 #pragma once
 

@@ -1,7 +1,7 @@
 // Batched-upload payload formatting (§9).
 //
-// Part of the `logic` component: the wire contract with the remote collector is
-// board-independent, so the firmware and the host tests share one
+// Part of the `liblogic` component: the wire contract with the remote collector
+// is board-independent, so the firmware and the host tests share one
 // implementation. Deliberately free of ESP-IDF dependencies so it builds for
 // the `linux` target. All formatting rules come from §9.1 (structure) and
 // §9.3 (temperature serialization).

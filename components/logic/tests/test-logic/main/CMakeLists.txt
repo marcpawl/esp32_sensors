@@ -4,7 +4,7 @@
 # are covered by on-target tests instead.
 #
 # Header-only modules need no `sut_srcs` entry — the test sources include them
-# directly. The `logic` component compiles its own sources, so its `.cpp` files
+# directly. The `liblogic` component compiles its own sources, so its `.cpp` files
 # are never listed here; the tests pull them in via PRIV_REQUIRES.
 #
 # WHOLE_ARCHIVE is required so the TEST_CASE registrations in the test sources
@@ -26,20 +26,20 @@ set(test_srcs
 
 # Production sources under test (paths are relative to this component dir).
 set(sut_srcs
-    "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/app_config.cpp"
-    "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/config_page.cpp"
-    "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/power_source.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../../../../../mcgowan/src/app_config.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../../../../../mcgowan/src/config_page.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../../../../../mcgowan/src/power_source.cpp"
 )
 
 idf_component_register(
     SRCS ${test_srcs} ${sut_srcs}
     INCLUDE_DIRS
         "."
-        "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/include"
+        "${CMAKE_CURRENT_LIST_DIR}/../../../../../mcgowan/src/include"
     PRIV_REQUIRES
         unity
         libespidfcpp
-        logic
+        liblogic
         hal_stub
     WHOLE_ARCHIVE
 )

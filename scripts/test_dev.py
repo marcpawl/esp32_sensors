@@ -245,7 +245,7 @@ class SubmoduleTests(unittest.TestCase):
     """The vendored `sml` submodule and the commands that fetch and skip it.
 
     `third_party/sml` is a git submodule pinned to boost-ext/sml v1.2.0 and a
-    requirement of the `logic` component. A bare clone leaves it empty, so
+    requirement of the `liblogic` component. A bare clone leaves it empty, so
     `build`/`test`/`clang-tidy` fetch it and CI runs `submodules` on its own.
     Its sources are vendored: never formatted, never analyzed.
     """
@@ -359,21 +359,24 @@ class SubmoduleTests(unittest.TestCase):
             dev._is_vendored(Path("components/sml/CMakeLists.txt"))
         )
         self.assertFalse(
-            dev._is_vendored(Path("components/logic/include/logic/mode.hpp"))
+            dev._is_vendored(
+                Path("components/logic/liblogic/include/logic/mode.hpp")
+            )
         )
         self.assertNotIn("third_party", dev.ROOTS)
 
     def test_component_wraps_the_submodule_headers(self):
         # ESP-IDF needs a component with `idf_component_register`; the upstream
         # tree must never be one, so a thin wrapper points at its headers and
-        # `logic` requires that wrapper.
+        # `liblogic` requires that wrapper.
         wrapper = (
             dev.REPO_ROOT / "components" / "sml" / "CMakeLists.txt"
         ).read_text()
         self.assertIn("idf_component_register", wrapper)
         self.assertIn(f"{self.SML_PATH}/include", wrapper)
         logic = (
-            dev.REPO_ROOT / "components" / "logic" / "CMakeLists.txt"
+            dev.REPO_ROOT / "components" / "logic" / "liblogic"
+            / "CMakeLists.txt"
         ).read_text()
         self.assertIn("sml", logic.split("REQUIRES", 1)[1])
 
@@ -1326,7 +1329,8 @@ class HostTestCommandTests(unittest.TestCase):
                 dev._idf(dev.TEST_PROJECT, dev.TEST_BUILD_DIR,
                          "--preview", "set-target", "linux"),
                 dev._idf(dev.TEST_PROJECT, dev.TEST_BUILD_DIR, "build"),
-                [f"./{dev.TEST_PROJECT}/{dev.TEST_BUILD_DIR}/"
+                [f"./{dev.project_dir(dev.TEST_PROJECT)}/"
+                 f"{dev.TEST_BUILD_DIR}/"
                  "test-logic.elf"],
             ],
         )
@@ -1677,7 +1681,7 @@ class TidyCompileArgumentsTests(unittest.TestCase):
         args = dev._tidy_compile_arguments([
             "gcc",
             "-DTHERMO_X=1",
-            "-I/project/components/logic/include",
+            "-I/project/components/logic/liblogic/include",
             "-isystem/opt/esp/idf/components/esp_common/include",
             "a.cpp",
         ])
@@ -1685,7 +1689,7 @@ class TidyCompileArgumentsTests(unittest.TestCase):
             args,
             [
                 "-DTHERMO_X=1",
-                "-I/project/components/logic/include",
+                "-I/project/components/logic/liblogic/include",
                 "-isystem/opt/esp/idf/components/esp_common/include",
                 "a.cpp",
             ],
@@ -1731,18 +1735,22 @@ class TidyUnitSelectionTests(unittest.TestCase):
 
     def test_duplicate_sources_are_analyzed_once(self):
         # A shared component is compiled by several subprojects.
-        first = self._entry("/project/components/logic/src/payload.cpp")
+        first = self._entry(
+            "/project/components/logic/liblogic/src/payload.cpp"
+        )
         second = self._entry(
-            "/project/components/logic/src/payload.cpp",
+            "/project/components/logic/liblogic/src/payload.cpp",
             directory="/project/test/build_linux",
         )
         self.assertEqual(self._units([first, second]), [first])
 
     def test_first_occurrence_wins(self):
         # Projects are seeded firmware-first, so the chip build's flags decide.
-        firmware = self._entry("/project/components/logic/src/payload.cpp")
+        firmware = self._entry(
+            "/project/components/logic/liblogic/src/payload.cpp"
+        )
         host = self._entry(
-            "/project/components/logic/src/payload.cpp",
+            "/project/components/logic/liblogic/src/payload.cpp",
             directory="/project/test/build_linux",
         )
         self.assertEqual(self._units([firmware, host])[0], firmware)
@@ -1787,8 +1795,8 @@ class TidyConfigurationTests(unittest.TestCase):
         pattern = re.compile(dev._tidy_header_filter())
         for path in (
             f"{root}/mcgowan/src/include/battery_monitor.hpp",
-            f"{root}/components/logic/include/logic/payload.hpp",
-            f"{root}/test-logic/main/test_main.cpp",
+            f"{root}/components/logic/liblogic/include/logic/payload.hpp",
+            f"{root}/components/logic/tests/test-logic/main/test_main.cpp",
             f"{root}/components/espidfcpp/tests/test-espidf-cpp/main/"
             "test_main.cpp",
             f"{root}/donny/main/console_task.hpp",
@@ -1923,7 +1931,7 @@ class StagedFormatCheckTests(unittest.TestCase):
         # committed root style (which must stay tracked for a fresh clone).
         self.assertEqual(
             dev._style_files_for(
-                ["components/logic/include/logic/led_task.hpp"]
+                ["components/logic/liblogic/include/logic/led_task.hpp"]
             ),
             [".clang-format"],
         )

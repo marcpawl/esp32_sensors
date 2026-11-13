@@ -12,7 +12,9 @@ cmake_minimum_required(VERSION 3.22)
 #                                                -> components/hal/test-hal-stub/build_linux/
 #   components/hal/test-hal-common/ host tests for components/hal/hal_common, `linux`
 #                                                -> components/hal/test-hal-common/build_linux/
-#   test-logic/      host unit tests, `linux` target (hal_stub) -> test-logic/build_linux/
+#   components/logic/tests/test-logic/
+#                    host unit tests, `linux` target (hal_stub)
+#                                                -> .../test-logic/build_linux/
 #   components/espidfcpp/tests/test-espidf-cpp/
 #                    host tests for components/espidfcpp/libespidfcpp, `linux`
 #                                                -> .../test-espidf-cpp/build_linux/
@@ -146,7 +148,8 @@ endif()
 # `set-target linux` is only meaningful when sdkconfig is (re)generated, so it
 # is cheap on every invocation and keeps a fresh build tree pointed at linux.
 if(test-logic IN_LIST SUBPROJECTS)
-    _idf_subproject(test-logic test-logic build_linux "--preview|set-target|linux" "build")
+    _idf_subproject(test-logic components/logic/tests/test-logic
+        build_linux "--preview|set-target|linux" "build")
 endif()
 
 # --- test-espidf-cpp: host tests for libespidfcpp (linux) -> *_build ------

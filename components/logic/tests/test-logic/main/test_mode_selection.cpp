@@ -3,7 +3,7 @@
 //
 // The board exposes the 3-position ON-OFF-ON switch as two independent push
 // buttons — one per mode-sense pole — so the DPDT interpretation is logic. It
-// lives in a pure, `constexpr`, ESP-IDF-free header in the `logic` component
+// lives in a pure, `constexpr`, ESP-IDF-free header in the `liblogic` component
 // precisely so it can be tested here without hardware: the stub board's `set()`
 // is not needed, the pole states are passed in directly.
 //

@@ -140,6 +140,9 @@ esp32_sensors/
 │   │   ├── hal_board/   #     Real, GPIO-backed HAL
 │   │   └── hal_stub/    #     Pin-free HAL stub
 │   ├── logic/           #   Board-independent application logic (temp_format, rom_id, payload, limits, led_manager, mode*, led_task, self_signed_cert)
+│   │   ├── liblogic/    #     The logic component
+│   │   └── tests/       #     Host tests (IDF `linux`, Unity)
+│   │       └── test-logic/
 │   └── sml/             #   Wrapper component exposing the third_party/sml submodule
 ├── third_party/         # Vendored third-party code (never formatted, never tidy'd)
 │   ├── json/            #   nlohmann/json v3.11.3 (header-only, MIT)
@@ -148,12 +151,15 @@ esp32_sensors/
 │   ├── espidfcpp/
 │   │   └── tests/
 │   │       └── test-espidf-cpp/   # Host tests for libespidfcpp
-│   └── hal/
-│       ├── ...           # (hal_common, hal_board, hal_stub)
-│       └── tests/        # Host tests for the HAL components (IDF `linux`, Unity)
-│           ├── test-hal-stub/
-│           └── test-hal-common/
-├── test-logic/          # Host-based unit tests subproject (IDF `linux`, Unity)
+│   ├── hal/
+│   │   ├── ...           # (hal_common, hal_board, hal_stub)
+│   │   └── tests/        # Host tests for the HAL components (IDF `linux`, Unity)
+│   │       ├── test-hal-stub/
+│   │       └── test-hal-common/
+│   └── logic/
+│       ├── liblogic/     # Board-independent application logic
+│       └── tests/
+│           └── test-logic/   # Host tests for liblogic
 ├── donny/               # Linux-emulated application (IDF `linux`)
 │   └── main/            #   app_main + the JSON console task (test driver)
 ├── Dockerfile           # Dev container: ESP-IDF v6.1 + non-root host-mapped user
@@ -187,7 +193,7 @@ directory **inside its own folder**, named after the target:
 | `mcgowan/` (firmware) | `mcgowan/build_esp32s3/` | esp32s3 | `mcgowan.bin` (flashed to the board) |
 | `test-hal-stub/` (HAL stub device tests) | `components/hal/tests/test-hal-stub/build_linux/` | linux | `esp32_sensors_hal_stub_tests.elf` (run on the host) |
 | `test-hal-common/` (HAL vocabulary tests) | `components/hal/tests/test-hal-common/build_linux/` | linux | `esp32_sensors_hal_common_tests.elf` (run on the host) |
-| `test-logic/` (host tests) | `test-logic/build_linux/` | linux | `test-logic.elf` (run on the host) |
+| `test-logic/` (logic tests) | `components/logic/tests/test-logic/build_linux/` | linux | `test-logic.elf` (run on the host) |
 | `test-espidf-cpp/` (wrapper tests) | `components/espidfcpp/tests/test-espidf-cpp/build_linux/` | linux | `test-espidf-cpp.elf` (run on the host) |
 | `donny/` (linux app) | `donny/build_linux/` | linux | `donny.elf` (an application, not a test: it runs the JSON console task and `Application`) |
 
@@ -219,7 +225,7 @@ component; it compiles the sources from `mcgowan/src/` and exposes
   the `_assert` program convention.
 - `mcgowan/main/CMakeLists.txt` — the firmware's component definition. **Add
   new sources here** or they will not compile. Board-independent logic belongs
-  in `components/logic` instead.
+  in `components/logic/liblogic` instead.
 - `mcgowan/sdkconfig.defaults` — the committed configuration intent (target,
   C++ exceptions/RTTI off, partition table, `-Os`). `mcgowan/sdkconfig` is
   generated from this and is **not** tracked.
@@ -387,8 +393,9 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 
 The LED task (`led_task.hpp`) and the operating modes and their pole mapping
 (`mode.hpp`, `mode_selection.hpp`) are **not** in `mcgowan/src/`: they are
-board-independent logic and live in the `logic` component (see below), included
-as `logic/led_task.hpp`, `logic/mode.hpp` and `logic/mode_selection.hpp`.
+board-independent logic and live in the `liblogic` component (see below),
+included as `logic/led_task.hpp`, `logic/mode.hpp` and
+`logic/mode_selection.hpp`.
 
 **HAL components (`components/hal/`).** Hardware-specific drivers live in
 reusable ESP-IDF components rather than in `mcgowan/src/`, so host tests can
@@ -423,8 +430,8 @@ not been checked out, naming `scripts/dev.py submodules`. The component is also
 why `third_party/` stays off every component search path: `donny` names
 `third_party/json` explicitly rather than scanning `/third_party`.
 
-**`logic` component (`components/logic`).** The headers are included with the
-`logic/` prefix:
+**`liblogic` component (`components/logic/liblogic`).** The headers are
+included with the `logic/` prefix:
 
 | Header | Provides |
 |---|---|
@@ -445,10 +452,10 @@ can all name the operating modes, the transmission gate, the fixed capacities,
 and the temperature sentinel without pulling in a board.
 
 The RTC state is **split** between the two components, and the split is the
-point. `logic/rtc_state.hpp` + `logic/src/rtc_buffer.cpp` own the block's shape
-and every operation on it (append/FIFO eviction, clear, cold-boot reset, Wi-Fi
-cache clear), so those run in the firmware and the host tests from one
-definition. The firmware-only half — `mcgowan/src/rtc_storage.hpp` /
+point. `logic/rtc_state.hpp` plus the component's `src/rtc_buffer.cpp` own the
+block's shape and every operation on it (append/FIFO eviction, clear, cold-boot
+reset, Wi-Fi cache clear), so those run in the firmware and the host tests from
+one definition. The firmware-only half — `mcgowan/src/rtc_storage.hpp` /
 `rtc_storage.cpp` — owns the two things that cannot be host-tested: the single
 `RTC_DATA_ATTR` block (which expands to a failing static assert on `linux`) and
 the per-boot policy `rtc_state_init(board)`, which clears the block only when
@@ -471,19 +478,21 @@ and movable.
 Layout: `include/logic/` for public headers, `src/` for `.cpp` files
 (`src/temp_format.cpp`, `src/rtc_buffer.cpp`, `src/self_signed_cert.cpp`,
 `src/rom_id.cpp`). **New `.cpp` files must be added to the `SRCS` list in
-`components/logic/CMakeLists.txt`**; adding sources there does not change any
-consumer.
+`components/logic/liblogic/CMakeLists.txt`**; adding sources there does not
+change any consumer.
 
-**Host-testable modules.** The `logic` component's `temp_format.cpp`,
+**Host-testable modules.** The `liblogic` component's `temp_format.cpp`,
 `rtc_buffer.cpp`, `rom_id.cpp`, and `payload.cpp`, together with
 `mcgowan/src`'s `app_config.cpp`, are deliberately free of chip-specific
 ESP-IDF dependencies so they build for the `linux` target and are covered by
-`test-logic/`. The header-only `logic/mode_selection.hpp` is the same idea
-applied to the mode-sense poles: it depends only on `hal/push_button_types.hpp`
-(for `ButtonState`) and `logic/mode.hpp`, and is `constexpr`, so
-`test-logic/main/test_mode_selection.cpp` exercises it directly and covers all
-four pole combinations — including the both-on hardware fault, which the header
-reports as `std::nullopt` instead of rebooting. `main.cpp`'s `read_mode()` is
+`components/logic/tests/test-logic/`. The header-only
+`logic/mode_selection.hpp` is the same idea applied to the mode-sense poles: it
+depends only on `hal/push_button_types.hpp` (for `ButtonState`) and
+`logic/mode.hpp`, and is `constexpr`, so
+`components/logic/tests/test-logic/main/test_mode_selection.cpp` exercises it
+directly and covers all four pole combinations — including the both-on
+hardware fault, which the header reports as `std::nullopt` instead of
+rebooting. `main.cpp`'s `read_mode()` is
 the thin wrapper that turns that `std::nullopt` into the firmware's fail-loudly
 `reboot()`. The HAL's `hal_stub` component (the pin-free buttons, LEDs, 1-Wire
 bus, chip-temperature sensor, WiFi radio, one-shot timer, and aggregate board)
@@ -572,11 +581,11 @@ back as one JSON line on stdout.
   `is_discarded()`), never `try`/`catch`.
 - **The state-machine library is a git submodule.** `third_party/sml` is
   [boost-ext/sml](https://github.com/boost-ext/sml) at tag **v1.2.0** (commit
-  `2d8485d`), recorded in `.gitmodules` and used by the `logic` component for
-  the application state machines. `components/sml` is a thin ESP-IDF wrapper
-  that exposes the submodule's `include/` directory; `logic` names `sml` in
-  `REQUIRES`, so consumers include `<boost/sml.hpp>` and never name the
-  component themselves. The upstream tree is **never** a component: its own
+  `2d8485d`), recorded in `.gitmodules` and used by the `liblogic` component
+  for the application state machines. `components/sml` is a thin ESP-IDF
+  wrapper that exposes the submodule's `include/` directory; `liblogic` names
+  `sml` in `REQUIRES`, so consumers include `<boost/sml.hpp>` and never name
+  the component themselves. The upstream tree is **never** a component: its own
   `CMakeLists.txt` builds upstream tests/examples, so it stays off every
   component search path (`donny/CMakeLists.txt` names `third_party/json`
   explicitly instead of scanning `third_party/`), and it is outside `ROOTS`, so
@@ -813,7 +822,7 @@ enacted on the host.
 |both|test|Run every host unit test suite: `test-hal-common`, then `test-hal-stub`, then `test-logic`, then `test-espidf-cpp`|
 |both|test-hal-stub|Build and run the `test-hal-stub/` host unit tests (ESP-IDF `linux` target)|
 |both|test-hal-common|Build and run the `test-hal-common/` host unit tests (ESP-IDF `linux` target)|
-|both|test-logic|Build and run the `test-logic/` host unit tests (ESP-IDF `linux` target)|
+|both|test-logic|Build and run the `components/logic/tests/test-logic/` host unit tests (ESP-IDF `linux` target)|
 |both|test-espidf-cpp|Build and run the `components/espidfcpp/tests/test-espidf-cpp/` host unit tests (ESP-IDF `linux` target)|
 |both|self-check|Run the host unit tests for dev.py itself (stdlib `unittest`)|
 |both|flash|idf.py flash monitor|
@@ -876,10 +885,11 @@ There are two kinds of test suite, runnable from the host via `scripts/dev.py`:
     described in `components/hal/AGENTS.md`.
   - `test-hal-common/` — the implementation-free `hal_common` vocabulary; what
     each test pins is described in `components/hal/AGENTS.md`.
-  - `test-logic/` covers the pure-logic modules (`temp_format`, `limits`,
-    `led_manager`, `payload`, `app_config` validation, `rom_id`, `rtc_buffer` —
-    including the cold-boot `rtc_state_reset()`, and the `mode_selection` pole
-    mapping) and the firmware sources in `mcgowan/src` that need no chip driver
+  - `components/logic/tests/test-logic/` covers the pure-logic modules
+    (`temp_format`, `limits`, `led_manager`, `payload`, `app_config`
+    validation, `rom_id`, `rtc_buffer` — including the cold-boot
+    `rtc_state_reset()`, and the `mode_selection` pole mapping) and the
+    firmware sources in `mcgowan/src` that need no chip driver
     (`app_config.cpp`, `config_page.cpp`, `power_source.cpp`).
     `test_led_runner.cpp` instantiates the templated `LedRunner<Board>` against
     the stub `BoardStub`.
@@ -890,9 +900,10 @@ There are two kinds of test suite, runnable from the host via `scripts/dev.py`:
   reads, deep-sleep wake, Wi-Fi upload).
 - Keep hardware interactions behind thin interfaces so business logic remains
   host-testable. When adding pure logic that the firmware and the tests both
-  need, put it in `components/logic` (headers under `include/logic/`, `.cpp`
-  files in its `SRCS`); when it is firmware-only, add it to both
-  `mcgowan/main/CMakeLists.txt` and `test-logic/main/CMakeLists.txt`.
+  need, put it in `components/logic/liblogic` (headers under `include/logic/`,
+  `.cpp` files in its `SRCS`); when it is firmware-only, add it to both
+  `mcgowan/main/CMakeLists.txt` and
+  `components/logic/tests/test-logic/main/CMakeLists.txt`.
 
 Run the suites with `./scripts/dev.py test` (all four, stopping at the first
 failure), or run one with `test-hal-common`, `test-hal-stub`, `test-logic`, or

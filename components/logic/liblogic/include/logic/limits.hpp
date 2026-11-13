@@ -1,9 +1,9 @@
 // Fixed capacities shared by the sample buffer, the payload, and the sensor
 // layer (§2.1, §4.1, §4.2).
 //
-// Part of the `logic` component: how many sensors the device logs and how many
-// samples the RTC buffer holds are properties of the application, not of any
-// particular board, and both the firmware and the host tests must agree on
+// Part of the `liblogic` component: how many sensors the device logs and how
+// many samples the RTC buffer holds are properties of the application, not of
+// any particular board, and both the firmware and the host tests must agree on
 // them. The header is deliberately dependency-free (only `<cstddef>`) so it
 // can be included by module state that must not pull in a board or an ESP-IDF
 // driver.

@@ -1,6 +1,6 @@
 // DS18B20 ROM-ID formatting and parsing (§5.1.3, §6.1).
 //
-// Part of the `logic` component so the firmware and the host tests share one
+// Part of the `liblogic` component so the firmware and the host tests share one
 // implementation; free of ESP-IDF dependencies, so it builds for the `linux`
 // target. The ROM ID *type* is the HAL's data (`thermo::hal::RomId`, from
 // `hal_common`'s `hal/ds18b20_types.hpp`); the textual conversions are

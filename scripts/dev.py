@@ -57,7 +57,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 ROOTS = (
     "mcgowan",
     "components",
-    "test-logic",
     "donny",
     "scripts",
 )
@@ -95,9 +94,10 @@ PYCODESTYLE_ARGS: tuple[str, ...] = ()
 #
 # `third_party/sml` is boost-ext/sml (https://github.com/boost-ext/sml),
 # pinned to tag **v1.2.0** via the gitlink recorded in .gitmodules. The
-# `components/sml` component exposes its headers to `logic`, which uses it for
-# the application state machines. Its sources are NOT ours: they sit outside
-# ROOTS (so clang-format never touches them) and are excluded from clang-tidy
+# `components/sml` component exposes its headers to `liblogic`, which uses it
+# for the application state machines. Its sources are NOT ours: they sit
+# outside ROOTS (so clang-format never touches them) and are excluded from
+# clang-tidy
 # (see `_is_vendored`).
 SUBMODULES = ("third_party/sml",)
 
@@ -144,7 +144,8 @@ FORMAT_ARGS = ("--dry-run", "--Werror")
 #   components/hal/tests/test-hal-common/
 #             host tests for components/hal/hal_common (linux target)
 #                                            -> .../test-hal-common/build_linux
-#   test-logic/ host unit tests (linux target)      -> test-logic/build_linux
+#   components/logic/tests/test-logic/
+#             host unit tests (linux target)      -> .../test-logic/build_linux
 #   components/espidfcpp/tests/test-espidf-cpp/
 #             host unit tests for components/espidfcpp/libespidfcpp
 #                                     -> .../test-espidf-cpp/build_linux
@@ -162,14 +163,15 @@ DONNY_PROJECT = "donny"
 
 # Directory (repo-relative) where each subproject lives. Most sit at
 # the repository root, but the two HAL test projects live under
-# `components/hal/tests/` and the wrapper suite under
-# `components/espidfcpp/tests/`. The subproject *identifier* (and the aggregate
+# `components/hal/tests/`, the wrapper suite under
+# `components/espidfcpp/tests/`, and the logic suite under
+# `components/logic/tests/`. The subproject *identifier* (and the aggregate
 # target name) stays short, because CMake target names may not contain a slash.
 PROJECT_DIRS = {
     FIRMWARE_PROJECT: FIRMWARE_PROJECT,
     HAL_STUB_TEST_PROJECT: "components/hal/tests/test-hal-stub",
     HAL_COMMON_TEST_PROJECT: "components/hal/tests/test-hal-common",
-    TEST_PROJECT: TEST_PROJECT,
+    TEST_PROJECT: "components/logic/tests/test-logic",
     ESPIDF_CPP_TEST_PROJECT:
         "components/espidfcpp/tests/test-espidf-cpp",
     DONNY_PROJECT: DONNY_PROJECT,
@@ -1014,7 +1016,8 @@ def _unique_tidy_units(
 ) -> list[dict]:
     """The C++ compilation-database entries to analyze, one per source file.
 
-    A shared source (`components/logic/src/payload.cpp`, most of the HAL) is
+    A shared source (`components/logic/liblogic/src/payload.cpp`, most of the
+    HAL) is
     compiled by three or four subprojects, so the union of their databases
     repeats it. Analyzing it once is enough, and taking the *first* occurrence
     keeps the verdict stable: the projects are listed firmware-first, so a

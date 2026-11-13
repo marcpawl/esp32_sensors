@@ -1,6 +1,6 @@
 // RTC-memory layout and the sample-buffer operations (§4, §8).
 //
-// Part of the `logic` component: the *shape* of the retained state and the
+// Part of the `liblogic` component: the *shape* of the retained state and the
 // buffer semantics are board-independent, so the firmware and the host tests
 // share one definition. What is *not* here is the storage itself — placing a
 // block in RTC slow memory (`RTC_DATA_ATTR`) and asking the hardware why the

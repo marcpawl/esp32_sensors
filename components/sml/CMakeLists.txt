@@ -10,7 +10,7 @@
 # header.
 #
 # **Why a submodule rather than a copied tree.** The library is used by the
-# shared `logic` component (state machines for the operating modes and the
+# shared `liblogic` component (state machines for the operating modes and
 # run-mode cycle). Pinning a released tag keeps the build reproducible and lets
 # `git submodule update` move it deliberately, without the byte-for-byte
 # "vendored" discipline `third_party/json` needs.

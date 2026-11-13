@@ -1,6 +1,6 @@
 // LED status indication vocabulary (§7).
 //
-// Part of the `logic` component: `TxState` is the transmission gate derived
+// Part of the `liblogic` component: `TxState` is the transmission gate derived
 // from the battery high-water / low-water hysteresis (§3.6), which is a
 // property of the application, not of any particular board. It therefore lives
 // here (as `logic/led_manager.hpp`) so the firmware, the host tests, and the

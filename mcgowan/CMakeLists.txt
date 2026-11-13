@@ -21,16 +21,19 @@ endif()
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
-# Reusable components live in the repo-root `components/` (the application
-# logic and the sml wrapper), `components/hal/` (the three HAL components) and
-# `components/espidfcpp/` (the ESP-IDF C++ wrappers). None is on this
-# project's default search path (that would be `mcgowan/components/`), and each
-# needs its own entry: ESP-IDF scans a component directory one level deep, so a
-# grouping directory is not descended into.
+# Reusable components live in the repo-root `components/` (the sml wrapper),
+# `components/hal/` (the three HAL components), `components/espidfcpp/` (the
+# ESP-IDF C++ wrappers) and `components/logic/` (the application logic). None
+# is on this project's default search path (that would be
+# `mcgowan/components/`), and each needs its own entry: ESP-IDF scans a
+# component directory one level deep, so a grouping directory is not descended
+# into.
 list(APPEND EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../components")
 list(APPEND EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../components/hal")
 list(APPEND EXTRA_COMPONENT_DIRS
     "${CMAKE_CURRENT_LIST_DIR}/../components/espidfcpp")
+list(APPEND EXTRA_COMPONENT_DIRS
+    "${CMAKE_CURRENT_LIST_DIR}/../components/logic")
 
 # This project links `hal_board` (GPIO-backed drivers). `hal_stub` exposes the
 # same headers and defines the same symbols, so exclude it to keep exactly one

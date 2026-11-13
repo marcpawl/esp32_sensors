@@ -29,6 +29,7 @@ RtcState& rtc_state() {
 
 // NOTE: rtc_state_init() is a template over `BoardLike`, so it is defined in
 // rtc_storage.hpp. The buffer operations and the cold-boot reset live in the
-// `logic` component (`logic/rtc_state.hpp`, `logic/src/rtc_buffer.cpp`).
+// `liblogic` component (`logic/rtc_state.hpp` and the component's
+// `src/rtc_buffer.cpp`).
 
 }  // namespace thermo

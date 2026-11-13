@@ -1,6 +1,6 @@
 // DS18B20 ROM-ID formatting and parsing (§5.1.3, §6.1).
 //
-// Part of the `logic` component: the textual form of a ROM ID is
+// Part of the `liblogic` component: the textual form of a ROM ID is
 // board-independent vocabulary shared by the sensor layer, the configuration
 // UI, and the payload. The ROM ID *type* itself (`thermo::hal::RomId`) is the
 // HAL's data, defined in the implementation-free `hal_common` component

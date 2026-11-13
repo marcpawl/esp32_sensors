@@ -31,10 +31,10 @@ endif()
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
 # The reusable components live in the repo-root `components/` directory (the
-# application logic and the sml wrapper). The component under test lives in
-# `components/espidfcpp/` and the HAL components in `components/hal/`; each
-# grouping directory needs its own entry: ESP-IDF scans a component directory
-# one level deep, so a grouping directory is not descended into.
+# sml wrapper). The component under test lives in `components/espidfcpp/` and
+# the HAL components in `components/hal/`; each grouping directory needs its
+# own entry: ESP-IDF scans a component directory one level deep, so a grouping
+# directory is not descended into.
 set(EXTRA_COMPONENT_DIRS
     "${CMAKE_CURRENT_LIST_DIR}/../../.."
     "${CMAKE_CURRENT_LIST_DIR}/../../../hal"

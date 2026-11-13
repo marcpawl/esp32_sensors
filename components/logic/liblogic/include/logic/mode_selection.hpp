@@ -3,7 +3,7 @@
 // The board exposes the 3-position ON-OFF-ON switch (a DPDT, §2.3) as two
 // independent `hal::PushButton`s — `config_button()` and `run_button()` — one
 // per mode-sense pole. Interpreting that pair is logic, not hardware, so it
-// lives here in the `logic` component rather than in the HAL.
+// lives here in the `liblogic` component rather than in the HAL.
 //
 // This header is deliberately free of chip-specific ESP-IDF dependencies (and
 // of `reboot()`), so the mapping is pure, `constexpr`, and host-testable. The

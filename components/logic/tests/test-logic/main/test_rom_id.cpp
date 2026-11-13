@@ -4,7 +4,7 @@
 // the configuration, so the textual form must round-trip exactly and reject
 // malformed input rather than silently producing a wrong identity.
 //
-// The conversions are free functions in the shared `logic` component
+// The conversions are free functions in the shared `liblogic` component
 // (`logic/rom_id.hpp`); `RomId` itself is the HAL's pure-data type.
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)

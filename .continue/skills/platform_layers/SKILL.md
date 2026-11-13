@@ -23,7 +23,7 @@ The hardware-abstraction layer (layers 1 and 2 below) is documented in
 | 1 (lowest) | `hal_common` | `test-hal-common` |
 | 2 | `hal_board`, `hal_stub` | `test-hal-stub` |
 | 3 | `libespidfcpp` | `test-espidf-cpp` |
-| 4 | `logic` | `test-logic` |
+| 4 | `liblogic` | `test-logic` |
 | 5 (highest) | — | `mcgowan`, `donny` |
 
 `hal_common` is header-only.
@@ -35,7 +35,7 @@ The hardware-abstraction layer (layers 1 and 2 below) is documented in
 `libespidfcpp` provides C++ wrappers around esp-idf code, to make usage less
 error prone.
 
-Logic in the main application business logic.
+`liblogic` holds the main application business logic.
 
 `mcgowan` is the ESP32-S3 firmware
 
@@ -45,8 +45,8 @@ Logic in the main application business logic.
 
 - Layer N may require layers `< N`, never `> N`.
 - Never include a higher layer's header, even a header-only one.
-- A higher layer may freely use the lower layers: `logic` uses the `hal_common`
-  vocabulary, and `mcgowan` links `hal_board` and `logic`.
+- A higher layer may freely use the lower layers: `liblogic` uses the
+  `hal_common` vocabulary, and `mcgowan` links `hal_board` and `liblogic`.
 - third_part may be used by any layer.
 
 ## Platform rules
@@ -55,13 +55,13 @@ Logic in the main application business logic.
 |---|---|---|
 | ESP32-S3 (`mcgowan`) | `hal_board` | `hal_stub` |
 | `linux` (`test-hal-common`, `test-hal-stub`, `test-logic`, `test-espidf-cpp`, `donny`) | `hal_stub` | `hal_board` |
-| Platform-neutral components (`hal_common`, `libespidfcpp`, `logic`) | neither | both |
+| Platform-neutral components (`hal_common`, `libespidfcpp`, `liblogic`) | neither | both |
 
-`libespidfcpp` and `logic` build for both the chip and the host, so they must not
-name either HAL implementation. They use the `hal_common` vocabulary instead
-and stay implementation-agnostic with templates and concepts: for example
-`logic/led_task.hpp` is templated on `hal::BoardLike`, and `mcgowan` supplies
-`hal::Board` while the host tests supply `hal::BoardStub`.
+`libespidfcpp` and `liblogic` build for both the chip and the host, so they
+must not name either HAL implementation. They use the `hal_common` vocabulary
+instead and stay implementation-agnostic with templates and concepts: for
+example `logic/led_task.hpp` is templated on `hal::BoardLike`, and `mcgowan`
+supplies `hal::Board` while the host tests supply `hal::BoardStub`.
 
 `hal_common` is shared by everything and is never excluded.
 
@@ -70,7 +70,8 @@ and stay implementation-agnostic with templates and concepts: for example
 When writing or editing a list of components or test projects, go from the
 lowest layer to the highest:
 
-- Components: `hal_common`, `hal_board`, `hal_stub`, `libespidfcpp`, `logic`.
+- Components: `hal_common`, `hal_board`, `hal_stub`, `libespidfcpp`,
+  `liblogic`.
 - Test projects: `test-hal-common`, `test-hal-stub`, `test-espidf-cpp`,
   `test-logic`.
 - Applications: `mcgowan`, `donny`.
@@ -87,43 +88,44 @@ list.
 | `hal_board` | `hal_common` |
 | `hal_stub` | `hal_common` |
 | `libespidfcpp` | none (ESP-IDF `esp_http_server` only) |
-| `logic` | `libespidfcpp`, `hal_common`, `sml` |
-| `mcgowan` | `hal_board`, `logic`, `libespidfcpp` |
-| `donny` | `hal_stub`, `logic`, `libespidfcpp`, vendored `json` |
+| `liblogic` | `libespidfcpp`, `hal_common`, `sml` |
+| `mcgowan` | `hal_board`, `liblogic`, `libespidfcpp` |
+| `donny` | `hal_stub`, `liblogic`, `libespidfcpp`, vendored `json` |
 | `test-hal-common` | `hal_common`; privately `hal_stub` |
 | `test-hal-stub` | `hal_stub` |
 | `test-espidf-cpp` | `libespidfcpp`; privately `hal_stub` |
-| `test-logic` | `logic`; privately `libespidfcpp`, `hal_stub` |
+| `test-logic` | `liblogic`; privately `libespidfcpp`, `hal_stub` |
 
 Test projects may privately link `hal_stub` even when their component is
 platform-neutral: `test-hal-common` needs the concrete device types because the
 `hal_common` concepts name them, and `test-espidf-cpp` keeps the requirement
 for parity and future HAL-facing tests. This is a test-project allowance, not a
-precedent for a component — `libespidfcpp` and `logic` themselves must never
-require either implementation.
+precedent for a component — `libespidfcpp` and `liblogic` themselves must
+never require either implementation.
 
 ## Where the rule is enforced
 
 - Each subproject's top-level `CMakeLists.txt` points `EXTRA_COMPONENT_DIRS` at
-  the repo-root `components/` (the application logic and the `sml` wrapper), at
-  `components/hal/` (the three HAL components) **and** at `components/espidfcpp/`
-  (the ESP-IDF wrappers), because its own project root is not on the default
-  search path. All entries are needed: ESP-IDF scans a component directory one
-  level deep (`__project_component_dir` globs `dir/*` and does not descend), so a
-  grouping directory is only found when it is named on its own. Each project
-  also sets `EXCLUDE_COMPONENTS` before `project()`: `mcgowan` excludes
-  `hal_stub`; every `linux` project excludes `hal_board`. `hal_common` is never
-  excluded.
+  the repo-root `components/` (the `sml` wrapper), at `components/hal/` (the
+  three HAL components), at `components/espidfcpp/` (the ESP-IDF wrappers)
+  **and** at `components/logic/` (the application logic), because its own
+  project root is not on the default search path. All entries are needed:
+  ESP-IDF scans a component directory one level deep
+  (`__project_component_dir` globs `dir/*` and does not descend), so a grouping
+  directory is only found when it is named on its own. Each project also sets
+  `EXCLUDE_COMPONENTS` before `project()`: `mcgowan` excludes `hal_stub`; every
+  `linux` project excludes `hal_board`. `hal_common` is never excluded.
 - The `linux` projects also narrow `set(COMPONENTS ...)` to `main` plus
-  `hal_stub` (and `logic` in `test-logic`, so the component is built now that
-  it has `.cpp` files), so the host target does not try to build chip-only
+  `hal_stub` (and `liblogic` in `test-logic`, so the component is built now
+  that it has `.cpp` files), so the host target does not try to build chip-only
   ESP-IDF components.
 - A component's requirements live in its own `CMakeLists.txt` — under
   `components/hal/<name>/` for the HAL components, under
-  `components/espidfcpp/libespidfcpp/` for the ESP-IDF wrappers, and under
+  `components/espidfcpp/libespidfcpp/` for the ESP-IDF wrappers, under
+  `components/logic/liblogic/` for the application logic, and under
   `components/<name>/` for the rest. An application's live in
-  `<project>/main/CMakeLists.txt`. Use `REQUIRES` when the dependency appears in
-  public headers, `PRIV_REQUIRES` when only `.cpp` files use it.
+  `<project>/main/CMakeLists.txt`. Use `REQUIRES` when the dependency appears
+  in public headers, `PRIV_REQUIRES` when only `.cpp` files use it.
 - The component *name* is the directory name, not its path:
   `components/hal/hal_common` is the component `hal_common`, so every
   `REQUIRES`, `PRIV_REQUIRES`, `EXCLUDE_COMPONENTS` and `set(COMPONENTS ...)`
@@ -140,8 +142,8 @@ require either implementation.
 2. If it needs something from a higher layer, move the code up or invert the
    dependency. A template parameter constrained by a `hal_common` concept is
    the usual answer — see `logic::LedTask<Board>`.
-3. Never make `libespidfcpp` or `logic` depend on `hal_board` or `hal_stub`; that
-   breaks one of the two builds.
+3. Never make `libespidfcpp` or `liblogic` depend on `hal_board` or
+   `hal_stub`; that breaks one of the two builds.
 4. Before moving an existing class to another component, check what it depends
    on and what depends on it. If a dependency would have to move too, ask the
    user before starting: dependencies may need to move in their own steps

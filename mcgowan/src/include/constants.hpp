@@ -9,7 +9,8 @@
 //
 // The fixed capacities (`thermo::limits::kSensorCount`,
 // `thermo::limits::kMaxBufferRecords`) are board-independent and shared with
-// the host tests, so they live in the `logic` component (`logic/limits.hpp`).
+// the host tests, so they live in the `liblogic` component
+// (`logic/limits.hpp`).
 #pragma once
 
 // NOLINTBEGIN
