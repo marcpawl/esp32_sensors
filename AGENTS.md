@@ -378,25 +378,10 @@ component; it compiles the sources from `mcgowan/src/` and exposes
   keep the comments and edit only the attribute that genuinely changed.
 - `LICENSE` — GPL-3.0.
 
-**`mcgowan/src/` module map:**
-
-| Area | Files |
-|---|---|
-| Entry point | `main.cpp` (`extern "C" void app_main`), `constants.hpp` |
-| Mode switching | `main.cpp` (`read_mode()` reads the poles and applies the reboot-on-fault policy); the mapping itself is `logic/mode_selection.hpp` |
-| Sensors | `onewire_bus.cpp` (bit-banged 1-Wire), `ds18b20.cpp`, `sensor_manager.cpp`, `sensor.hpp` |
-| RTC state / buffer | `rtc_storage.cpp` (the `RTC_DATA_ATTR` block + `rtc_state()`) and `rtc_storage.hpp` (`rtc_state_init(board)`, which asks the board's wake cause whether the retained block survives). The block's *shape*, the FIFO, the cold-boot reset and the Wi-Fi-cache clear are board-independent and live in `logic/rtc_state.hpp` / `logic/src/rtc_buffer.cpp`; `RtcState`'s `buffer` / `rom_ids` are `espidf_cpp::static_vector`s that carry their own counts |
-| Power / battery | `battery_monitor.cpp`, `power_manager.cpp`, `power_source.cpp` |
-| Config | `app_config.cpp` (validation), `app_config_store.cpp` (NVS) |
-| Configure mode | `configure_mode.cpp`, `wifi_ap.cpp`, `https_server.cpp`, `config_page.cpp`; the self-signed certificate is `logic/self_signed_cert.hpp` |
-| Run mode | `run_mode.cpp` (stubbed network path), `ntp_client.cpp` |
-| Payload | `payload.cpp`; the temperature formatter and `kTempNull` are `logic/temp_format.hpp`, and ROM-ID hex is `logic/rom_id.hpp` |
-
-The LED task (`led_task.hpp`) and the operating modes and their pole mapping
-(`mode.hpp`, `mode_selection.hpp`) are **not** in `mcgowan/src/`: they are
-board-independent logic and live in the `liblogic` component (see below),
-included as `logic/led_task.hpp`, `logic/mode.hpp` and
-`logic/mode_selection.hpp`.
+**`mcgowan/`.** The ESP32-S3 firmware subproject (`mcgowan.bin`); its module
+map, the `main/` vs `src/` split, and its configuration intent are documented
+in `mcgowan/AGENTS.md`. New firmware sources must be added to
+`mcgowan/main/CMakeLists.txt`.
 
 **HAL components (`components/hal/`).** Hardware-specific drivers live in
 reusable ESP-IDF components rather than in `mcgowan/src/`, so host tests can
