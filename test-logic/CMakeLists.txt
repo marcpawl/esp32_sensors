@@ -26,15 +26,16 @@ endif()
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
-# Reusable components live in the repo-root `components/` (the ESP-IDF
-# wrappers, the application logic and the sml wrapper) and
-# `components/hal/` (the three HAL components). Neither is on this
-# project's default search path (that would be `test-logic/components/`), and each needs its own entry: ESP-IDF
-# scans a component directory one level deep, so a grouping directory is not
-# descended into.
+# Reusable components live in the repo-root `components/` (the application
+# logic and the sml wrapper), `components/hal/` (the three HAL components) and
+# `components/espidfcpp/` (the ESP-IDF C++ wrappers). None is on this
+# project's default search path (that would be `test-logic/components/`), and
+# each needs its own entry: ESP-IDF scans a component directory one level deep,
+# so a grouping directory is not descended into.
 set(EXTRA_COMPONENT_DIRS
     "${CMAKE_CURRENT_LIST_DIR}/../components"
     "${CMAKE_CURRENT_LIST_DIR}/../components/hal"
+    "${CMAKE_CURRENT_LIST_DIR}/../components/espidfcpp"
 )
 
 # Restrict the component set to `main` (and its requirements, which include the

@@ -1,6 +1,6 @@
 # ESP-IDF build output. The repo root is not an ESP-IDF project; it aggregates
-# the subprojects (mcgowan/, test-hal-stub/, test-hal-common/, test-logic/,
-# test-espidf-cpp/, donny/), and each subproject keeps its build tree inside
+# the subprojects (mcgowan/, test-logic/, donny/, plus the HAL and wrapper
+# suites under components/), and each subproject keeps its build tree inside
 # its own directory, named after the target so the firmware (esp32s3) and
 # host-test (linux) builds stay separate:
 #
@@ -8,7 +8,8 @@
 #   components/hal/tests/test-hal-stub/build_linux/    host tests for hal/hal_stub
 #   components/hal/tests/test-hal-common/build_linux/  host tests for hal/hal_common
 #   test-logic/build_linux/       host unit tests
-#   test-espidf-cpp/build_linux/  host tests for components/libespidfcpp
+#   components/espidfcpp/tests/test-espidf-cpp/build_linux/
+#                                 host tests for components/espidfcpp/libespidfcpp
 #   donny/build_linux/            linux-emulated application (donny)
 #
 # The root aggregator's own CMake/Ninja tree (scripts/dev.py build).
@@ -20,6 +21,7 @@ cmake-build-*/
 test-logic/build_linux/
 components/hal/tests/test-hal-stub/build_linux/
 components/hal/tests/test-hal-common/build_linux/
+components/espidfcpp/tests/test-espidf-cpp/build_linux/
 managed_components/
 dependencies.lock
 
@@ -30,21 +32,21 @@ __pycache__/
 # Generated project configuration.
 # sdkconfig is produced from sdkconfig.defaults by `idf.py`; keep only the
 # committed defaults (sdkconfig.defaults) under version control.
-# One per ESP-IDF project (mcgowan/, test-hal-stub/, test-hal-common/, test-logic/,
-# test-espidf-cpp/, donny/), plus the root aggregator's.
+# One per ESP-IDF project (mcgowan/, test-logic/, donny/, and the suites under
+# components/), plus the root aggregator's.
 sdkconfig
 mcgowan/sdkconfig
 components/hal/tests/test-hal-stub/sdkconfig
 components/hal/tests/test-hal-common/sdkconfig
 test-logic/sdkconfig
-test-espidf-cpp/sdkconfig
+components/espidfcpp/tests/test-espidf-cpp/sdkconfig
 donny/sdkconfig
 sdkconfig.old
 mcgowan/sdkconfig.old
 components/hal/tests/test-hal-stub/sdkconfig.old
 components/hal/tests/test-hal-common/sdkconfig.old
 test-logic/sdkconfig.old
-test-espidf-cpp/sdkconfig.old
+components/espidfcpp/tests/test-espidf-cpp/sdkconfig.old
 donny/sdkconfig.old
 
 # CMake / ninja ephemera

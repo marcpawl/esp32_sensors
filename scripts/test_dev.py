@@ -1340,7 +1340,8 @@ class HostTestCommandTests(unittest.TestCase):
                          "--preview", "set-target", "linux"),
                 dev._idf(dev.ESPIDF_CPP_TEST_PROJECT, dev.TEST_BUILD_DIR,
                          "build"),
-                [f"./{dev.ESPIDF_CPP_TEST_PROJECT}/{dev.TEST_BUILD_DIR}/"
+                [f"./{dev.project_dir(dev.ESPIDF_CPP_TEST_PROJECT)}/"
+                 f"{dev.TEST_BUILD_DIR}/"
                  "test-espidf-cpp.elf"],
             ],
         )
@@ -1788,7 +1789,8 @@ class TidyConfigurationTests(unittest.TestCase):
             f"{root}/mcgowan/src/include/battery_monitor.hpp",
             f"{root}/components/logic/include/logic/payload.hpp",
             f"{root}/test-logic/main/test_main.cpp",
-            f"{root}/test-espidf-cpp/main/test_main.cpp",
+            f"{root}/components/espidfcpp/tests/test-espidf-cpp/main/"
+            "test_main.cpp",
             f"{root}/donny/main/console_task.hpp",
         ):
             self.assertIsNotNone(pattern.match(path), path)

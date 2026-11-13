@@ -13,8 +13,9 @@ cmake_minimum_required(VERSION 3.22)
 #   components/hal/test-hal-common/ host tests for components/hal/hal_common, `linux`
 #                                                -> components/hal/test-hal-common/build_linux/
 #   test-logic/      host unit tests, `linux` target (hal_stub) -> test-logic/build_linux/
-#   test-espidf-cpp/ host tests for components/libespidfcpp, `linux`
-#                                                -> test-espidf-cpp/build_linux/
+#   components/espidfcpp/tests/test-espidf-cpp/
+#                    host tests for components/espidfcpp/libespidfcpp, `linux`
+#                                                -> .../test-espidf-cpp/build_linux/
 #
 # This file only aggregates them, so ONE build covers all of them. It is plain
 # CMake (no repo-root sdkconfig): each target invokes `idf.py` for its
@@ -152,8 +153,8 @@ endif()
 # Same `linux` target rules as `test-logic/`; built (not run) here, since running is
 # `scripts/dev.py test-espidf-cpp`'s job (`test` runs every host suite).
 if(test-espidf-cpp IN_LIST SUBPROJECTS)
-    _idf_subproject(test-espidf-cpp test-espidf-cpp build_linux
-        "--preview|set-target|linux" "build")
+    _idf_subproject(test-espidf-cpp components/espidfcpp/tests/test-espidf-cpp
+        build_linux "--preview|set-target|linux" "build")
 endif()
 
 # --- donny: linux-emulated application (linux) -> target donny_build -------

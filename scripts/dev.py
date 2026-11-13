@@ -58,7 +58,6 @@ ROOTS = (
     "mcgowan",
     "components",
     "test-logic",
-    "test-espidf-cpp",
     "donny",
     "scripts",
 )
@@ -146,9 +145,9 @@ FORMAT_ARGS = ("--dry-run", "--Werror")
 #             host tests for components/hal/hal_common (linux target)
 #                                            -> .../test-hal-common/build_linux
 #   test-logic/ host unit tests (linux target)      -> test-logic/build_linux
-#   test-espidf-cpp/
-#             host unit tests for components/libespidfcpp (linux target)
-#                                                -> test-espidf-cpp/build_linux
+#   components/espidfcpp/tests/test-espidf-cpp/
+#             host unit tests for components/espidfcpp/libespidfcpp
+#                                     -> .../test-espidf-cpp/build_linux
 #   donny/    linux-emulated application (hal_stub, linux target)
 #                                                -> donny/build_linux
 #
@@ -163,14 +162,16 @@ DONNY_PROJECT = "donny"
 
 # Directory (repo-relative) where each subproject lives. Most sit at
 # the repository root, but the two HAL test projects live under
-# `components/hal/tests/`. The subproject *identifier* (and the aggregate
+# `components/hal/tests/` and the wrapper suite under
+# `components/espidfcpp/tests/`. The subproject *identifier* (and the aggregate
 # target name) stays short, because CMake target names may not contain a slash.
 PROJECT_DIRS = {
     FIRMWARE_PROJECT: FIRMWARE_PROJECT,
     HAL_STUB_TEST_PROJECT: "components/hal/tests/test-hal-stub",
     HAL_COMMON_TEST_PROJECT: "components/hal/tests/test-hal-common",
     TEST_PROJECT: TEST_PROJECT,
-    ESPIDF_CPP_TEST_PROJECT: ESPIDF_CPP_TEST_PROJECT,
+    ESPIDF_CPP_TEST_PROJECT:
+        "components/espidfcpp/tests/test-espidf-cpp",
     DONNY_PROJECT: DONNY_PROJECT,
 }
 
@@ -825,7 +826,7 @@ def cmd_test_logic() -> int:
 
 
 def cmd_test_espidf_cpp() -> int:
-    """Host tests for components/libespidfcpp (`linux` target)."""
+    """Host tests for components/espidfcpp/libespidfcpp (`linux` target)."""
     change_to_container()
     return _run_host_tests((ESPIDF_CPP_TEST_PROJECT,))
 

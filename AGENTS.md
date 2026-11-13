@@ -129,7 +129,10 @@ esp32_sensors/
 │   │   └── CMakeLists.txt
 │   └── src/             #   C++26 sources + include/ — see module map below
 ├── components/          # Reusable ESP-IDF components (see "HAL" section)
-│   ├── libespidfcpp/    #   C++ wrappers over ESP-IDF/FreeRTOS (Task, queue, handles, ...)
+│   ├── espidfcpp/       #   C++ wrappers over ESP-IDF/FreeRTOS (Task, queue, handles, ...)
+│   │   ├── libespidfcpp/#     The wrapper component
+│   │   └── tests/       #     Host tests (IDF `linux`, Unity)
+│   │       └── test-espidf-cpp/
 │   ├── hal/             #   The hardware-abstraction layer (see "HAL" section)
 │   │   ├── AGENTS.md    #     The HAL layer in detail — devices, contract, tests
 │   │   ├── hal_common/  #     Shared, header-only HAL vocabulary (types/concepts)
@@ -141,13 +144,15 @@ esp32_sensors/
 │   ├── json/            #   nlohmann/json v3.11.3 (header-only, MIT)
 │   └── sml/             #   boost-ext/sml git SUBMODULE, pinned to v1.2.0
 ├── components/
+│   ├── espidfcpp/
+│   │   └── tests/
+│   │       └── test-espidf-cpp/   # Host tests for libespidfcpp
 │   └── hal/
 │       ├── ...           # (hal_common, hal_board, hal_stub)
 │       └── tests/        # Host tests for the HAL components (IDF `linux`, Unity)
 │           ├── test-hal-stub/
 │           └── test-hal-common/
 ├── test-logic/          # Host-based unit tests subproject (IDF `linux`, Unity)
-├── test-espidf-cpp/     # Host tests for components/libespidfcpp (IDF `linux`, Unity)
 ├── donny/               # Linux-emulated application (IDF `linux`)
 │   └── main/            #   app_main + the JSON console task (test driver)
 ├── Dockerfile           # Dev container: ESP-IDF v6.1 + non-root host-mapped user
@@ -179,10 +184,10 @@ directory **inside its own folder**, named after the target:
 | Subproject | Directory | Target | Produces |
 |---|---|---|---|
 | `mcgowan/` (firmware) | `mcgowan/build_esp32s3/` | esp32s3 | `mcgowan.bin` (flashed to the board) |
-| `test-hal-stub/` (HAL stub device tests) | `test-hal-stub/build_linux/` | linux | `esp32_sensors_hal_stub_tests.elf` (run on the host) |
-| `test-hal-common/` (HAL vocabulary tests) | `test-hal-common/build_linux/` | linux | `esp32_sensors_hal_common_tests.elf` (run on the host) |
+| `test-hal-stub/` (HAL stub device tests) | `components/hal/tests/test-hal-stub/build_linux/` | linux | `esp32_sensors_hal_stub_tests.elf` (run on the host) |
+| `test-hal-common/` (HAL vocabulary tests) | `components/hal/tests/test-hal-common/build_linux/` | linux | `esp32_sensors_hal_common_tests.elf` (run on the host) |
 | `test-logic/` (host tests) | `test-logic/build_linux/` | linux | `test-logic.elf` (run on the host) |
-| `test-espidf-cpp/` (wrapper tests) | `test-espidf-cpp/build_linux/` | linux | `test-espidf-cpp.elf` (run on the host) |
+| `test-espidf-cpp/` (wrapper tests) | `components/espidfcpp/tests/test-espidf-cpp/build_linux/` | linux | `test-espidf-cpp.elf` (run on the host) |
 | `donny/` (linux app) | `donny/build_linux/` | linux | `donny.elf` (an application, not a test: it runs the JSON console task and `Application`) |
 
 The aggregate (root) project configures into `build_root/`. Each aggregate
@@ -394,9 +399,9 @@ skill (`.continue/skills/platform_layers/SKILL.md`); the HAL itself — the
 header pair per device, the semantics-free contract, the one-shot timer, the
 aggregate board and deep sleep — is documented in `components/hal/AGENTS.md`.
 
-**`libespidfcpp` component (`components/libespidfcpp`).** The headers are in
-namespace `thermo::espidf_cpp` (`HttpServer` has one `.cpp`, listed in the
-component's `SRCS`):
+**`libespidfcpp` component (`components/espidfcpp/libespidfcpp`).** The headers
+are in namespace `thermo::espidf_cpp` (`HttpServer` has one `.cpp`, listed in
+the component's `SRCS`):
 
 | Header | Provides |
 |---|---|
@@ -408,7 +413,8 @@ component's `SRCS`):
 | `espidf_cpp/http_server_types.hpp` | `HttpServer` vocabulary: `HttpMethod`, `HttpField(s)`, `HttpRequest`, `HttpStatus`, `HttpResponse`, `HttpHandler`, `parse_int`, `normalize_url` (no ESP-IDF dependency) |
 | `espidf_cpp/http_server.hpp` | `HttpServer<BodyCapacity>` — prefix routes over `esp_http_server` with one GET/POST handler each; fixed-size request/response buffers, bad input becomes an HTTP error (never an abort) |
 
-Its host tests live in `test-espidf-cpp/` (e.g. `test_one_message_queue.cpp`,
+Its host tests live in
+`components/espidfcpp/tests/test-espidf-cpp/` (e.g. `test_one_message_queue.cpp`,
 `test_static_vector.cpp`, `test_static_string.cpp`,
 `test_http_server_types.cpp`, and `test_http_server.cpp` — which drives a real
 server over a loopback socket — plus fork+exec `_assert` programs for the abort
@@ -819,7 +825,7 @@ enacted on the host.
 |both|test-hal-stub|Build and run the `test-hal-stub/` host unit tests (ESP-IDF `linux` target)|
 |both|test-hal-common|Build and run the `test-hal-common/` host unit tests (ESP-IDF `linux` target)|
 |both|test-logic|Build and run the `test-logic/` host unit tests (ESP-IDF `linux` target)|
-|both|test-espidf-cpp|Build and run the `test-espidf-cpp/` host unit tests (ESP-IDF `linux` target)|
+|both|test-espidf-cpp|Build and run the `components/espidfcpp/tests/test-espidf-cpp/` host unit tests (ESP-IDF `linux` target)|
 |both|self-check|Run the host unit tests for dev.py itself (stdlib `unittest`)|
 |both|flash|idf.py flash monitor|
 |both|monitor|idf.py monitor|
@@ -888,8 +894,8 @@ There are two kinds of test suite, runnable from the host via `scripts/dev.py`:
     (`app_config.cpp`, `config_page.cpp`, `power_source.cpp`).
     `test_led_runner.cpp` instantiates the templated `LedRunner<Board>` against
     the stub `BoardStub`.
-  - `test-espidf-cpp/` covers the `libespidfcpp` wrappers (the headers listed
-    under "`libespidfcpp` component" above).
+  - `components/espidfcpp/tests/test-espidf-cpp/` covers the `libespidfcpp`
+    wrappers (the headers listed under "`libespidfcpp` component" above).
 - **On-target tests** are planned for hardware-dependent code (1-Wire/DS18B20
   reads, deep-sleep wake, Wi-Fi upload).
 - Keep hardware interactions behind thin interfaces so business logic remains

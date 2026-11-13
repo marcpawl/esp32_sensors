@@ -6,10 +6,11 @@ cmake_minimum_required(VERSION 3.22)
 # Build and run with:
 #   scripts/dev.py test-espidf-cpp     (or `test`, which runs every suite)
 # or directly in the container:
-#   scripts/dev.py shell -C test-espidf-cpp idf.py -B build_linux \
-#       --preview set-target linux
-#   scripts/dev.py shell -C test-espidf-cpp idf.py -B build_linux build
-#   ./test-espidf-cpp/build_linux/test-espidf-cpp.elf
+#   scripts/dev.py shell -C components/espidfcpp/tests/test-espidf-cpp \
+#       idf.py -B build_linux --preview set-target linux
+#   scripts/dev.py shell -C components/espidfcpp/tests/test-espidf-cpp \
+#       idf.py -B build_linux build
+#   ./components/espidfcpp/tests/test-espidf-cpp/build_linux/test-espidf-cpp.elf
 #
 # The build directory is named after the target (`build_linux`), like the
 # other subprojects'.
@@ -29,14 +30,15 @@ endif()
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
-# The component under test lives in the repo-root `components/` directory,
-# which is not on this project's default search path (that would be
-# `test-espidf-cpp/components/`). The three HAL components live in
-# `components/hal/` and need their own entry: ESP-IDF scans a component
-# directory one level deep, so a grouping directory is not descended into.
+# The reusable components live in the repo-root `components/` directory (the
+# application logic and the sml wrapper). The component under test lives in
+# `components/espidfcpp/` and the HAL components in `components/hal/`; each
+# grouping directory needs its own entry: ESP-IDF scans a component directory
+# one level deep, so a grouping directory is not descended into.
 set(EXTRA_COMPONENT_DIRS
-    "${CMAKE_CURRENT_LIST_DIR}/../components"
-    "${CMAKE_CURRENT_LIST_DIR}/../components/hal"
+    "${CMAKE_CURRENT_LIST_DIR}/../../.."
+    "${CMAKE_CURRENT_LIST_DIR}/../../../hal"
+    "${CMAKE_CURRENT_LIST_DIR}/../.."
 )
 
 # Restrict the component set to `main` (and its requirements, which pull in

@@ -9,11 +9,12 @@ Dockerfile
 .dockerignore
 
 # ESP-IDF build output and local state (never needed inside the image). Each
-# subproject (mcgowan/, test-hal-stub/, test-hal-common/, test-logic/,
-# test-espidf-cpp/, donny/) keeps its build tree inside its directory.
+# subproject (mcgowan/, test-logic/, donny/, and the suites under components/)
+# keeps its build tree inside its directory.
 build_root/
 build_*/
 */build_*/
+components/espidfcpp/tests/test-espidf-cpp/build_linux/
 managed_components/
 sdkconfig
 sdkconfig.old
