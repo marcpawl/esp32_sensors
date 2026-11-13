@@ -130,6 +130,7 @@ esp32_sensors/
 │   └── src/             #   C++26 sources + include/ — see module map below
 ├── components/          # Reusable ESP-IDF components (see "HAL" section)
 │   ├── espidfcpp/       #   C++ wrappers over ESP-IDF/FreeRTOS (Task, queue, handles, ...)
+│   │   ├── AGENTS.md    #     The wrappers and their host tests in detail
 │   │   ├── libespidfcpp/#     The wrapper component
 │   │   └── tests/       #     Host tests (IDF `linux`, Unity)
 │   │       └── test-espidf-cpp/
@@ -213,6 +214,9 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 - `components/hal/AGENTS.md` — the HAL layer in detail: the three components,
   the header pair per device, the semantics-free contract, the one-shot timer,
   the aggregate board, deep sleep, and what the HAL tests pin.
+- `components/espidfcpp/AGENTS.md` — the ESP-IDF C++ wrappers and their host
+  tests in detail: the header list, the build rules, what each test pins, and
+  the `_assert` program convention.
 - `mcgowan/main/CMakeLists.txt` — the firmware's component definition. **Add
   new sources here** or they will not compile. Board-independent logic belongs
   in `components/logic` instead.
@@ -399,27 +403,12 @@ skill (`.continue/skills/platform_layers/SKILL.md`); the HAL itself — the
 header pair per device, the semantics-free contract, the one-shot timer, the
 aggregate board and deep sleep — is documented in `components/hal/AGENTS.md`.
 
-**`libespidfcpp` component (`components/espidfcpp/libespidfcpp`).** The headers
-are in namespace `thermo::espidf_cpp` (`HttpServer` has one `.cpp`, listed in
-the component's `SRCS`):
-
-| Header | Provides |
-|---|---|
-| `espidf_cpp/task.hpp` | `Task<Runner>` (typed `[[noreturn]]` task body), `TaskParams` |
-| `espidf_cpp/one_message_queue.hpp` | `OneMessageQueue<T>` (single-slot, trivially-copyable messages) |
-| `espidf_cpp/handle.hpp` | `HandleDeleter`, `UniqueTaskHandle`, `UniqueQueueHandle` |
-| `espidf_cpp/static_vector.hpp` | fixed-capacity, inline-storage vector |
-| `espidf_cpp/static_string.hpp` | fixed-capacity, NUL-terminated string (`try_push_back` / `try_append` for the non-aborting path) |
-| `espidf_cpp/http_server_types.hpp` | `HttpServer` vocabulary: `HttpMethod`, `HttpField(s)`, `HttpRequest`, `HttpStatus`, `HttpResponse`, `HttpHandler`, `parse_int`, `normalize_url` (no ESP-IDF dependency) |
-| `espidf_cpp/http_server.hpp` | `HttpServer<BodyCapacity>` — prefix routes over `esp_http_server` with one GET/POST handler each; fixed-size request/response buffers, bad input becomes an HTTP error (never an abort) |
-
-Its host tests live in
-`components/espidfcpp/tests/test-espidf-cpp/` (e.g. `test_one_message_queue.cpp`,
-`test_static_vector.cpp`, `test_static_string.cpp`,
-`test_http_server_types.cpp`, and `test_http_server.cpp` — which drives a real
-server over a loopback socket — plus fork+exec `_assert` programs for the abort
-paths); `task.hpp` needs a real scheduler and is verified on target by the
-firmware build.
+**`libespidfcpp` component (`components/espidfcpp/libespidfcpp`).** C++ wrappers
+over ESP-IDF and FreeRTOS that make usage less error prone: `Task`,
+`OneMessageQueue`, RAII handles, `static_vector` / `static_string`, and
+`HttpServer`. The headers include as `espidf_cpp/...` and live in namespace
+`thermo::espidf_cpp`. The component's headers and its host test project are
+documented in `components/espidfcpp/AGENTS.md`.
 
 **`sml` component (`components/sml`).** A **wrapper**, not a copy: the
 state-machine library is the `third_party/sml` git submodule
@@ -895,7 +884,8 @@ There are two kinds of test suite, runnable from the host via `scripts/dev.py`:
     `test_led_runner.cpp` instantiates the templated `LedRunner<Board>` against
     the stub `BoardStub`.
   - `components/espidfcpp/tests/test-espidf-cpp/` covers the `libespidfcpp`
-    wrappers (the headers listed under "`libespidfcpp` component" above).
+    wrappers; what each test pins is described in
+    `components/espidfcpp/AGENTS.md`.
 - **On-target tests** are planned for hardware-dependent code (1-Wire/DS18B20
   reads, deep-sleep wake, Wi-Fi upload).
 - Keep hardware interactions behind thin interfaces so business logic remains
