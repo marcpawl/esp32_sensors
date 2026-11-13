@@ -140,6 +140,7 @@ esp32_sensors/
 │   │   ├── hal_board/   #     Real, GPIO-backed HAL
 │   │   └── hal_stub/    #     Pin-free HAL stub
 │   ├── logic/           #   Board-independent application logic (temp_format, rom_id, payload, limits, led_manager, mode*, led_task, self_signed_cert)
+│   │   ├── AGENTS.md    #     The logic component and its host tests in detail
 │   │   ├── liblogic/    #     The logic component
 │   │   └── tests/       #     Host tests (IDF `linux`, Unity)
 │   │       └── test-logic/
@@ -223,6 +224,9 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 - `components/espidfcpp/AGENTS.md` — the ESP-IDF C++ wrappers and their host
   tests in detail: the header list, the build rules, what each test pins, and
   the `_assert` program convention.
+- `components/logic/AGENTS.md` — the application logic and its host tests in
+  detail: the header list, the layer requirements, the source layout, the
+  board-independent template rules, and what the suite covers.
 - `mcgowan/main/CMakeLists.txt` — the firmware's component definition. **Add
   new sources here** or they will not compile. Board-independent logic belongs
   in `components/logic/liblogic` instead.
@@ -430,26 +434,16 @@ not been checked out, naming `scripts/dev.py submodules`. The component is also
 why `third_party/` stays off every component search path: `donny` names
 `third_party/json` explicitly rather than scanning `/third_party`.
 
-**`liblogic` component (`components/logic/liblogic`).** The headers are
-included with the `logic/` prefix:
-
-| Header | Provides |
-|---|---|
-| `logic/led_manager.hpp` | `thermo::TxState` (`kTxOk` / `kTxInhibited`) — the §3.6 battery-hysteresis transmission gate; board-independent vocabulary, dependency-free (only `<cstdint>`) |
-| `logic/limits.hpp` | `thermo::limits::kSensorCount` (3) and `thermo::limits::kMaxBufferRecords` (256) — the fixed capacities shared by the sample buffer, the payload, and the sensor layer (§2.1, §4.1, §4.2); dependency-free (only `<cstddef>`) |
-| `logic/led_task.hpp` | `thermo::LedState`, `thermo::ledtask::*` (`Step`, `CycleSteps`, `LedRunner<Board>`), `thermo::LedTask<Board>` — the LED status task built on `espidf_cpp::Task` |
-| `logic/mode.hpp` | `thermo::Mode` (`kOff` / `kConfigure` / `kRun`) and `thermo::to_string(Mode)` — the operating modes (§3), board-independent vocabulary |
-| `logic/mode_selection.hpp` | `thermo::ModeSelection` (`std::optional<Mode>`) and `thermo::mode_from_buttons(ButtonState config, ButtonState run)` — the pure, `constexpr` mapping from the two mode-sense poles to a mode, reporting a both-poles-on miswire as `std::nullopt` |
-| `logic/temp_format.hpp` / `src/temp_format.cpp` | `thermo::kTempNull` (the int16 `0x8000` sensor-failure sentinel) and `thermo::format_temp_c_x100()` — centred-hundredths formatting for the config UI and the payload (§4.2, §9); no ESP-IDF dependency |
-| `logic/rom_id.hpp` / `src/rom_id.cpp` | `thermo::rom_id_to_hex()` and `thermo::rom_id_from_hex()` — the free functions that render a `thermo::hal::RomId` as the 16-character uppercase hex key of §5.1.3 / §6.1 and parse one back (`std::nullopt` on a wrong length or a non-hex character). Free functions, not members: `RomId` in `hal_common` stays pure data. No ESP-IDF dependency |
-| `logic/payload.hpp` / `src/payload.cpp` | `thermo::payload::NamedSample` and `thermo::payload::build_batch_json()` — the §9.1 upload document (key names, ordering, `batch_size`, JSON escaping) built from the buffered records; the temperatures go through `logic/temp_format.hpp`. No ESP-IDF dependency |
-| `logic/rtc_state.hpp` / `src/rtc_buffer.cpp` | `thermo::SampleRecord`, `thermo::WifiCache`, `thermo::RtcState` (the §8 retained block's *shape*) plus the buffer operations `rtc_buffer_push()` / `rtc_buffer_clear()`, the cold-boot `rtc_state_reset()`, and `rtc_wifi_cache_clear()` (§3.10, §4.2). Storage is **not** here: the `RTC_DATA_ATTR` block and the wake-cause policy are firmware-only (`mcgowan/src/rtc_storage.{hpp,cpp}`), because `RTC_DATA_ATTR` fails to compile on `linux` and the sleep API is unlinkable there |
-
-`logic/mode.hpp`, `logic/led_manager.hpp`, `logic/limits.hpp`, and
-`logic/temp_format.hpp` are deliberately dependency-free (only `<cstdint>` /
-`<cstddef>`), so the firmware, the host tests, and `logic/mode_selection.hpp`
-can all name the operating modes, the transmission gate, the fixed capacities,
-and the temperature sentinel without pulling in a board.
+**`liblogic` component (`components/logic/liblogic`).** Board-independent
+application logic: the operating modes and their pole mapping, the LED status
+task, the retained sample buffer's shape, the temperature/ROM-ID/payload
+formatting, and the reboot gate. Headers include as `logic/...` and stay in
+namespace `thermo::`. The component requires only lower layers
+(`libespidfcpp`, `hal_common`, and `sml`) and must never require `hal_board` or
+`hal_stub`. Its headers, its host test project
+(`components/logic/tests/test-logic/`), the source layout, and the
+board-independent template rules are documented in
+`components/logic/AGENTS.md`.
 
 The RTC state is **split** between the two components, and the split is the
 point. `logic/rtc_state.hpp` plus the component's `src/rtc_buffer.cpp` own the
@@ -465,39 +459,6 @@ wake question goes through the board rather than calling
 the policy itself is still firmware-only (it reads `rtc_state()`, which needs
 the `RTC_DATA_ATTR` block), while the cold-boot half it delegates to —
 `rtc_state_reset()` — is host-tested in `test_rtc_buffer.cpp`.
-
-`LedRunner` and `LedTask` take a `std::shared_ptr<Board>` (never a null one,
-where `Board` is the `hal::BoardLike` template parameter) and share the board
-with the caller instead of owning it, so the caller can keep using the board
-the task drives (e.g. a test reads back the LEDs). Create it with
-`std::make_shared<BoardStub>(BoardStub::create(pins))` under `hal_stub`, or the
-`thermo::hal::Board` equivalent under `hal_board`, and call `init_all()` before
-starting the task. The HAL itself is unchanged: both boards stay non-copyable
-and movable.
-
-Layout: `include/logic/` for public headers, `src/` for `.cpp` files
-(`src/temp_format.cpp`, `src/rtc_buffer.cpp`, `src/self_signed_cert.cpp`,
-`src/rom_id.cpp`). **New `.cpp` files must be added to the `SRCS` list in
-`components/logic/liblogic/CMakeLists.txt`**; adding sources there does not
-change any consumer.
-
-**Host-testable modules.** The `liblogic` component's `temp_format.cpp`,
-`rtc_buffer.cpp`, `rom_id.cpp`, and `payload.cpp`, together with
-`mcgowan/src`'s `app_config.cpp`, are deliberately free of chip-specific
-ESP-IDF dependencies so they build for the `linux` target and are covered by
-`components/logic/tests/test-logic/`. The header-only
-`logic/mode_selection.hpp` is the same idea applied to the mode-sense poles: it
-depends only on `hal/push_button_types.hpp` (for `ButtonState`) and
-`logic/mode.hpp`, and is `constexpr`, so
-`components/logic/tests/test-logic/main/test_mode_selection.cpp` exercises it
-directly and covers all four pole combinations — including the both-on
-hardware fault, which the header reports as `std::nullopt` instead of
-rebooting. `main.cpp`'s `read_mode()` is
-the thin wrapper that turns that `std::nullopt` into the firmware's fail-loudly
-`reboot()`. The HAL's `hal_stub` component (the pin-free buttons, LEDs, 1-Wire
-bus, chip-temperature sensor, WiFi radio, one-shot timer, and aggregate board)
-is likewise covered by `test-hal-stub/main/test_hal_*.cpp`. **Keep it that
-way** — put pure logic in these files and hardware/IDF calls behind them.
 
 **`donny/`.** A plain (non-test) `linux`-target application that constructs
 `thermo::Application<thermo::hal::BoardStub>`. It uses the vendored `json`
@@ -890,9 +851,8 @@ There are two kinds of test suite, runnable from the host via `scripts/dev.py`:
     validation, `rom_id`, `rtc_buffer` — including the cold-boot
     `rtc_state_reset()`, and the `mode_selection` pole mapping) and the
     firmware sources in `mcgowan/src` that need no chip driver
-    (`app_config.cpp`, `config_page.cpp`, `power_source.cpp`).
-    `test_led_runner.cpp` instantiates the templated `LedRunner<Board>` against
-    the stub `BoardStub`.
+    (`app_config.cpp`, `config_page.cpp`, `power_source.cpp`); what each test
+    pins is described in `components/logic/AGENTS.md`.
   - `components/espidfcpp/tests/test-espidf-cpp/` covers the `libespidfcpp`
     wrappers; what each test pins is described in
     `components/espidfcpp/AGENTS.md`.
