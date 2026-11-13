@@ -15,6 +15,10 @@ There are no quality checks for .md files.
 Skill cpp_qc is used for C++ and CMake changes.
 Skill python_qc is used for C++ and CMake changes.
 
+Ask if the quality checks should be applied after
+changes have been made  when the user has asked
+for a code change.
+
 
 ## Commit Message
 
