@@ -88,7 +88,7 @@ Repository-specific wisdom worth carrying into the body when relevant:
   existing one, because `docker-compose.yml` uses `pull_policy: missing`).
 - Tests are named by class where it helps the reviewer find them.
 
-#### Required trailer
+### Required trailer
 
 Every commit ends with trailers describing the AI used.
 
@@ -96,3 +96,9 @@ Every commit ends with trailers describing the AI used.
 ai-agent: [Agent Name](Agent URL)
 ai-model: [Model Name)(Model URL)
 ```
+
+## Pull Request Message
+
+The description of the pull request should describe briefly all
+commits in the request.  When pushing into an existing PR,
+modify the description.
