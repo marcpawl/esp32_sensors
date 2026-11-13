@@ -7,10 +7,10 @@ cmake_minimum_required(VERSION 3.22)
 # Build and run with:
 #   scripts/dev.py test-hal-common     (or `test`, which runs every suite)
 # or directly in the container:
-#   scripts/dev.py shell -C test-hal-common idf.py -B build_linux \
+#   scripts/dev.py shell -C components/hal/tests/test-hal-common idf.py -B build_linux \
 #       --preview set-target linux
-#   scripts/dev.py shell -C test-hal-common idf.py -B build_linux build
-#   ./test-hal-common/build_linux/esp32_sensors_hal_common_tests.elf
+#   scripts/dev.py shell -C components/hal/tests/test-hal-common idf.py -B build_linux build
+#   ./components/hal/tests/test-hal-common/build_linux/esp32_sensors_hal_common_tests.elf
 #
 # The build directory is named after the target (`build_linux`), like the
 # other subprojects'.
@@ -33,12 +33,12 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 # Reusable components live in the repo-root `components/` (the ESP-IDF
 # wrappers, the application logic and the sml wrapper) and
 # `components/hal/` (the three HAL components). Neither is on this
-# project's default search path (that would be `test-hal-common/components/`), and each needs its own entry:
+# project's default search path (that would be `components/hal/test-hal-common/components/`), and each needs its own entry:
 # ESP-IDF scans a component directory one level deep, so a grouping directory
 # is not descended into.
 set(EXTRA_COMPONENT_DIRS
-    "${CMAKE_CURRENT_LIST_DIR}/../components"
-    "${CMAKE_CURRENT_LIST_DIR}/../components/hal"
+    "${CMAKE_CURRENT_LIST_DIR}/../../.."
+    "${CMAKE_CURRENT_LIST_DIR}/../.."
 )
 
 # Restrict the component set to `main` (and its requirements) plus `hal_stub`.

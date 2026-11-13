@@ -140,8 +140,12 @@ esp32_sensors/
 ├── third_party/         # Vendored third-party code (never formatted, never tidy'd)
 │   ├── json/            #   nlohmann/json v3.11.3 (header-only, MIT)
 │   └── sml/             #   boost-ext/sml git SUBMODULE, pinned to v1.2.0
-├── test-hal-stub/       # Host tests for components/hal/hal_stub (IDF `linux`, Unity)
-├── test-hal-common/     # Host tests for components/hal/hal_common (IDF `linux`, Unity)
+├── components/
+│   └── hal/
+│       ├── ...           # (hal_common, hal_board, hal_stub)
+│       └── tests/        # Host tests for the HAL components (IDF `linux`, Unity)
+│           ├── test-hal-stub/
+│           └── test-hal-common/
 ├── test-logic/          # Host-based unit tests subproject (IDF `linux`, Unity)
 ├── test-espidf-cpp/     # Host tests for components/espidf_cpp (IDF `linux`, Unity)
 ├── donny/               # Linux-emulated application (IDF `linux`)

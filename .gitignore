@@ -5,8 +5,8 @@
 # host-test (linux) builds stay separate:
 #
 #   mcgowan/build_esp32s3/        ESP32-S3 firmware (mcgowan.bin)
-#   test-hal-stub/build_linux/    host tests for hal/hal_stub
-#   test-hal-common/build_linux/  host tests for hal/hal_common
+#   components/hal/tests/test-hal-stub/build_linux/    host tests for hal/hal_stub
+#   components/hal/tests/test-hal-common/build_linux/  host tests for hal/hal_common
 #   test-logic/build_linux/       host unit tests
 #   test-espidf-cpp/build_linux/  host tests for components/espidf_cpp
 #   donny/build_linux/            linux-emulated application (donny)
@@ -18,8 +18,8 @@ build_linux/
 # CLion's own CMake build tree (see .idea/cmake.xml).
 cmake-build-*/
 test-logic/build_linux/
-test-hal-stub/build_linux/
-test-hal-common/build_linux/
+components/hal/tests/test-hal-stub/build_linux/
+components/hal/tests/test-hal-common/build_linux/
 managed_components/
 dependencies.lock
 
@@ -34,15 +34,15 @@ __pycache__/
 # test-espidf-cpp/, donny/), plus the root aggregator's.
 sdkconfig
 mcgowan/sdkconfig
-test-hal-stub/sdkconfig
-test-hal-common/sdkconfig
+components/hal/tests/test-hal-stub/sdkconfig
+components/hal/tests/test-hal-common/sdkconfig
 test-logic/sdkconfig
 test-espidf-cpp/sdkconfig
 donny/sdkconfig
 sdkconfig.old
 mcgowan/sdkconfig.old
-test-hal-stub/sdkconfig.old
-test-hal-common/sdkconfig.old
+components/hal/tests/test-hal-stub/sdkconfig.old
+components/hal/tests/test-hal-common/sdkconfig.old
 test-logic/sdkconfig.old
 test-espidf-cpp/sdkconfig.old
 donny/sdkconfig.old

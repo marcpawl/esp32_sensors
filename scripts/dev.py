@@ -58,8 +58,6 @@ ROOTS = (
     "mcgowan",
     "components",
     "test-logic",
-    "test-hal-stub",
-    "test-hal-common",
     "test-espidf-cpp",
     "donny",
     "scripts",
@@ -141,12 +139,12 @@ FORMAT_ARGS = ("--dry-run", "--Werror")
 #
 #   mcgowan/  ESP32-S3 firmware (hal_board)
 #                                        -> mcgowan/build_esp32s3/mcgowan.bin
-#   test-hal-stub/
+#   components/hal/tests/test-hal-stub/
 #             host tests for components/hal/hal_stub (linux target)
-#                                                -> test-hal-stub/build_linux
-#   test-hal-common/
+#                                             -> .../test-hal-stub/build_linux
+#   components/hal/tests/test-hal-common/
 #             host tests for components/hal/hal_common (linux target)
-#                                                -> test-hal-common/build_linux
+#                                            -> .../test-hal-common/build_linux
 #   test-logic/ host unit tests (linux target)      -> test-logic/build_linux
 #   test-espidf-cpp/
 #             host unit tests for components/espidf_cpp (linux target)
@@ -162,6 +160,26 @@ HAL_STUB_TEST_PROJECT = "test-hal-stub"
 HAL_COMMON_TEST_PROJECT = "test-hal-common"
 ESPIDF_CPP_TEST_PROJECT = "test-espidf-cpp"
 DONNY_PROJECT = "donny"
+
+# Directory (repo-relative) where each subproject lives. Most sit at
+# the repository root, but the two HAL test projects live under
+# `components/hal/tests/`. The subproject *identifier* (and the aggregate
+# target name) stays short, because CMake target names may not contain a slash.
+PROJECT_DIRS = {
+    FIRMWARE_PROJECT: FIRMWARE_PROJECT,
+    HAL_STUB_TEST_PROJECT: "components/hal/tests/test-hal-stub",
+    HAL_COMMON_TEST_PROJECT: "components/hal/tests/test-hal-common",
+    TEST_PROJECT: TEST_PROJECT,
+    ESPIDF_CPP_TEST_PROJECT: ESPIDF_CPP_TEST_PROJECT,
+    DONNY_PROJECT: DONNY_PROJECT,
+}
+
+
+def project_dir(project: str) -> str:
+    """Repo-relative directory of a subproject. Pure (testable)."""
+    return PROJECT_DIRS.get(project, project)
+
+
 FW_BUILD_DIR = "build_esp32s3"
 TEST_BUILD_DIR = "build_linux"
 ROOT_BUILD_DIR = "build_root"
@@ -617,7 +635,8 @@ def _idf(project: str, build_dir: str, *args: str) -> list[str]:
     Pure (no I/O), so it is unit-testable. `project` is a subproject directory
     relative to the repo root; the build directory lives inside it.
     """
-    return ["idf.py", "-C", project, "-B", f"{project}/{build_dir}", *args]
+    directory = project_dir(project)
+    return ["idf.py", "-C", directory, "-B", f"{directory}/{build_dir}", *args]
 
 
 def _parse_subprojects(args: list[str]) -> list[str] | None:
@@ -776,7 +795,7 @@ def _run_host_tests(projects: tuple[str, ...]) -> int:
         for cmd in (
             _idf(project, TEST_BUILD_DIR, "--preview", "set-target", "linux"),
             _idf(project, TEST_BUILD_DIR, "build"),
-            [f"./{project}/{TEST_BUILD_DIR}/{elf}"],
+            [f"./{project_dir(project)}/{TEST_BUILD_DIR}/{elf}"],
         ):
             rc = run(cmd)
             if rc != 0:
@@ -1062,7 +1081,10 @@ def _tidy_units(projects: list[str]) -> list[dict] | None:
     compilations: list[dict] = []
     for project in projects:
         build_dir = dict(TIDY_PROJECTS)[project]
-        database = REPO_ROOT / project / build_dir / "compile_commands.json"
+        database = (
+            REPO_ROOT / project_dir(project) / build_dir
+            / "compile_commands.json"
+        )
         if not database.is_file():
             print(
                 f"clang-tidy: '{project}' has no "

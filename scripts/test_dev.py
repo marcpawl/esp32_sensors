@@ -222,7 +222,10 @@ class SubprojectBuildTests(unittest.TestCase):
     def test_subproject_directories_have_a_cmakelists(self):
         for project in dev.SUBPROJECTS:
             with self.subTest(project=project):
-                cmake = dev.REPO_ROOT / project / "CMakeLists.txt"
+                cmake = (
+                    dev.REPO_ROOT / dev.project_dir(project)
+                    / "CMakeLists.txt"
+                )
                 self.assertTrue(cmake.is_file(), f"missing {cmake}")
 
     def test_root_is_not_an_espidf_project(self):
@@ -502,7 +505,7 @@ class ClionRunConfigurationTests(unittest.TestCase):
         root_cmake = (dev.REPO_ROOT / "CMakeLists.txt").read_text()
         # `add_custom_target(${sub}_build ALL ...)` is the one target
         # statement.
-        self.assertIn("add_custom_target(${sub}_build", root_cmake)
+        self.assertIn("add_custom_target(${name}_build", root_cmake)
         # The concrete names come from the `_idf_subproject(<name> ...)` calls.
         return {
             f"{sub}_build"
@@ -1294,7 +1297,8 @@ class HostTestCommandTests(unittest.TestCase):
                          "--preview", "set-target", "linux"),
                 dev._idf(dev.HAL_STUB_TEST_PROJECT, dev.TEST_BUILD_DIR,
                          "build"),
-                [f"./{dev.HAL_STUB_TEST_PROJECT}/{dev.TEST_BUILD_DIR}/"
+                [f"./{dev.project_dir(dev.HAL_STUB_TEST_PROJECT)}/"
+                 f"{dev.TEST_BUILD_DIR}/"
                  "esp32_sensors_hal_stub_tests.elf"],
             ],
         )
@@ -1308,7 +1312,8 @@ class HostTestCommandTests(unittest.TestCase):
                          "--preview", "set-target", "linux"),
                 dev._idf(dev.HAL_COMMON_TEST_PROJECT, dev.TEST_BUILD_DIR,
                          "build"),
-                [f"./{dev.HAL_COMMON_TEST_PROJECT}/{dev.TEST_BUILD_DIR}/"
+                [f"./{dev.project_dir(dev.HAL_COMMON_TEST_PROJECT)}/"
+                 f"{dev.TEST_BUILD_DIR}/"
                  "esp32_sensors_hal_common_tests.elf"],
             ],
         )
@@ -1360,7 +1365,7 @@ class HostTestCommandTests(unittest.TestCase):
                 dev._idf(project, dev.TEST_BUILD_DIR,
                          "--preview", "set-target", "linux"),
                 dev._idf(project, dev.TEST_BUILD_DIR, "build"),
-                [f"./{project}/{dev.TEST_BUILD_DIR}/{elf}"],
+                [f"./{dev.project_dir(project)}/{dev.TEST_BUILD_DIR}/{elf}"],
             )
         ]
         self.assertEqual(self.calls, expected)
@@ -1369,7 +1374,10 @@ class HostTestCommandTests(unittest.TestCase):
         # A red suite (here: the first ELF to run) must fail `test`, not be
         # swallowed while the later suites are run anyway.
         first_project, first_elf = dev.HOST_TEST_PROJECTS[0]
-        failing = f"./{first_project}/{dev.TEST_BUILD_DIR}/{first_elf}"
+        failing = (
+            f"./{dev.project_dir(first_project)}/"
+            f"{dev.TEST_BUILD_DIR}/{first_elf}"
+        )
 
         def fake_run(cmd, cwd=dev.REPO_ROOT):
             self.calls.append(list(cmd))
@@ -1402,8 +1410,12 @@ class HostTestCommandTests(unittest.TestCase):
         """The host-test projects `handler` selects (by intercepting `run`)."""
         self.calls = []
         handler()
+        directory_to_project = {
+            directory: project
+            for project, directory in dev.PROJECT_DIRS.items()
+        }
         return tuple(
-            cmd[2]
+            directory_to_project.get(cmd[2], cmd[2])
             for cmd in self.calls
             if cmd[:2] == ["idf.py", "-C"]
             and cmd[-1] == "build"

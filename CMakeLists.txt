@@ -8,10 +8,10 @@ cmake_minimum_required(VERSION 3.22)
 # `sdkconfig.defaults`, and build directory inside its own folder:
 #
 #   mcgowan/         ESP32-S3 firmware (hal_board)   -> mcgowan/build_esp32s3/mcgowan.bin
-#   test-hal-stub/   host tests for components/hal/hal_stub, `linux`
-#                                                -> test-hal-stub/build_linux/
-#   test-hal-common/ host tests for components/hal/hal_common, `linux`
-#                                                -> test-hal-common/build_linux/
+#   components/hal/test-hal-stub/   host tests for components/hal/hal_stub, `linux`
+#                                                -> components/hal/test-hal-stub/build_linux/
+#   components/hal/test-hal-common/ host tests for components/hal/hal_common, `linux`
+#                                                -> components/hal/test-hal-common/build_linux/
 #   test-logic/      host unit tests, `linux` target (hal_stub) -> test-logic/build_linux/
 #   test-espidf-cpp/ host tests for components/espidf_cpp, `linux`
 #                                                -> test-espidf-cpp/build_linux/
@@ -95,39 +95,41 @@ set(ENV{PATH} "$ENV{IDF_PATH}/tools:$ENV{PATH}")
 # "--preview|set-target|linux"), run in order. `|` (not `;`) separates the
 # words because `;` is CMake's list separator; the invocations are `;`-separated
 # in turn. One target per subproject keeps its name unique.
-function(_idf_subproject sub build_dir)
+function(_idf_subproject name dir build_dir)
     # idf.py is run through scripts/idf.sh rather than directly: the wrapper
     # guarantees the ESP-IDF environment, which an IDE-launched build does not
     # inherit (see the IDF_RUNNER comment above).
+    # `name` is the aggregate target name (${name}_build) and the subproject
+    # identifier; `dir` is the subproject's directory relative to the repo root.
     set(common
         "${IDF_RUNNER}"
         idf.py
-        -C "${CMAKE_CURRENT_SOURCE_DIR}/${sub}"
-        -B "${CMAKE_CURRENT_SOURCE_DIR}/${sub}/${build_dir}"
+        -C "${CMAKE_CURRENT_SOURCE_DIR}/${dir}"
+        -B "${CMAKE_CURRENT_SOURCE_DIR}/${dir}/${build_dir}"
         --no-hints)
     set(commands)
     foreach(step IN LISTS ARGN)
         string(REPLACE "|" ";" words "${step}")
         list(APPEND commands COMMAND ${common} ${words})
     endforeach()
-    add_custom_target(${sub}_build ALL
+    add_custom_target(${name}_build ALL
         ${commands}
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${sub}"
-        COMMENT "${sub}: build (${sub}/${build_dir})"
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${dir}"
+        COMMENT "${name}: build (${dir}/${build_dir})"
         VERBATIM
     )
 endfunction()
 
 # --- mcgowan: ESP32-S3 firmware (mcgowan.bin) -> target mcgowan_build ------
 if(mcgowan IN_LIST SUBPROJECTS)
-    _idf_subproject(mcgowan build_esp32s3 "build")
+    _idf_subproject(mcgowan mcgowan build_esp32s3 "build")
 endif()
 
 # --- test-hal-stub: hal_stub device tests (linux) -> target *_build ------
 # Same `linux` target rules as `test-logic/`; built (not run) here, since running is
 # `scripts/dev.py test-hal-stub`'s job (`test` runs every host suite).
 if(test-hal-stub IN_LIST SUBPROJECTS)
-    _idf_subproject(test-hal-stub build_linux
+    _idf_subproject(test-hal-stub components/hal/tests/test-hal-stub build_linux
         "--preview|set-target|linux" "build")
 endif()
 
@@ -135,7 +137,7 @@ endif()
 # Same `linux` target rules as `test-logic/`; built (not run) here, since running is
 # `scripts/dev.py test-hal-common`'s job (`test` runs every host suite).
 if(test-hal-common IN_LIST SUBPROJECTS)
-    _idf_subproject(test-hal-common build_linux
+    _idf_subproject(test-hal-common components/hal/tests/test-hal-common build_linux
         "--preview|set-target|linux" "build")
 endif()
 
@@ -143,19 +145,19 @@ endif()
 # `set-target linux` is only meaningful when sdkconfig is (re)generated, so it
 # is cheap on every invocation and keeps a fresh build tree pointed at linux.
 if(test-logic IN_LIST SUBPROJECTS)
-    _idf_subproject(test-logic build_linux "--preview|set-target|linux" "build")
+    _idf_subproject(test-logic test-logic build_linux "--preview|set-target|linux" "build")
 endif()
 
 # --- test-espidf-cpp: host tests for espidf_cpp (linux) -> *_build --------
 # Same `linux` target rules as `test-logic/`; built (not run) here, since running is
 # `scripts/dev.py test-espidf-cpp`'s job (`test` runs every host suite).
 if(test-espidf-cpp IN_LIST SUBPROJECTS)
-    _idf_subproject(test-espidf-cpp build_linux
+    _idf_subproject(test-espidf-cpp test-espidf-cpp build_linux
         "--preview|set-target|linux" "build")
 endif()
 
 # --- donny: linux-emulated application (linux) -> target donny_build -------
 # Same `linux` target rules as the host test projects.
 if(donny IN_LIST SUBPROJECTS)
-    _idf_subproject(donny build_linux "--preview|set-target|linux" "build")
+    _idf_subproject(donny donny build_linux "--preview|set-target|linux" "build")
 endif()
