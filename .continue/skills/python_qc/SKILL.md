@@ -1,5 +1,5 @@
 ---
-name: python
+name: python Quality Checks
 description: How Python sources in this repository are written and checked. Use before writing or editing any Python — `scripts/dev.py`, `scripts/test_dev.py`, or a shebang script — or when deciding which quality gates to run before committing.
 ---
 
@@ -7,22 +7,16 @@ description: How Python sources in this repository are written and checked. Use 
 
 ## Quality gates before committing
 
-The automatic pre-commit hook has been removed (issue #66); the gates run on
-GitHub instead. Run the relevant subset locally depending on what changed:
+Python files are used as the build driver so we need both
+the C++ and the Python quality checks.
 
-- **A C++ file or `CMakeLists.txt` change:**
-  1. `./scripts/dev.py build`
-  2. `./scripts/dev.py format`
-  3. `./scripts/dev.py build` again (only if `format` changed anything)
-  4. `./scripts/dev.py test`
-  5. `./scripts/dev.py clang-tidy`
-- **A Python file change:**
+C++ checks are described in the skill cpp_qc.
+
+## Python  Quality checks
+
   1. `./scripts/dev.py pycodestyle`
   2. `./scripts/dev.py self-check`
-- **A change strictly to `.md` files:** no tests are required.
 
-Run the gates that match the files you touched; mixing C++ and Python changes
-means running both sets.
 
 ## Style
 
