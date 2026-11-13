@@ -597,7 +597,7 @@ class DevImageTests(unittest.TestCase):
         # The spec's environment table is the first thing a new contributor
         # reads, so it must not contradict the pinned image. (The spec keeps no
         # change history of its own; git log is the record.)
-        spec = (dev.REPO_ROOT / "Specification.md").read_text()
+        spec = (dev.REPO_ROOT / "doc" / "Specification.md").read_text()
         self.assertIn(dev.DEV_IMAGE, spec)
 
     def test_local_image_is_not_the_pinned_tag(self):
@@ -657,7 +657,9 @@ class DevContainerTests(unittest.TestCase):
         # The Dev Container must not define its own image: it inherits the
         # pinned one from docker-compose.yml.
         text = self._devcontainer()
-        self.assertEqual(text["dockerComposeFile"], "../docker/docker-compose.yml")
+        self.assertEqual(
+            text["dockerComposeFile"], "../docker/docker-compose.yml"
+        )
         self.assertEqual(text["service"], "dev")
         self.assertNotIn("image", text)
         self.assertNotIn("build", text)
@@ -723,7 +725,17 @@ class ContainerUserTests(unittest.TestCase):
         finally:
             dev.run = original
         command = calls[0]
-        self.assertEqual(command[:6], ["docker", "compose", "-f", "docker/docker-compose.yml", "run", "--user"])
+        self.assertEqual(
+            command[:6],
+            [
+                "docker",
+                "compose",
+                "-f",
+                "docker/docker-compose.yml",
+                "run",
+                "--user",
+            ],
+        )
         self.assertEqual(command[6], dev._container_user())
         self.assertIn("--rm", command)
         # The re-executed command follows the service name.
