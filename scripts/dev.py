@@ -54,7 +54,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # untracked files as well as tracked ones, so a source that exists but has not
 # been `git add`ed is still formatted. Discovering the files through git keeps
 # the walk to source trees (no build output, no missing-glob errors). Keep this
-# in sync with the pre-commit hook (.githooks/pre-commit).
+# Keep this in sync with the quality gate ordering documented in the skills.
 ROOTS = (
     "mcgowan",
     "components",
@@ -70,10 +70,10 @@ VENDORED_DIRS = ("third_party",)
 
 # Python sources are linted by `pycodestyle` (see `cmd_pycodestyle`). Unlike
 # the C/C++ list, the search covers the whole repository rather than ROOTS,
-# for two reasons: the interesting files are `.githooks/pre-commit` (scripts
-# that are Python but carry no `.py` suffix) and future tooling outside the
-# C/C++ trees. `third_party/` is dropped by `_select_python_sources`, and
-# `.gitignore`d build output never appears because git is the enumerator.
+# for two reasons: the interesting files are extensionless Python shebang
+# scripts (e.g. future tooling) and sources outside the C/C++ trees.
+# `third_party/` is dropped by `_select_python_sources`, and `.gitignore`d
+# build output never appears because git is the enumerator.
 PYTHON_EXTENSIONS = (".py",)
 
 # A first line naming a Python interpreter: `#!/usr/bin/env python3`,
@@ -200,8 +200,8 @@ FW_BINARY = "mcgowan.bin"
 # The host-test projects (linux target) and the ELF each one produces (named
 # after its ESP-IDF project). Each is pinned to `linux`, built, then run.
 #
-# `test` runs every entry (the pre-commit hook and CI call it), so a suite
-# added here is run by both without further wiring. `test-hal-common` is first
+# `test` runs every entry (CI calls it), so a suite added here is run by both
+# without further wiring. `test-hal-common` is first
 # because it covers the shared vocabulary every other suite builds on;
 # `test-hal-stub` follows with the pin-free devices those suites link against
 # (`test/` drives `BoardStub`). Each suite also has its own command
@@ -448,13 +448,8 @@ def cmd_pycodestyle() -> int:
     """Python style check (pycodestyle, PEP 8) over the repository's Python.
 
     Covers `scripts/dev.py`, `scripts/test_dev.py`, and any Python shebang
-    script such as `.githooks/pre-commit`; `third_party/` is excluded.
-    pycodestyle's defaults are enforced (79 columns), so the result matches a
-    bare `pycodestyle` run.
-
-    This is the FIRST gate in the pre-commit hook and a CI step: it is the
-    cheapest check, so a long line or a stray blank line is reported before
-    clang-tidy, clang-format, or the test suite start.
+    script; `third_party/` is excluded. pycodestyle's defaults are enforced
+    (79 columns), so the result matches a bare `pycodestyle` run.
     """
     change_to_container()
 

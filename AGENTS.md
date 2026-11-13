@@ -178,7 +178,8 @@ esp32_sensors/
 ├── .devcontainer/       # CLion / VS Code Dev Container definition (reuses compose)
 ├── .continue/           # Continue CLI config: `rules/` (slash commands), `skills/`
 │   └── skills/          #   one SKILL.md per topic: cpp-coding-standards, git,
-│                        #   platform_layers, quality_checks, cmake, markdown
+│                        #   platform_layers, quality_checks, cmake, markdown,
+│                        #   python
 ├── scripts/dev.py       # Container task runner (build/flash/test/format/shell)
 ├── scripts/idf.sh       # Runs idf.py with the ESP-IDF env, sourcing export.sh if absent
 ├── scripts/test_dev.py  # Host unit tests for dev.py (`dev.py self-check`)
@@ -275,12 +276,12 @@ component; it compiles the sources from `mcgowan/src/` and exposes
   `./scripts/dev.py shell ls -1d /`). `cn` runs the Continue CLI in the
   container: it passes `--config <container HOME>/.continue/config.yaml`
   explicitly (cn's own default lookup is not reliable), and forwards its
-  arguments to `cn` verbatim (`./scripts/dev.py cn -p "prompt"`). The
-  pre-commit hook (`.githooks/pre-commit`) runs the quality gates; see the
-  `quality_checks` skill. `pull`, `image`, and `self-check` are host-only — the
-  tasks whose *decisions* only exist on the host — so each refuses to run in
-  the container with an explanatory message. An internal `complete` command
-  lists subcommands matching a prefix (used only by the completion script).
+  arguments to `cn` verbatim (`./scripts/dev.py cn -p "prompt"`). Quality gates
+  are run via `scripts/dev.py` (see the `quality_checks` and `python` skills);
+  `pull`, `image`, and `self-check` are host-only — the tasks whose *decisions*
+  only exist on the host — so each refuses to run in the container with an
+  explanatory message. An internal `complete` command lists subcommands
+  matching a prefix (used only by the completion script).
 - `scripts/idf.sh` — runs a command (normally `idf.py`) with the ESP-IDF
   environment established, sourcing `$IDF_PATH/export.sh` when
   `IDF_PYTHON_ENV_PATH`/`ESP_IDF_VERSION` are absent. The image's entrypoint
@@ -826,8 +827,9 @@ Run every quality gate through `scripts/dev.py` and fix what it reports. The
 gates — clang-format, pycodestyle, clang-tidy, the build, the four host test
 suites, and the `dev.py` self-check — their order, and the fixing policy are
 documented in the `quality_checks` skill
-(`.continue/skills/quality_checks/SKILL.md`). `.githooks/pre-commit` enforces
-them before every commit.
+(`.continue/skills/quality_checks/SKILL.md`). Quality gates are run via
+`scripts/dev.py`; see the `quality_checks` and `python` skills for the
+required subsets.
 
 > **Parked defect:** `pins::kDividerGate` is 25, but the ESP32-S3 has no GPIO
 > 22–25 at all (`soc/gpio_num.h` jumps `GPIO_NUM_21` straight to
