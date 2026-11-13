@@ -3,10 +3,11 @@ cmake_minimum_required(VERSION 3.22)
 # Build and run with:
 #   scripts/dev.py build
 # or directly in the container:
-#   scripts/dev.py shell -C donny idf.py -B build_linux \
-#       --preview set-target linux
-#   scripts/dev.py shell -C donny idf.py -B build_linux build
-#   ./donny/build_linux/donny.elf
+#   scripts/dev.py shell -C components/simulator/exe/donny \
+#       idf.py -B build_linux --preview set-target linux
+#   scripts/dev.py shell -C components/simulator/exe/donny \
+#       idf.py -B build_linux build
+#   ./components/simulator/exe/donny/build_linux/donny.elf
 #
 # The build directory is named after the target (`build_linux`), like the other
 # subprojects'.
@@ -27,22 +28,24 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
 # The reusable components live in the repo-root `components/` directory (the
 # sml wrapper), which is not on this project's default search path (that would
-# be `donny/components/`). The three HAL components live in `components/hal/`,
-# the ESP-IDF C++ wrappers in `components/espidfcpp/` and the application logic
-# in `components/logic/`, each of which needs its own entry: ESP-IDF scans a
-# component directory one level deep, so a grouping directory is not descended
-# into.
+# be `components/simulator/exe/donny/components/`). The three HAL components
+# live in `components/hal/`, the ESP-IDF C++ wrappers in
+# `components/espidfcpp/`, the application logic in `components/logic/` and the
+# simulator component beside this executable in `components/simulator/`, each
+# of which needs its own entry: ESP-IDF scans a component directory one level
+# deep, so a grouping directory is not descended into.
 set(EXTRA_COMPONENT_DIRS
-    "${CMAKE_CURRENT_LIST_DIR}/../components"
-    "${CMAKE_CURRENT_LIST_DIR}/../components/hal"
-    "${CMAKE_CURRENT_LIST_DIR}/../components/espidfcpp"
-    "${CMAKE_CURRENT_LIST_DIR}/../components/logic"
+    "${CMAKE_CURRENT_LIST_DIR}/../../.."
+    "${CMAKE_CURRENT_LIST_DIR}/../../../hal"
+    "${CMAKE_CURRENT_LIST_DIR}/../../../espidfcpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../../../logic"
+    "${CMAKE_CURRENT_LIST_DIR}/../.."
 )
 
 # Vendored third-party components live in the repo-root `third_party/`, not
-# under `donny/`: that keeps them out of every directory `scripts/dev.py`
-# formats, which is the point — vendored sources are copied verbatim from
-# upstream and must not be reformatted.
+# under the simulator tree: that keeps them out of every directory
+# `scripts/dev.py` formats, which is the point — vendored sources are copied
+# verbatim from upstream and must not be reformatted.
 #
 # It names the *individual* components (`third_party/json`) rather than
 # `third_party/` as a whole. `third_party/` also holds the `sml` git submodule
@@ -51,15 +54,17 @@ set(EXTRA_COMPONENT_DIRS
 # those as ESP-IDF components. The ESP-IDF face of sml is the wrapper
 # component `components/sml`, found via `EXTRA_COMPONENT_DIRS` above, so the
 # submodule itself is never on a component search path.
-list(APPEND EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../third_party/json")
+list(APPEND EXTRA_COMPONENT_DIRS
+    "${CMAKE_CURRENT_LIST_DIR}/../../../../third_party/json")
 
 # Restrict the component set to `main` (and its requirements) plus `hal_stub`.
 # Without this the `linux` target also tries to build chip-specific components
 # such as esp_driver_ana_cmpr, which have no linux implementation and fail to
-# resolve. `hal_stub` is listed explicitly because it is a requirement of
-# `main`; `hal_board` is deliberately excluded (the two are mutually exclusive,
-# and the GPIO-backed drivers are not linkable on linux).
-set(COMPONENTS main hal_stub)
+# resolve. `hal_stub` and `libsimulator` are listed explicitly because they are
+# requirements of `main`; `hal_board` is deliberately excluded (the two HAL
+# implementations are mutually exclusive, and the GPIO-backed drivers are not
+# linkable on linux).
+set(COMPONENTS main hal_stub libsimulator)
 
 # This project links `hal_stub`. `hal_board` exposes the same headers and
 # defines the same symbols, so exclude it to keep exactly one implementation in

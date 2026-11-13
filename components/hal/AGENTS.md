@@ -12,7 +12,7 @@ skill (`.continue/skills/platform_layers/SKILL.md`).
 |---|---|---|---|
 | `hal_common` | header-only | everything | the shared vocabulary: types and concepts |
 | `hal_board` | `.cpp` | the firmware (`mcgowan/`) | the real, GPIO-backed drivers |
-| `hal_stub` | `.cpp` | the host tests, `donny/` | the pin-free, software-driven stubs |
+| `hal_stub` | `.cpp` | the host tests, the simulator application | the pin-free, software-driven stubs |
 
 Hardware-specific drivers live in reusable ESP-IDF components rather than in
 `mcgowan/src/`, so host tests can swap them for deterministic stubs. The root

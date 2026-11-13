@@ -8,16 +8,24 @@ cmake_minimum_required(VERSION 3.22)
 # `sdkconfig.defaults`, and build directory inside its own folder:
 #
 #   mcgowan/         ESP32-S3 firmware (hal_board)   -> mcgowan/build_esp32s3/mcgowan.bin
-#   components/hal/test-hal-stub/   host tests for components/hal/hal_stub, `linux`
-#                                                -> components/hal/test-hal-stub/build_linux/
-#   components/hal/test-hal-common/ host tests for components/hal/hal_common, `linux`
-#                                                -> components/hal/test-hal-common/build_linux/
+#   components/hal/tests/test-hal-stub/
+#                    host tests for components/hal/hal_stub, `linux`
+#                                             -> .../test-hal-stub/build_linux/
+#   components/hal/tests/test-hal-common/
+#                    host tests for components/hal/hal_common, `linux`
+#                                            -> .../test-hal-common/build_linux/
 #   components/logic/tests/test-logic/
 #                    host unit tests, `linux` target (hal_stub)
 #                                                -> .../test-logic/build_linux/
 #   components/espidfcpp/tests/test-espidf-cpp/
 #                    host tests for components/espidfcpp/libespidfcpp, `linux`
 #                                                -> .../test-espidf-cpp/build_linux/
+#   components/simulator/tests/test-simulator/
+#                    host tests for components/simulator/libsimulator, `linux`
+#                                             -> .../test-simulator/build_linux/
+#   components/simulator/exe/donny/
+#                    linux-emulated application (hal_stub, `linux`)
+#                                              -> .../donny/build_linux/
 #
 # This file only aggregates them, so ONE build covers all of them. It is plain
 # CMake (no repo-root sdkconfig): each target invokes `idf.py` for its
@@ -35,9 +43,8 @@ cmake_minimum_required(VERSION 3.22)
 #
 # Every target in this file is prefixed with its subproject name (e.g.
 # mcgowan_build, test-hal-stub_build, test-hal-common_build, test-logic_build,
-# test-espidf-cpp_build; a
-# HAL component's would be hal_board_test) so it cannot collide with another
-# target in this project,
+# test-espidf-cpp_build, test-simulator_build, donny_build) so it cannot collide
+# with another target in this project,
 # with names CMake / ESP-IDF define for themselves (test, build_test, ...), or
 # with a subproject directory name.
 
@@ -68,14 +75,16 @@ project(esp32_sensors_subprojects NONE)
 
 # Which subprojects to build. Default: all of them.
 set(SUBPROJECTS
-    "mcgowan;test-hal-stub;test-hal-common;test-logic;test-espidf-cpp;donny"
+    "mcgowan;test-hal-stub;test-hal-common;test-logic;test-espidf-cpp;test-simulator;donny"
     CACHE STRING
-    "Subprojects to build: mcgowan, test-hal-stub, test-hal-common, test-logic, test-espidf-cpp, donny")
+    "Subprojects to build: mcgowan, test-hal-stub, test-hal-common, test-logic, test-espidf-cpp, test-simulator, donny")
 set_property(CACHE SUBPROJECTS PROPERTY STRINGS
-    mcgowan test-hal-stub test-hal-common test-logic test-espidf-cpp donny)
+    mcgowan test-hal-stub test-hal-common test-logic test-espidf-cpp
+    test-simulator donny)
 
 set(KNOWN_SUBPROJECTS
-    mcgowan test-hal-stub test-hal-common test-logic test-espidf-cpp donny)
+    mcgowan test-hal-stub test-hal-common test-logic test-espidf-cpp
+    test-simulator donny)
 foreach(sub IN LISTS SUBPROJECTS)
     if(NOT sub IN_LIST KNOWN_SUBPROJECTS)
         message(FATAL_ERROR
@@ -160,8 +169,17 @@ if(test-espidf-cpp IN_LIST SUBPROJECTS)
         build_linux "--preview|set-target|linux" "build")
 endif()
 
+# --- test-simulator: simulator component tests (linux) -> *_build ---------
+# Same `linux` target rules as `test-logic/`; built (not run) here, since
+# running is `scripts/dev.py test-simulator`'s job (`test` runs every suite).
+if(test-simulator IN_LIST SUBPROJECTS)
+    _idf_subproject(test-simulator components/simulator/tests/test-simulator
+        build_linux "--preview|set-target|linux" "build")
+endif()
+
 # --- donny: linux-emulated application (linux) -> target donny_build -------
 # Same `linux` target rules as the host test projects.
 if(donny IN_LIST SUBPROJECTS)
-    _idf_subproject(donny donny build_linux "--preview|set-target|linux" "build")
+    _idf_subproject(donny components/simulator/exe/donny
+        build_linux "--preview|set-target|linux" "build")
 endif()

@@ -54,11 +54,11 @@ station, batch upload, backoff) intentionally stubbed.
 >   (§9, payload is formatted and logged but not sent), exponential backoff
 >   (§3.7).
 > - **Host unit tests.** `test-hal-stub/`, `test-hal-common/`, `test-logic/`,
->   and `test-espidf-cpp/` build for the ESP-IDF `linux` target (Unity) and run
->   via `scripts/dev.py test`, which runs all four suites (`test-hal-common`
->   first and `test-hal-stub` next; `test-hal-common`, `test-hal-stub`,
->   `test-logic`, and `test-espidf-cpp` run one suite each). On-target tests
->   for hardware-dependent code are planned.
+>   `test-espidf-cpp/`, and `test-simulator/` build for the ESP-IDF `linux`
+>   target (Unity) and run via `scripts/dev.py test`, which runs all five
+>   suites (`test-hal-common` first and `test-hal-stub` next; each suite also
+>   has a command that runs it alone). On-target tests for hardware-dependent
+>   code are planned.
 
 > **Toolchain note:** The host's locally installed ESP-IDF is **v6.1**
 > with **Xtensa GCC 15.2.0** (`esp-15.2.0_20251204`), which matches the pinned
@@ -144,6 +144,11 @@ esp32_sensors/
 │   │   ├── liblogic/    #     The logic component
 │   │   └── tests/       #     Host tests (IDF `linux`, Unity)
 │   │       └── test-logic/
+│   ├── simulator/       #   Host-side simulator (IDF `linux`)
+│   │   ├── AGENTS.md    #     The simulator, `donny`, and its tests in detail
+│   │   ├── libsimulator/#     The simulator component (empty for now)
+│   │   ├── exe/donny/   #     The linux-emulated application (JSON console driver)
+│   │   └── tests/test-simulator/  # Host tests for libsimulator
 │   └── sml/             #   Wrapper component exposing the third_party/sml submodule
 ├── third_party/         # Vendored third-party code (never formatted, never tidy'd)
 │   ├── json/            #   nlohmann/json v3.11.3 (header-only, MIT)
@@ -157,12 +162,17 @@ esp32_sensors/
 │   │   └── tests/        # Host tests for the HAL components (IDF `linux`, Unity)
 │   │       ├── test-hal-stub/
 │   │       └── test-hal-common/
-│   └── logic/
-│       ├── liblogic/     # Board-independent application logic
+│   ├── logic/
+│   │   ├── liblogic/     # Board-independent application logic
+│   │   └── tests/
+│   │       └── test-logic/   # Host tests for liblogic
+│   └── simulator/
+│       ├── libsimulator/ # The simulator component (empty for now)
+│       ├── exe/
+│       │   └── donny/    # The linux-emulated application (JSON console driver)
+│       │       └── main/ #   app_main + the JSON console task (test driver)
 │       └── tests/
-│           └── test-logic/   # Host tests for liblogic
-├── donny/               # Linux-emulated application (IDF `linux`)
-│   └── main/            #   app_main + the JSON console task (test driver)
+│           └── test-simulator/   # Host tests for libsimulator
 ├── Dockerfile           # Dev container: ESP-IDF v6.1 + non-root host-mapped user
 ├── docker-compose.yml   # `dev` service with serial (/dev) passthrough
 ├── .devcontainer/       # CLion / VS Code Dev Container definition (reuses compose)
@@ -196,18 +206,20 @@ directory **inside its own folder**, named after the target:
 | `test-hal-common/` (HAL vocabulary tests) | `components/hal/tests/test-hal-common/build_linux/` | linux | `esp32_sensors_hal_common_tests.elf` (run on the host) |
 | `test-logic/` (logic tests) | `components/logic/tests/test-logic/build_linux/` | linux | `test-logic.elf` (run on the host) |
 | `test-espidf-cpp/` (wrapper tests) | `components/espidfcpp/tests/test-espidf-cpp/build_linux/` | linux | `test-espidf-cpp.elf` (run on the host) |
-| `donny/` (linux app) | `donny/build_linux/` | linux | `donny.elf` (an application, not a test: it runs the JSON console task and `Application`) |
+| `test-simulator/` (simulator tests) | `components/simulator/tests/test-simulator/build_linux/` | linux | `test-simulator.elf` (run on the host) |
+| `donny/` (linux app) | `components/simulator/exe/donny/build_linux/` | linux | `donny.elf` (an application, not a test: it runs the JSON console task and `Application`) |
 
 The aggregate (root) project configures into `build_root/`. Each aggregate
 target is prefixed with its subproject name (`mcgowan_build`,
 `test-hal-stub_build`, `test-hal-common_build`, `test_build`,
-`test-espidf-cpp_build`, `donny_build`) so it cannot collide with another
+`test-espidf-cpp_build`, `test-simulator_build`, `donny_build`) so it cannot
+collide with another
 target in the project, with names CMake/ESP-IDF define themselves (e.g.
 `test`), or with a directory name. `scripts/dev.py build` drives the aggregate
 project; `scripts/dev.py build mcgowan` builds just the firmware. `mcgowan/`
 targets ESP32-S3; `test-hal-stub/`, `test-hal-common/`, `test-logic/`,
-`test-espidf-cpp/`, and `donny/` target `linux`. All build trees are
-git-ignored.
+`test-espidf-cpp/`, `test-simulator/`, and `donny/` target `linux`. All build
+trees are git-ignored.
 
 **Why `mcgowan/main/` and `mcgowan/src/`.** ESP-IDF requires the component that
 defines `app_main` to be named `main`, so `mcgowan/main/` is that (near-empty)
@@ -227,6 +239,9 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 - `components/logic/AGENTS.md` — the application logic and its host tests in
   detail: the header list, the layer requirements, the source layout, the
   board-independent template rules, and what the suite covers.
+- `components/simulator/AGENTS.md` — the simulator: the empty `libsimulator`
+  component, the `donny` application and its JSON console protocol, and the
+  `test-simulator` suite.
 - `mcgowan/main/CMakeLists.txt` — the firmware's component definition. **Add
   new sources here** or they will not compile. Board-independent logic belongs
   in `components/logic/liblogic` instead.
@@ -235,7 +250,7 @@ component; it compiles the sources from `mcgowan/src/` and exposes
   generated from this and is **not** tracked.
 - `CMakeLists.txt` (root) — the generator-agnostic aggregator: one prefixed
   target per subproject invoking `idf.py -C <sub> -B <sub>/<build-dir>`.
-  `-DSUBPROJECTS="mcgowan;test-hal-stub;test-hal-common;test-logic;test-espidf-cpp;donny"`
+  `-DSUBPROJECTS="mcgowan;test-hal-stub;test-hal-common;test-logic;test-espidf-cpp;test-simulator;donny"`
   (default: all) selects what is built.
 - `Dockerfile` / `docker-compose.yml` — the reproducible ESP-IDF build/flash
   environment. Extend these (not ad-hoc `docker run`) when adding tooling. The
@@ -248,7 +263,8 @@ component; it compiles the sources from `mcgowan/src/` and exposes
 - `scripts/dev.py` — the single container task runner (`pull`, `image`,
   `submodules`, `build`, `flash`, `monitor`, `menuconfig`, `test`,
   `test-hal-common`, `test-hal-stub`, `test-logic`, `test-espidf-cpp`,
-  `self-check`, `format`, `format-check`, `format-check-staged`, `pycodestyle`,
+  `test-simulator`, `self-check`, `format`, `format-check`,
+  `format-check-staged`, `pycodestyle`,
   `clang-tidy`, `install-hooks`, `shell`, `cn`). CLion run configurations and
   the docs both call it, so `docker compose` specifics live in one place.
   `submodules` fetches the pinned git submodules (`third_party/sml`); `build`,
@@ -307,11 +323,11 @@ component; it compiles the sources from `mcgowan/src/` and exposes
   profile declared in `.idea/cmake.xml`, and `TARGET_NAME` must be one of the
   root aggregator's `*_build` targets (a subproject's `<name>.elf` is not
   resolvable from the root and fails with "cannot find target").
-  `HostTestCommandTests` pins the four host suites: the `test-hal-common`,
-  `test-hal-stub`, `test-logic`, and `test-espidf-cpp` commands each build and
-  run only their own project, and the aggregate `test` runs every
-  `HOST_TEST_PROJECTS` entry in table order with `test-hal-common` first and
-  `test-hal-stub` next, stopping at the first failing suite. The `Tidy*`
+  `HostTestCommandTests` pins the five host suites: the `test-hal-common`,
+  `test-hal-stub`, `test-logic`, `test-espidf-cpp`, and `test-simulator`
+  commands each build and run only their own project, and the aggregate `test`
+  runs every `HOST_TEST_PROJECTS` entry in table order with `test-hal-common`
+  first and `test-hal-stub` next, stopping at the first failing suite. The `Tidy*`
   classes cover `clang-tidy`: `TidyCompileArgumentsTests` pins which GCC flags
   are stripped and that the source file and the `-D`/`-I` flags survive;
   `TidyUnitSelectionTests` pins the one-entry-per-source reduction (non-C++ and
@@ -431,8 +447,9 @@ and this component only teaches ESP-IDF about it. Upstream is header-only, so
 `CMakeLists.txt` (upstream tests and examples) and must never be discovered as
 an ESP-IDF component. It fails loudly at configure time when the submodule has
 not been checked out, naming `scripts/dev.py submodules`. The component is also
-why `third_party/` stays off every component search path: `donny` names
-`third_party/json` explicitly rather than scanning `/third_party`.
+why `third_party/` stays off every component search path: the simulator
+application names `third_party/json` explicitly rather than scanning
+`/third_party`.
 
 **`liblogic` component (`components/logic/liblogic`).** Board-independent
 application logic: the operating modes and their pole mapping, the LED status
@@ -460,109 +477,37 @@ the policy itself is still firmware-only (it reads `rtc_state()`, which needs
 the `RTC_DATA_ATTR` block), while the cold-boot half it delegates to —
 `rtc_state_reset()` — is host-tested in `test_rtc_buffer.cpp`.
 
-**`donny/`.** A plain (non-test) `linux`-target application that constructs
-`thermo::Application<thermo::hal::BoardStub>`. It uses the vendored `json`
-component from `third_party/` (its layer requirements are in the
-`platform_layers` skill). `hal_board` cannot be linked on the linux target: it
-requires `esp_driver_tsens`, whose Kconfig needs
-`CONFIG_SOC_TEMP_SENSOR_SUPPORTED`, so the chain ends at `esp_hal_ana_conv`, a
-SoC-only component with no linux implementation (`esp_driver_gpio`, by
-contrast, registers itself empty on linux).
+**`components/simulator/`.** The host-side simulator: the `libsimulator`
+component, the `donny` linux-emulated application (`exe/donny/`), and the
+simulator's host suite (`tests/test-simulator/`). `donny` constructs
+`thermo::Application<thermo::hal::BoardStub>` and exposes the JSON console
+protocol that drives it from a test driver. Its wiring, the console protocol,
+and the test project are documented in `components/simulator/AGENTS.md`.
 
-**`donny`'s console protocol (`donny/main/console_task.{hpp,cpp}`).** Nothing
-on the linux target ever changes the hardware, so a *test driver* has to: the
-console task is that channel. It reads one JSON **object** per line from stdin,
-applies the fields it names to the `BoardStub`, and writes the resulting state
-back as one JSON line on stdout.
+**The state-machine library is a git submodule.** `third_party/sml` is
+[boost-ext/sml](https://github.com/boost-ext/sml) at tag **v1.2.0** (commit
+`2d8485d`), recorded in `.gitmodules` and used by the `liblogic` component for
+the application state machines. `components/sml` is a thin ESP-IDF wrapper that
+exposes the submodule's `include/` directory; `liblogic` names `sml` in
+`REQUIRES`, so consumers include `<boost/sml.hpp>` and never name the component
+themselves. The upstream tree is **never** a component: its own `CMakeLists.txt`
+builds upstream tests/examples, so it stays off every component search path
+(`components/simulator/exe/donny/CMakeLists.txt` names `third_party/json`
+explicitly instead of scanning `third_party/`), and it is outside `ROOTS`, so
+clang-format never touches it (`_is_vendored` keeps clang-tidy off it too).
 
-- **Task shape.** Split the same way `LedTask` is: `ConsoleRunner` holds the
-  behaviour and the `std::shared_ptr<hal::BoardStub>` (shared, never owned),
-  and `ConsoleTask : espidf_cpp::Task<ConsoleRunner>` is the FreeRTOS task. It
-  is started in `app_main` **before** the `Application` is constructed, so a
-  driver can already drive the board while the application boots.
-- **Partial documents.** Every input field is optional; a missing field leaves
-  that piece of board state alone, so `{"config_button":"on"}` presses one pole
-  without touching anything else. Output is always a complete snapshot.
-- **Idempotent round trip.** Feeding the task's own output back in changes
-  nothing and yields byte-identical output, so a driver can read the state,
-  edit one field, and write it back without knowing which fields exist. Three
-  reported fields are therefore **ignored on input** because nothing in the
-  board's interface can set them: `wifi.initialized` (only `init()` sets it),
-  `deep_sleep.last_s` (the only way to sleep is to end the process), and — see
-  below — `wifi.ap` / `wifi.station` when the interface is down.
-- **Fields.** `button`, `config_button`, `run_button` (`"on"`/`"off"`);
-  `leds.{green,red}` (`"on"`/`"off"`, a JSON bool is accepted on input);
-  `chip_temp_c_x100` (int16); `sensors` (an array of `{rom, temp_c_x100}`, a
-  complete replacement of the bus, `null` temperature for a failed reading);
-  `wifi.{initialized, ap_running, station_running, ap, station}`;
-  `deep_sleep.last_s` (`null` until the board has slept).
-- **WiFi config is start-only.** The HAL can record a configuration *solely* by
-  starting the interface (`start_ap()` / `start_station()`), so naming a
-  `wifi.ap` / `wifi.station` object starts it, and `*_running` alone
-  starts/stops with the configuration already recorded. Per interface the
-  configuration is resolved *before* the running state, so the result never
-  depends on JSON key order. A stopped interface reports `null` for its
-  configuration (that is the only state a driver can round-trip), and
-  restarting it reuses the recorded one. Contradictory input (`ap` with
-  `ap_running:false`) is an error.
-- **Errors never kill the task.** A malformed line answers
-  `{"error":"malformed JSON"}`; a rejected field answers
-  `{"error":"...","state":{...}}` with the state after the fields that *did*
-  apply, and the loop continues. EOF (the driver closed the pipe) makes the
-  task idle on `vTaskDelay(60 s)` rather than spin.
-- **stdout is the protocol; logs go to stderr.** ESP-IDF logs to stdout by
-  default (`esp_log_vprint_func = &vprintf`) and the stub devices log when they
-  are written to, which would interleave log lines with protocol output.
-  `app_main` installs `esp_log_set_vprintf()` via a **static-init** struct:
-  doing it inside `app_main` is too late, since the port logs "Starting
-  scheduler" first.
-- **stdin is read with `read()`, never `fgets`.** The ESP-IDF `linux` FreeRTOS
-  port drives the scheduler from a 1 kHz `SIGALRM` whose handler it installs
-  with `sa_flags = 0` (no `SA_RESTART`), so *every* blocking read returns early
-  with `EINTR`. `fgets` cannot distinguish that from end of file: it sets the
-  sticky error flag and returns `NULL`, so an interactive console saw "EOF"
-  about a millisecond after it started and shut its input down (a pipe only
-  appeared to work because the data was already buffered). `read()` keeps
-  `errno`, so the console task simply retries on `EINTR`; reading the
-  descriptor directly also sidesteps the `FILE` error flag.
-- **The JSON library is vendored in `third_party/`.** `third_party/json` holds
-  `nlohmann/json` (v3.11.3, single header, MIT + `LICENSE.MIT`) as a
-  header-only ESP-IDF component. It sits in `third_party/` rather than under
-  `components/` or `donny/` because `third_party/` is outside every directory
-  `scripts/dev.py` clang-formats: a vendored header must stay byte-identical to
-  upstream so it can be diffed against a release. No project sees it by default
-  — `donny/CMakeLists.txt` opts in with
-  `list(APPEND EXTRA_COMPONENT_DIRS .../third_party/json)` (the *component
-  directory*, not the whole of `third_party/`, so the `sml` submodule's own
-  upstream `CMakeLists.txt` can never be discovered) and `main` names `json` in
-  its `REQUIRES`. The firmware deliberately does not use it: it formats its
-  payload by hand and has no JSON parser, whereas `donny`'s binary size is
-  irrelevant. `donny` builds with `CONFIG_COMPILER_CXX_EXCEPTIONS=n`, so the
-  parse uses the non-throwing form (`json::parse(line, nullptr, false)` +
-  `is_discarded()`), never `try`/`catch`.
-- **The state-machine library is a git submodule.** `third_party/sml` is
-  [boost-ext/sml](https://github.com/boost-ext/sml) at tag **v1.2.0** (commit
-  `2d8485d`), recorded in `.gitmodules` and used by the `liblogic` component
-  for the application state machines. `components/sml` is a thin ESP-IDF
-  wrapper that exposes the submodule's `include/` directory; `liblogic` names
-  `sml` in `REQUIRES`, so consumers include `<boost/sml.hpp>` and never name
-  the component themselves. The upstream tree is **never** a component: its own
-  `CMakeLists.txt` builds upstream tests/examples, so it stays off every
-  component search path (`donny/CMakeLists.txt` names `third_party/json`
-  explicitly instead of scanning `third_party/`), and it is outside `ROOTS`, so
-  clang-format never touches it (`_is_vendored` keeps clang-tidy off it too).
-  - **Not vendored, not committed content.** The submodule is pinned by the
-    gitlink recorded in git, so a fresh clone has an empty directory until the
-    sources are fetched. `scripts/dev.py submodules` fetches them
-    (`git submodule update --init --recursive -- <path>`, idempotent), and
-    `build`, `test`, and `clang-tidy` call the same helper first, so a bare
-    clone builds without a manual step. CI runs `submodules` as its own step,
-    before `build`, so a failed fetch is reported on its own rather than as a
-    confusing configure error.
-  - **Updating the pin:** `git -C third_party/sml checkout v1.2.1`, then
-    `git add third_party/sml` in this repo (and update the version in this
-    document and `components/sml/CMakeLists.txt`). `scripts/dev.py self-check`
-    pins the gitlink to the v1.2.0 commit.
+- **Not vendored, not committed content.** The submodule is pinned by the
+  gitlink recorded in git, so a fresh clone has an empty directory until the
+  sources are fetched. `scripts/dev.py submodules` fetches them
+  (`git submodule update --init --recursive -- <path>`, idempotent), and
+  `build`, `test`, and `clang-tidy` call the same helper first, so a bare clone
+  builds without a manual step. CI runs `submodules` as its own step, before
+  `build`, so a failed fetch is reported on its own rather than as a confusing
+  configure error.
+- **Updating the pin:** `git -C third_party/sml checkout v1.2.1`, then
+  `git add third_party/sml` in this repo (and update the version in this
+  document and `components/sml/CMakeLists.txt`). `scripts/dev.py self-check`
+  pins the gitlink to the v1.2.0 commit.
 
 **Not yet present (expected next):**
 - On-target tests for hardware-dependent code (1-Wire, deep-sleep, Wi-Fi).
@@ -731,7 +676,7 @@ symptom, not a fix; `ClionRunConfigurationTests` pins both invariants.
 | Linux app (donny, container CMake) | CMake | Builds the `donny_build` aggregate target via the `Linux app (donny)` profile |
 | Build firmware (container) | `scripts/dev.py build` | `idf.py -C mcgowan -B mcgowan/build_esp32s3 build` (and the other subprojects) |
 | Flash & monitor (container) | `scripts/dev.py flash` | `idf.py -C mcgowan -B mcgowan/build_esp32s3 -p $ESP32_PORT flash monitor` (default `/dev/ttyUSB0`) |
-| Host unit tests (container) | `scripts/dev.py test` | runs all four host test suites (below), `test-hal-common` first and `test-hal-stub` next; `test-hal-common` / `test-hal-stub` / `test-logic` / `test-espidf-cpp` run one each |
+| Host unit tests (container) | `scripts/dev.py test` | runs all five host test suites (below), `test-hal-common` first and `test-hal-stub` next; each suite also has a command that runs it alone |
 | clang-format check (container) | `scripts/dev.py format-check` | `clang-format --dry-run --Werror` |
 | menuconfig (container) | `scripts/dev.py menuconfig` | Kconfig UI |
 | Container shell (ESP-IDF) | `scripts/dev.py shell` | login shell with the IDF env sourced (accepts trailing args to run a command) |
@@ -778,13 +723,14 @@ enacted on the host.
 |host|pull|Pull the pinned prebuilt dev image from the registry|
 |host|image|Build the dev image locally from the Dockerfile (not needed normally)|
 |both|submodules|Fetch the pinned git submodules (`third_party/sml`)|
-|both|build [SUBPROJECT...]|Build all subprojects via the root aggregator, or just the named ones (mcgowan, test-hal-stub, test-hal-common, test, test-espidf-cpp, donny)|
+|both|build [SUBPROJECT...]|Build all subprojects via the root aggregator, or just the named ones (mcgowan, test-hal-stub, test-hal-common, test, test-espidf-cpp, test-simulator, donny)|
 |both|build-test-espidf-cpp|Build the libespidfcpp unit tests for the ESP-IDF `linux` target|
-|both|test|Run every host unit test suite: `test-hal-common`, then `test-hal-stub`, then `test-logic`, then `test-espidf-cpp`|
+|both|test|Run every host unit test suite: `test-hal-common`, then `test-hal-stub`, then `test-logic`, then `test-espidf-cpp`, then `test-simulator`|
 |both|test-hal-stub|Build and run the `test-hal-stub/` host unit tests (ESP-IDF `linux` target)|
 |both|test-hal-common|Build and run the `test-hal-common/` host unit tests (ESP-IDF `linux` target)|
 |both|test-logic|Build and run the `components/logic/tests/test-logic/` host unit tests (ESP-IDF `linux` target)|
 |both|test-espidf-cpp|Build and run the `components/espidfcpp/tests/test-espidf-cpp/` host unit tests (ESP-IDF `linux` target)|
+|both|test-simulator|Build and run the `components/simulator/tests/test-simulator/` host unit tests (ESP-IDF `linux` target)|
 |both|self-check|Run the host unit tests for dev.py itself (stdlib `unittest`)|
 |both|flash|idf.py flash monitor|
 |both|monitor|idf.py monitor|
@@ -840,7 +786,7 @@ plugged in at any time and it will be accessible by the container.
 There are two kinds of test suite, runnable from the host via `scripts/dev.py`:
 
 - **Host-based unit tests** build for the ESP-IDF `linux` target with Unity —
-  no hardware needed — in four projects:
+  no hardware needed — in five projects:
 
   - `test-hal-stub/` — the pin-free `hal_stub` devices; what each test pins is
     described in `components/hal/AGENTS.md`.
@@ -856,6 +802,9 @@ There are two kinds of test suite, runnable from the host via `scripts/dev.py`:
   - `components/espidfcpp/tests/test-espidf-cpp/` covers the `libespidfcpp`
     wrappers; what each test pins is described in
     `components/espidfcpp/AGENTS.md`.
+  - `components/simulator/tests/test-simulator/` links `libsimulator`; the
+    component is empty today, so the suite runs no cases yet. What it will
+    cover is described in `components/simulator/AGENTS.md`.
 - **On-target tests** are planned for hardware-dependent code (1-Wire/DS18B20
   reads, deep-sleep wake, Wi-Fi upload).
 - Keep hardware interactions behind thin interfaces so business logic remains
@@ -865,9 +814,10 @@ There are two kinds of test suite, runnable from the host via `scripts/dev.py`:
   `mcgowan/main/CMakeLists.txt` and
   `components/logic/tests/test-logic/main/CMakeLists.txt`.
 
-Run the suites with `./scripts/dev.py test` (all four, stopping at the first
-failure), or run one with `test-hal-common`, `test-hal-stub`, `test-logic`, or
-`test-espidf-cpp`. See the `quality_checks` skill for the gates and the fixing
+Run the suites with `./scripts/dev.py test` (all five, stopping at the first
+failure), or run one with `test-hal-common`, `test-hal-stub`, `test-logic`,
+`test-espidf-cpp`, or `test-simulator`. See the `quality_checks` skill for the
+gates and the fixing
 policy.
 
 ### Quality checks

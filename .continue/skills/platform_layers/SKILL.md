@@ -24,7 +24,8 @@ The hardware-abstraction layer (layers 1 and 2 below) is documented in
 | 2 | `hal_board`, `hal_stub` | `test-hal-stub` |
 | 3 | `libespidfcpp` | `test-espidf-cpp` |
 | 4 | `liblogic` | `test-logic` |
-| 5 (highest) | — | `mcgowan`, `donny` |
+| 5 | `libsimulator` | `test-simulator` |
+| 6 (highest) | — | `mcgowan`, `donny` |
 
 `hal_common` is header-only.
 
@@ -37,7 +38,10 @@ error prone.
 
 `liblogic` holds the main application business logic.
 
-`mcgowan` is the ESP32-S3 firmware
+`libsimulator` is the host-side simulator component (`linux` only). It is empty
+today and must never be required by a chip-target project.
+
+`mcgowan` is the ESP32-S3 firmware.
 
 `donny` is the `linux`-emulated application.
 
@@ -54,7 +58,7 @@ error prone.
 | Target | May link | Must not link |
 |---|---|---|
 | ESP32-S3 (`mcgowan`) | `hal_board` | `hal_stub` |
-| `linux` (`test-hal-common`, `test-hal-stub`, `test-logic`, `test-espidf-cpp`, `donny`) | `hal_stub` | `hal_board` |
+| `linux` (`test-hal-common`, `test-hal-stub`, `test-logic`, `test-espidf-cpp`, `test-simulator`, `donny`) | `hal_stub` | `hal_board` |
 | Platform-neutral components (`hal_common`, `libespidfcpp`, `liblogic`) | neither | both |
 
 `libespidfcpp` and `liblogic` build for both the chip and the host, so they
@@ -71,14 +75,14 @@ When writing or editing a list of components or test projects, go from the
 lowest layer to the highest:
 
 - Components: `hal_common`, `hal_board`, `hal_stub`, `libespidfcpp`,
-  `liblogic`.
+  `liblogic`, `libsimulator`.
 - Test projects: `test-hal-common`, `test-hal-stub`, `test-espidf-cpp`,
-  `test-logic`.
+  `test-logic`, `test-simulator`.
 - Applications: `mcgowan`, `donny`.
 
-`./scripts/dev.py test` currently runs `test-logic` before `test-espidf-cpp`;
-that is the command's existing order, not the layer order to use for a new
-list.
+`./scripts/dev.py test` currently runs `test-logic` before `test-espidf-cpp`
+and `test-simulator`; that is the command's existing order, not the layer order
+to use for a new list.
 
 ## Current dependency edges
 
@@ -89,12 +93,14 @@ list.
 | `hal_stub` | `hal_common` |
 | `libespidfcpp` | none (ESP-IDF `esp_http_server` only) |
 | `liblogic` | `libespidfcpp`, `hal_common`, `sml` |
+| `libsimulator` | none yet |
 | `mcgowan` | `hal_board`, `liblogic`, `libespidfcpp` |
-| `donny` | `hal_stub`, `liblogic`, `libespidfcpp`, vendored `json` |
+| `donny` | `hal_stub`, `liblogic`, `libespidfcpp`, `libsimulator`, vendored `json` |
 | `test-hal-common` | `hal_common`; privately `hal_stub` |
 | `test-hal-stub` | `hal_stub` |
 | `test-espidf-cpp` | `libespidfcpp`; privately `hal_stub` |
 | `test-logic` | `liblogic`; privately `libespidfcpp`, `hal_stub` |
+| `test-simulator` | `libsimulator`; privately `unity` |
 
 Test projects may privately link `hal_stub` even when their component is
 platform-neutral: `test-hal-common` needs the concrete device types because the
@@ -107,9 +113,10 @@ never require either implementation.
 
 - Each subproject's top-level `CMakeLists.txt` points `EXTRA_COMPONENT_DIRS` at
   the repo-root `components/` (the `sml` wrapper), at `components/hal/` (the
-  three HAL components), at `components/espidfcpp/` (the ESP-IDF wrappers)
-  **and** at `components/logic/` (the application logic), because its own
-  project root is not on the default search path. All entries are needed:
+  three HAL components), at `components/espidfcpp/` (the ESP-IDF wrappers), at
+  `components/logic/` (the application logic) and — where the simulator is
+  linked — at `components/simulator/` (the simulator component), because its
+  own project root is not on the default search path. All entries are needed:
   ESP-IDF scans a component directory one level deep
   (`__project_component_dir` globs `dir/*` and does not descend), so a grouping
   directory is only found when it is named on its own. Each project also sets
@@ -117,14 +124,16 @@ never require either implementation.
   `linux` project excludes `hal_board`. `hal_common` is never excluded.
 - The `linux` projects also narrow `set(COMPONENTS ...)` to `main` plus
   `hal_stub` (and `liblogic` in `test-logic`, so the component is built now
-  that it has `.cpp` files), so the host target does not try to build chip-only
-  ESP-IDF components.
+  that it has `.cpp` files; `libsimulator` in `test-simulator` and `donny`), so
+  the host target does not try to build chip-only ESP-IDF components.
 - A component's requirements live in its own `CMakeLists.txt` — under
   `components/hal/<name>/` for the HAL components, under
   `components/espidfcpp/libespidfcpp/` for the ESP-IDF wrappers, under
-  `components/logic/liblogic/` for the application logic, and under
+  `components/logic/liblogic/` for the application logic, under
+  `components/simulator/libsimulator/` for the simulator, and under
   `components/<name>/` for the rest. An application's live in
-  `<project>/main/CMakeLists.txt`. Use `REQUIRES` when the dependency appears
+  `<project>/main/CMakeLists.txt` (`donny`'s in
+  `components/simulator/exe/donny/main/CMakeLists.txt`). Use `REQUIRES` when the dependency appears
   in public headers, `PRIV_REQUIRES` when only `.cpp` files use it.
 - The component *name* is the directory name, not its path:
   `components/hal/hal_common` is the component `hal_common`, so every
@@ -142,8 +151,9 @@ never require either implementation.
 2. If it needs something from a higher layer, move the code up or invert the
    dependency. A template parameter constrained by a `hal_common` concept is
    the usual answer — see `logic::LedTask<Board>`.
-3. Never make `libespidfcpp` or `liblogic` depend on `hal_board` or
-   `hal_stub`; that breaks one of the two builds.
+3. Never make `libespidfcpp`, `liblogic`, or `libsimulator` depend on
+   `hal_board` or `hal_stub`; that breaks one of the two builds. `libsimulator`
+   must not be built for the chip at all.
 4. Before moving an existing class to another component, check what it depends
    on and what depends on it. If a dependency would have to move too, ask the
    user before starting: dependencies may need to move in their own steps

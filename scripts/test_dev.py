@@ -147,6 +147,7 @@ class SubprojectBuildTests(unittest.TestCase):
                 "test-hal-common",
                 "test-logic",
                 "test-espidf-cpp",
+                "test-simulator",
                 "donny",
             ),
         )
@@ -159,6 +160,7 @@ class SubprojectBuildTests(unittest.TestCase):
                 dev.HAL_COMMON_TEST_PROJECT,
                 dev.TEST_PROJECT,
                 dev.ESPIDF_CPP_TEST_PROJECT,
+                dev.TEST_SIMULATOR_PROJECT,
                 dev.DONNY_PROJECT,
             ),
         )
@@ -208,7 +210,7 @@ class SubprojectBuildTests(unittest.TestCase):
                     "-S", ".",
                     "-B", dev.ROOT_BUILD_DIR,
                     "-DSUBPROJECTS=mcgowan;test-hal-stub;test-hal-common;"
-                    "test-logic;test-espidf-cpp;donny",
+                    "test-logic;test-espidf-cpp;test-simulator;donny",
                 ],
                 ["cmake", "--build", dev.ROOT_BUILD_DIR],
             ],
@@ -1178,6 +1180,7 @@ class CommandRegistryTests(unittest.TestCase):
                 dev.HAL_STUB_TEST_PROJECT,
                 dev.TEST_PROJECT,
                 dev.ESPIDF_CPP_TEST_PROJECT,
+                dev.TEST_SIMULATOR_PROJECT,
             ],
         )
         # `test` runs `hal_common` first: it covers the shared vocabulary the
@@ -1216,12 +1219,12 @@ class CommandRegistryTests(unittest.TestCase):
 class HostTestCommandTests(unittest.TestCase):
     """The `test*` commands run the suites they name.
 
-    There are four host test suites (the `hal_common` vocabulary tests, the
-    `hal_stub` device tests, the `test/` application tests, and the
-    `libespidfcpp` wrapper tests). `test` is the aggregate the pre-commit hook
-    and CI call, so it must run all four, with `test-hal-common` first and
-    `test-hal-stub` next; each suite also has a command of its own so one can
-    be run alone while working on it.
+    There are five host test suites (the `hal_common` vocabulary tests, the
+    `hal_stub` device tests, the `test/` application tests, the
+    `libespidfcpp` wrapper tests, and the simulator tests). `test` is the
+    aggregate the pre-commit hook and CI call, so it must run all five, with
+    `test-hal-common` first and `test-hal-stub` next; each suite also has a
+    command of its own so one can be run alone while working on it.
     """
 
     def setUp(self):
@@ -1257,6 +1260,7 @@ class HostTestCommandTests(unittest.TestCase):
             ("test-hal-common", dev.cmd_test_hal_common),
             ("test-logic", dev.cmd_test_logic),
             ("test-espidf-cpp", dev.cmd_test_espidf_cpp),
+            ("test-simulator", dev.cmd_test_simulator),
         ):
             with self.subTest(command=name):
                 self.assertIn(name, dev.COMMANDS)
@@ -1270,6 +1274,7 @@ class HostTestCommandTests(unittest.TestCase):
             dev.cmd_test_hal_common,
             dev.cmd_test_logic,
             dev.cmd_test_espidf_cpp,
+            dev.cmd_test_simulator,
             dev.cmd_test,
         ):
             with self.subTest(command=handler.__name__):
@@ -1350,6 +1355,21 @@ class HostTestCommandTests(unittest.TestCase):
             ],
         )
 
+    def test_test_simulator_runs_only_the_simulator_suite(self):
+        self.assertEqual(dev.cmd_test_simulator(), 0)
+        self.assertEqual(
+            self.calls,
+            [
+                dev._idf(dev.TEST_SIMULATOR_PROJECT, dev.TEST_BUILD_DIR,
+                         "--preview", "set-target", "linux"),
+                dev._idf(dev.TEST_SIMULATOR_PROJECT, dev.TEST_BUILD_DIR,
+                         "build"),
+                [f"./{dev.project_dir(dev.TEST_SIMULATOR_PROJECT)}/"
+                 f"{dev.TEST_BUILD_DIR}/"
+                 "test-simulator.elf"],
+            ],
+        )
+
     def test_test_runs_every_suite_in_table_order(self):
         # The regression this pins: `test` used to be an alias of
         # `test-logic`, so the libespidfcpp suite was never run by the gate.
@@ -1404,6 +1424,7 @@ class HostTestCommandTests(unittest.TestCase):
                 dev.cmd_test_hal_common,
                 dev.cmd_test_logic,
                 dev.cmd_test_espidf_cpp,
+                dev.cmd_test_simulator,
             )
             for project, _ in dev._host_test_projects(
                 self._projects_run_by(handler)
@@ -1799,7 +1820,8 @@ class TidyConfigurationTests(unittest.TestCase):
             f"{root}/components/logic/tests/test-logic/main/test_main.cpp",
             f"{root}/components/espidfcpp/tests/test-espidf-cpp/main/"
             "test_main.cpp",
-            f"{root}/donny/main/console_task.hpp",
+            f"{root}/components/simulator/exe/donny/main/"
+            "console_task.hpp",
         ):
             self.assertIsNotNone(pattern.match(path), path)
         for path in (

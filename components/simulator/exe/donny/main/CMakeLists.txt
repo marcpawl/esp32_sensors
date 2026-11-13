@@ -10,5 +10,6 @@ idf_component_register(
         hal_stub
         libespidfcpp
         liblogic
+        libsimulator
         json
 )
