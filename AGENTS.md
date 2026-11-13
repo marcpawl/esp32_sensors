@@ -153,26 +153,6 @@ esp32_sensors/
 ├── third_party/         # Vendored third-party code (never formatted, never tidy'd)
 │   ├── json/            #   nlohmann/json v3.11.3 (header-only, MIT)
 │   └── sml/             #   boost-ext/sml git SUBMODULE, pinned to v1.2.0
-├── components/
-│   ├── espidfcpp/
-│   │   └── tests/
-│   │       └── test-espidf-cpp/   # Host tests for libespidfcpp
-│   ├── hal/
-│   │   ├── ...           # (hal_common, hal_board, hal_stub)
-│   │   └── tests/        # Host tests for the HAL components (IDF `linux`, Unity)
-│   │       ├── test-hal-stub/
-│   │       └── test-hal-common/
-│   ├── logic/
-│   │   ├── liblogic/     # Board-independent application logic
-│   │   └── tests/
-│   │       └── test-logic/   # Host tests for liblogic
-│   └── simulator/
-│       ├── libsimulator/ # The simulator component (empty for now)
-│       ├── exe/
-│       │   └── donny/    # The linux-emulated application (JSON console driver)
-│       │       └── main/ #   app_main + the JSON console task (test driver)
-│       └── tests/
-│           └── test-simulator/   # Host tests for libsimulator
 ├── Dockerfile           # Dev container: ESP-IDF v6.1 + non-root host-mapped user
 ├── docker-compose.yml   # `dev` service with serial (/dev) passthrough
 ├── .devcontainer/       # CLion / VS Code Dev Container definition (reuses compose)
