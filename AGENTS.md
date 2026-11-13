@@ -129,7 +129,7 @@ esp32_sensors/
 │   │   └── CMakeLists.txt
 │   └── src/             #   C++26 sources + include/ — see module map below
 ├── components/          # Reusable ESP-IDF components (see "HAL" section)
-│   ├── espidf_cpp/      #   C++ wrappers over ESP-IDF/FreeRTOS (Task, queue, handles, ...)
+│   ├── libespidfcpp/    #   C++ wrappers over ESP-IDF/FreeRTOS (Task, queue, handles, ...)
 │   ├── hal/             #   The hardware-abstraction layer (see "HAL" section)
 │   │   ├── AGENTS.md    #     The HAL layer in detail — devices, contract, tests
 │   │   ├── hal_common/  #     Shared, header-only HAL vocabulary (types/concepts)
@@ -147,7 +147,7 @@ esp32_sensors/
 │           ├── test-hal-stub/
 │           └── test-hal-common/
 ├── test-logic/          # Host-based unit tests subproject (IDF `linux`, Unity)
-├── test-espidf-cpp/     # Host tests for components/espidf_cpp (IDF `linux`, Unity)
+├── test-espidf-cpp/     # Host tests for components/libespidfcpp (IDF `linux`, Unity)
 ├── donny/               # Linux-emulated application (IDF `linux`)
 │   └── main/            #   app_main + the JSON console task (test driver)
 ├── Dockerfile           # Dev container: ESP-IDF v6.1 + non-root host-mapped user
@@ -394,7 +394,7 @@ skill (`.continue/skills/platform_layers/SKILL.md`); the HAL itself — the
 header pair per device, the semantics-free contract, the one-shot timer, the
 aggregate board and deep sleep — is documented in `components/hal/AGENTS.md`.
 
-**`espidf_cpp` component (`components/espidf_cpp`).** The headers are in
+**`libespidfcpp` component (`components/libespidfcpp`).** The headers are in
 namespace `thermo::espidf_cpp` (`HttpServer` has one `.cpp`, listed in the
 component's `SRCS`):
 
@@ -814,7 +814,7 @@ enacted on the host.
 |host|image|Build the dev image locally from the Dockerfile (not needed normally)|
 |both|submodules|Fetch the pinned git submodules (`third_party/sml`)|
 |both|build [SUBPROJECT...]|Build all subprojects via the root aggregator, or just the named ones (mcgowan, test-hal-stub, test-hal-common, test, test-espidf-cpp, donny)|
-|both|build-test-espidf-cpp|Build the espidf_cpp unit tests for the ESP-IDF `linux` target|
+|both|build-test-espidf-cpp|Build the libespidfcpp unit tests for the ESP-IDF `linux` target|
 |both|test|Run every host unit test suite: `test-hal-common`, then `test-hal-stub`, then `test-logic`, then `test-espidf-cpp`|
 |both|test-hal-stub|Build and run the `test-hal-stub/` host unit tests (ESP-IDF `linux` target)|
 |both|test-hal-common|Build and run the `test-hal-common/` host unit tests (ESP-IDF `linux` target)|
@@ -888,8 +888,8 @@ There are two kinds of test suite, runnable from the host via `scripts/dev.py`:
     (`app_config.cpp`, `config_page.cpp`, `power_source.cpp`).
     `test_led_runner.cpp` instantiates the templated `LedRunner<Board>` against
     the stub `BoardStub`.
-  - `test-espidf-cpp/` covers the `espidf_cpp` wrappers (the headers listed
-    under "`espidf_cpp` component" above).
+  - `test-espidf-cpp/` covers the `libespidfcpp` wrappers (the headers listed
+    under "`libespidfcpp` component" above).
 - **On-target tests** are planned for hardware-dependent code (1-Wire/DS18B20
   reads, deep-sleep wake, Wi-Fi upload).
 - Keep hardware interactions behind thin interfaces so business logic remains

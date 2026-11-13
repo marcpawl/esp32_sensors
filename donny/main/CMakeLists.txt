@@ -8,7 +8,7 @@ idf_component_register(
         "."
     REQUIRES
         hal_stub
-        espidf_cpp
+        libespidfcpp
         logic
         json
 )

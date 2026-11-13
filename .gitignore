@@ -8,7 +8,7 @@
 #   components/hal/tests/test-hal-stub/build_linux/    host tests for hal/hal_stub
 #   components/hal/tests/test-hal-common/build_linux/  host tests for hal/hal_common
 #   test-logic/build_linux/       host unit tests
-#   test-espidf-cpp/build_linux/  host tests for components/espidf_cpp
+#   test-espidf-cpp/build_linux/  host tests for components/libespidfcpp
 #   donny/build_linux/            linux-emulated application (donny)
 #
 # The root aggregator's own CMake/Ninja tree (scripts/dev.py build).

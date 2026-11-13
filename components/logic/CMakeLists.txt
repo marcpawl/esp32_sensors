@@ -5,7 +5,7 @@
 # project.
 #
 # FreeRTOS, logging, and `esp_common` come from ESP-IDF's common requirements
-# (the same reason `espidf_cpp` lists no dependencies).
+# (the same reason `libespidfcpp` lists no dependencies).
 #
 # Add new .cpp files under SRCS below; consumers already `REQUIRES logic`, so
 # nothing else needs to change.
@@ -21,7 +21,7 @@ idf_component_register(
     INCLUDE_DIRS
         "include"
     REQUIRES
-        espidf_cpp
+        libespidfcpp
         hal_common
         # boost-ext/sml (v1.2.0), via the wrapper component in
         # `components/sml` that exposes the `third_party/sml` submodule. The

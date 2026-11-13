@@ -1,4 +1,4 @@
-// Host-based unit-test entry point for the `espidf_cpp` wrappers.
+// Host-based unit-test entry point for the `libespidfcpp` wrappers.
 //
 // Built for the ESP-IDF `linux` target and executed natively (no hardware).
 // Unity discovers every TEST_CASE linked in via WHOLE_ARCHIVE and runs the

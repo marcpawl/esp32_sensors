@@ -29,7 +29,7 @@ idf_component_register(
     REQUIRES
         hal_board
         logic
-        espidf_cpp
+        libespidfcpp
         nvs_flash
         esp_wifi
         esp_netif

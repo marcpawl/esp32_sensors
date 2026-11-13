@@ -1215,7 +1215,7 @@ class HostTestCommandTests(unittest.TestCase):
 
     There are four host test suites (the `hal_common` vocabulary tests, the
     `hal_stub` device tests, the `test/` application tests, and the
-    `espidf_cpp` wrapper tests). `test` is the aggregate the pre-commit hook
+    `libespidfcpp` wrapper tests). `test` is the aggregate the pre-commit hook
     and CI call, so it must run all four, with `test-hal-common` first and
     `test-hal-stub` next; each suite also has a command of its own so one can
     be run alone while working on it.
@@ -1347,7 +1347,7 @@ class HostTestCommandTests(unittest.TestCase):
 
     def test_test_runs_every_suite_in_table_order(self):
         # The regression this pins: `test` used to be an alias of
-        # `test-logic`, so the espidf_cpp suite was never run by the gate.
+        # `test-logic`, so the libespidfcpp suite was never run by the gate.
         self.assertEqual(dev.cmd_test(), 0)
         executed = [
             Path(cmd[-1]).name

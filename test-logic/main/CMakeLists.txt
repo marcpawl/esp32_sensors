@@ -38,7 +38,7 @@ idf_component_register(
         "${CMAKE_CURRENT_LIST_DIR}/../../mcgowan/src/include"
     PRIV_REQUIRES
         unity
-        espidf_cpp
+        libespidfcpp
         logic
         hal_stub
     WHOLE_ARCHIVE

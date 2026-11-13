@@ -1,4 +1,4 @@
-# `espidf_cpp` (the component under test) is a normal requirement;
+# `libespidfcpp` (the component under test) is a normal requirement;
 # `hal_stub` is a private requirement for parity with the firmware's test
 # project (and for future tests of HAL-facing wrappers). WHOLE_ARCHIVE is
 # required so the TEST_CASE registrations in the test sources are linked into
@@ -18,7 +18,7 @@ idf_component_register(
     INCLUDE_DIRS
         "."
     REQUIRES
-        espidf_cpp
+        libespidfcpp
     PRIV_REQUIRES
         unity
         hal_stub
@@ -32,10 +32,11 @@ idf_component_register(
 # executable (no IDF runtime) into the build directory next to the test ELF, so
 # the corresponding test can locate it via a path derived from /proc/self/exe.
 # The `_assert_cases.hpp` headers are shared between the trigger program and
-# the Unity test; the component's own include directory comes from `espidf_cpp`.
+# the Unity test; the component's own include directory comes from
+# `libespidfcpp`.
 function(add_assert_program name)
     add_executable(${name} "test_${name}.cpp")
-    target_link_libraries(${name} PRIVATE idf::espidf_cpp)
+    target_link_libraries(${name} PRIVATE idf::libespidfcpp)
     target_include_directories(${name} PRIVATE
         "${CMAKE_CURRENT_LIST_DIR}"
     )

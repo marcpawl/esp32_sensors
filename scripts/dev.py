@@ -147,7 +147,7 @@ FORMAT_ARGS = ("--dry-run", "--Werror")
 #                                            -> .../test-hal-common/build_linux
 #   test-logic/ host unit tests (linux target)      -> test-logic/build_linux
 #   test-espidf-cpp/
-#             host unit tests for components/espidf_cpp (linux target)
+#             host unit tests for components/libespidfcpp (linux target)
 #                                                -> test-espidf-cpp/build_linux
 #   donny/    linux-emulated application (hal_stub, linux target)
 #                                                -> donny/build_linux
@@ -729,7 +729,7 @@ def cmd_build(args: list[str]) -> int:
 
 
 def cmd_build_test_espidf_cpp() -> int:
-    """Build the espidf_cpp unit tests for the ESP-IDF `linux` target."""
+    """Build the libespidfcpp unit tests for the ESP-IDF `linux` target."""
     change_to_container()
     rc = _ensure_submodules()
     if rc != 0:
@@ -825,7 +825,7 @@ def cmd_test_logic() -> int:
 
 
 def cmd_test_espidf_cpp() -> int:
-    """Host tests for components/espidf_cpp (`linux` target)."""
+    """Host tests for components/libespidfcpp (`linux` target)."""
     change_to_container()
     return _run_host_tests((ESPIDF_CPP_TEST_PROJECT,))
 

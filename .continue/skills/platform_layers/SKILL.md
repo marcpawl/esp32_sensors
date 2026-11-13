@@ -22,7 +22,7 @@ The hardware-abstraction layer (layers 1 and 2 below) is documented in
 |---|---|---|
 | 1 (lowest) | `hal_common` | `test-hal-common` |
 | 2 | `hal_board`, `hal_stub` | `test-hal-stub` |
-| 3 | `espidf_cpp` | `test-espidf-cpp` |
+| 3 | `libespidfcpp` | `test-espidf-cpp` |
 | 4 | `logic` | `test-logic` |
 | 5 (highest) | — | `mcgowan`, `donny` |
 
@@ -32,7 +32,7 @@ The hardware-abstraction layer (layers 1 and 2 below) is documented in
 
 `hal_stub` is the pin-free implementation (`linux`).
 
-`espidf_cpp` provides C++ wrappers around esp-idf code, to make usage less
+`libespidfcpp` provides C++ wrappers around esp-idf code, to make usage less
 error prone.
 
 Logic in the main application business logic.
@@ -55,9 +55,9 @@ Logic in the main application business logic.
 |---|---|---|
 | ESP32-S3 (`mcgowan`) | `hal_board` | `hal_stub` |
 | `linux` (`test-hal-common`, `test-hal-stub`, `test-logic`, `test-espidf-cpp`, `donny`) | `hal_stub` | `hal_board` |
-| Platform-neutral components (`hal_common`, `espidf_cpp`, `logic`) | neither | both |
+| Platform-neutral components (`hal_common`, `libespidfcpp`, `logic`) | neither | both |
 
-`espidf_cpp` and `logic` build for both the chip and the host, so they must not
+`libespidfcpp` and `logic` build for both the chip and the host, so they must not
 name either HAL implementation. They use the `hal_common` vocabulary instead
 and stay implementation-agnostic with templates and concepts: for example
 `logic/led_task.hpp` is templated on `hal::BoardLike`, and `mcgowan` supplies
@@ -70,7 +70,7 @@ and stay implementation-agnostic with templates and concepts: for example
 When writing or editing a list of components or test projects, go from the
 lowest layer to the highest:
 
-- Components: `hal_common`, `hal_board`, `hal_stub`, `espidf_cpp`, `logic`.
+- Components: `hal_common`, `hal_board`, `hal_stub`, `libespidfcpp`, `logic`.
 - Test projects: `test-hal-common`, `test-hal-stub`, `test-espidf-cpp`,
   `test-logic`.
 - Applications: `mcgowan`, `donny`.
@@ -86,20 +86,20 @@ list.
 | `hal_common` | none (ESP-IDF `esp_common` only) |
 | `hal_board` | `hal_common` |
 | `hal_stub` | `hal_common` |
-| `espidf_cpp` | none (ESP-IDF `esp_http_server` only) |
-| `logic` | `espidf_cpp`, `hal_common`, `sml` |
-| `mcgowan` | `hal_board`, `logic`, `espidf_cpp` |
-| `donny` | `hal_stub`, `logic`, `espidf_cpp`, vendored `json` |
+| `libespidfcpp` | none (ESP-IDF `esp_http_server` only) |
+| `logic` | `libespidfcpp`, `hal_common`, `sml` |
+| `mcgowan` | `hal_board`, `logic`, `libespidfcpp` |
+| `donny` | `hal_stub`, `logic`, `libespidfcpp`, vendored `json` |
 | `test-hal-common` | `hal_common`; privately `hal_stub` |
 | `test-hal-stub` | `hal_stub` |
-| `test-espidf-cpp` | `espidf_cpp`; privately `hal_stub` |
-| `test-logic` | `logic`; privately `espidf_cpp`, `hal_stub` |
+| `test-espidf-cpp` | `libespidfcpp`; privately `hal_stub` |
+| `test-logic` | `logic`; privately `libespidfcpp`, `hal_stub` |
 
 Test projects may privately link `hal_stub` even when their component is
 platform-neutral: `test-hal-common` needs the concrete device types because the
 `hal_common` concepts name them, and `test-espidf-cpp` keeps the requirement
 for parity and future HAL-facing tests. This is a test-project allowance, not a
-precedent for a component — `espidf_cpp` and `logic` themselves must never
+precedent for a component — `libespidfcpp` and `logic` themselves must never
 require either implementation.
 
 ## Where the rule is enforced
@@ -138,7 +138,7 @@ require either implementation.
 2. If it needs something from a higher layer, move the code up or invert the
    dependency. A template parameter constrained by a `hal_common` concept is
    the usual answer — see `logic::LedTask<Board>`.
-3. Never make `espidf_cpp` or `logic` depend on `hal_board` or `hal_stub`; that
+3. Never make `libespidfcpp` or `logic` depend on `hal_board` or `hal_stub`; that
    breaks one of the two builds.
 4. Before moving an existing class to another component, check what it depends
    on and what depends on it. If a dependency would have to move too, ask the

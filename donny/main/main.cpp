@@ -1,7 +1,7 @@
 // Entry point for the `donny` linux-emulated application.
 //
 // Builds for the ESP-IDF `linux` target and runs natively on the host. It links
-// the pin-free HAL (`hal_stub`), `espidf_cpp`, and `logic`.
+// the pin-free HAL (`hal_stub`), `libespidfcpp`, and `logic`.
 //
 // Boot order matters: the interactive console task (`console_task.hpp`) starts
 // *before* the `Application` is constructed, so a test driver can already drive

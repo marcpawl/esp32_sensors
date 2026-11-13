@@ -40,7 +40,7 @@ set(EXTRA_COMPONENT_DIRS
 )
 
 # Restrict the component set to `main` (and its requirements, which pull in
-# `espidf_cpp`) plus `hal_stub`. Without this the `linux` target also tries to
+# `libespidfcpp`) plus `hal_stub`. Without this the `linux` target also tries to
 # build chip-specific components such as esp_driver_ana_cmpr, which have no
 # linux implementation and fail to resolve. `hal_stub` is listed to keep the
 # component set identical to `test/`'s and available to future tests;

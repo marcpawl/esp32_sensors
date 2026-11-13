@@ -1,4 +1,4 @@
-# Host (linux) target for the espidf_cpp unit tests.
+# Host (linux) target for the libespidfcpp unit tests.
 CONFIG_IDF_TARGET="linux"
 
 # Keep logging quiet during test runs; Unity prints the results we care about.

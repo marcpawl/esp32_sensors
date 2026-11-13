@@ -13,7 +13,7 @@ cmake_minimum_required(VERSION 3.22)
 #   components/hal/test-hal-common/ host tests for components/hal/hal_common, `linux`
 #                                                -> components/hal/test-hal-common/build_linux/
 #   test-logic/      host unit tests, `linux` target (hal_stub) -> test-logic/build_linux/
-#   test-espidf-cpp/ host tests for components/espidf_cpp, `linux`
+#   test-espidf-cpp/ host tests for components/libespidfcpp, `linux`
 #                                                -> test-espidf-cpp/build_linux/
 #
 # This file only aggregates them, so ONE build covers all of them. It is plain
@@ -148,7 +148,7 @@ if(test-logic IN_LIST SUBPROJECTS)
     _idf_subproject(test-logic test-logic build_linux "--preview|set-target|linux" "build")
 endif()
 
-# --- test-espidf-cpp: host tests for espidf_cpp (linux) -> *_build --------
+# --- test-espidf-cpp: host tests for libespidfcpp (linux) -> *_build ------
 # Same `linux` target rules as `test-logic/`; built (not run) here, since running is
 # `scripts/dev.py test-espidf-cpp`'s job (`test` runs every host suite).
 if(test-espidf-cpp IN_LIST SUBPROJECTS)
