@@ -39,10 +39,11 @@ esp32_sensors/
 │   └── sml/             #   boost-ext/sml git SUBMODULE, pinned to v1.2.0
 ├── docker/              # Dev container: Dockerfile + docker-compose.yml
 ├── .devcontainer/       # CLion / VS Code Dev Container definition (reuses compose)
-├── .continue/           # Continue CLI config: `rules/` (slash commands), `skills/`
-│   └── skills/          #   one SKILL.md per topic: cpp-coding-standards, git,
-│                        #   platform_layers, quality_checks, cmake, markdown,
-│                        #   cpp_qc, python_qc
+├── .opencode/           # OpenCode config: `skills/` (one SKILL.md per topic)
+│   ├── skills/          #   cpp-coding-standards, git, platform_layers,
+│   │                    #   quality_checks, cmake, markdown, cpp_qc,
+│   │                    #   python_qc, bug_found
+│   └── commands/        #   slash commands (e.g. review)
 ├── scripts/dev.py       # Container task runner (build/flash/test/format/shell)
 ├── scripts/AGENTS.md    #   dev.py and test_dev.py documentation
 ├── scripts/idf.sh       # Runs idf.py with the ESP-IDF env, sourcing export.sh if absent
@@ -114,7 +115,7 @@ required.
   `docker-compose.yml`; it never defines its own image).
 - **Connect:** open the repo in CLion and accept the Dev Container prompt, or
   use *Remote Development → Dev Containers → docker-compose.yml → `dev`*. CLion
-  pulls `marcpawl/esp-idf:20261109b` if it is not cached and starts the service
+  pulls `marcpawl/esp-idf:20261113` if it is not cached and starts the service
   on demand. Note that compose falls back to building the local `Dockerfile` if
   the pull fails, so run `./scripts/dev.py pull` first if you want that failure
   to be loud.
@@ -279,7 +280,7 @@ Run every quality gate through `scripts/dev.py` and fix what it reports. The
 gates — clang-format, pycodestyle, clang-tidy, the build, the four host test
 suites, and the `dev.py` self-check — their order, and the fixing policy are
 documented in the `quality_checks` skill
-(`.continue/skills/quality_checks/SKILL.md`). Quality gates are run via
+(`.opencode/skills/quality_checks/SKILL.md`). Quality gates are run via
 `scripts/dev.py`; see the `quality_checks`, `cpp_qc`, and `python_qc` skills
 for the required subsets.
 
@@ -289,14 +290,14 @@ for the required subsets.
 
 How the `CMakeLists.txt` files are written — including the rule that they
 document the build and never the sources — is in the `cmake` skill
-(`.continue/skills/cmake/SKILL.md`). Read it before editing a build file or
+(`.opencode/skills/cmake/SKILL.md`). Read it before editing a build file or
 adding a source.
 
 ### Markdown
 
 How the Markdown files are written — the line width, and the preference for
 lists and subsections over sentences that run several items together — is in
-the `markdown` skill (`.continue/skills/markdown/SKILL.md`). Read it before
+the `markdown` skill (`.opencode/skills/markdown/SKILL.md`). Read it before
 writing or editing a `.md` file.
 
 

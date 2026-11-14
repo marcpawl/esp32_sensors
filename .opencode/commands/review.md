@@ -1,5 +1,6 @@
 ---
-invokable: true
+description: Review code for spec conformance, ESP-IDF, RTC-memory,
+  power, sensor, Wi-Fi, concurrency, and HTTPS-server issues.
 ---
 
 Review this code for potential issues, including:

@@ -38,7 +38,6 @@ invoked from the host.
 | both | `pycodestyle` | PEP 8 (79 columns) over all Python sources |
 | both | `clang-tidy [PROJECT...]` | Static analysis over built projects |
 | both | `shell [CMD...]` | Run a command in the container; no arguments = login shell |
-| both | `cn` | Run the Continue CLI in the container |
 | both | `complete` | Internal: list subcommands matching a prefix |
 | host | `install-hooks` | Install the git commit hooks |
 
@@ -51,7 +50,7 @@ Set `ESP32_PORT` (e.g. `/dev/ttyACM0`) to target another serial device.
 Stdlib-`unittest` tests for `dev.py` itself, run by
 `scripts/dev.py self-check`. It pins the format/pycodestyle source discovery,
 the staged format check, the run-configuration invariants, the host-test
-commands, clang-tidy wiring, the `sml` submodule pin, `dev.py cn`, and that
+commands, clang-tidy wiring, the `sml` submodule pin, and that
 `self-check` is host-only. Add coverage there when changing `dev.py`.
 
 ## Shell completion

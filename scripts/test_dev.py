@@ -548,7 +548,7 @@ class DevImageTests(unittest.TestCase):
     """
 
     def test_dev_image_is_the_pinned_prebuilt_tag(self):
-        self.assertEqual(dev.DEV_IMAGE, "marcpawl/esp-idf:20261109b")
+        self.assertEqual(dev.DEV_IMAGE, "marcpawl/esp-idf:20261113")
 
     def test_compose_pins_the_same_image(self):
         compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
@@ -665,8 +665,8 @@ class DevContainerTests(unittest.TestCase):
         self.assertNotIn("build", text)
 
     def test_inherits_the_host_home_mounts_from_compose(self):
-        # The Dev Container reuses the compose service, so `~/.continue`,
-        # `~/.ssh`, and `~/.config/gh` are inherited. A `mounts` entry here
+        # The Dev Container reuses the compose service, so `~/.ssh`,
+        # and `~/.config/gh` are inherited. A `mounts` entry here
         # would layer another mount over the compose one, shadowing its source,
         # so all of them must stay in docker-compose.yml alone.
         text = (
@@ -822,212 +822,6 @@ def _compose_dev_environment() -> dict[str, str | None]:
     raise AssertionError("docker-compose.yml has no `environment:` block")
 
 
-class ContinueCliMountTests(unittest.TestCase):
-    """The host's `~/.continue` is shared with the container.
-
-    `cn` keeps its config, models, and sessions under `$HOME/.continue`. Users
-    expect `ls ~/.continue` to list the same files on the host and inside the
-    container (`./scripts/dev.py shell ls '~/.continue'`), which needs a bind
-    mount. A Dockerfile cannot mount host paths, so the mount lives in
-    docker-compose.yml — which the Dev Container reuses, so the IDE gets it
-    too.
-
-    The container's HOME depends on the uid it runs as (see
-    ContainerUserTests), so a single mount point cannot cover every user.
-    """
-
-    TARGET_UID_HOME = "/home/dev"
-    OTHER_UID_HOME = "/tmp"
-
-    def _mounts(self) -> dict[str, tuple[str, str]]:
-        """The `~/.continue` bind mounts, keyed by target."""
-        return {
-            target: mount
-            for target, mount in _compose_home_bind_mounts().items()
-            if target.endswith("/.continue")
-        }
-
-    def test_host_continue_dir_is_mounted_at_the_image_users_home(self):
-        self.assertEqual(
-            self._mounts().get(f"{self.TARGET_UID_HOME}/.continue"),
-            (
-                "${HOME:?HOME must be set to share the Continue CLI config}"
-                "/.continue",
-                "rw",
-            ),
-        )
-
-    def test_host_continue_dir_is_mounted_where_other_uids_home_points(self):
-        # The coupling that matters: `dev.py` pins HOME for any uid other than
-        # the image's 1000, so the mount must be made at *that* path too. If
-        # HOME ever changes, this mount silently stops applying.
-        flags = dev._container_environment("1001:1001")
-        [home_flag] = [flag for flag in flags if flag.startswith("HOME=")]
-        other_home = home_flag.split("=", 1)[1]
-        self.assertEqual(other_home, self.OTHER_UID_HOME)
-        self.assertIn(f"{other_home}/.continue", self._mounts())
-
-    def test_mount_refuses_to_fall_back_to_the_filesystem_root(self):
-        # `${HOME}` unset would make the source `/.continue`. The `:?` form
-        # fails the run loudly instead.
-        mounts = self._mounts()
-        # Guard against passing vacuously if the mount lines are ever renamed.
-        self.assertEqual(len(mounts), 2, mounts)
-        for source, _ in mounts.values():
-            self.assertIn("${HOME:?", source)
-
-    def test_image_creates_both_mount_points(self):
-        # A bind mount needs an existing destination with the right owner;
-        # Docker would otherwise create it as root. Both paths are created, and
-        # /tmp/.continue is world-writable like /tmp so it works without the
-        # mount too.
-        dockerfile = (dev.REPO_ROOT / "docker" / "Dockerfile").read_text()
-        self.assertIn("mkdir -p /tmp/.continue", dockerfile)
-        self.assertIn('"/home/${USERNAME}/.continue"', dockerfile)
-        self.assertIn("chmod 1777 /tmp/.continue", dockerfile)
-
-    def test_image_installs_the_continue_cli_and_its_node_runtime(self):
-        # `cn` needs Node >= 20.20.1 and the base image ships no Node at all.
-        dockerfile = (dev.REPO_ROOT / "docker" / "Dockerfile").read_text()
-        self.assertIn("@continuedev/cli@${CONTINUE_CLI_VERSION}", dockerfile)
-        self.assertIn("ARG NODE_VERSION=", dockerfile)
-        # The tarball is pinned by checksum, not just by URL.
-        self.assertIn("sha256sum --check --strict", dockerfile)
-        # Installed globally (/usr/local) so every uid finds it on PATH.
-        self.assertIn("npm install --global", dockerfile)
-
-
-class ContinueCliCommandTests(unittest.TestCase):
-    """`dev.py cn` runs the Continue CLI with the host's mounted config.
-
-    `cn` is installed in the image, and its config is the host's
-    `~/.continue/config.yaml` (bind-mounted by docker-compose.yml). That config
-    is named explicitly with `--config`: cn's own default lookup is not
-    reliable (it can fall back to the remote default config), and only this
-    file declares the DeepSeek models and the `secrets.DEEPSEEK_API_KEY` they
-    authenticate with.
-    """
-
-    # The two homes `dev.py` can give the container (see `_container_home`).
-    IMAGE_USER = "1000:1000"
-    OTHER_USER = "1001:1001"
-
-    def _config_flag(self, argv: list[str]) -> str:
-        """The value of `--config` in a `cn` argv."""
-        self.assertIn("--config", argv, argv)
-        return argv[argv.index("--config") + 1]
-
-    def test_command_is_registered(self):
-        self.assertIn("cn", dev.COMMANDS)
-        self.assertIs(dev.COMMANDS["cn"], dev.cmd_cn)
-        self.assertTrue((dev.cmd_cn.__doc__ or "").strip())
-
-    def test_config_is_the_mounted_continue_config_of_the_image_user(self):
-        argv = dev._cn_command([], home=dev._container_home(self.IMAGE_USER))
-        self.assertEqual(argv[:2], ["cn", "--config"])
-        self.assertEqual(
-            self._config_flag(argv), "/home/dev/.continue/config.yaml"
-        )
-
-    def test_config_follows_the_home_dev_py_pins_for_other_uids(self):
-        # A uid other than the image's 1000 gets HOME=/tmp, and compose mounts
-        # the host's `~/.continue` there too. The same helper must agree, or
-        # `--config` would name a path that is not the host's config.
-        home = dev._container_home(self.OTHER_USER)
-        self.assertEqual(home, "/tmp")
-        self.assertEqual(
-            self._config_flag(dev._cn_command([], home=home)),
-            "/tmp/.continue/config.yaml",
-        )
-
-    def test_config_path_matches_a_compose_mount_target(self):
-        # `--config` names a file under the container's HOME; that directory is
-        # the host's `~/.continue` only because compose mounts it there.
-        mounts = _compose_home_bind_mounts()
-        for user in (self.IMAGE_USER, self.OTHER_USER):
-            with self.subTest(user=user):
-                home = dev._container_home(user)
-                self.assertIn(f"{home}/.continue", mounts)
-
-    def test_extra_arguments_are_passed_through_verbatim(self):
-        # `--config` comes first and the caller's arguments follow unchanged,
-        # so every `cn` flag works (the last `--config` would still win).
-        argv = dev._cn_command(
-            ["--format", "json", "-p", "list the files"], home="/home/dev"
-        )
-        self.assertEqual(
-            argv,
-            [
-                "cn",
-                "--config", "/home/dev/.continue/config.yaml",
-                "--format", "json", "-p", "list the files",
-            ],
-        )
-
-    def test_command_runs_in_the_container(self):
-        # `cn` only exists inside the dev image.
-        source = (dev.REPO_ROOT / "scripts" / "dev.py").read_text()
-        body = source.split("def cmd_cn", 1)[1].split("\ndef ", 1)[0]
-        self.assertIn("change_to_container()", body)
-
-    def test_main_forwards_cn_arguments_without_parsing_them(self):
-        # Every cn argument is a flag argparse would claim (`--help`) or reject
-        # (`-p`), so `main` must hand them over untouched.
-        calls = []
-        original = dev.cmd_cn
-        try:
-            dev.cmd_cn = lambda extra: calls.append(extra) or 0
-            rc = dev.main(
-                [str(dev.REPO_ROOT / "scripts" / "dev.py"),
-                 "cn", "-p", "hello world"]
-            )
-        finally:
-            dev.cmd_cn = original
-        self.assertEqual(rc, 0)
-        self.assertEqual(calls, [["-p", "hello world"]])
-
-    def test_main_rewrites_the_script_path_before_re_executing(self):
-        # `cmd_cn` -> `change_to_container` re-execs `sys.argv` inside the
-        # container, so `sys.argv[0]` must already be repo-relative when `cn`
-        # is dispatched: an absolute host path (e.g. when dev.py is invoked by
-        # absolute path from another directory) does not exist there. This
-        # pins the dispatch below the rewrite, not merely somewhere in `main`.
-        seen = []
-        original = dev.cmd_cn
-        original_argv = sys.argv
-        try:
-            dev.cmd_cn = lambda extra: seen.append(sys.argv[0]) or 0
-            sys.argv = [str(dev.REPO_ROOT / "scripts" / "dev.py"), "cn"]
-            rc = dev.main(sys.argv)
-        finally:
-            dev.cmd_cn = original
-            sys.argv = original_argv
-        self.assertEqual(rc, 0)
-        self.assertEqual(seen, ["scripts/dev.py"])
-
-    def test_cn_is_listed_in_help(self):
-        # It is registered in COMMANDS, so it shows up in `--help` even though
-        # its arguments are not parsed by argparse.
-        buf = io.StringIO()
-        with redirect_stdout(buf), self.assertRaises(SystemExit):
-            dev._build_parser().parse_args(["--help"])
-        listing = " ".join(buf.getvalue().split())
-        self.assertIn("cn ", listing)
-
-    def test_deepseek_key_is_passed_through_from_the_host_environment(self):
-        # The config's `${{ secrets.DEEPSEEK_API_KEY }}` is resolved from the
-        # environment, so the key is passed through like GH_TOKEN: a null value
-        # means "take it from the host env" and is never written here.
-        service = _compose_dev_environment()
-        self.assertIn("DEEPSEEK_API_KEY", service, service)
-        self.assertIsNone(service["DEEPSEEK_API_KEY"])
-        compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
-        for line in compose.splitlines():
-            stripped = line.strip()
-            if stripped.startswith("DEEPSEEK_API_KEY:"):
-                self.assertEqual(stripped, "DEEPSEEK_API_KEY:")
-
-
 class SshMountTests(unittest.TestCase):
     """The host's `~/.ssh` is shared with the container, read-only.
 
@@ -1041,7 +835,7 @@ class SshMountTests(unittest.TestCase):
     that a host key missing from the host's `known_hosts` cannot be added from
     inside the container.
 
-    Like `~/.continue`, the target is duplicated because the container's HOME
+    Like `~/.ssh`, the target is duplicated because the container's HOME
     is uid-dependent (see ContainerUserTests).
     """
 
@@ -1156,7 +950,6 @@ class GhCliMountTests(unittest.TestCase):
             if line.strip().startswith("&& chmod 1777")
         ]
         self.assertIn("/tmp/.config/gh", chmod_line)
-        self.assertIn("/tmp/.continue", chmod_line)
 
     def test_token_is_passed_through_from_the_host_environment(self):
         # The recommended path. A null value in the compose `environment:`

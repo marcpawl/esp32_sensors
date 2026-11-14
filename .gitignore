@@ -122,9 +122,6 @@ compile_commands.json
 .DS_Store
 Thumbs.db
 
-# Local Continue CLI / agent state (install.sh artifact is committed, state is not)
-.continue/.cache/
-
 # Host-side scratch directory bind-mounted as the container /tmp (see
 # docker-compose.yml).
 /tmp/

@@ -14,7 +14,7 @@
 #                   test-logic|test-espidf-cpp|test-simulator|self-check|\
 #                   format|format-check|\
 #                   format-check-staged|pycodestyle|clang-tidy|install-hooks|\
-#                   shell|cn]
+#                   shell]
 #   scripts/dev.py --help        # full help, including per-command details
 #
 # Environment:
@@ -26,11 +26,6 @@
 #                whichever is set on the host, and `gh` prefers it over any
 #                stored credential. See Developer.md, "GitHub CLI (`gh`) in
 #                the container".
-#   DEEPSEEK_API_KEY
-#                Secret resolved by the Continue CLI (`cn`) config
-#                (`${{ secrets.DEEPSEEK_API_KEY }}`). docker-compose.yml
-#                passes it from the host environment into the container, so
-#                `scripts/dev.py cn` needs no config change on the host.
 #
 """Container task runner for the ESP32 thermometer logger."""
 
@@ -120,7 +115,7 @@ STYLE_FILE_NAMES = (".clang-format", ".clang-format-ignore")
 # never moved, so update it in both places (test_dev.py asserts they agree).
 # `LOCAL_IMAGE` is only what `image` (a local rebuild) produces, for trying out
 # Dockerfile changes.
-DEV_IMAGE = "marcpawl/esp-idf:20261109b"
+DEV_IMAGE = "marcpawl/esp-idf:20261113"
 LOCAL_IMAGE = "esp32-sensors-dev:local"
 
 # User baked into DEV_IMAGE, and where ccache lives under a writable HOME. A
@@ -1260,53 +1255,6 @@ def cmd_shell(extra: list[str], directory: str | None = None) -> int:
     return run(_build_shell_command(extra, directory))
 
 
-# The Continue CLI (`cn`) configuration file, relative to the container's
-# `$HOME`. `docker-compose.yml` bind-mounts the host's `~/.continue` at both
-# possible container homes, so this is the host's config seen from inside the
-# container. It is passed explicitly with `--config` because cn's own default
-# location is not reliably used (cn falls back to a remote default config when
-# it looks in the wrong place), and the config is the only thing that names the
-# DeepSeek models and the `secrets.DEEPSEEK_API_KEY` they authenticate with.
-CN_CONFIG_PATH = ".continue/config.yaml"
-
-
-def _cn_command(extra: list[str], home: str | None = None) -> list[str]:
-    """The `cn` argv `cmd_cn` runs. Pure (testable).
-
-    `--config` names the file explicitly, ahead of the caller's arguments, so a
-    later `--config` on the command line still wins (last one wins) but the
-    default is always the mounted `~/.continue/config.yaml` rather than
-    whatever rc file cn decides to look for.
-
-    `home` is the container's HOME, spelled by `_container_environment`, so the
-    path is resolved for the uid the container actually runs as (uid 1000 keeps
-    `/home/dev`, every other uid gets `/tmp`) — both locations are mounted.
-    """
-    config = str(Path(home or "/home/dev") / CN_CONFIG_PATH)
-    return ["cn", "--config", config, *extra]
-
-
-def cmd_cn(extra: list[str]) -> int:
-    """Run the Continue CLI (`cn`) inside the container.
-
-    Uses the host's Continue config, bind-mounted by `docker-compose.yml` at
-    `$HOME/.continue` (see `CN_CONFIG_PATH`), and names it with `--config`
-    because cn's default lookup is not reliable. The DeepSeek models that
-    config declares authenticate with `${{ secrets.DEEPSEEK_API_KEY }}`, which
-    cn resolves from the environment, so `DEEPSEEK_API_KEY` is passed through
-    from the host by `docker-compose.yml`.
-
-    Arguments after `cn` are passed to `cn` verbatim, so both the interactive
-    agent and headless runs work:
-
-        scripts/dev.py cn
-        scripts/dev.py cn -p "summarize scripts/dev.py"
-        scripts/dev.py cn --format json -p "list the files in components/"
-    """
-    change_to_container()
-    return run(_cn_command(extra, _container_home(_container_user())))
-
-
 def cmd_complete() -> int:
     """Print the command names matching a prefix (used by shell completion).
 
@@ -1497,7 +1445,6 @@ COMMANDS = {
     "clang-tidy": cmd_clang_tidy,
     "install-hooks": cmd_install_hooks,
     "shell": cmd_shell,
-    "cn": cmd_cn,
     "complete": cmd_complete,
 }
 
@@ -1565,11 +1512,6 @@ def _build_parser() -> argparse.ArgumentParser:
         help="command (and arguments) to run in the container shell",
     )
 
-    # `cn` declares no arguments: `main` hands everything after it to `cn`
-    # verbatim (see the dispatch there), because every one of those arguments
-    # is a flag (`-p`, `--format`, `--model`, ...) that argparse would claim
-    # or reject here. `cn --help` is also more useful than a restatement.
-
     return parser
 
 
@@ -1585,17 +1527,6 @@ def main(argv: list[str]) -> int:
     prog = Path(argv[0]).resolve()
     relative_prog = prog.relative_to(REPO_ROOT)
     sys.argv[0] = str(relative_prog)
-
-    # `cn` likewise: every argument after it belongs to `cn` (`-p`, `--format`,
-    # `--model`, ...), and argparse would claim one (`--help`) or reject the
-    # rest as unknown options. Handing them over verbatim is what makes
-    # `dev.py cn -p "..."` and `dev.py cn --format json -p "..."` work. `cn`
-    # is still in COMMANDS, so it is listed in `--help` and completed by the
-    # bash completion script. This sits after the `sys.argv[0]` rewrite above
-    # because `cmd_cn` re-execs `sys.argv` inside the container, where the
-    # host's absolute script path does not exist (the repo is `/project`).
-    if len(argv) > 1 and argv[1] == "cn":
-        return cmd_cn(argv[2:])
 
     parser = _build_parser()
     args = parser.parse_args(argv[1:])
