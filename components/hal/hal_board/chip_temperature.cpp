@@ -12,9 +12,9 @@
 #include <cassert>
 #include <cmath>
 
-#include "hal/chip_temperature.hpp"
+#include "hal_board/chip_temperature.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::board {
 namespace {
 
 // The internal sensor is usable roughly over -10..80 °C on most ESP32 parts;
@@ -75,4 +75,4 @@ std::int16_t ChipTemperature::read() noexcept {
     return to_x100(celsius);
 }
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::board

@@ -9,8 +9,9 @@
 //   - `hal_stub`  — software-driven FreeRTOS software timers used by the host
 //     tests.
 //
-// Each implementation provides its own header (`hal/timer_board.hpp` in
-// `hal_board`, `hal/timer_stub.hpp` in `hal_stub`) that includes this one and
+// Each implementation provides its own header (`hal_board/timer_board.hpp`
+// in `hal_board`, `hal_stub/timer_stub.hpp` in `hal_stub`) that includes this
+// one and
 // adds the concrete classes, so there is exactly one definition of the shared
 // contract and the two implementations cannot drift. (A project still links
 // exactly one of `hal_board` / `hal_stub`, but both `REQUIRES hal_common`.)

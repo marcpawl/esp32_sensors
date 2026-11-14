@@ -8,9 +8,9 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
-#include "hal/led.hpp"
+#include "hal_stub/led.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::stub {
 namespace {
 
 constexpr const char* kTag = "hal_led";
@@ -39,4 +39,4 @@ LedState Led::state() const noexcept {
     return state_;
 }
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::stub

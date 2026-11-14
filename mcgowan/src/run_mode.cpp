@@ -233,9 +233,9 @@ template<hal::BoardLike Board>
     abort();
 }
 
-[[noreturn]] void run_mode_cycle(hal::Board& board,
-                                 LedTask<hal::Board>& led_task) {
-    run_mode_cycle<hal::Board>(board, led_task);
+[[noreturn]] void run_mode_cycle(hal::board::Board& board,
+                                 LedTask<hal::board::Board>& led_task) {
+    run_mode_cycle<hal::board::Board>(board, led_task);
 }
 
 }  // namespace thermo

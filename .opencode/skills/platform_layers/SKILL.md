@@ -65,7 +65,7 @@ today and must never be required by a chip-target project.
 must not name either HAL implementation. They use the `hal_common` vocabulary
 instead and stay implementation-agnostic with templates and concepts: for
 example `logic/led_task.hpp` is templated on `hal::BoardLike`, and `mcgowan`
-supplies `hal::Board` while the host tests supply `hal::BoardStub`.
+supplies `hal::board::Board` while the host tests supply `hal::stub::BoardStub`.
 
 `hal_common` is shared by everything and is never excluded.
 

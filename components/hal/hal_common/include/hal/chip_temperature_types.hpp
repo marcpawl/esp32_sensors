@@ -8,7 +8,8 @@
 //     temperature sensor driver (`esp_driver_tsens`).
 //   - `hal_stub`  — deterministic stub used by the host tests.
 //
-// Each implementation provides its own `hal/chip_temperature.hpp` that includes
+// Each implementation provides its own `hal_board/chip_temperature.hpp` (or
+// `hal_stub/chip_temperature.hpp`) that includes
 // this header and adds the concrete `ChipTemperature` class, so there is
 // exactly one definition of the shared contract and the two implementations
 // cannot drift. (A project still links exactly one of `hal_board` / `hal_stub`,

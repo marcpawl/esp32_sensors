@@ -38,7 +38,7 @@ require only lower layers.
 ## `donny`
 
 A plain (non-test) `linux`-target application that constructs
-`thermo::Application<thermo::hal::BoardStub>`. It requires `hal_stub`,
+`thermo::Application<thermo::hal::stub::BoardStub>`. It requires `hal_stub`,
 `liblogic`, `libespidfcpp`, `libsimulator`, and the vendored `json` component
 (its layer requirements are in the `platform_layers` skill).
 
@@ -72,7 +72,8 @@ from stdin, applies the fields it names to the `BoardStub`, and writes the
 resulting state back as one JSON line on stdout.
 
 - **Task shape.** Split the same way `LedTask` is: `ConsoleRunner` holds the
-  behaviour and the `std::shared_ptr<hal::BoardStub>` (shared, never owned),
+  behaviour and the `std::shared_ptr<hal::stub::BoardStub>` (shared, never
+  owned),
   and `ConsoleTask : espidf_cpp::Task<ConsoleRunner>` is the FreeRTOS task. It
   is started in `app_main` **before** the `Application` is constructed, so a
   driver can already drive the board while the application boots.
