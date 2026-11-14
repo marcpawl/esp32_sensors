@@ -9,7 +9,6 @@ set(test_srcs
     "test_hal_onewire.cpp"
     "test_hal_chip_temperature.cpp"
     "test_hal_wifi.cpp"
-    "test_hal_timer_stub.cpp"
     "test_freertos_timers.cpp"
     "test_freertos_task.cpp"
     "test_esp_restart.cpp"

@@ -95,8 +95,8 @@ header reports as `std::nullopt` instead of rebooting.
 
 `test_led_runner.cpp` instantiates the templated `LedRunner<Board>` against the
 stub `BoardStub`. The `hal_stub` component itself (the pin-free buttons, LEDs,
-1-Wire bus, chip-temperature sensor, WiFi radio, one-shot timer, and aggregate
-board) is covered by `components/hal/tests/test-hal-stub/`.
+1-Wire bus, chip-temperature sensor, WiFi radio, and aggregate board) is covered
+by `components/hal/tests/test-hal-stub/`.
 
 **Keep it that way** — put pure logic in these files and hardware/IDF calls
 behind them.
