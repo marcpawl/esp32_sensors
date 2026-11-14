@@ -36,16 +36,16 @@
 
 #include <cstdint>
 
-#include "hal/board_stub.hpp"
 #include "hal/board_types.hpp"
-#include "hal/chip_temperature.hpp"
-#include "hal/led.hpp"
-#include "hal/onewire.hpp"
-#include "hal/push_button.hpp"
 #include "hal/sleep_types.hpp"
-#include "hal/timer_stub.hpp"
 #include "hal/timer_types.hpp"
-#include "hal/wifi.hpp"
+#include "hal_stub/board_stub.hpp"
+#include "hal_stub/chip_temperature.hpp"
+#include "hal_stub/led.hpp"
+#include "hal_stub/onewire.hpp"
+#include "hal_stub/push_button.hpp"
+#include "hal_stub/timer_stub.hpp"
+#include "hal_stub/wifi.hpp"
 #include "unity.h"
 
 namespace {
@@ -53,7 +53,6 @@ namespace {
 // Convenience aliases for the shared HAL vocabulary.
 using thermo::hal::AccessPointConfig;
 using thermo::hal::BoardPins;
-using thermo::hal::BoardStub;
 using thermo::hal::ButtonState;
 using thermo::hal::copy_text;
 using thermo::hal::LedState;
@@ -63,6 +62,7 @@ using thermo::hal::wake_cause_bit;
 using thermo::hal::WakeCause;
 using thermo::hal::WakeCauses;
 using thermo::hal::woke_from;
+using thermo::hal::stub::BoardStub;
 
 // Pin numbers are irrelevant to the stub, but every device takes them for
 // interface parity with the GPIO-backed implementation.
@@ -256,7 +256,8 @@ TEST_CASE("hal board: the board names a cancelable TimerHandle type",
           "[hal_board]") {
     // The `BoardLike` contract requires a public member typedef, and the
     // handle it names must be cancelable — that is all a holder needs.
-    static_assert(std::same_as<BoardStub::TimerHandle, thermo::hal::TimerStub>);
+    static_assert(
+        std::same_as<BoardStub::TimerHandle, thermo::hal::stub::TimerStub>);
     static_assert(TimerLike<BoardStub::TimerHandle>);
     TEST_PASS();
 }

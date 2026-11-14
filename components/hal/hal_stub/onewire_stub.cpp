@@ -13,9 +13,9 @@
 #include <iterator>
 #include <utility>
 
-#include "hal/onewire.hpp"
+#include "hal_stub/onewire.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::stub {
 namespace {
 
 // Example DS18B20 sensors from §5.1.3, used as the default collection. The
@@ -56,4 +56,4 @@ void OneWire::set_sensors(std::vector<DS18B20Reading> readings) noexcept {
     sensors_ = std::move(readings);
 }
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::stub

@@ -14,7 +14,8 @@
 // service task ("Tmr Svc") is what dispatches the callback, which
 // `test/main/test_freertos_timers.cpp` pins as working on this target.
 //
-// The implementation files are `hal/timer_stub.hpp` / `timer_stub.cpp` rather
+// The implementation files are `hal_stub/timer_stub.hpp` / `timer_stub.cpp`
+// rather
 // than the shared `hal/timer.hpp` name the other HAL devices use: there is no
 // single `Timer` class for the two projects to share, only two class names, and
 // naming the files after the implementation makes it obvious which one a
@@ -53,7 +54,7 @@
 
 #include "hal/timer_types.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::stub {
 
 // The FreeRTOS-timer-backed one-shot timer factory (forward declaration).
 class OneShotTimerFactoryStub;
@@ -137,4 +138,4 @@ static_assert(
     OneShotTimerFactoryLike<OneShotTimerFactoryStub, TimerStub>,
     "OneShotTimerFactoryStub must satisfy the OneShotTimerFactoryLike concept");
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::stub

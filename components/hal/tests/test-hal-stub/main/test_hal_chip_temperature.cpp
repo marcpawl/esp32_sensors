@@ -17,14 +17,14 @@
 
 #include <concepts>
 
-#include "hal/chip_temperature.hpp"
 #include "hal/chip_temperature_types.hpp"
+#include "hal_stub/chip_temperature.hpp"
 #include "unity.h"
 
 namespace {
 
 // Convenience alias for the shared HAL vocabulary.
-using thermo::hal::ChipTemperature;
+using thermo::hal::stub::ChipTemperature;
 
 ChipTemperature make_sensor() {
     ChipTemperature sensor = ChipTemperature::create();

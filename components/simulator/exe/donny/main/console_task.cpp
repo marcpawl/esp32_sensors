@@ -256,7 +256,7 @@ std::optional<std::string> find_switch(const json& object, const char* key,
 
 // --- Snapshot: the board's state as JSON -----------------------------------
 
-json sensors_json(const hal::BoardStub& board) {
+json sensors_json(const hal::stub::BoardStub& board) {
     json sensors = json::array();
     for (const hal::DS18B20Reading& reading : board.one_wire().read()) {
         // `null` for a missing reading, matching the §9.3 sentinel's meaning.
@@ -273,8 +273,8 @@ json sensors_json(const hal::BoardStub& board) {
 // The WiFi state. A configuration is reported only while its interface is
 // running: the HAL can only record one by starting it, so that is the only
 // state a driver can round-trip back in.
-json wifi_json(const hal::BoardStub& board) {
-    const hal::WifiRadio& wifi = board.wifi();
+json wifi_json(const hal::stub::BoardStub& board) {
+    const hal::stub::WifiRadio& wifi = board.wifi();
 
     json ap = nullptr;
     if (wifi.ap_running()) {
@@ -303,7 +303,7 @@ json wifi_json(const hal::BoardStub& board) {
 }
 
 // The complete board state. Every field is always present.
-json snapshot(const hal::BoardStub& board) {
+json snapshot(const hal::stub::BoardStub& board) {
     json deep_sleep = nullptr;
     if (const auto& slept = board.last_deep_sleep(); slept.has_value()) {
         deep_sleep = json{{"last_s", slept->count()}};
@@ -387,7 +387,8 @@ std::optional<std::string> apply_station(const json& doc,
 // starts or stops it with the configuration already recorded. Resolving each
 // configuration before its running state keeps the result independent of the
 // order the driver wrote the keys in.
-std::optional<std::string> apply_wifi(const json& wifi, hal::BoardStub& board) {
+std::optional<std::string> apply_wifi(const json& wifi,
+                                      hal::stub::BoardStub& board) {
     if (!wifi.is_object()) {
         return "wifi must be an object";
     }
@@ -473,7 +474,7 @@ std::optional<std::string> apply_wifi(const json& wifi, hal::BoardStub& board) {
 // one at a time, so a rejected document takes effect partially; the caller
 // reports the error and still echoes the resulting state, letting the driver
 // see what did take effect.
-std::optional<std::string> apply(const json& doc, hal::BoardStub& board) {
+std::optional<std::string> apply(const json& doc, hal::stub::BoardStub& board) {
     if (!doc.is_object()) {
         return "document must be a JSON object";
     }
@@ -572,7 +573,8 @@ std::optional<std::string> apply(const json& doc, hal::BoardStub& board) {
 
 }  // namespace
 
-ConsoleRunner::ConsoleRunner(std::shared_ptr<hal::BoardStub> board) noexcept
+ConsoleRunner::ConsoleRunner(
+    std::shared_ptr<hal::stub::BoardStub> board) noexcept
     : board_(std::move(board)) {}
 
 // `[[noreturn]]`, as required by `espidf_cpp::Task<Runner>`.
@@ -617,7 +619,7 @@ ConsoleRunner::ConsoleRunner(std::shared_ptr<hal::BoardStub> board) noexcept
     }
 }
 
-ConsoleTask::ConsoleTask(std::shared_ptr<hal::BoardStub> board)
+ConsoleTask::ConsoleTask(std::shared_ptr<hal::stub::BoardStub> board)
     : espidf_cpp::Task<ConsoleRunner>(
           ConsoleRunner(std::move(board)),
           espidf_cpp::TaskParams{.name = "console"}) {}
