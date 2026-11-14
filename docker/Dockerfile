@@ -29,7 +29,6 @@
 # Project tooling added on top of the base image:
 #   - GitHub CLI (`gh`) from GitHub's official apt repository.
 #   - PyGithub (`import github`) in the ESP-IDF Python venv.
-#   - Node.js (pinned LTS, official tarball) — the base image ships none.
 #   - esp-clang, providing `clang-format` / `clang-tidy`.
 #   - pycodestyle (pinned) for the Python style check.
 
@@ -110,40 +109,6 @@ RUN mkdir -p -m 755 /etc/apt/keyrings \
     && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/* \
     && gh --version
-
-# ---------------------------------------------------------------------------
-# Node.js: general-purpose JavaScript runtime. The base image ships no
-# Node runtime at all, and the ESP-IDF venv cannot provide one.
-#
-# The official static tarball is used (rather than NodeSource or a distro
-# package) so the version is pinned by URL *and* SHA-256 and does not drift with
-# the Ubuntu release. It is unpacked into /usr/local so `node`/`npm` are on PATH
-# for *any* uid: the container is run as the calling user, and for a uid with no
-# passwd entry `scripts/dev.py` sets HOME=/tmp — a per-user install (nvm/fnm)
-# would need a writable HOME at build time and would be invisible to those users.
-#
-# To bump: set NODE_VERSION and the two SHA-256 values from
-# https://nodejs.org/dist/v<version>/SHASUMS256.txt (only the architectures
-# below are supported; add a branch for any other).
-# ---------------------------------------------------------------------------
-ARG NODE_VERSION=24.22.2
-RUN ARCH="$(dpkg --print-architecture)" \
-    && case "$ARCH" in \
-        amd64) NODE_ARCH=x64 \
-               NODE_SHA256=48cc0e21e048790e54c0cf5749c2725005313d652651c40b7a21feb9697aaf75 ;; \
-        arm64) NODE_ARCH=arm64 \
-               NODE_SHA256=eb187837a2230d4047161ac0be008584e16b46f726e9c9490ee35dc6b17d9ba8 ;; \
-        *) echo "Unsupported architecture for Node.js: $ARCH" >&2; exit 1 ;; \
-    esac \
-    && TARBALL="node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" \
-    && curl -fsSL -o "/tmp/${TARBALL}" \
-        "https://nodejs.org/dist/v${NODE_VERSION}/${TARBALL}" \
-    && echo "${NODE_SHA256}  /tmp/${TARBALL}" | sha256sum --check --strict - \
-    && tar -xJf "/tmp/${TARBALL}" -C /usr/local \
-        --strip-components=1 --no-same-owner \
-    && rm -f "/tmp/${TARBALL}" \
-    && node --version \
-    && npm --version
 
 # ---------------------------------------------------------------------------
 # esp-clang: the Espressif-maintained LLVM toolchain, which ships the

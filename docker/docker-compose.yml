@@ -6,9 +6,9 @@
 #   docker compose run --rm dev idf.py build    # run a single command
 #
 # --- Which image? ---------------------------------------------------------
-# `dev` uses the PREBUILT image `marcpawl/esp-idf:20261113`, which is the
+# `dev` uses the PREBUILT image `marcpawl/esp-idf:20261114`, which is the
 # official ESP-IDF v6.1 image plus this project's tooling (gh, PyGithub,
-# esp-clang, Node.js, pycodestyle). Pull it once with
+# esp-clang, pycodestyle). Pull it once with
 # `docker compose pull`; do not rebuild it.
 # CI pulls the same tag, so developers and CI share one toolchain.
 #
@@ -43,7 +43,7 @@ services:
     # falls back to that build if the pull itself fails (bad tag, registry
     # outage), which is why CI runs `scripts/dev.py pull` as its own step
     # first: that step fails loudly instead of quietly rebuilding a toolchain.
-    image: marcpawl/esp-idf:20261113
+    image: marcpawl/esp-idf:20261114
     pull_policy: missing
 
     # Kept so the image can be rebuilt from the committed Dockerfile (then

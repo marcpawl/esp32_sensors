@@ -115,7 +115,7 @@ required.
   `docker-compose.yml`; it never defines its own image).
 - **Connect:** open the repo in CLion and accept the Dev Container prompt, or
   use *Remote Development → Dev Containers → docker-compose.yml → `dev`*. CLion
-  pulls `marcpawl/esp-idf:20261113` if it is not cached and starts the service
+  pulls `marcpawl/esp-idf:20261114` if it is not cached and starts the service
   on demand. Note that compose falls back to building the local `Dockerfile` if
   the pull fails, so run `./scripts/dev.py pull` first if you want that failure
   to be loud.

@@ -33,18 +33,18 @@ cache live in **RTC memory** so they survive sleep and backoff reboots.
 |---|---|
 | Host OS | Linux Mint |
 | Container runtime | Docker |
-| Container image | `marcpawl/esp-idf:20261113` (prebuilt) |
+| Container image | `marcpawl/esp-idf:20261114` (prebuilt) |
 | Source language | **C++26** (GNU extensions, `-std=gnu++26`) |
 | Target framework | ESP-IDF v6.1 |
 
 ### Why This Image
 
-`marcpawl/esp-idf:20261113` is the **prebuilt, published** development image.
+`marcpawl/esp-idf:20261114` is the **prebuilt, published** development image.
 It extends the official `espressif/idf:release-v6.1` image (the officially
 supported build environment for ESP-IDF: cross-compiler toolchain, CMake,
 Ninja, Python virtual environment, and all required packages) with this
 project's tooling — `gh`, PyGithub, esp-clang (which supplies the
-`clang-format` used by the pre-commit hook), the Node.js runtime,
+`clang-format` used by the pre-commit hook),
 and `pycodestyle` (which enforces PEP 8 on the Python sources).
 
 The tag is **date-stamped and never moved**, and it is pinned in exactly two
@@ -63,7 +63,7 @@ supplies the user mapping and environment flags described below:
 
 ```bash
 # Pull the pinned image (host only; not run inside a container)
-./scripts/dev.py pull       # == docker pull marcpawl/esp-idf:20261113
+./scripts/dev.py pull       # == docker pull marcpawl/esp-idf:20261114
 
 # Build the firmware, run the host tests, check formatting
 ./scripts/dev.py build
@@ -82,7 +82,7 @@ The equivalent ad-hoc form, if a command must bypass `dev.py`:
 ```bash
 docker run --rm -v $PWD:/project -w /project -u "$(id -u):$(id -g)" \
   -e HOME=/tmp -e CCACHE_DIR=/tmp/.cache/ccache \
-  marcpawl/esp-idf:20261113 idf.py build
+  marcpawl/esp-idf:20261114 idf.py build
 ```
 
 > **Docker note (Linux):** Your user must have access to the Docker daemon
@@ -113,7 +113,7 @@ defines its own image). CLion pulls the pinned image when it is not cached and
 starts the container on demand.
 
 - Point CLion at the standard Docker socket (`unix:///var/run/docker.sock`).
-- Select the `marcpawl/esp-idf:20261113` image (or open the repo as a Dev
+- Select the `marcpawl/esp-idf:20261114` image (or open the repo as a Dev
   Container, which takes it from `docker-compose.yml`).
 - CLion will run commands inside the container transparently.
 
