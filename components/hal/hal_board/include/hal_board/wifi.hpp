@@ -24,7 +24,7 @@
 
 #include "hal/wifi_types.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::board {
 
 // The WiFi radio: one ESP-IDF WiFi driver instance driving the SoftAP and the
 // station interface.
@@ -95,4 +95,4 @@ using WifiRadio = WifiRadioBoard;
 static_assert(WifiRadioLike<WifiRadio>,
               "WifiRadio must satisfy the WifiRadioLike concept");
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::board

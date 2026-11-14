@@ -123,8 +123,8 @@ template<hal::BoardLike Board>
     }
 }
 
-[[noreturn]] void run_configure_mode(LedTask<hal::Board>& led_task) {
-    run_configure_mode<hal::Board>(led_task);
+[[noreturn]] void run_configure_mode(LedTask<hal::board::Board>& led_task) {
+    run_configure_mode<hal::board::Board>(led_task);
 }
 
 }  // namespace thermo

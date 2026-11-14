@@ -16,7 +16,7 @@
 
 #include "hal_stub/board_stub.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::stub {
 
 BoardStub::BoardStub(BoardPins pins) noexcept
     : chip_temperature_(),
@@ -74,4 +74,4 @@ std::optional<std::chrono::seconds> BoardStub::last_deep_sleep()
     return last_deep_sleep_;
 }
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::stub

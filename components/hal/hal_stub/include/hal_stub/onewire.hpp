@@ -24,7 +24,7 @@
 
 #include "hal/onewire_types.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::stub {
 
 // Represents a 1-Wire bus whose sensor collection is held in software.
 class OneWire {
@@ -68,4 +68,4 @@ class OneWire {
 static_assert(OneWireLike<OneWire>,
               "OneWire must satisfy the OneWireLike concept");
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::stub

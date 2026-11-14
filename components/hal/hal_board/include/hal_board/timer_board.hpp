@@ -42,7 +42,7 @@
 
 #include "hal/timer_types.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::board {
 
 // The `esp_timer`-backed one-shot timer factory (forward declaration).
 class OneShotTimerFactoryBoard;
@@ -132,4 +132,4 @@ static_assert(
     "OneShotTimerFactoryBoard must satisfy the OneShotTimerFactoryLike "
     "concept");
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::board

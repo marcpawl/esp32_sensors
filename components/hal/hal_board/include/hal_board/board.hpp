@@ -39,7 +39,7 @@
 #include "hal_board/timer_board.hpp"
 #include "hal_board/wifi.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::board {
 
 // Owns every HAL device on the board.
 class Board {
@@ -168,4 +168,4 @@ class Board {
 
 static_assert(BoardLike<Board>, "Board must satisfy the BoardLike concept");
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::board

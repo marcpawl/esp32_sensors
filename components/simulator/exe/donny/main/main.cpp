@@ -61,8 +61,8 @@ extern "C" void app_main(void) {
     // (`logic/led_task.hpp` takes a `std::shared_ptr<Board>` for any
     // `hal::BoardLike` board and does not own it) without the board being
     // destroyed while either still uses it.
-    auto board = std::make_shared<thermo::hal::BoardStub>(
-        thermo::hal::BoardStub::create({}));
+    auto board = std::make_shared<thermo::hal::stub::BoardStub>(
+        thermo::hal::stub::BoardStub::create({}));
     ESP_ERROR_CHECK(board->init_all());
     ESP_LOGI(kTag, "board initialized");
 
@@ -70,6 +70,6 @@ extern "C" void app_main(void) {
     // the application boots.
     thermo::ConsoleTask console(board);
 
-    thermo::Application<thermo::hal::BoardStub> app(board);
+    thermo::Application<thermo::hal::stub::BoardStub> app(board);
     app.application_main();
 }

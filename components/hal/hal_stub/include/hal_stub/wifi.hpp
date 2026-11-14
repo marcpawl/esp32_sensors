@@ -33,7 +33,7 @@
 
 #include "hal/wifi_types.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::stub {
 
 // Represents the WiFi radio with all of its state held in software.
 class WifiRadioStub {
@@ -112,4 +112,4 @@ using WifiRadio = WifiRadioStub;
 static_assert(WifiRadioLike<WifiRadio>,
               "WifiRadio must satisfy the WifiRadioLike concept");
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::stub

@@ -10,7 +10,7 @@
 
 #include "hal_stub/chip_temperature.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::stub {
 
 ChipTemperature::ChipTemperature() noexcept = default;
 
@@ -26,4 +26,4 @@ void ChipTemperature::set_celsius(std::int16_t celsius_x100) noexcept {
     celsius_x100_ = celsius_x100;
 }
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::stub

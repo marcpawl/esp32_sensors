@@ -23,8 +23,8 @@
 namespace {
 
 // Convenience aliases for the shared HAL vocabulary.
-using thermo::hal::Led;
 using thermo::hal::LedState;
+using thermo::hal::stub::Led;
 
 // Pin numbers are irrelevant to the stub, but the factory takes them for
 // interface parity with the GPIO-backed implementation.

@@ -24,7 +24,7 @@
 
 #include "hal/chip_temperature_types.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::stub {
 
 // Represents the chip temperature sensor with its reading held in software.
 class ChipTemperature {
@@ -67,4 +67,4 @@ class ChipTemperature {
 static_assert(ChipTemperatureLike<ChipTemperature>,
               "ChipTemperature must satisfy the ChipTemperatureLike concept");
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::stub

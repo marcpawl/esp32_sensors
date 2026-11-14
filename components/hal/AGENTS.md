@@ -37,7 +37,8 @@ it and adds the concrete class. For the push button:
   `thermo::hal::ButtonHandler`, and the `thermo::hal::PushButtonLike` concept —
   the single definition of the shared types.
 - `hal_board/push_button.hpp` and `hal_stub/push_button.hpp` (one each) define
-  `thermo::hal::PushButton` with an identical public interface (same ctor,
+  `thermo::hal::board::PushButton` and `thermo::hal::stub::PushButton` with an
+  identical public interface (same ctor,
   inline `create()` factory, `init()`, `read()`, `set_interrupt()`). Each
   `static_assert`s `PushButtonLike<PushButton>`, so the two implementations
   cannot drift from the shared contract (or from each other).
@@ -171,8 +172,9 @@ touch the timer: neither `esp_timer` nor the FreeRTOS timer service needs
 per-board setup.
 
 The two aggregate boards are **named differently on purpose**: `hal_board`'s is
-`thermo::hal::Board` in `hal_board/board.hpp`, `hal_stub`'s is
-`thermo::hal::BoardStub` in `hal_stub/board_stub.hpp`. Nothing includes one
+`thermo::hal::board::Board` in `hal_board/board.hpp`, `hal_stub`'s is
+`thermo::hal::stub::BoardStub` in `hal_stub/board_stub.hpp`. Nothing includes
+one
 header hoping the other implementation is on the include path, so a project
 states which board it linked. The device headers are split the same way, with
 `hal_board` under `hal_board/…` and `hal_stub` under `hal_stub/…`, and each

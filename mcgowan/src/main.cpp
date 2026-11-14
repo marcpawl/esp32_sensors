@@ -35,7 +35,7 @@ constexpr const char* kTag = "app_main";
 // Reads the two mode-sense poles and maps them to a mode (§3). The mapping
 // itself is pure and host-tested (`logic/mode_selection.hpp`); this wrapper
 // only turns its hardware-fault result into the firmware's fail-loudly policy.
-thermo::Mode read_mode(thermo::hal::Board& board) {
+thermo::Mode read_mode(thermo::hal::board::Board& board) {
     const thermo::ModeSelection selection = thermo::mode_from_buttons(
         board.config_button().read(), board.run_button().read());
     if (!selection.has_value()) {
@@ -68,8 +68,8 @@ extern "C" void app_main(void) {
     // wake happened (§3.8) and `read_mode()` reads the switch poles. It is
     // shared: `LedTask` holds a `std::shared_ptr` to it instead of owning it,
     // so it cannot be destroyed while the task still uses it.
-    auto board =
-        std::make_shared<thermo::hal::Board>(thermo::hal::Board::create({}));
+    auto board = std::make_shared<thermo::hal::board::Board>(
+        thermo::hal::board::Board::create({}));
     ESP_ERROR_CHECK(board->init_all());
 
     thermo::Application<typeof(*board)> app(board);

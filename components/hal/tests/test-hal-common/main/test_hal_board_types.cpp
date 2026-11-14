@@ -45,14 +45,14 @@ namespace {
 
 using thermo::hal::BoardLike;
 using thermo::hal::BoardPins;
-using thermo::hal::ChipTemperature;
-using thermo::hal::Led;
-using thermo::hal::OneWire;
-using thermo::hal::PushButton;
 using thermo::hal::TimerLike;
-using thermo::hal::TimerStub;
 using thermo::hal::WakeCauses;
-using thermo::hal::WifiRadio;
+using thermo::hal::stub::ChipTemperature;
+using thermo::hal::stub::Led;
+using thermo::hal::stub::OneWire;
+using thermo::hal::stub::PushButton;
+using thermo::hal::stub::TimerStub;
+using thermo::hal::stub::WifiRadio;
 
 // A handle that is a class but has no `cancel()`: exactly the mistake a board
 // could make, and which `TimerLike` must reject.

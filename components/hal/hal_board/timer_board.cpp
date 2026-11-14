@@ -38,7 +38,7 @@
 
 #include "hal_board/timer_board.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::board {
 namespace {
 
 // `esp_timer` callback: copies the callable (see the lifetime note above) and
@@ -135,4 +135,4 @@ TimerBoard OneShotTimerFactoryBoard::register_timer(
     return TimerBoard(timer, std::move(box));
 }
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::board

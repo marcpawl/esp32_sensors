@@ -54,7 +54,7 @@
 
 #include "hal/timer_types.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::stub {
 
 // The FreeRTOS-timer-backed one-shot timer factory (forward declaration).
 class OneShotTimerFactoryStub;
@@ -138,4 +138,4 @@ static_assert(
     OneShotTimerFactoryLike<OneShotTimerFactoryStub, TimerStub>,
     "OneShotTimerFactoryStub must satisfy the OneShotTimerFactoryLike concept");
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::stub

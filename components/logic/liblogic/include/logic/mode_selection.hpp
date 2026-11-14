@@ -1,7 +1,7 @@
 // Maps the two mode-sense pole states onto an operating mode (§3).
 //
 // The board exposes the 3-position ON-OFF-ON switch (a DPDT, §2.3) as two
-// independent `hal::PushButton`s — `config_button()` and `run_button()` — one
+// independent `PushButton`s — `config_button()` and `run_button()` — one
 // per mode-sense pole. Interpreting that pair is logic, not hardware, so it
 // lives here in the `liblogic` component rather than in the HAL.
 //

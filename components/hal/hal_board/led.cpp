@@ -8,7 +8,7 @@
 
 #include "hal_board/led.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::board {
 
 Led::Led(int gpio, const char* name) noexcept : gpio_(gpio) {
     // Accepted for interface parity with the stub implementation; unused.
@@ -34,4 +34,4 @@ void Led::write(LedState state) noexcept {
                    state == LedState::kOn ? 1 : 0);
 }
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::board

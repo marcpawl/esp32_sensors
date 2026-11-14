@@ -22,7 +22,7 @@
 
 #include "hal/push_button_types.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::board {
 
 // Reads a push button wired (with a pull-up) to a GPIO.
 class PushButton {
@@ -69,4 +69,4 @@ class PushButton {
 static_assert(PushButtonLike<PushButton>,
               "PushButton must satisfy the PushButtonLike concept");
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::board

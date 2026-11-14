@@ -11,7 +11,7 @@
 
 #include "hal_stub/push_button.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::stub {
 
 PushButton::PushButton(int gpio) noexcept {
     // Accepted for interface parity with the real implementation; unused.
@@ -42,4 +42,4 @@ void PushButton::set_interrupt(ButtonHandler handler) noexcept {
     handler_ = handler;
 }
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::stub

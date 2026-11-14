@@ -10,7 +10,7 @@
 
 #include "hal_stub/led.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::stub {
 namespace {
 
 constexpr const char* kTag = "hal_led";
@@ -39,4 +39,4 @@ LedState Led::state() const noexcept {
     return state_;
 }
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::stub

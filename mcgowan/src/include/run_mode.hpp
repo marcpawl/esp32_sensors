@@ -29,7 +29,7 @@ template<hal::BoardLike Board>
 // Entry point used by `app_main`: runs one cycle on the board the firmware
 // links in (`hal_board` on target, `hal_stub` in the host tests). Defined
 // in run_mode.cpp.
-[[noreturn]] void run_mode_cycle(hal::Board& board,
-                                 LedTask<hal::Board>& led_task);
+[[noreturn]] void run_mode_cycle(hal::board::Board& board,
+                                 LedTask<hal::board::Board>& led_task);
 
 }  // namespace thermo

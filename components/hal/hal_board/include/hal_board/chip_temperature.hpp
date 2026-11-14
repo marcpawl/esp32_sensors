@@ -20,7 +20,7 @@
 
 #include "hal/chip_temperature_types.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::board {
 
 // Reads the ESP32's internal temperature sensor (the on-die sensor, not the
 // DS18B20s on the 1-Wire bus). This reports the die temperature, which runs
@@ -62,4 +62,4 @@ class ChipTemperature {
 static_assert(ChipTemperatureLike<ChipTemperature>,
               "ChipTemperature must satisfy the ChipTemperatureLike concept");
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::board

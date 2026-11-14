@@ -25,7 +25,7 @@
 namespace {
 
 // The radio implementation linked into this project (the stub here).
-using Radio = thermo::hal::WifiRadio;
+using Radio = thermo::hal::stub::WifiRadio;
 
 using thermo::hal::AccessPointConfig;
 using thermo::hal::copy_text;
@@ -61,12 +61,12 @@ Radio make_radio() {
 // --- Concept / alias --------------------------------------------------------
 
 TEST_CASE("hal wifi: WifiRadioStub models WifiRadioLike", "[hal_wifi]") {
-    static_assert(thermo::hal::WifiRadioLike<thermo::hal::WifiRadioStub>);
+    static_assert(thermo::hal::WifiRadioLike<thermo::hal::stub::WifiRadioStub>);
 }
 
 TEST_CASE("hal wifi: WifiRadio alias is the stub in this project",
           "[hal_wifi]") {
-    static_assert(std::same_as<Radio, thermo::hal::WifiRadioStub>);
+    static_assert(std::same_as<Radio, thermo::hal::stub::WifiRadioStub>);
     static_assert(std::same_as<decltype(Radio::create()), Radio>);
 }
 

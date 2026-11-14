@@ -16,7 +16,7 @@
 
 #include "hal/led_types.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::board {
 
 // Drives one LED wired (through a current-limiting resistor) to a GPIO.
 class Led {
@@ -53,4 +53,4 @@ class Led {
 
 static_assert(LedLike<Led>, "Led must satisfy the LedLike concept");
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::board

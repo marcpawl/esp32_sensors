@@ -30,7 +30,7 @@
 namespace {
 
 using thermo::LedState;
-using thermo::hal::BoardStub;
+using thermo::hal::stub::BoardStub;
 using thermo::ledtask::LedRunner;
 
 // --- The templated runner satisfies its expected contract -------------------

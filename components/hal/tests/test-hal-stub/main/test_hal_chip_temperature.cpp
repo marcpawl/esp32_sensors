@@ -24,7 +24,7 @@
 namespace {
 
 // Convenience alias for the shared HAL vocabulary.
-using thermo::hal::ChipTemperature;
+using thermo::hal::stub::ChipTemperature;
 
 ChipTemperature make_sensor() {
     ChipTemperature sensor = ChipTemperature::create();

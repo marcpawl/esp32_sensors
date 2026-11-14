@@ -39,9 +39,9 @@
 namespace {
 
 using thermo::hal::OneShotTimerFactoryLike;
-using thermo::hal::OneShotTimerFactoryStub;
 using thermo::hal::TimerLike;
-using thermo::hal::TimerStub;
+using thermo::hal::stub::OneShotTimerFactoryStub;
+using thermo::hal::stub::TimerStub;
 
 // Long enough to be cancelled before it expires, short enough to keep the suite
 // fast (`configTICK_RATE_HZ` is 100 on this target, so this is 20 ticks).

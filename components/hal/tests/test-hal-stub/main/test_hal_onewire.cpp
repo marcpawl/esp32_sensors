@@ -31,8 +31,8 @@ namespace {
 
 // Convenience aliases for the shared HAL vocabulary.
 using thermo::hal::DS18B20Reading;
-using thermo::hal::OneWire;
 using thermo::hal::RomId;
+using thermo::hal::stub::OneWire;
 
 // Pin number is irrelevant to the stub, but the factory takes it for interface
 // parity with the GPIO-backed implementation.

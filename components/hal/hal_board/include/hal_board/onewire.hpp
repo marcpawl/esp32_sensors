@@ -26,7 +26,7 @@
 
 #include "hal/onewire_types.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::board {
 
 // Bit-banged 1-Wire bus on a single GPIO. ESP-IDF v6.1 ships no DS18B20 driver,
 // so the protocol is implemented directly. Not thread-safe: callers must
@@ -84,4 +84,4 @@ class OneWire {
 static_assert(OneWireLike<OneWire>,
               "OneWire must satisfy the OneWireLike concept");
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::board

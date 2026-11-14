@@ -55,7 +55,7 @@
 #include "hal_stub/timer_stub.hpp"
 #include "hal_stub/wifi.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::stub {
 
 // Owns every stub HAL device on the board.
 class BoardStub {
@@ -215,4 +215,4 @@ class BoardStub {
 static_assert(BoardLike<BoardStub>,
               "BoardStub must satisfy the BoardLike concept");
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::stub
