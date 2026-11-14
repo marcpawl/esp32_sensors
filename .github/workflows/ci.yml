@@ -5,6 +5,9 @@ on:
     branches: [ "v0.1" ]
   pull_request:
     branches: [ "v0.1" ]
+    # `ready_for_review` re-runs the checks when a draft PR is marked ready;
+    # without it the only run would be the one skipped below.
+    types: [ opened, synchronize, reopened, ready_for_review ]
 
 # The dev image is PREBUILT and pinned in docker-compose.yml
 # (`image: marcpawl/esp-idf:20261113`); CI pulls it instead of building it from
@@ -14,6 +17,13 @@ on:
 # self-check` fails if the two disagree.
 jobs:
   build-and-test:
+    # Draft pull requests are work in progress: no checks until they are marked
+    # ready for review, which saves the expensive build/test run. `push` builds
+    # have no `pull_request` payload, so the first condition keeps them running.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.draft == false
+
     # GitHub's runner user is uid 1001, not the image's 1000. `scripts/dev.py`
     # runs the container as the *calling* user and pins HOME/CCACHE_DIR for it,
     # so build artifacts are owned by the runner (no root-owned files) and
