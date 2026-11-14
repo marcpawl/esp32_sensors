@@ -29,7 +29,7 @@
 #include <memory>
 
 #include "espidf_cpp/task.hpp"
-#include "hal/board_stub.hpp"
+#include "hal_stub/board_stub.hpp"
 
 namespace thermo {
 
@@ -44,7 +44,8 @@ class ConsoleRunner {
   public:
     // Shares `board` with the caller (never null): the task mutates the same
     // board the application reads from.
-    explicit ConsoleRunner(std::shared_ptr<hal::BoardStub> board) noexcept;
+    explicit ConsoleRunner(
+        std::shared_ptr<hal::stub::BoardStub> board) noexcept;
 
     ConsoleRunner(ConsoleRunner const&) = delete;
     ConsoleRunner(ConsoleRunner&&) = default;
@@ -56,7 +57,7 @@ class ConsoleRunner {
     [[noreturn]] void run() noexcept;
 
   private:
-    std::shared_ptr<hal::BoardStub> board_;
+    std::shared_ptr<hal::stub::BoardStub> board_;
 };
 
 /** FreeRTOS task that runs a `ConsoleRunner` against the stub board.
@@ -67,7 +68,7 @@ class ConsoleRunner {
 class ConsoleTask : public espidf_cpp::Task<ConsoleRunner> {
   public:
     // Shares `board` with the caller and starts the task.
-    explicit ConsoleTask(std::shared_ptr<hal::BoardStub> board);
+    explicit ConsoleTask(std::shared_ptr<hal::stub::BoardStub> board);
 
     ConsoleTask(ConsoleTask const&) = delete;
     ConsoleTask(ConsoleTask&&) = delete;

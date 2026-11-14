@@ -6,8 +6,8 @@
 // (`hal/wifi_types.hpp`); this header adds the concrete, driver-backed
 // `WifiRadioBoard` class plus the `WifiRadio` alias the rest of the firmware
 // uses. `hal_stub` provides a software-driven `WifiRadio` with the same public
-// interface, so a project can link either one and include `<hal/wifi.hpp>`
-// unchanged.
+// interface, so a project states its choice by including
+// `<hal_board/wifi.hpp>`.
 //
 // The radio is semantics-free: it knows how to bring an access point or a
 // station up and down, but not when to. The two interfaces are independent —
@@ -24,7 +24,7 @@
 
 #include "hal/wifi_types.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::board {
 
 // The WiFi radio: one ESP-IDF WiFi driver instance driving the SoftAP and the
 // station interface.
@@ -95,4 +95,4 @@ using WifiRadio = WifiRadioBoard;
 static_assert(WifiRadioLike<WifiRadio>,
               "WifiRadio must satisfy the WifiRadioLike concept");
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::board

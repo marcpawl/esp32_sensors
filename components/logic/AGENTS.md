@@ -72,7 +72,8 @@ where `Board` is the `hal::BoardLike` template parameter) and share the board
 with the caller instead of owning it, so the caller can keep using the board
 the task drives (e.g. a test reads back the LEDs). Create it with
 `std::make_shared<BoardStub>(BoardStub::create(pins))` under `hal_stub`, or the
-`thermo::hal::Board` equivalent under `hal_board`, and call `init_all()` before
+`thermo::hal::board::Board` equivalent under `hal_board`, and call `init_all()`
+before
 starting the task. The HAL itself is unchanged: both boards stay non-copyable
 and movable.
 

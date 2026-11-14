@@ -44,9 +44,9 @@
 
 #include <cstdint>
 
-#include "hal/timer_stub.hpp"
+#include "hal_stub/timer_stub.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::stub {
 namespace {
 
 // Frees the box the timer owned. Runs in the timer service task, queued behind
@@ -167,4 +167,4 @@ TimerStub OneShotTimerFactoryStub::register_timer(
     return TimerStub(timer, box);
 }
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::stub

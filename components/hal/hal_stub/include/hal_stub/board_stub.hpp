@@ -11,7 +11,8 @@
 // The stub's class is deliberately named `BoardStub` rather than `Board`: the
 // two HAL implementations are mutually exclusive, so giving the stub its own
 // name lets a project name the implementation it actually linked instead of
-// relying on which `hal/board*.hpp` happened to be on the include path. Code
+// relying on which aggregate-board header happened to be on the include path.
+// Code
 // that must work with either keeps taking the `hal::BoardLike` template
 // parameter (`logic/led_task.hpp`).
 //
@@ -46,15 +47,15 @@
 #include <cstdint>
 
 #include "hal/board_types.hpp"
-#include "hal/chip_temperature.hpp"
-#include "hal/led.hpp"
-#include "hal/onewire.hpp"
-#include "hal/push_button.hpp"
 #include "hal/sleep_types.hpp"
-#include "hal/timer_stub.hpp"
-#include "hal/wifi.hpp"
+#include "hal_stub/chip_temperature.hpp"
+#include "hal_stub/led.hpp"
+#include "hal_stub/onewire.hpp"
+#include "hal_stub/push_button.hpp"
+#include "hal_stub/timer_stub.hpp"
+#include "hal_stub/wifi.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::stub {
 
 // Owns every stub HAL device on the board.
 class BoardStub {
@@ -214,4 +215,4 @@ class BoardStub {
 static_assert(BoardLike<BoardStub>,
               "BoardStub must satisfy the BoardLike concept");
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::stub

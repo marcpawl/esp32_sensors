@@ -4,8 +4,8 @@
 // The shared LED vocabulary (`LedState`, `LedLike`) lives in the header-only
 // `hal_common` component (`hal/led_types.hpp`); this header adds the concrete,
 // GPIO-backed `Led` class. `hal_stub` provides an identical `Led` (same ctor,
-// inline `create()` factory, `init()`, `write()`) so a project can link either
-// one and include `<hal/led.hpp>` unchanged.
+// inline `create()` factory, `init()`, `write()`), so a project states its
+// choice by including `<hal_board/led.hpp>`.
 #pragma once
 
 // NOLINTBEGIN
@@ -16,7 +16,7 @@
 
 #include "hal/led_types.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::board {
 
 // Drives one LED wired (through a current-limiting resistor) to a GPIO.
 class Led {
@@ -53,4 +53,4 @@ class Led {
 
 static_assert(LedLike<Led>, "Led must satisfy the LedLike concept");
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::board

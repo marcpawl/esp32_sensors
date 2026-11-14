@@ -5,8 +5,8 @@
 // `hal_common` component (`hal/onewire_types.hpp`); this header adds the
 // software-driven `OneWire` class. `hal_board` provides an identical `OneWire`
 // (same ctor, inline `create()` factory, `init()`, `discover_sensors()`,
-// `read()`) so a project can link either one and include `<hal/onewire.hpp>`
-// unchanged.
+// `read()`), so a project states its choice by including
+// `<hal_stub/onewire.hpp>`.
 //
 // This stub replaces the GPIO-backed `hal_board` implementation where no real
 // bus exists. The sensor collection is held in software and can be changed with
@@ -24,7 +24,7 @@
 
 #include "hal/onewire_types.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::stub {
 
 // Represents a 1-Wire bus whose sensor collection is held in software.
 class OneWire {
@@ -68,4 +68,4 @@ class OneWire {
 static_assert(OneWireLike<OneWire>,
               "OneWire must satisfy the OneWireLike concept");
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::stub

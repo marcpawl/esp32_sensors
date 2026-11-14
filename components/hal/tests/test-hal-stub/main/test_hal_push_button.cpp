@@ -20,15 +20,15 @@
 #include <concepts>
 #include <optional>
 
-#include "hal/push_button.hpp"
 #include "hal/push_button_types.hpp"
+#include "hal_stub/push_button.hpp"
 #include "unity.h"
 
 namespace {
 
 // Convenience aliases for the shared HAL vocabulary.
 using thermo::hal::ButtonState;
-using thermo::hal::PushButton;
+using thermo::hal::stub::PushButton;
 
 // Pin numbers are irrelevant to the stub, but the factory takes them for
 // interface parity with the GPIO-backed implementation.

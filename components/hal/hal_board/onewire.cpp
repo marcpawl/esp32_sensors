@@ -16,9 +16,9 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
-#include "hal/onewire.hpp"
+#include "hal_board/onewire.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::board {
 namespace {
 
 constexpr std::uint8_t kRomCommandSearchRom = 0xF0;
@@ -279,4 +279,4 @@ std::vector<DS18B20Reading> OneWire::read() noexcept {
     return readings;
 }
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::board

@@ -12,9 +12,9 @@
 
 #include <cstdint>
 
-#include "hal/board.hpp"
+#include "hal_board/board.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::board {
 namespace {
 
 // `WakeCause` names ESP-IDF's `esp_sleep_source_t` values on purpose, so the
@@ -76,4 +76,4 @@ WakeCauses Board::sleep_get_wakeup_causes() const noexcept {
     return esp_sleep_get_wakeup_causes();
 }
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::board

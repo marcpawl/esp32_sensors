@@ -29,15 +29,16 @@ is shared by everything and is never excluded.
 
 Each HAL device has a header pair: the shared vocabulary in `hal_common` (e.g.
 `hal/push_button_types.hpp`) plus a per-implementation header of the same name
-(e.g. `hal/push_button.hpp`) that includes it and adds the concrete class. For
-the push button:
+(e.g. `hal_board/push_button.hpp` or `hal_stub/push_button.hpp`) that includes
+it and adds the concrete class. For the push button:
 
 - `hal/push_button_types.hpp` (`hal_common`) defines
   `thermo::hal::ButtonState`, `thermo::hal::ButtonCallback`,
   `thermo::hal::ButtonHandler`, and the `thermo::hal::PushButtonLike` concept —
   the single definition of the shared types.
-- `hal/push_button.hpp` (`hal_board` and `hal_stub`, one each) defines
-  `thermo::hal::PushButton` with an identical public interface (same ctor,
+- `hal_board/push_button.hpp` and `hal_stub/push_button.hpp` (one each) define
+  `thermo::hal::board::PushButton` and `thermo::hal::stub::PushButton` with an
+  identical public interface (same ctor,
   inline `create()` factory, `init()`, `read()`, `set_interrupt()`). Each
   `static_assert`s `PushButtonLike<PushButton>`, so the two implementations
   cannot drift from the shared contract (or from each other).
@@ -63,8 +64,8 @@ presses, so bad hardware is reproducible in tests.
 
 The WiFi radio (§3.2, §3.9) follows the same header pair: `hal/wifi_types.hpp`
 (`hal_common`) defines `AccessPointConfig`, `StationConfig`, `copy_text()`, the
-length limits, and the `WifiRadioLike` concept; `hal/wifi.hpp` (`hal_board` /
-`hal_stub`) defines `WifiRadioBoard` / `WifiRadioStub` and aliases
+length limits, and the `WifiRadioLike` concept; `hal_board/wifi.hpp` and
+`hal_stub/wifi.hpp` define `WifiRadioBoard` / `WifiRadioStub` and alias
 `using WifiRadio = ...`. The interface is `init()`, `start_ap()`/`stop_ap()`,
 `start_station()`/`stop_station()` — the API and station are **independent**
 (Configure mode may run both at once) and the radio is semantics-free (callers
@@ -94,7 +95,7 @@ Unlike the other HAL devices there is no shared `hal/timer.hpp` and no single
 always states which one it linked, and board-independent code targets the
 concept rather than a concrete type.
 
-- **`hal_board`:** `hal/timer_board.hpp` + `timer_board.cpp` provide
+- **`hal_board`:** `hal_board/timer_board.hpp` + `timer_board.cpp` provide
   `OneShotTimerFactoryBoard` (the arming factory) and `TimerBoard` (the
   move-only handle). Both `static_assert` their concepts, so the implementation
   cannot drift from the shared contract. It is built on `esp_timer` with
@@ -114,7 +115,7 @@ concept rather than a concrete type.
   delay or a failed `esp_timer_create()` / `esp_timer_start_once()` trips an
   `assert` rather than silently dropping the request (after the assert it
   returns an empty handle, never a handle that owns no timer).
-- **`hal_stub`:** `hal/timer_stub.hpp` + `timer_stub.cpp` provide
+- **`hal_stub`:** `hal_stub/timer_stub.hpp` + `timer_stub.cpp` provide
   `OneShotTimerFactoryStub` and `TimerStub`, likewise pinned by
   `static_assert`. It uses FreeRTOS software timers (`freertos/timers.h`)
   because the `linux` target has no `esp_timer` implementation —
@@ -171,13 +172,15 @@ touch the timer: neither `esp_timer` nor the FreeRTOS timer service needs
 per-board setup.
 
 The two aggregate boards are **named differently on purpose**: `hal_board`'s is
-`thermo::hal::Board` in `hal/board.hpp`, `hal_stub`'s is
-`thermo::hal::BoardStub` in `hal/board_stub.hpp`. Nothing includes one header
-hoping the other implementation is on the include path, so a project states
-which board it linked. `hal_stub`'s devices keep the shared headers
-(`hal/led.hpp`, `hal/wifi.hpp`, …), and the shared `WifiRadio` alias still
-resolves per implementation. Code that must work with either takes the
-`hal::BoardLike` template parameter and never names a concrete board — see
+`thermo::hal::board::Board` in `hal_board/board.hpp`, `hal_stub`'s is
+`thermo::hal::stub::BoardStub` in `hal_stub/board_stub.hpp`. Nothing includes
+one
+header hoping the other implementation is on the include path, so a project
+states which board it linked. The device headers are split the same way, with
+`hal_board` under `hal_board/…` and `hal_stub` under `hal_stub/…`, and each
+implementation provides its own `WifiRadio` alias. Code that must work with
+either takes the `hal::BoardLike` template parameter and never names a concrete
+board — see
 `logic/led_task.hpp`, whose LED-cycle table and coverage checks are free
 functions (`thermo::ledtask::led_cycles()` / `has_cycle()`), so the
 `static_assert`s naming every `LedState` need no board at all.

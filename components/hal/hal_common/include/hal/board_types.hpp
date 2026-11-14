@@ -8,10 +8,11 @@
 //   - `hal_board` — real, GPIO-backed devices for the development board.
 //   - `hal_stub`  — deterministic, pin-free devices used by the host tests.
 //
-// Each implementation provides its own `hal/board.hpp` that includes this
-// header and adds the concrete `Board` class, so there is exactly one
-// definition of the shared contract and the two implementations cannot drift.
-// (A project still links exactly one of `hal_board` / `hal_stub`, but both
+// Each implementation provides its own aggregate-board header
+// (`hal_board/board.hpp` or `hal_stub/board_stub.hpp`) that includes this
+// header and adds the concrete class, so there is exactly one definition of
+// the shared contract and the two implementations cannot drift. (A project
+// still links exactly one of `hal_board` / `hal_stub`, but both
 // `REQUIRES hal_common`.)
 //
 // The board is a convenience aggregate: it owns one instance of each HAL
@@ -40,14 +41,14 @@
 #include <functional>
 #include <type_traits>
 
-#include "hal/chip_temperature.hpp"
-#include "hal/led.hpp"
-#include "hal/onewire.hpp"
+#include "hal/chip_temperature_types.hpp"
+#include "hal/led_types.hpp"
+#include "hal/onewire_types.hpp"
 #include "hal/pin_map.hpp"
-#include "hal/push_button.hpp"
+#include "hal/push_button_types.hpp"
 #include "hal/sleep_types.hpp"
 #include "hal/timer_types.hpp"
-#include "hal/wifi.hpp"
+#include "hal/wifi_types.hpp"
 
 namespace thermo::hal {
 
@@ -108,39 +109,49 @@ struct BoardPins {
 // `TimerLike` concept, so a project can link either board and board-
 // independent code can cancel a timer without knowing which mechanism armed it.
 template<typename T>
-concept BoardLike =
-    std::is_class_v<T> &&
-    requires(T& board, T const& const_board, std::chrono::seconds duration,
-             std::chrono::milliseconds delay, std::function<void()> callback) {
-        // The board names the handle type it hands back, and that type can be
-        // cancelled. A board without a public `TimerHandle` — or one whose
-        // handle has no `cancel()` — cannot model this.
-        requires TimerLike<typename T::TimerHandle>;
-        {
-            board.register_timer(delay, callback)
-        } -> std::same_as<typename T::TimerHandle>;
-        { T::create(BoardPins{}) } -> std::same_as<T>;
-        { board.init_all() } -> std::same_as<esp_err_t>;
-        { board.deep_sleep_start(duration) } -> std::same_as<void>;
-        { const_board.sleep_get_wakeup_causes() } -> std::same_as<WakeCauses>;
-        { board.chip_temperature() } -> std::same_as<ChipTemperature&>;
-        {
-            const_board.chip_temperature()
-        } -> std::same_as<ChipTemperature const&>;
-        { board.one_wire() } -> std::same_as<OneWire&>;
-        { const_board.one_wire() } -> std::same_as<OneWire const&>;
-        { board.green() } -> std::same_as<Led&>;
-        { const_board.green() } -> std::same_as<Led const&>;
-        { board.red() } -> std::same_as<Led&>;
-        { const_board.red() } -> std::same_as<Led const&>;
-        { board.button() } -> std::same_as<PushButton&>;
-        { const_board.button() } -> std::same_as<PushButton const&>;
-        { board.config_button() } -> std::same_as<PushButton&>;
-        { const_board.config_button() } -> std::same_as<PushButton const&>;
-        { board.run_button() } -> std::same_as<PushButton&>;
-        { const_board.run_button() } -> std::same_as<PushButton const&>;
-        { board.wifi() } -> std::same_as<WifiRadio&>;
-        { const_board.wifi() } -> std::same_as<WifiRadio const&>;
-    };
+concept BoardLike = std::is_class_v<T> && requires(
+                                              T& board, T const& const_board,
+                                              std::chrono::seconds duration,
+                                              std::chrono::milliseconds delay,
+                                              std::function<void()> callback) {
+    // The board names the handle type it hands back, and that type can be
+    // cancelled. A board without a public `TimerHandle` — or one whose
+    // handle has no `cancel()` — cannot model this.
+    requires TimerLike<typename T::TimerHandle>;
+    {
+        board.register_timer(delay, callback)
+    } -> std::same_as<typename T::TimerHandle>;
+    { T::create(BoardPins{}) } -> std::same_as<T>;
+    { board.init_all() } -> std::same_as<esp_err_t>;
+    { board.deep_sleep_start(duration) } -> std::same_as<void>;
+    { const_board.sleep_get_wakeup_causes() } -> std::same_as<WakeCauses>;
+
+    // Every accessor returns a type satisfying the matching `hal_common`
+    // device concept. Naming only the concepts keeps this header free of
+    // either implementation: `hal_board` and `hal_stub` both depend on
+    // `hal_common`, never the other way round.
+    requires ChipTemperatureLike<
+        std::remove_cvref_t<decltype(board.chip_temperature())>>;
+    requires ChipTemperatureLike<
+        std::remove_cvref_t<decltype(const_board.chip_temperature())>>;
+    requires OneWireLike<std::remove_cvref_t<decltype(board.one_wire())>>;
+    requires OneWireLike<std::remove_cvref_t<decltype(const_board.one_wire())>>;
+    requires LedLike<std::remove_cvref_t<decltype(board.green())>>;
+    requires LedLike<std::remove_cvref_t<decltype(const_board.green())>>;
+    requires LedLike<std::remove_cvref_t<decltype(board.red())>>;
+    requires LedLike<std::remove_cvref_t<decltype(const_board.red())>>;
+    requires PushButtonLike<std::remove_cvref_t<decltype(board.button())>>;
+    requires PushButtonLike<
+        std::remove_cvref_t<decltype(const_board.button())>>;
+    requires PushButtonLike<
+        std::remove_cvref_t<decltype(board.config_button())>>;
+    requires PushButtonLike<
+        std::remove_cvref_t<decltype(const_board.config_button())>>;
+    requires PushButtonLike<std::remove_cvref_t<decltype(board.run_button())>>;
+    requires PushButtonLike<
+        std::remove_cvref_t<decltype(const_board.run_button())>>;
+    requires WifiRadioLike<std::remove_cvref_t<decltype(board.wifi())>>;
+    requires WifiRadioLike<std::remove_cvref_t<decltype(const_board.wifi())>>;
+};
 
 }  // namespace thermo::hal

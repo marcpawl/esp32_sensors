@@ -6,8 +6,8 @@
 // the concrete `ChipTemperature` class backed by the ESP-IDF internal
 // temperature sensor driver (`esp_driver_tsens`). `hal_stub` provides an
 // identical `ChipTemperature` (same no-argument inline `create()` factory,
-// `init()`, `read()`, plus a test-only `set_celsius()`) so a project can link
-// either one and include `<hal/chip_temperature.hpp>` unchanged.
+// `init()`, `read()`, plus a test-only `set_celsius()`), so a project states
+// its choice by including `<hal_board/chip_temperature.hpp>`.
 #pragma once
 
 // NOLINTBEGIN
@@ -20,7 +20,7 @@
 
 #include "hal/chip_temperature_types.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::board {
 
 // Reads the ESP32's internal temperature sensor (the on-die sensor, not the
 // DS18B20s on the 1-Wire bus). This reports the die temperature, which runs
@@ -62,4 +62,4 @@ class ChipTemperature {
 static_assert(ChipTemperatureLike<ChipTemperature>,
               "ChipTemperature must satisfy the ChipTemperatureLike concept");
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::board

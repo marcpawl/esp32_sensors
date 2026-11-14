@@ -15,9 +15,9 @@
 #include <cstdint>
 #include <cstring>
 
-#include "hal/wifi.hpp"
+#include "hal_board/wifi.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::board {
 namespace {
 
 constexpr const char* kTag = "hal_wifi";
@@ -224,4 +224,4 @@ esp_err_t WifiRadioBoard::apply_interfaces() noexcept {
     return ESP_OK;
 }
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::board

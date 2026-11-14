@@ -5,8 +5,8 @@
 // the header-only `hal_common` component (`hal/push_button_types.hpp`); this
 // header adds the software-driven `PushButton` class. `hal_board` provides an
 // identical `PushButton` (same ctor, inline `create()` factory, `init()`,
-// `read()`) so a project can link either one and include
-// `<hal/push_button.hpp>` unchanged.
+// `read()`), so a project states its choice by including
+// `<hal_stub/push_button.hpp>`.
 //
 // This stub replaces the GPIO-backed `hal_board` implementation where the
 // input pin does not exist. The reported state is held in software and can be
@@ -23,7 +23,7 @@
 
 #include "hal/push_button_types.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::stub {
 
 // Represents a push button whose state is held in software.
 class PushButton {
@@ -73,4 +73,4 @@ class PushButton {
 static_assert(PushButtonLike<PushButton>,
               "PushButton must satisfy the PushButtonLike concept");
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::stub

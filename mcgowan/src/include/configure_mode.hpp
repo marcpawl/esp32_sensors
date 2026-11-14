@@ -7,8 +7,8 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
-#include "hal/board.hpp"
 #include "hal/board_types.hpp"
+#include "hal_board/board.hpp"
 #include "logic/led_task.hpp"
 
 namespace thermo {
@@ -29,6 +29,6 @@ template<hal::BoardLike Board>
 // Entry point used by `app_main`: runs the Configure-mode workflow on the board
 // the firmware links in (`hal_board` on target, `hal_stub` in the host
 // tests). Defined in configure_mode.cpp.
-[[noreturn]] void run_configure_mode(LedTask<hal::Board>& led_task);
+[[noreturn]] void run_configure_mode(LedTask<hal::board::Board>& led_task);
 
 }  // namespace thermo

@@ -5,8 +5,9 @@
 // and for the station. These tests cover the *stub device* contract — the
 // `WifiRadioLike` concept, `init()` gating, start/stop independence, the
 // recorded configuration, and the empty-SSID rejection — plus the
-// `<hal/wifi.hpp>` `WifiRadio` alias. They run on the ESP-IDF `linux` target
-// with Unity and link the pin-free `hal_stub` component (never `hal_board`).
+// `<hal_stub/wifi.hpp>` `WifiRadio` alias. They run on the ESP-IDF `linux`
+// target with Unity and link the pin-free `hal_stub` component (never
+// `hal_board`).
 //
 // The stub holds its state in software, so every case is deterministic and
 // needs no radio.
@@ -17,14 +18,14 @@
 
 #include <concepts>
 
-#include "hal/wifi.hpp"
 #include "hal/wifi_types.hpp"
+#include "hal_stub/wifi.hpp"
 #include "unity.h"
 
 namespace {
 
 // The radio implementation linked into this project (the stub here).
-using Radio = thermo::hal::WifiRadio;
+using Radio = thermo::hal::stub::WifiRadio;
 
 using thermo::hal::AccessPointConfig;
 using thermo::hal::copy_text;
@@ -60,12 +61,12 @@ Radio make_radio() {
 // --- Concept / alias --------------------------------------------------------
 
 TEST_CASE("hal wifi: WifiRadioStub models WifiRadioLike", "[hal_wifi]") {
-    static_assert(thermo::hal::WifiRadioLike<thermo::hal::WifiRadioStub>);
+    static_assert(thermo::hal::WifiRadioLike<thermo::hal::stub::WifiRadioStub>);
 }
 
 TEST_CASE("hal wifi: WifiRadio alias is the stub in this project",
           "[hal_wifi]") {
-    static_assert(std::same_as<Radio, thermo::hal::WifiRadioStub>);
+    static_assert(std::same_as<Radio, thermo::hal::stub::WifiRadioStub>);
     static_assert(std::same_as<decltype(Radio::create()), Radio>);
 }
 

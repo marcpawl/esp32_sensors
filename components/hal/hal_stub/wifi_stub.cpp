@@ -10,9 +10,9 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
-#include "hal/wifi.hpp"
+#include "hal_stub/wifi.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::stub {
 namespace {
 
 constexpr const char* kTag = "hal_wifi";
@@ -88,4 +88,4 @@ std::optional<StationConfig> const& WifiRadioStub::station_config()
     return station_config_;
 }
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::stub

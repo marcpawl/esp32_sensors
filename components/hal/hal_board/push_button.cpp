@@ -17,9 +17,9 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
-#include "hal/push_button.hpp"
+#include "hal_board/push_button.hpp"
 
-namespace thermo::hal {
+namespace thermo::hal::board {
 namespace {
 
 gpio_config_t input_config(int gpio) {
@@ -94,4 +94,4 @@ void PushButton::set_interrupt(ButtonHandler handler) noexcept {
                          reinterpret_cast<void*>(static_cast<intptr_t>(gpio_)));
 }
 
-}  // namespace thermo::hal
+}  // namespace thermo::hal::board

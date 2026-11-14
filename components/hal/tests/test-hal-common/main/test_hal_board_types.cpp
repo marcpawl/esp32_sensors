@@ -30,29 +30,29 @@
 #include <functional>
 
 #include "hal/board_types.hpp"
-#include "hal/chip_temperature.hpp"
-#include "hal/led.hpp"
-#include "hal/onewire.hpp"
 #include "hal/pin_map.hpp"
-#include "hal/push_button.hpp"
 #include "hal/sleep_types.hpp"
-#include "hal/timer_stub.hpp"
 #include "hal/timer_types.hpp"
-#include "hal/wifi.hpp"
+#include "hal_stub/chip_temperature.hpp"
+#include "hal_stub/led.hpp"
+#include "hal_stub/onewire.hpp"
+#include "hal_stub/push_button.hpp"
+#include "hal_stub/timer_stub.hpp"
+#include "hal_stub/wifi.hpp"
 #include "unity.h"
 
 namespace {
 
 using thermo::hal::BoardLike;
 using thermo::hal::BoardPins;
-using thermo::hal::ChipTemperature;
-using thermo::hal::Led;
-using thermo::hal::OneWire;
-using thermo::hal::PushButton;
 using thermo::hal::TimerLike;
-using thermo::hal::TimerStub;
 using thermo::hal::WakeCauses;
-using thermo::hal::WifiRadio;
+using thermo::hal::stub::ChipTemperature;
+using thermo::hal::stub::Led;
+using thermo::hal::stub::OneWire;
+using thermo::hal::stub::PushButton;
+using thermo::hal::stub::TimerStub;
+using thermo::hal::stub::WifiRadio;
 
 // A handle that is a class but has no `cancel()`: exactly the mistake a board
 // could make, and which `TimerLike` must reject.

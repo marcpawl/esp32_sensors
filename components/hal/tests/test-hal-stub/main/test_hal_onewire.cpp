@@ -23,16 +23,16 @@
 #include <cstdint>
 
 #include "hal/ds18b20_types.hpp"
-#include "hal/onewire.hpp"
 #include "hal/onewire_types.hpp"
+#include "hal_stub/onewire.hpp"
 #include "unity.h"
 
 namespace {
 
 // Convenience aliases for the shared HAL vocabulary.
 using thermo::hal::DS18B20Reading;
-using thermo::hal::OneWire;
 using thermo::hal::RomId;
+using thermo::hal::stub::OneWire;
 
 // Pin number is irrelevant to the stub, but the factory takes it for interface
 // parity with the GPIO-backed implementation.
