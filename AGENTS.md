@@ -301,12 +301,12 @@ the `markdown` skill (`.opencode/skills/markdown/SKILL.md`). Read it before
 writing or editing a `.md` file.
 
 
-### Agent interaction
+# Agent interaction
 
 ## New tasks
 
 bug_found task describes how to handle finding a new bug while
-in the 
+in the process of completing a task.
 
 ## Prompting
   If more than five minutes has passed, and you have just outputted something 
