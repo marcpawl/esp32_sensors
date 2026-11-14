@@ -23,8 +23,8 @@
 #include <cstdint>
 
 #include "hal/ds18b20_types.hpp"
-#include "hal/onewire.hpp"
 #include "hal/onewire_types.hpp"
+#include "hal_stub/onewire.hpp"
 #include "unity.h"
 
 namespace {

@@ -44,7 +44,7 @@
 
 #include <cstdint>
 
-#include "hal/timer_stub.hpp"
+#include "hal_stub/timer_stub.hpp"
 
 namespace thermo::hal {
 namespace {

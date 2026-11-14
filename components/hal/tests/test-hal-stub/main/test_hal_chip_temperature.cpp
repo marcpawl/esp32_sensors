@@ -17,8 +17,8 @@
 
 #include <concepts>
 
-#include "hal/chip_temperature.hpp"
 #include "hal/chip_temperature_types.hpp"
+#include "hal_stub/chip_temperature.hpp"
 #include "unity.h"
 
 namespace {

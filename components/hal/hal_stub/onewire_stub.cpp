@@ -13,7 +13,7 @@
 #include <iterator>
 #include <utility>
 
-#include "hal/onewire.hpp"
+#include "hal_stub/onewire.hpp"
 
 namespace thermo::hal {
 namespace {

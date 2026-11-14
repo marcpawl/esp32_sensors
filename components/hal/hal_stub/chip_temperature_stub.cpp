@@ -8,7 +8,7 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
-#include "hal/chip_temperature.hpp"
+#include "hal_stub/chip_temperature.hpp"
 
 namespace thermo::hal {
 

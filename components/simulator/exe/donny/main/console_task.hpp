@@ -29,7 +29,7 @@
 #include <memory>
 
 #include "espidf_cpp/task.hpp"
-#include "hal/board_stub.hpp"
+#include "hal_stub/board_stub.hpp"
 
 namespace thermo {
 

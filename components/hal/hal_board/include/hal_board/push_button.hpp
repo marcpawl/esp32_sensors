@@ -5,8 +5,8 @@
 // the header-only `hal_common` component (`hal/push_button_types.hpp`); this
 // header adds the concrete, GPIO-backed `PushButton` class. `hal_stub`
 // provides an identical `PushButton` (same ctor, inline `create()` factory,
-// `init()`, `read()`) so a project can link either one and include
-// `<hal/push_button.hpp>` unchanged.
+// `init()`, `read()`), so a project states its choice by including
+// `<hal_board/push_button.hpp>`.
 //
 // The button is reported without semantics: `read()` returns `kOn` while the
 // button is pressed and `kOff` while it is released. A registered interrupt

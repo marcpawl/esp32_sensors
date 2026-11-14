@@ -5,8 +5,8 @@
 // `hal_common` component (`hal/chip_temperature_types.hpp`); this header adds
 // the software-driven `ChipTemperature` class. `hal_board` provides an
 // identical `ChipTemperature` (same no-argument inline `create()` factory,
-// `init()`, `read()`), so a project can link either one and include
-// `<hal/chip_temperature.hpp>` unchanged.
+// `init()`, `read()`), so a project states its choice by including
+// `<hal_stub/chip_temperature.hpp>`.
 //
 // This stub replaces the driver-backed `hal_board` implementation where no
 // internal sensor is available (or should be touched). The reported

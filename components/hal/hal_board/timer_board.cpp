@@ -36,7 +36,7 @@
 #include <memory>
 #include <utility>
 
-#include "hal/timer_board.hpp"
+#include "hal_board/timer_board.hpp"
 
 namespace thermo::hal {
 namespace {

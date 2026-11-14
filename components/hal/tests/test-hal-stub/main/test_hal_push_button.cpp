@@ -20,8 +20,8 @@
 #include <concepts>
 #include <optional>
 
-#include "hal/push_button.hpp"
 #include "hal/push_button_types.hpp"
+#include "hal_stub/push_button.hpp"
 #include "unity.h"
 
 namespace {

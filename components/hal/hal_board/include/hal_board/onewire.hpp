@@ -5,8 +5,8 @@
 // `hal_common` component (`hal/onewire_types.hpp`); this header adds the
 // concrete, bit-banged `OneWire` class. `hal_stub` provides an identical
 // `OneWire` (same ctor, inline `create()` factory, `init()`,
-// `discover_sensors()`, `read()`, plus a test-only `set_sensors()`) so a
-// project can link either one and include `<hal/onewire.hpp>` unchanged.
+// `discover_sensors()`, `read()`, plus a test-only `set_sensors()`), so a
+// project states its choice by including `<hal_board/onewire.hpp>`.
 //
 // The bus exposes the ROM IDs present on the wire and a reading (temperature)
 // for each of them.

@@ -2,16 +2,16 @@
 # expose the same API, so a project links one implementation.
 #
 # The timer is the one device whose header is *not* the same name in both
-# implementations (`hal/timer_board.hpp` here, `hal/timer_stub.hpp` in
-# `hal_stub`): the two share only the `hal_common` concepts, not a `Timer`
+# implementations (`hal_board/timer_board.hpp` here, `hal_stub/timer_stub.hpp`
+# in `hal_stub`): the two share only the `hal_common` concepts, not a `Timer`
 # class, so board-independent code is written against
 # `OneShotTimerFactoryLike` instead of including either header.
 #
 # `esp_hw_support` is a public requirement because deep sleep (§3.8) is part of
 # the board interface: `board.cpp` calls `esp_sleep_enable_timer_wakeup()` /
 # `esp_deep_sleep_start()` and `esp_sleep_get_wakeup_causes()`, which live
-# there. `esp_timer` is a public requirement because `hal/timer_board.hpp` names
-# `esp_timer_handle_t` in the handle class.
+# there. `esp_timer` is a public requirement because
+# `hal_board/timer_board.hpp` names `esp_timer_handle_t` in the handle class.
 
 idf_component_register(
     SRCS

@@ -10,7 +10,8 @@
 // with either takes the `hal::OneShotTimerFactoryLike` template parameter and
 // never names a concrete timer.
 //
-// The implementation files are `hal/timer_board.hpp` / `timer_board.cpp` rather
+// The implementation files are `hal_board/timer_board.hpp` / `timer_board.cpp`
+// rather
 // than the shared `hal/timer.hpp` name the other HAL devices use: there is no
 // single `Timer` class for the two projects to share, only two class names, and
 // naming the files after the implementation (`_board` here, `timer_stub` in

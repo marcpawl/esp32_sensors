@@ -10,7 +10,7 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
-#include "hal/wifi.hpp"
+#include "hal_stub/wifi.hpp"
 
 namespace thermo::hal {
 namespace {

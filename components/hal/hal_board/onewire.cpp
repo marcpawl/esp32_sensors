@@ -16,7 +16,7 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
-#include "hal/onewire.hpp"
+#include "hal_board/onewire.hpp"
 
 namespace thermo::hal {
 namespace {

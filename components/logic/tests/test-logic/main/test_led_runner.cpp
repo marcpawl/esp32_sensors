@@ -21,8 +21,8 @@
 #include <memory>
 #include <type_traits>
 
-#include "hal/board_stub.hpp"
 #include "hal/board_types.hpp"
+#include "hal_stub/board_stub.hpp"
 #include "logic/led_task.hpp"
 #include "unity.h"
 #include "unity_test_runner.h"

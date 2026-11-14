@@ -5,8 +5,8 @@
 // header-only `hal_common` component (`hal/board_types.hpp`); this header adds
 // the concrete `Board` class. `hal_stub` provides an identical `Board` (same
 // inline `create()` factory, `init_all()`, and accessors) whose devices are the
-// pin-free stubs, so a project can link either one and include
-// `<hal/board.hpp>` unchanged.
+// pin-free stubs, so a project can link either one and include its own
+// aggregate-board header (`hal_board/board.hpp` or `hal_stub/board_stub.hpp`).
 //
 // The board owns one instance of each HAL device (chip temperature, 1-Wire bus,
 // green/red LEDs, push button, mode-sense buttons) and exposes them. It carries
@@ -31,13 +31,13 @@
 #include <utility>
 
 #include "hal/board_types.hpp"
-#include "hal/chip_temperature.hpp"
-#include "hal/led.hpp"
-#include "hal/onewire.hpp"
-#include "hal/push_button.hpp"
 #include "hal/sleep_types.hpp"
-#include "hal/timer_board.hpp"
-#include "hal/wifi.hpp"
+#include "hal_board/chip_temperature.hpp"
+#include "hal_board/led.hpp"
+#include "hal_board/onewire.hpp"
+#include "hal_board/push_button.hpp"
+#include "hal_board/timer_board.hpp"
+#include "hal_board/wifi.hpp"
 
 namespace thermo::hal {
 

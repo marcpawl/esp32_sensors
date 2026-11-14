@@ -22,8 +22,8 @@
 #include <cstdio>
 
 #include "console_task.hpp"
-#include "hal/board_stub.hpp"
 #include "hal/board_types.hpp"
+#include "hal_stub/board_stub.hpp"
 #include "logic/application.hpp"
 
 namespace {

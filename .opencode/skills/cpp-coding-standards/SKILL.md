@@ -806,7 +806,7 @@ Keep each group separated by a blank line. `clang-format`
 (`SortIncludes: CaseSensitive`, `IncludeBlocks: Preserve`) sorts each group but
 does not reorder across the blank lines, so the groups must be laid out by
 hand. Write includes fully qualified (`"esp_log.h"`, `"freertos/FreeRTOS.h"`,
-`"hal/push_button.hpp"`) so the group is unambiguous:
+`"hal_board/push_button.hpp"`) so the group is unambiguous:
 
   ```cpp
   #include "sensor.hpp"
@@ -824,7 +824,7 @@ hand. Write includes fully qualified (`"esp_log.h"`, `"freertos/FreeRTOS.h"`,
   #include <cstring>
   #include <sys/types.h>
 
-  #include "hal/push_button.hpp"
+  #include "hal_board/push_button.hpp"
   ```
 
 clang-format inserts the blank line after `#pragma GCC diagnostic pop` unless

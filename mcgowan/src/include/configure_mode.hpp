@@ -7,8 +7,8 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
-#include "hal/board.hpp"
 #include "hal/board_types.hpp"
+#include "hal_board/board.hpp"
 #include "logic/led_task.hpp"
 
 namespace thermo {

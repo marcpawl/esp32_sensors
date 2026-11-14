@@ -5,8 +5,9 @@
 // and for the station. These tests cover the *stub device* contract — the
 // `WifiRadioLike` concept, `init()` gating, start/stop independence, the
 // recorded configuration, and the empty-SSID rejection — plus the
-// `<hal/wifi.hpp>` `WifiRadio` alias. They run on the ESP-IDF `linux` target
-// with Unity and link the pin-free `hal_stub` component (never `hal_board`).
+// `<hal_stub/wifi.hpp>` `WifiRadio` alias. They run on the ESP-IDF `linux`
+// target with Unity and link the pin-free `hal_stub` component (never
+// `hal_board`).
 //
 // The stub holds its state in software, so every case is deterministic and
 // needs no radio.
@@ -17,8 +18,8 @@
 
 #include <concepts>
 
-#include "hal/wifi.hpp"
 #include "hal/wifi_types.hpp"
+#include "hal_stub/wifi.hpp"
 #include "unity.h"
 
 namespace {

@@ -7,7 +7,8 @@
 //   - `hal_board` — real GPIO implementation for the development board.
 //   - `hal_stub`  — deterministic stub used by the host tests.
 //
-// Each implementation provides its own `hal/led.hpp` that includes this header
+// Each implementation provides its own `hal_board/led.hpp` (or
+// `hal_stub/led.hpp`) that includes this header
 // and adds the concrete `Led` class, so there is exactly one definition of the
 // shared types and the two implementations cannot drift. (A project still
 // links exactly one of `hal_board` / `hal_stub`, but both `REQUIRES

@@ -5,8 +5,8 @@
 // `WifiRadioLike`) lives in the header-only `hal_common` component
 // (`hal/wifi_types.hpp`); this header adds the software-driven `WifiRadio`
 // class. `hal_board` provides the real, driver-backed `WifiRadioBoard` plus the
-// same `WifiRadio` alias, so a project can link either one and include
-// `<hal/wifi.hpp>` unchanged.
+// same `WifiRadio` alias, so a project states its choice by including
+// `<hal_stub/wifi.hpp>`.
 //
 // This stub replaces the ESP-IDF WiFi driver where there is no radio (or it
 // must not be touched). It models the radio's behaviour in software: the AP

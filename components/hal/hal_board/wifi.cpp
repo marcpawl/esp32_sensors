@@ -15,7 +15,7 @@
 #include <cstdint>
 #include <cstring>
 
-#include "hal/wifi.hpp"
+#include "hal_board/wifi.hpp"
 
 namespace thermo::hal {
 namespace {

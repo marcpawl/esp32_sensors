@@ -8,7 +8,8 @@
 //   - `hal_board` — real ESP-IDF WiFi (SoftAP + station) implementation.
 //   - `hal_stub`  — software-driven stub used by the host tests.
 //
-// Each implementation provides its own `hal/wifi.hpp` that includes this
+// Each implementation provides its own `hal_board/wifi.hpp` (or
+// `hal_stub/wifi.hpp`) that includes this
 // header and adds the concrete `Wifi` class, so there is exactly one
 // definition of the shared contract and the two implementations cannot drift.
 // (A project still links exactly one of `hal_board` / `hal_stub`, but both

@@ -16,8 +16,8 @@
 
 #include <concepts>
 
-#include "hal/led.hpp"
 #include "hal/led_types.hpp"
+#include "hal_stub/led.hpp"
 #include "unity.h"
 
 namespace {

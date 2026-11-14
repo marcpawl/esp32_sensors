@@ -6,8 +6,8 @@
 // the concrete `ChipTemperature` class backed by the ESP-IDF internal
 // temperature sensor driver (`esp_driver_tsens`). `hal_stub` provides an
 // identical `ChipTemperature` (same no-argument inline `create()` factory,
-// `init()`, `read()`, plus a test-only `set_celsius()`) so a project can link
-// either one and include `<hal/chip_temperature.hpp>` unchanged.
+// `init()`, `read()`, plus a test-only `set_celsius()`), so a project states
+// its choice by including `<hal_board/chip_temperature.hpp>`.
 #pragma once
 
 // NOLINTBEGIN

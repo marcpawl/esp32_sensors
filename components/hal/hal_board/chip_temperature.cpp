@@ -12,7 +12,7 @@
 #include <cassert>
 #include <cmath>
 
-#include "hal/chip_temperature.hpp"
+#include "hal_board/chip_temperature.hpp"
 
 namespace thermo::hal {
 namespace {

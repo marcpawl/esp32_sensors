@@ -9,7 +9,7 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
-#include "hal/push_button.hpp"
+#include "hal_stub/push_button.hpp"
 
 namespace thermo::hal {
 

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
 # The concepts name concrete device types through each implementation's public
-# header (`hal/led.hpp`, `hal/wifi.hpp`, ...), so this project links the
+# header (`hal_stub/led.hpp`, `hal_stub/wifi.hpp`, ...), so this project links the
 # pin-free `hal_stub` implementation — the only one with a `linux` target.
 #
 # Build and run with:

@@ -12,7 +12,7 @@
 
 #include <cstdint>
 
-#include "hal/board.hpp"
+#include "hal_board/board.hpp"
 
 namespace thermo::hal {
 namespace {

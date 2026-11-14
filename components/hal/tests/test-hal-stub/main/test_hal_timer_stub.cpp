@@ -1,4 +1,4 @@
-// Tests for the stub one-shot timer (`hal_stub`, `hal/timer_stub.hpp`).
+// Tests for the stub one-shot timer (`hal_stub`, `hal_stub/timer_stub.hpp`).
 //
 // The stub is built on FreeRTOS software timers, so these tests run on the
 // ESP-IDF `linux` target with Unity and a live scheduler: the callback really
@@ -32,8 +32,8 @@
 #include <functional>
 #include <utility>
 
-#include "hal/timer_stub.hpp"
 #include "hal/timer_types.hpp"
+#include "hal_stub/timer_stub.hpp"
 #include "unity.h"
 
 namespace {

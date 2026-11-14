@@ -6,7 +6,7 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
-#include "hal/led.hpp"
+#include "hal_board/led.hpp"
 
 namespace thermo::hal {
 

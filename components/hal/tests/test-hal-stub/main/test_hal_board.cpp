@@ -36,16 +36,16 @@
 
 #include <cstdint>
 
-#include "hal/board_stub.hpp"
 #include "hal/board_types.hpp"
-#include "hal/chip_temperature.hpp"
-#include "hal/led.hpp"
-#include "hal/onewire.hpp"
-#include "hal/push_button.hpp"
 #include "hal/sleep_types.hpp"
-#include "hal/timer_stub.hpp"
 #include "hal/timer_types.hpp"
-#include "hal/wifi.hpp"
+#include "hal_stub/board_stub.hpp"
+#include "hal_stub/chip_temperature.hpp"
+#include "hal_stub/led.hpp"
+#include "hal_stub/onewire.hpp"
+#include "hal_stub/push_button.hpp"
+#include "hal_stub/timer_stub.hpp"
+#include "hal_stub/wifi.hpp"
 #include "unity.h"
 
 namespace {

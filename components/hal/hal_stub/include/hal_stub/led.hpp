@@ -4,8 +4,8 @@
 // The shared LED vocabulary (`LedState`, `LedLike`) lives in the header-only
 // `hal_common` component (`hal/led_types.hpp`); this header adds the
 // software-driven `Led` class. `hal_board` provides an identical `Led` (same
-// ctor, inline `create()` factory, `init()`, `write()`) so a project can link
-// either one and include `<hal/led.hpp>` unchanged.
+// ctor, inline `create()` factory, `init()`, `write()`), so a project states
+// its choice by including `<hal_stub/led.hpp>`.
 //
 // This stub replaces the GPIO-backed `hal_board` implementation where the
 // output pin does not exist (or should not be driven). It remembers the last

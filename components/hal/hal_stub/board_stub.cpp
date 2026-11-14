@@ -14,7 +14,7 @@
 #include <chrono>
 #include <optional>
 
-#include "hal/board_stub.hpp"
+#include "hal_stub/board_stub.hpp"
 
 namespace thermo::hal {
 
