@@ -1,0 +1,12 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "deepseek/deepseek-flash",
+  "agents": {
+    "build": {
+      "model": "deepseek/deepseek-flash#low"
+    }
+  },
+  "plugins": [
+    "opencode-snip@latest"
+  ]
+}
