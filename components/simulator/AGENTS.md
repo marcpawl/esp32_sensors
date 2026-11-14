@@ -4,7 +4,7 @@ This file documents `components/simulator/` — the host-side simulator componen
 the `donny` emulated application, and the simulator's host test project.
 Repository-wide guidance (the build, the workflow, the quality gates) is in the
 root `AGENTS.md`; the layering rules are in the `platform_layers` skill
-(`.continue/skills/platform_layers/SKILL.md`).
+(`.opencode/skills/platform_layers/SKILL.md`).
 
 ## Layout
 

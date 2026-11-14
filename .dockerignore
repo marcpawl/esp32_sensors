@@ -1,7 +1,6 @@
 # Keep the Docker build context small and reproducible.
 .git
 .idea
-.continue
 AGENTS.md
 *.md
 docker-compose.yml

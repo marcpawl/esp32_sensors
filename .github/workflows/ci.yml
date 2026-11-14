@@ -10,7 +10,7 @@ on:
     types: [ opened, synchronize, reopened, ready_for_review ]
 
 # The dev image is PREBUILT and pinned in docker-compose.yml
-# (`image: marcpawl/esp-idf:20261109b`); CI pulls it instead of building it from
+# (`image: marcpawl/esp-idf:20261114`); CI pulls it instead of building it from
 # the Dockerfile, so a run does not spend minutes rebuilding a toolchain image
 # that never changes. Bump the tag in docker-compose.yml + scripts/dev.py
 # (`DEV_IMAGE`) — and only there — when a new image is published; `dev.py

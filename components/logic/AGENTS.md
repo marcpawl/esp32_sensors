@@ -4,7 +4,7 @@ This file documents `components/logic/` — the `liblogic` component and its hos
 test project. Repository-wide guidance (the build, the workflow, the quality
 gates) is in the root `AGENTS.md`; the layering rules — which layer may require
 which — are in the `platform_layers` skill
-(`.continue/skills/platform_layers/SKILL.md`).
+(`.opencode/skills/platform_layers/SKILL.md`).
 
 ## Layout
 

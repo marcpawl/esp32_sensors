@@ -48,8 +48,8 @@ $ esptool --port /dev/ttyACM0
 ## Setup the Docker Environment
 
 The development container uses the **prebuilt** image
-`marcpawl/esp-idf:20261109b` (ESP-IDF v6.1 plus the project tooling: gh,
-PyGithub, esp-clang, Node.js, the Continue CLI `cn`, and `pycodestyle`). The
+`marcpawl/esp-idf:20261114` (ESP-IDF v6.1 plus the project tooling: gh,
+PyGithub, esp-clang, and `pycodestyle`). The
 tag is pinned in `docker-compose.yml`, is never moved, and is the same image CI
 pulls, so there is nothing to build on a fresh machine — just pull it.
 
@@ -88,82 +88,6 @@ $ ./scripts/dev.py shell -C mcgowan idf.py -B build_esp32s3 set-target esp32s3
 $
 ```
 
-### Continue CLI (`cn`) in the container
-
-The image installs the
-[Continue CLI](https://github.com/continuedev/continue/tree/main/extensions/cli)
-(`cn`) plus the Node.js runtime it needs, so the coding agent is available
-inside the container without a host install:
-
-```console
-$ ./scripts/dev.py cn --version
-1.5.47
-```
-
-`./scripts/dev.py cn` is the supported entry point (see
-[`scripts/dev.py cn`](#scriptsdevpy-cn) below); `./scripts/dev.py shell cn`
-also works and simply runs `cn` in the container's shell.
-
-`cn` keeps its configuration, sessions, and model list under `$HOME/.continue`,
-and the container's `$HOME/.continue` **is** the host's: `docker-compose.yml`
-bind-mounts `${HOME}/.continue` from the host there, so the same files are
-visible on both sides:
-
-```console
-$ ls ~/.continue          # host
-config.yaml  index  logs  sessions  ...
-$ ./scripts/dev.py shell ls '~/.continue'
-config.yaml  index  logs  sessions  ...
-```
-
-The mount is declared in `docker-compose.yml` (a `Dockerfile` cannot mount host
-paths), which is also why the Dev Container gets it:
-`.devcontainer/devcontainer.json` reuses the compose `dev` service. It is
-listed **twice** because the container's `HOME` depends on the uid it runs as —
-uid 1000 keeps `/home/dev`, any other uid is given `HOME=/tmp` by
-`scripts/dev.py` (so ccache has a writable home) — and both locations are
-created in the image so the mount always has a destination. CI's checkout has
-no `~/.continue`; Docker creates the host directory when it is missing, and the
-runner never uses it.
-
-The service fails to start if `HOME` is unset (`${HOME:?...}`), rather than
-silently mounting `/.continue`.
-
-#### `scripts/dev.py cn`
-
-`./scripts/dev.py cn` runs the Continue CLI in the container the same way every
-other task does, and names the config explicitly:
-
-```console
-$ ./scripts/dev.py cn                              # interactive agent
-$ ./scripts/dev.py cn -p "summarize scripts/dev.py"
-$ ./scripts/dev.py cn --format json -p "list the files in components/"
-```
-
-It prefixes its own `--config <container HOME>/.continue/config.yaml` because
-`cn`'s default lookup of that file is not reliable — pointed at the wrong
-directory it silently falls back to a **remote default config**, which has none
-of the host's models. Everything after `cn` is forwarded to `cn` verbatim, so
-any `cn` flag works (a later `--config` still wins, since the last one wins).
-The `$HOME` in that path is the container's, which `scripts/dev.py` sets —
-`/home/dev` for the image user (uid 1000) and `/tmp` for any other uid — and
-`docker-compose.yml` mounts the host's `~/.continue` at both.
-
-The config's models authenticate with `${{ secrets.DEEPSEEK_API_KEY }}`, which
-`cn` resolves from the process environment. `docker-compose.yml` passes the
-host's `DEEPSEEK_API_KEY` through, with **no value in the file**, so the secret
-is read from your environment and never committed. Export it on the host and
-the container sees it:
-
-```console
-$ export DEEPSEEK_API_KEY=...
-$ ./scripts/dev.py cn -p "hello"
-```
-
-`./scripts/dev.py shell cn ...` gets the same `DEEPSEEK_API_KEY` (compose
-passes the service environment to every command it runs), but not the
-`--config`: it inherits `cn`'s own default lookup.
-
 ### GitHub CLI (`gh`) in the container: no SSH login
 
 The image ships the [GitHub CLI](https://cli.github.com/) (`gh`), but **the
@@ -194,7 +118,7 @@ machine without the variable simply gets an unauthenticated `gh`.
 
 **2. Share the host's `gh` state.** `docker-compose.yml` bind-mounts the host's
 `~/.config/gh` (read/write) at both possible container homes, like
-`~/.continue` and `~/.ssh`, so when `gh auth login` stored the token in
+`~/.ssh`, so when `gh auth login` stored the token in
 `hosts.yml` the container reads the same login:
 
 ```console
@@ -250,7 +174,7 @@ $ ssh-keyscan github.com >> ~/.ssh/known_hosts
 `ssh` insists that `~/.ssh` be `0700` and private keys `0600`, and that they be
 owned by the running user. Those are the host's modes (the mount carries them),
 which is why the container must run as your uid — see "How the container user
-is handled" below. Like `~/.continue`, the mount is declared twice in
+is handled" below. Like `~/.ssh`, the mount is declared twice in
 `docker-compose.yml`, once per possible container `HOME`.
 
 ### How the container user is handled
@@ -294,7 +218,7 @@ $ docker push marcpawl/esp-idf:YYYYMMDD
 
 > **Pushing is a host command, outside the container.** It needs your Docker
 > Hub credentials, which live on the host — do not run `docker push` from
-> inside `./scripts/dev.py shell` or `cn`.
+> inside `./scripts/dev.py shell` or an AI agent.
 
 `scripts/test_dev.py` asserts that `DEV_IMAGE` and the compose `image:` agree,
 so `./scripts/dev.py self-check` catches a half-done bump.
@@ -346,7 +270,7 @@ officially supported. Configure it under **Settings | Build, Execution,
 Deployment | Toolchains → Add → Docker**.
 
 - Point CLion at the standard Docker socket (`unix:///var/run/docker.sock`).
-- Select the pinned dev image `marcpawl/esp-idf:20261109b` (the one
+- Select the pinned dev image `marcpawl/esp-idf:20261114` (the one
   `docker-compose.yml` uses; pull it first with `./scripts/dev.py pull`).
 - CLion will build and run commands inside the container transparently.
 

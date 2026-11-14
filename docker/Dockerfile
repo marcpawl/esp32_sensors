@@ -29,8 +29,6 @@
 # Project tooling added on top of the base image:
 #   - GitHub CLI (`gh`) from GitHub's official apt repository.
 #   - PyGithub (`import github`) in the ESP-IDF Python venv.
-#   - Node.js (pinned LTS, official tarball) — the base image ships none.
-#   - Continue CLI (`cn`), the command line coding agent used in this repo.
 #   - esp-clang, providing `clang-format` / `clang-tidy`.
 #   - pycodestyle (pinned) for the Python style check.
 
@@ -113,61 +111,6 @@ RUN mkdir -p -m 755 /etc/apt/keyrings \
     && gh --version
 
 # ---------------------------------------------------------------------------
-# Node.js: required by the Continue CLI below. The base image ships no Node
-# runtime at all, and the ESP-IDF venv cannot provide one.
-#
-# The official static tarball is used (rather than NodeSource or a distro
-# package) so the version is pinned by URL *and* SHA-256 and does not drift with
-# the Ubuntu release. It is unpacked into /usr/local so `node`/`npm` are on PATH
-# for *any* uid: the container is run as the calling user, and for a uid with no
-# passwd entry `scripts/dev.py` sets HOME=/tmp — a per-user install (nvm/fnm,
-# what the upstream Continue installer does) would need a writable HOME at build
-# time and would be invisible to those users.
-#
-# To bump: set NODE_VERSION and the two SHA-256 values from
-# https://nodejs.org/dist/v<version>/SHASUMS256.txt (only the architectures
-# below are supported; add a branch for any other).
-# ---------------------------------------------------------------------------
-ARG NODE_VERSION=24.22.2
-RUN ARCH="$(dpkg --print-architecture)" \
-    && case "$ARCH" in \
-        amd64) NODE_ARCH=x64 \
-               NODE_SHA256=48cc0e21e048790e54c0cf5749c2725005313d652651c40b7a21feb9697aaf75 ;; \
-        arm64) NODE_ARCH=arm64 \
-               NODE_SHA256=eb187837a2230d4047161ac0be008584e16b46f726e9c9490ee35dc6b17d9ba8 ;; \
-        *) echo "Unsupported architecture for Node.js: $ARCH" >&2; exit 1 ;; \
-    esac \
-    && TARBALL="node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz" \
-    && curl -fsSL -o "/tmp/${TARBALL}" \
-        "https://nodejs.org/dist/v${NODE_VERSION}/${TARBALL}" \
-    && echo "${NODE_SHA256}  /tmp/${TARBALL}" | sha256sum --check --strict - \
-    && tar -xJf "/tmp/${TARBALL}" -C /usr/local \
-        --strip-components=1 --no-same-owner \
-    && rm -f "/tmp/${TARBALL}" \
-    && node --version \
-    && npm --version
-
-# ---------------------------------------------------------------------------
-# Continue CLI (`cn`), the command line coding agent used on this repository.
-# https://github.com/continuedev/continue/tree/main/extensions/cli
-#
-# Installed from npm into /usr/local (npm's default prefix as root) rather than
-# a user prefix, so every uid that runs the container finds `cn` on PATH. The
-# version is pinned exactly and the registry integrity is left to npm, so a
-# rebuild cannot silently pick up a new release.
-#
-# `cn` keeps its configuration, sessions and models under `$HOME/.continue`, so
-# it is per-user state, never part of this image: uid 1000 (the image user)
-# keeps it in /home/dev, while any other uid gets HOME=/tmp from `dev.py` and so
-# starts with a fresh config on each container. Point it elsewhere explicitly
-# with `cn --config <path>` (see scripts/dev.py's environment) to share one.
-# ---------------------------------------------------------------------------
-ARG CONTINUE_CLI_VERSION=1.5.47
-RUN npm install --global --no-fund --no-audit \
-        "@continuedev/cli@${CONTINUE_CLI_VERSION}" \
-    && test "$(cn --version)" = "${CONTINUE_CLI_VERSION}"
-
-# ---------------------------------------------------------------------------
 # esp-clang: the Espressif-maintained LLVM toolchain, which ships the
 # `clang-format` / `clang-tidy` binaries used by the pre-commit hook
 # (.githooks/pre-commit) and scripts/dev.py.
@@ -246,23 +189,21 @@ RUN if getent passwd "${UID}" >/dev/null 2>&1; then \
         getent group "$g" >/dev/null && usermod -aG "$g" "${USERNAME}"; \
     done \
     && mkdir -p "/home/${USERNAME}/.cache" "/home/${USERNAME}/.espressif" \
-        "/home/${USERNAME}/.commandhistory" "/home/${USERNAME}/.continue" \
+        "/home/${USERNAME}/.commandhistory" \
     && chown -R "${UID}:${GID}" "/home/${USERNAME}" \
     # Source the IDF environment for every interactive login shell.
     && echo "ESP_IDF_EXPORT_DEBUG=1" >> "/home/${USERNAME}/.bashrc" \
     && printf 'source %s/export.sh\n' "${IDF_PATH}" >> "/home/${USERNAME}/.bashrc"
 
 # ---------------------------------------------------------------------------
-# Continue CLI (`cn`), SSH key, and GitHub CLI (`gh`) mount points, shared with
-# the host.
+# SSH key and GitHub CLI (`gh`) mount points, shared with the host.
 #
-# `docker-compose.yml` bind-mounts the host's `~/.continue`, `~/.ssh`, and
-# `~/.config/gh` here so the host and the container see the same files: `cn`
-# keeps its config, models, and sessions under $HOME/.continue, `git push`
-# authenticates with the host's SSH keys under $HOME/.ssh, and `gh` reads its
-# logged-in account from $HOME/.config/gh. (gh accepts no SSH key for its own
-# commands — they call the REST API, which needs a token — so its state is
-# separate from `~/.ssh`; see the GH_TOKEN passthrough in docker-compose.yml.)
+# `docker-compose.yml` bind-mounts the host's `~/.ssh` and `~/.config/gh` here
+# so the host and the container see the same files: `git push` authenticates
+# with the host's SSH keys under $HOME/.ssh, and `gh` reads its logged-in
+# account from $HOME/.config/gh. (gh accepts no SSH key for its own commands
+# — they call the REST API, which needs a token — so its state is separate
+# from `~/.ssh`; see the GH_TOKEN passthrough in docker-compose.yml.)
 #
 # A bind mount needs its destination to exist; Docker would otherwise create it
 # as root (and the mount would hide it), and the tool running without the mount
@@ -271,7 +212,7 @@ RUN if getent passwd "${UID}" >/dev/null 2>&1; then \
 #
 # Two locations, because the container's HOME depends on the uid it runs as
 # (see scripts/dev.py): uid 1000 keeps /home/dev, any other uid is given
-# HOME=/tmp so tools like ccache find a writable home. `cn` and `ssh` read from
+# HOME=/tmp so tools like ccache find a writable home. `ssh` reads from
 # $HOME, so both are mount points in compose.
 #
 # `~/.ssh` is mounted READ-ONLY, so its permissions are the host's — SSH
@@ -288,25 +229,21 @@ RUN if getent passwd "${UID}" >/dev/null 2>&1; then \
 # `gh` stored one there, which is the same secret the mounted host copy already
 # carries — see the read/write mount in docker-compose.yml.)
 # ---------------------------------------------------------------------------
-RUN mkdir -p /tmp/.continue /tmp/.config/gh \
-    # World-writable + sticky, like /tmp itself: any uid may use it when the
-    # host config is not mounted (the mount, when present, hides this dir, and
-    # then carries the host's own modes — which is why the container must run
-    # as the host uid; see scripts/dev.py).
-    #
-    # `/tmp/.config/gh` gets the same treatment on purpose. Left at the 0700
+RUN mkdir -p /tmp/.config/gh \
+    # `/tmp/.config/gh` is world-writable + sticky, like /tmp itself, so
+    # any uid may use it when the host config is not mounted. Left at the 0700
     # owned by uid 1000 that `install -d` below would give it, every other uid
     # would fail with EACCES ("failed to read configuration") instead of simply
     # starting unauthenticated, and that is the useful behaviour for the many
     # runs that have no `gh` login to share (CI, a bare `docker run`, a host
     # that never logged in).
-    && chmod 1777 /tmp/.continue /tmp/.config/gh \
+    && chmod 1777 /tmp/.config/gh \
     # The remaining mount points belong to the container user. `install -d`
     # creates them with SSH's required 0700 (a loose mode or a foreign owner
     # makes ssh refuse the key), for both possible HOMEs. `-m 700` applies to
     # the leaf only, so each `.config` parent stays traversable at 755.
     && install -d -m 700 -o "${UID}" -g "${GID}" \
-        "/home/${USERNAME}/.continue" "/home/${USERNAME}/.ssh" /tmp/.ssh \
+        "/home/${USERNAME}/.ssh" /tmp/.ssh \
         "/home/${USERNAME}/.config/gh"
 
 

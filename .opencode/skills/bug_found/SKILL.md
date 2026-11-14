@@ -1,3 +1,9 @@
+---
+name: bug_found
+description: Procedure to follow when an existing bug is found while
+  working on a task.
+---
+
 ## Existing Bug Found
 
 While working on a task and an existing bug is found 

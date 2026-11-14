@@ -6,9 +6,9 @@
 #   docker compose run --rm dev idf.py build    # run a single command
 #
 # --- Which image? ---------------------------------------------------------
-# `dev` uses the PREBUILT image `marcpawl/esp-idf:20261109b`, which is the
+# `dev` uses the PREBUILT image `marcpawl/esp-idf:20261114`, which is the
 # official ESP-IDF v6.1 image plus this project's tooling (gh, PyGithub,
-# esp-clang, Node.js, Continue CLI `cn`, pycodestyle). Pull it once with
+# esp-clang, pycodestyle). Pull it once with
 # `docker compose pull`; do not rebuild it.
 # CI pulls the same tag, so developers and CI share one toolchain.
 #
@@ -43,7 +43,7 @@ services:
     # falls back to that build if the pull itself fails (bad tag, registry
     # outage), which is why CI runs `scripts/dev.py pull` as its own step
     # first: that step fails loudly instead of quietly rebuilding a toolchain.
-    image: marcpawl/esp-idf:20261109b
+    image: marcpawl/esp-idf:20261114
     pull_policy: missing
 
     # Kept so the image can be rebuilt from the committed Dockerfile (then
@@ -91,15 +91,6 @@ services:
       # the classic per-user location.
       - idf-bash-history:/home/dev/.commandhistory
       - idf-espressif-cache:/home/dev/.espressif
-      # Share the host's Continue CLI (`cn`) state — config, models, sessions —
-      # with the container, so `ls ~/.continue` lists the same files on the
-      # host and inside the container. Listed twice because the container's
-      # HOME depends on the uid it runs as (see scripts/dev.py): the image user
-      # (uid 1000) keeps /home/dev, any other uid is given HOME=/tmp. `cn`
-      # stores its state under $HOME/.continue, so both paths need the mount.
-      # `${HOME:?...}` fails the run loudly rather than mounting /.continue.
-      - ${HOME:?HOME must be set to share the Continue CLI config}/.continue:/home/dev/.continue
-      - ${HOME:?HOME must be set to share the Continue CLI config}/.continue:/tmp/.continue
       # Share the host's SSH keys, so `git push` over SSH works from inside the
       # container (the key itself never leaves the host filesystem). READ-ONLY
       # on purpose: the container can authenticate but cannot modify or delete
@@ -114,7 +105,7 @@ services:
       # host (e.g. `ssh-keyscan github.com >> ~/.ssh/known_hosts`) and re-run;
       # github.com is already recorded for anyone who has pushed from the host.
       #
-      # Listed twice for the same reason as `~/.continue`: the container's HOME
+      # Listed twice because the container's HOME
       # is uid-dependent (see scripts/dev.py).
       - ${HOME:?HOME must be set to share the SSH keys}/.ssh:/home/dev/.ssh:ro
       - ${HOME:?HOME must be set to share the SSH keys}/.ssh:/tmp/.ssh:ro
@@ -153,16 +144,6 @@ services:
       # Do NOT put a token in this file: it is committed.
       GH_TOKEN:
       GITHUB_TOKEN:
-      # Pass the host's DeepSeek API key through when it is set, so the
-      # Continue CLI (`cn`, via `scripts/dev.py cn`) can authenticate. The
-      # config in `~/.continue/config.yaml` names its models' key as
-      # `${{ secrets.DEEPSEEK_API_KEY }}`, and cn resolves that from the
-      # environment. A null value means "take it from the host env", so a host
-      # without the variable passes nothing (and cn then reports the missing
-      # secret) rather than an empty string.
-      #
-      # Do NOT put a key in this file: it is committed.
-      DEEPSEEK_API_KEY:
 
     # Optional: expose the device's HTTPS config server for host-side testing
     # once Configure mode is implemented (adjust the container-side port).
