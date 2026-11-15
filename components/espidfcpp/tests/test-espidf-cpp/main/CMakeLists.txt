@@ -11,6 +11,10 @@ set(test_srcs
     "test_static_string.cpp"
     "test_http_server_types.cpp"
     "test_http_server.cpp"
+    "test_timer.cpp"
+    # Host implementation of the esp_timer C API, which ESP-IDF does not
+    # provide for the `linux` target.
+    "fake_esp_timer.cpp"
 )
 
 idf_component_register(

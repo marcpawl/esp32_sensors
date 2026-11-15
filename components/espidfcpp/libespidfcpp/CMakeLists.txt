@@ -1,6 +1,10 @@
 # FreeRTOS and logging come from ESP-IDF's common requirements. `esp_http_server`
 # is a public requirement because `http_server.hpp` includes `esp_http_server.h`;
 # it is also available for the `linux` target.
+#
+# `esp_timer` is public because `timer.hpp` includes `esp_timer.h`, and
+# `esp_hw_support` supplies `esp_etm.h`, which `esp_timer.h` includes on the
+# `linux` target as well.
 
 idf_component_register(
     SRCS
@@ -9,4 +13,6 @@ idf_component_register(
         "include"
     REQUIRES
         esp_http_server
+        esp_timer
+        esp_hw_support
 )
