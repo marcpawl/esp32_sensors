@@ -1124,7 +1124,7 @@ def cmd_clang_tidy(projects: list[str]) -> int:
     `scripts/dev.py build` first.
 
     Uses clang-tidy's default check set (`clang-diagnostic-*`,
-    `clang-analyzer-*`) — the repository commits no `.clang-tidy` — and reports
+    `clang-analyzer-*`) pinned by the repository's `.clang-tidy`, and reports
     only diagnostics in this repository's own headers, not ESP-IDF's or
     libstdc++'s. Any finding is an error (`--warnings-as-errors=*`).
     """
