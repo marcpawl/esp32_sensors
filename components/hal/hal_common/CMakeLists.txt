@@ -1,7 +1,6 @@
-# `hal/sleep_types.hpp` and `hal/timer_types.hpp` stay free of ESP-IDF
-# dependencies on purpose: `esp_sleep.h` is not self-contained on the `linux`
-# target (it includes `hal/gpio_types.h`), the ESP-IDF linux port links no
-# `sleep_modes.c`, and it likewise has no `esp_timer` implementation.
+# `hal/sleep_types.hpp` stays free of ESP-IDF dependencies on purpose:
+# `esp_sleep.h` is not self-contained on the `linux` target (it includes
+# `hal/gpio_types.h`), and the ESP-IDF linux port links no `sleep_modes.c`.
 #
 # `esp_common` is required only for `esp_err.h` (the `init()` return type named
 # by some of the concepts). No driver is pulled in.

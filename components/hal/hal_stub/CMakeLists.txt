@@ -5,15 +5,6 @@
 # implementation it linked; code that must work with either takes the
 # `hal::BoardLike` template parameter.
 #
-# The one-shot timer is the one device whose header is *not* the same name in
-# both implementations (`hal_stub/timer_stub.hpp` here,
-# `hal_board/timer_board.hpp` in `hal_board`): the two share only the
-# `hal_common` concepts, not a `Timer` class, so board-independent code is
-# written against `OneShotTimerFactoryLike` instead of including either header.
-# `timer_stub.cpp` is built on FreeRTOS
-# software timers (`freertos/timers.h`), because the `linux` target has no
-# `esp_timer` implementation.
-#
 # Deep sleep (§3.8) needs no ESP-IDF dependency here: the stub implements it
 # entirely in software.
 
@@ -24,10 +15,18 @@ idf_component_register(
         "onewire_stub.cpp"
         "chip_temperature_stub.cpp"
         "wifi_stub.cpp"
-        "timer_stub.cpp"
+        "esp_timer_stub.cpp"
         "board_stub.cpp"
     INCLUDE_DIRS
         "include"
     REQUIRES
         hal_common
+    # `esp_timer_stub.cpp` implements the `esp_timer` C API for the host; the
+    # IDF component supplies only the headers on `linux`, and `esp_etm.h` (via
+    # `esp_timer.h`) comes from `esp_hw_support`. FreeRTOS provides the
+    # software timers the stub is built on.
+    PRIV_REQUIRES
+        esp_timer
+        esp_hw_support
+        freertos
 )

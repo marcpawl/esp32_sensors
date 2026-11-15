@@ -23,8 +23,8 @@ the answer that drifts the moment the code changes.
 #   payload.cpp       The §9 upload payload builder.
 
 # GOOD: describes the build.
-# `esp_timer` is a public requirement because `hal_board/timer_board.hpp` names
-# `esp_timer_handle_t` in the handle class.
+# `esp_hw_support` is a public requirement because `board.cpp` calls
+# `esp_sleep_enable_timer_wakeup()` / `esp_deep_sleep_start()`.
 ```
 
 ## What a build comment explains
