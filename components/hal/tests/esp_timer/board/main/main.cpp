@@ -11,6 +11,7 @@
 //   idf.py -B build_esp32s3 -p $ESP32_PORT flash monitor
 
 #include <cstdio>
+#include <cstdlib>
 
 #include "esp_err.h"
 #include "esp_timer.h"
@@ -24,15 +25,18 @@ void tearDown(void) {}
 
 extern "C" void app_main(void) {
     // The system normally initializes esp_timer during startup; call it anyway
-    // so the suite also states the intended precondition in one place. An
-    // already-initialized library is not an error.
+    // so the suite also states the intended precondition in one place.
     const esp_err_t early = esp_timer_early_init();
-    const esp_err_t init = esp_timer_init();
     if (early != ESP_OK) {
         std::printf("esp_timer_early_init failed: %d\n", early);
+        std::abort();
     }
+
+    // An already-initialized library is not an error.
+    const esp_err_t init = esp_timer_init();
     if (init != ESP_OK && init != ESP_ERR_INVALID_STATE) {
         std::printf("esp_timer_init failed: %d\n", init);
+        std::abort();
     }
 
     unity_run_all_tests();

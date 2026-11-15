@@ -25,12 +25,17 @@ void tearDown(void) {}
 
 extern "C" void app_main(void) {
     const esp_err_t early = esp_timer_early_init();
-    const esp_err_t init = esp_timer_init();
     if (early != ESP_OK) {
         std::printf("esp_timer_early_init failed: %d\n", early);
+        std::exit(EXIT_FAILURE);
     }
+
+    // The board's startup code has already initialized esp_timer; an
+    // already-initialized library is not an error.
+    const esp_err_t init = esp_timer_init();
     if (init != ESP_OK && init != ESP_ERR_INVALID_STATE) {
         std::printf("esp_timer_init failed: %d\n", init);
+        std::exit(EXIT_FAILURE);
     }
 
     unity_run_all_tests();

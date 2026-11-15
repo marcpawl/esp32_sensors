@@ -54,7 +54,10 @@ struct esp_timer {
     bool stopped = false;
     bool callback_running = false;
     bool skip_unhandled_events = false;
+    // Period in microseconds for a periodic timer; 0 for a one-shot timer.
     uint64_t period_us = 0;
+    // Absolute time (same base as `esp_timer_get_time()`) of the next alarm.
+    // For a disarmed one-shot it keeps the last requested alarm time.
     uint64_t expiry_us = 0;
     // Bumped on every arm/disarm so a periodic callback can tell whether the
     // timer was restarted or stopped while it was running.
@@ -578,6 +581,11 @@ esp_err_t esp_timer_dump(FILE* stream) {
     return ESP_OK;
 }
 
+// Reports whether the timer is armed or its callback is currently running.
+//
+// A timer stopped while its callback is still executing stays active until the
+// callback returns, matching the chip implementation. A handle that was created
+// but never started, or one that is not known to this library, is inactive.
 bool esp_timer_is_active(esp_timer_handle_t timer) {
     if (timer == nullptr) {
         return false;
