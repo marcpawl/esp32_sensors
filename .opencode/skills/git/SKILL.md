@@ -30,14 +30,15 @@ file first, then commit with `-F`:
 $EDITOR "$(mktemp)"
 # ...or write it with the Write tool to a path under /tmp.
 
-# 2. Show it to the user and wait for their approval.
-
-# 3. Commit, reading the message from that file.
+# 2. Commit, reading the message from that file.
 git commit -F /tmp/commit_msg.txt
 
-# 4. Remove the file.
+# 3. Remove the file.
 rm /tmp/commit_msg.txt
 ```
+
+Do not stop to ask for approval of the message. Commit with it; rewording
+before a push is cheap, and the message does not need to be final first.
 
 `git commit -m "<message>"` is **not** used, and neither is a bare `git commit`
 (which opens an editor).
