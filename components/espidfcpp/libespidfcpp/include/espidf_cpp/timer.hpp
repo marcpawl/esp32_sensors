@@ -16,6 +16,8 @@
 // NOLINTEND
 
 #include <chrono>
+#include <functional>
+#include <memory>
 #include <utility>
 
 #include <cassert>
@@ -32,15 +34,22 @@ inline constexpr std::size_t kTimerNameCapacity = 32;
 
 class Timer {
   public:
-    // Creates the timer with the given callback, argument, name, and
-    // light-sleep policy. The callback runs in the esp_timer task. A failed
-    // create is fatal because there is no useful object to return.
-    Timer(esp_timer_cb_t callback, void* arg, const char* name = "timer",
+    // Creates the timer with the given callback, name, and light-sleep policy.
+    // The callback runs in the esp_timer task. A failed create, or an empty
+    // callback, is fatal because there is no useful object to return.
+    Timer(std::function<void()> callback, const char* name = "timer",
           bool skip_unhandled_events = false)
-        : name_(name != nullptr ? name : "timer") {
+        : callback_(
+              std::make_unique<std::function<void()>>(std::move(callback))),
+          name_(name != nullptr ? name : "timer") {
+        if (!*callback_) {
+            assert(false && "timer callback must not be empty");
+            std::abort();
+        }
+
         esp_timer_create_args_t args = {};
-        args.callback = callback;
-        args.arg = arg;
+        args.callback = &Timer::invoke;
+        args.arg = callback_.get();
         args.dispatch_method = ESP_TIMER_TASK;
         args.name = name_.c_str();
         args.skip_unhandled_events = skip_unhandled_events;
@@ -58,12 +67,14 @@ class Timer {
 
     Timer(Timer&& other) noexcept
         : handle_(std::exchange(other.handle_, nullptr)),
+          callback_(std::move(other.callback_)),
           name_(std::move(other.name_)) {}
 
     Timer& operator=(Timer&& other) noexcept {
         if (this != &other) {
             destroy();
             handle_ = std::exchange(other.handle_, nullptr);
+            callback_ = std::move(other.callback_);
             name_ = std::move(other.name_);
         }
         return *this;
@@ -125,6 +136,11 @@ class Timer {
     [[nodiscard]] esp_timer_handle_t handle() const noexcept { return handle_; }
 
   private:
+    // The `esp_timer` C callback, bridging back to the stored std::function.
+    static void invoke(void* arg) {
+        (*static_cast<std::function<void()>*>(arg))();
+    }
+
     static std::uint64_t to_microseconds(std::chrono::microseconds value) {
         if (value < std::chrono::microseconds::zero()) {
             assert(false && "timer duration must not be negative");
@@ -143,6 +159,9 @@ class Timer {
     }
 
     esp_timer_handle_t handle_ = nullptr;
+    // Heap-backed so its address stays stable when the Timer moves; that
+    // address is what esp_timer passes back to `invoke`.
+    std::unique_ptr<std::function<void()>> callback_;
     static_string<kTimerNameCapacity> name_;
 };
 
