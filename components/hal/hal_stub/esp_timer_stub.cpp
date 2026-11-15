@@ -43,6 +43,11 @@
 #include <string>
 #include <vector>
 
+// Every microsecond value below is a duration or a monotonic timestamp on that
+// same scale. The public `esp_timer` API still uses `uint64_t`, so conversions
+// happen only at its boundary.
+using Microseconds = std::chrono::microseconds;
+
 // The concrete definition of the opaque handle declared in `esp_timer.h`.
 struct esp_timer {
     esp_timer_cb_t callback = nullptr;
@@ -54,11 +59,11 @@ struct esp_timer {
     bool stopped = false;
     bool callback_running = false;
     bool skip_unhandled_events = false;
-    // Period in microseconds for a periodic timer; 0 for a one-shot timer.
-    uint64_t period_us = 0;
-    // Absolute time (same base as `esp_timer_get_time()`) of the next alarm.
-    // For a disarmed one-shot it keeps the last requested alarm time.
-    uint64_t expiry_us = 0;
+    // Period for a periodic timer; 0 for a one-shot timer.
+    Microseconds period{0};
+    // Monotonic time of the next alarm. For a disarmed one-shot it keeps the
+    // last requested alarm time.
+    Microseconds expiry{0};
     // Bumped on every arm/disarm so a periodic callback can tell whether the
     // timer was restarted or stopped while it was running.
     uint64_t generation = 0;
@@ -77,31 +82,33 @@ std::vector<struct esp_timer*> g_timers;
 
 // Monotonic origin for `esp_timer_get_time()`. The first call establishes it,
 // so the returned value is small and relative, like microseconds since boot.
-uint64_t now_us() {
+Microseconds now() {
     static const std::chrono::steady_clock::time_point origin =
         std::chrono::steady_clock::now();
     const auto elapsed = std::chrono::steady_clock::now() - origin;
-    return static_cast<uint64_t>(
-        std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count());
+    return std::chrono::duration_cast<Microseconds>(elapsed);
 }
 
-// Microseconds an absolute alarm may already be in the past and still be
-// accepted. The chip implementation tolerates its own scheduling overhead; the
-// host stub needs the same slack because `esp_timer_start_once()` reads the
-// clock twice, once to compute the alarm and once here.
-constexpr uint64_t kPastToleranceUs = 1000;
+// How far an absolute alarm may already be in the past and still be accepted.
+// The chip implementation tolerates its own scheduling overhead; the host stub
+// needs the same slack because `esp_timer_start_once()` reads the clock twice,
+// once to compute the alarm and once here.
+constexpr Microseconds kPastTolerance{1000};
 
-// The non-negative delay to arm, clamped when the alarm is within the
-// tolerance above (and therefore marginally in the past).
-uint64_t relative_delay(uint64_t alarm_us, uint64_t current_us) {
-    return alarm_us > current_us ? alarm_us - current_us : 0;
+// The non-negative delay to arm, clamped when the alarm is within the tolerance
+// above (and therefore marginally in the past).
+Microseconds relative_delay(Microseconds alarm, Microseconds current) {
+    return alarm > current ? alarm - current : Microseconds{0};
 }
 
 // Rounds a microsecond delay up to whole FreeRTOS ticks, with a minimum of one
 // tick because a zero period is rejected by FreeRTOS.
-TickType_t us_to_ticks(uint64_t delay_us) {
-    const uint64_t delay_ms = (delay_us + 999U) / 1000U;
-    TickType_t const ticks = pdMS_TO_TICKS(delay_ms == 0U ? 1U : delay_ms);
+TickType_t us_to_ticks(Microseconds delay) {
+    // Round up: a positive delay shorter than one millisecond must still arm.
+    const int64_t delay_ms =
+        std::chrono::ceil<std::chrono::milliseconds>(delay).count();
+    const int64_t rounded_ms = delay_ms == 0 ? 1 : delay_ms;
+    TickType_t const ticks = pdMS_TO_TICKS(rounded_ms);
     return ticks == 0 ? 1 : ticks;
 }
 
@@ -118,8 +125,8 @@ bool is_known(esp_timer_handle_t handle) {
 // Arms already-recorded state on the FreeRTOS timer. Called with the mutex
 // released, because the timer service task may need it while it drains the
 // command queue.
-bool arm_rtos_timer(struct esp_timer* timer, uint64_t delay_us) {
-    return xTimerChangePeriod(timer->rtos_timer, us_to_ticks(delay_us),
+bool arm_rtos_timer(struct esp_timer* timer, Microseconds delay) {
+    return xTimerChangePeriod(timer->rtos_timer, us_to_ticks(delay),
                               kCommandWait) == pdPASS;
 }
 
@@ -143,7 +150,7 @@ void timer_callback(TimerHandle_t rtos_timer) {
         static_cast<struct esp_timer*>(pvTimerGetTimerID(rtos_timer));
 
     bool rearm = false;
-    uint64_t period_us = 0;
+    Microseconds period{0};
     {
         std::lock_guard<std::mutex> const lock(g_mutex);
         timer->callback_running = true;
@@ -154,8 +161,8 @@ void timer_callback(TimerHandle_t rtos_timer) {
         if (timer->periodic && !timer->stopped) {
             ++timer->generation;
             timer->armed = true;
-            timer->expiry_us = now_us() + timer->period_us;
-            period_us = timer->period_us;
+            timer->expiry = now() + timer->period;
+            period = timer->period;
             rearm = true;
         } else {
             // A one-shot timer is disarmed once it fires.
@@ -166,7 +173,7 @@ void timer_callback(TimerHandle_t rtos_timer) {
     if (rearm) {
         // Non-blocking: this runs in the timer service task, which must not
         // wait for itself to drain the command queue.
-        (void)xTimerChangePeriod(rtos_timer, us_to_ticks(period_us), 0);
+        (void)xTimerChangePeriod(rtos_timer, us_to_ticks(period), 0);
     }
 
     timer->callback(timer->arg);
@@ -250,7 +257,9 @@ esp_err_t esp_timer_create(const esp_timer_create_args_t* create_args,
 }
 
 esp_err_t esp_timer_start_once(esp_timer_handle_t timer, uint64_t timeout_us) {
-    return esp_timer_start_once_at(timer, now_us() + timeout_us);
+    const Microseconds timeout{timeout_us};
+    return esp_timer_start_once_at(
+        timer, static_cast<uint64_t>((now() + timeout).count()));
 }
 
 esp_err_t esp_timer_start_once_at(esp_timer_handle_t timer, uint64_t alarm_us) {
@@ -261,8 +270,9 @@ esp_err_t esp_timer_start_once_at(esp_timer_handle_t timer, uint64_t alarm_us) {
         return ESP_ERR_INVALID_STATE;
     }
 
-    const uint64_t current = now_us();
-    if (alarm_us + kPastToleranceUs < current) {
+    const Microseconds alarm{alarm_us};
+    const Microseconds current = now();
+    if (alarm + kPastTolerance < current) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -275,14 +285,14 @@ esp_err_t esp_timer_start_once_at(esp_timer_handle_t timer, uint64_t alarm_us) {
             return ESP_ERR_INVALID_STATE;
         }
         timer->periodic = false;
-        timer->period_us = 0;
-        timer->expiry_us = alarm_us;
+        timer->period = Microseconds{0};
+        timer->expiry = alarm;
         timer->armed = true;
         timer->stopped = false;
         ++timer->generation;
     }
 
-    if (!arm_rtos_timer(timer, relative_delay(alarm_us, current))) {
+    if (!arm_rtos_timer(timer, relative_delay(alarm, current))) {
         std::lock_guard<std::mutex> const lock(g_mutex);
         timer->armed = false;
         return ESP_ERR_NO_MEM;
@@ -294,8 +304,10 @@ esp_err_t esp_timer_start_periodic(esp_timer_handle_t timer,
                                    uint64_t period_us) {
     // Clamp before computing the first alarm: a zero period would otherwise
     // make the alarm fall in the past between the two clock reads.
-    const uint64_t period = period_us == 0 ? 1000 : period_us;
-    return esp_timer_start_periodic_at(timer, period, now_us() + period);
+    const Microseconds period{period_us == 0 ? 1000 : period_us};
+    return esp_timer_start_periodic_at(
+        timer, static_cast<uint64_t>(period.count()),
+        static_cast<uint64_t>((now() + period).count()));
 }
 
 esp_err_t esp_timer_start_periodic_at(esp_timer_handle_t timer,
@@ -308,8 +320,10 @@ esp_err_t esp_timer_start_periodic_at(esp_timer_handle_t timer,
         return ESP_ERR_INVALID_STATE;
     }
 
-    const uint64_t current = now_us();
-    if (first_alarm_us + kPastToleranceUs < current) {
+    const Microseconds period{period_us == 0 ? 1000 : period_us};
+    const Microseconds first_alarm{first_alarm_us};
+    const Microseconds current = now();
+    if (first_alarm + kPastTolerance < current) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -322,14 +336,14 @@ esp_err_t esp_timer_start_periodic_at(esp_timer_handle_t timer,
             return ESP_ERR_INVALID_STATE;
         }
         timer->periodic = true;
-        timer->period_us = period_us == 0 ? 1000 : period_us;
-        timer->expiry_us = first_alarm_us;
+        timer->period = period;
+        timer->expiry = first_alarm;
         timer->armed = true;
         timer->stopped = false;
         ++timer->generation;
     }
 
-    if (!arm_rtos_timer(timer, relative_delay(first_alarm_us, current))) {
+    if (!arm_rtos_timer(timer, relative_delay(first_alarm, current))) {
         std::lock_guard<std::mutex> const lock(g_mutex);
         timer->armed = false;
         return ESP_ERR_NO_MEM;
@@ -338,7 +352,9 @@ esp_err_t esp_timer_start_periodic_at(esp_timer_handle_t timer,
 }
 
 esp_err_t esp_timer_restart(esp_timer_handle_t timer, uint64_t timeout_us) {
-    return esp_timer_restart_at(timer, timeout_us, now_us() + timeout_us);
+    const Microseconds timeout{timeout_us};
+    return esp_timer_restart_at(
+        timer, timeout_us, static_cast<uint64_t>((now() + timeout).count()));
 }
 
 esp_err_t esp_timer_restart_at(esp_timer_handle_t timer, uint64_t period_us,
@@ -350,8 +366,9 @@ esp_err_t esp_timer_restart_at(esp_timer_handle_t timer, uint64_t period_us,
         return ESP_ERR_INVALID_STATE;
     }
 
-    const uint64_t current = now_us();
-    if (first_alarm_us + kPastToleranceUs < current) {
+    const Microseconds first_alarm{first_alarm_us};
+    const Microseconds current = now();
+    if (first_alarm + kPastTolerance < current) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -364,14 +381,14 @@ esp_err_t esp_timer_restart_at(esp_timer_handle_t timer, uint64_t period_us,
             return ESP_ERR_INVALID_STATE;
         }
         if (timer->periodic) {
-            timer->period_us = period_us == 0 ? 1000 : period_us;
+            timer->period = Microseconds{period_us == 0 ? 1000 : period_us};
         }
-        timer->expiry_us = first_alarm_us;
+        timer->expiry = first_alarm;
         timer->stopped = false;
         ++timer->generation;
     }
 
-    if (!arm_rtos_timer(timer, relative_delay(first_alarm_us, current))) {
+    if (!arm_rtos_timer(timer, relative_delay(first_alarm, current))) {
         std::lock_guard<std::mutex> const lock(g_mutex);
         timer->armed = false;
         return ESP_ERR_NO_MEM;
@@ -509,29 +526,31 @@ esp_err_t esp_timer_delete(esp_timer_handle_t timer) {
 }
 
 int64_t esp_timer_get_time(void) {
-    return static_cast<int64_t>(now_us());
+    return static_cast<int64_t>(now().count());
 }
 
 int64_t esp_timer_get_next_alarm(void) {
     std::lock_guard<std::mutex> const lock(g_mutex);
-    uint64_t next = UINT64_MAX;
+    Microseconds next = Microseconds::max();
     for (struct esp_timer* const timer : g_timers) {
         if (timer->armed) {
-            next = std::min(next, timer->expiry_us);
+            next = std::min(next, timer->expiry);
         }
     }
-    return next == UINT64_MAX ? INT64_MAX : static_cast<int64_t>(next);
+    return next == Microseconds::max() ? INT64_MAX
+                                       : static_cast<int64_t>(next.count());
 }
 
 int64_t esp_timer_get_next_alarm_for_wake_up(void) {
     std::lock_guard<std::mutex> const lock(g_mutex);
-    uint64_t next = UINT64_MAX;
+    Microseconds next = Microseconds::max();
     for (struct esp_timer* const timer : g_timers) {
         if (timer->armed && !timer->skip_unhandled_events) {
-            next = std::min(next, timer->expiry_us);
+            next = std::min(next, timer->expiry);
         }
     }
-    return next == UINT64_MAX ? INT64_MAX : static_cast<int64_t>(next);
+    return next == Microseconds::max() ? INT64_MAX
+                                       : static_cast<int64_t>(next.count());
 }
 
 esp_err_t esp_timer_get_period(esp_timer_handle_t timer, uint64_t* period) {
@@ -542,7 +561,8 @@ esp_err_t esp_timer_get_period(esp_timer_handle_t timer, uint64_t* period) {
     if (!is_known(timer)) {
         return ESP_ERR_INVALID_ARG;
     }
-    *period = timer->periodic ? timer->period_us : 0;
+    *period =
+        timer->periodic ? static_cast<uint64_t>(timer->period.count()) : 0;
     return ESP_OK;
 }
 
@@ -558,7 +578,7 @@ esp_err_t esp_timer_get_expiry_time(esp_timer_handle_t timer,
     if (timer->periodic) {
         return ESP_ERR_NOT_SUPPORTED;
     }
-    *expiry = timer->expiry_us;
+    *expiry = static_cast<uint64_t>(timer->expiry.count());
     return ESP_OK;
 }
 
@@ -575,8 +595,8 @@ esp_err_t esp_timer_dump(FILE* stream) {
         }
         (void)fprintf(stream, "%-17s | %-11llu | %llu\n", timer->name.c_str(),
                       static_cast<unsigned long long>(
-                          timer->periodic ? timer->period_us : 0),
-                      static_cast<unsigned long long>(timer->expiry_us));
+                          timer->periodic ? timer->period.count() : 0),
+                      static_cast<unsigned long long>(timer->expiry.count()));
     }
     return ESP_OK;
 }

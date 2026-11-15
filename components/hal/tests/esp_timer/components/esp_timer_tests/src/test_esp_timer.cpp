@@ -27,6 +27,7 @@
 // NOLINTEND
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -37,10 +38,17 @@ namespace {
 
 // Long enough to sit well above a FreeRTOS tick, short enough to keep the
 // suite quick. Every wait is bounded by `kTimeoutMs`.
-constexpr uint64_t kShortUs = 50'000;
-constexpr uint64_t kMediumUs = 150'000;
-constexpr uint64_t kLongUs = 500'000;
+using Microseconds = std::chrono::microseconds;
+constexpr Microseconds kShort{50'000};
+constexpr Microseconds kMedium{150'000};
+constexpr Microseconds kLong{500'000};
 constexpr int kTimeoutMs = 3000;
+
+// The esp_timer API takes plain microseconds; convert at that boundary only.
+constexpr uint64_t us(Microseconds duration) {
+    return static_cast<uint64_t>(duration.count());
+}
+
 // `portMAX_DELAY` is 64-bit on the linux port while esp_timer takes uint32_t;
 // the chip implementation's value is UINT32_MAX.
 constexpr uint32_t kForever = UINT32_MAX;
@@ -167,13 +175,13 @@ TEST_CASE("esp_timer: start_once fires exactly once", "[esp_timer]") {
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
 
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, kShortUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, us(kShort)));
     TEST_ASSERT_TRUE(esp_timer_is_active(handle));
     TEST_ASSERT_TRUE(wait_for_calls(1));
     TEST_ASSERT_TRUE(wait_for_inactive(handle));
 
     // Many more periods must not produce another callback.
-    vTaskDelay(pdMS_TO_TICKS(3 * kShortUs / 1000));
+    vTaskDelay(pdMS_TO_TICKS(3 * us(kShort) / 1000));
     TEST_ASSERT_EQUAL(1, g_calls.load());
     stop_and_delete(handle);
 }
@@ -183,9 +191,9 @@ TEST_CASE("esp_timer: start_once while armed is rejected", "[esp_timer]") {
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
 
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, kLongUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, us(kLong)));
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE,
-                      esp_timer_start_once(handle, kLongUs));
+                      esp_timer_start_once(handle, us(kLong)));
     stop_and_delete(handle);
 }
 
@@ -195,9 +203,9 @@ TEST_CASE("esp_timer: start_once_at uses the absolute alarm", "[esp_timer]") {
     TEST_ASSERT_NOT_NULL(handle);
 
     const int64_t now = esp_timer_get_time();
-    TEST_ASSERT_EQUAL(
-        ESP_OK,
-        esp_timer_start_once_at(handle, static_cast<uint64_t>(now) + kShortUs));
+    TEST_ASSERT_EQUAL(ESP_OK,
+                      esp_timer_start_once_at(
+                          handle, static_cast<uint64_t>(now) + us(kShort)));
     TEST_ASSERT_TRUE(wait_for_calls(1));
     TEST_ASSERT_EQUAL(1, g_calls.load());
     stop_and_delete(handle);
@@ -220,13 +228,13 @@ TEST_CASE("esp_timer: start_periodic fires repeatedly", "[esp_timer]") {
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
 
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_periodic(handle, kShortUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_periodic(handle, us(kShort)));
     TEST_ASSERT_TRUE(wait_for_calls(2));
     TEST_ASSERT_EQUAL(ESP_OK, esp_timer_stop_blocking(handle, kForever));
 
     // Once stopped, no further callback may run.
     const int after_stop = g_calls.load();
-    vTaskDelay(pdMS_TO_TICKS(3 * kShortUs / 1000));
+    vTaskDelay(pdMS_TO_TICKS(3 * us(kShort) / 1000));
     TEST_ASSERT_EQUAL(after_stop, g_calls.load());
     stop_and_delete(handle);
 }
@@ -247,9 +255,9 @@ TEST_CASE("esp_timer: start_periodic_at honours the first alarm",
     TEST_ASSERT_NOT_NULL(handle);
 
     const int64_t now = esp_timer_get_time();
-    TEST_ASSERT_EQUAL(
-        ESP_OK, esp_timer_start_periodic_at(
-                    handle, kShortUs, static_cast<uint64_t>(now) + kShortUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_periodic_at(
+                                  handle, us(kShort),
+                                  static_cast<uint64_t>(now) + us(kShort)));
     TEST_ASSERT_TRUE(wait_for_calls(2));
     TEST_ASSERT_EQUAL(ESP_OK, esp_timer_stop_blocking(handle, kForever));
     stop_and_delete(handle);
@@ -260,10 +268,10 @@ TEST_CASE("esp_timer: restart changes a one-shot deadline", "[esp_timer]") {
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
 
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, kLongUs));
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_restart(handle, kShortUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, us(kLong)));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_restart(handle, us(kShort)));
     TEST_ASSERT_TRUE(wait_for_calls(1));
-    vTaskDelay(pdMS_TO_TICKS(3 * kLongUs / 1000));
+    vTaskDelay(pdMS_TO_TICKS(3 * us(kLong) / 1000));
     TEST_ASSERT_EQUAL(1, g_calls.load());
     stop_and_delete(handle);
 }
@@ -273,9 +281,9 @@ TEST_CASE("esp_timer: restart changes a periodic period", "[esp_timer]") {
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
 
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_periodic(handle, kLongUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_periodic(handle, us(kLong)));
     TEST_ASSERT_TRUE(wait_for_calls(1));
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_restart(handle, kShortUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_restart(handle, us(kShort)));
     TEST_ASSERT_TRUE(wait_for_calls(3));
     TEST_ASSERT_EQUAL(ESP_OK, esp_timer_stop_blocking(handle, kForever));
     stop_and_delete(handle);
@@ -286,7 +294,7 @@ TEST_CASE("esp_timer: restart on an inactive timer is rejected",
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE,
-                      esp_timer_restart(handle, kShortUs));
+                      esp_timer_restart(handle, us(kShort)));
     stop_and_delete(handle);
 }
 
@@ -295,13 +303,13 @@ TEST_CASE("esp_timer: restart_at uses the absolute alarm", "[esp_timer]") {
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
 
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, kLongUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, us(kLong)));
     const int64_t now = esp_timer_get_time();
     TEST_ASSERT_EQUAL(
-        ESP_OK,
-        esp_timer_restart_at(handle, 0, static_cast<uint64_t>(now) + kShortUs));
+        ESP_OK, esp_timer_restart_at(handle, 0,
+                                     static_cast<uint64_t>(now) + us(kShort)));
     TEST_ASSERT_TRUE(wait_for_calls(1));
-    vTaskDelay(pdMS_TO_TICKS(3 * kLongUs / 1000));
+    vTaskDelay(pdMS_TO_TICKS(3 * us(kLong) / 1000));
     TEST_ASSERT_EQUAL(1, g_calls.load());
     stop_and_delete(handle);
 }
@@ -313,11 +321,11 @@ TEST_CASE("esp_timer: stop disarms a running timer", "[esp_timer]") {
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
 
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, kMediumUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, us(kMedium)));
     TEST_ASSERT_EQUAL(ESP_OK, esp_timer_stop(handle));
     TEST_ASSERT_FALSE(esp_timer_is_active(handle));
 
-    vTaskDelay(pdMS_TO_TICKS(3 * kMediumUs / 1000));
+    vTaskDelay(pdMS_TO_TICKS(3 * us(kMedium) / 1000));
     TEST_ASSERT_EQUAL(0, g_calls.load());
     stop_and_delete(handle);
 }
@@ -335,7 +343,7 @@ TEST_CASE("esp_timer: stop_blocking waits for a running callback",
     esp_timer_handle_t handle = create_timer(&slow_cb);
     TEST_ASSERT_NOT_NULL(handle);
 
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, kShortUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, us(kShort)));
     for (int waited = 0; !g_callback_started.load() && waited < kTimeoutMs;
          waited += 10) {
         vTaskDelay(pdMS_TO_TICKS(10));
@@ -355,7 +363,7 @@ TEST_CASE("esp_timer: stop_blocking can time out", "[esp_timer]") {
     esp_timer_handle_t handle = create_timer(&slow_cb);
     TEST_ASSERT_NOT_NULL(handle);
 
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, kShortUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, us(kShort)));
     for (int waited = 0; !g_callback_started.load() && waited < kTimeoutMs;
          waited += 10) {
         vTaskDelay(pdMS_TO_TICKS(10));
@@ -374,7 +382,7 @@ TEST_CASE("esp_timer: a callback can stop its own timer", "[esp_timer]") {
     TEST_ASSERT_NOT_NULL(handle);
     g_self_handle = handle;
 
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, kShortUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, us(kShort)));
     TEST_ASSERT_TRUE(wait_for_calls(1));
     TEST_ASSERT_EQUAL(ESP_OK, g_stop_result.load());
     TEST_ASSERT_FALSE(esp_timer_is_active(handle));
@@ -388,10 +396,10 @@ TEST_CASE("esp_timer: a periodic callback can stop its own timer",
     TEST_ASSERT_NOT_NULL(handle);
     g_self_handle = handle;
 
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_periodic(handle, kShortUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_periodic(handle, us(kShort)));
     TEST_ASSERT_TRUE(wait_for_calls(1));
     TEST_ASSERT_EQUAL(ESP_OK, g_stop_result.load());
-    vTaskDelay(pdMS_TO_TICKS(3 * kShortUs / 1000));
+    vTaskDelay(pdMS_TO_TICKS(3 * us(kShort) / 1000));
     TEST_ASSERT_EQUAL(1, g_calls.load());
     stop_and_delete(handle);
 }
@@ -402,7 +410,7 @@ TEST_CASE("esp_timer: stop_blocking prevents a periodic re-arm",
     esp_timer_handle_t handle = create_timer(&slow_cb);
     TEST_ASSERT_NOT_NULL(handle);
 
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_periodic(handle, kShortUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_periodic(handle, us(kShort)));
     for (int waited = 0; !g_callback_started.load() && waited < kTimeoutMs;
          waited += 10) {
         vTaskDelay(pdMS_TO_TICKS(10));
@@ -411,7 +419,7 @@ TEST_CASE("esp_timer: stop_blocking prevents a periodic re-arm",
 
     TEST_ASSERT_EQUAL(ESP_OK, esp_timer_stop_blocking(handle, kForever));
     const int after_stop = g_calls.load();
-    vTaskDelay(pdMS_TO_TICKS(3 * kShortUs / 1000));
+    vTaskDelay(pdMS_TO_TICKS(3 * us(kShort) / 1000));
     TEST_ASSERT_EQUAL(after_stop, g_calls.load());
     stop_and_delete(handle);
 }
@@ -433,14 +441,14 @@ TEST_CASE("esp_timer: get_next_alarm reports the earliest alarm",
     TEST_ASSERT_NOT_NULL(handle);
 
     const int64_t before = esp_timer_get_time();
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, kMediumUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, us(kMedium)));
     const int64_t next = esp_timer_get_next_alarm();
 
     // The alarm is in the future and no later than the requested delay, plus
     // slack for the read itself and the tick rounding on the host.
     TEST_ASSERT_GREATER_THAN_INT64(before, next);
     TEST_ASSERT_LESS_OR_EQUAL_INT64(
-        before + static_cast<int64_t>(kMediumUs) + 100'000, next);
+        before + static_cast<int64_t>(us(kMedium)) + 100'000, next);
     stop_and_delete(handle);
 }
 
@@ -453,14 +461,15 @@ TEST_CASE("esp_timer: get_next_alarm_for_wake_up skips opted-out timers",
     TEST_ASSERT_NOT_NULL(wake);
 
     const int64_t now = esp_timer_get_time();
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(skip, kShortUs));
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once_at(
-                                  wake, static_cast<uint64_t>(now) + kLongUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(skip, us(kShort)));
+    TEST_ASSERT_EQUAL(
+        ESP_OK,
+        esp_timer_start_once_at(wake, static_cast<uint64_t>(now) + us(kLong)));
 
     const int64_t wake_alarm = esp_timer_get_next_alarm_for_wake_up();
     // The skipped 50 ms timer must not be reported; the 500 ms timer is.
     TEST_ASSERT_GREATER_THAN_INT64(
-        now + static_cast<int64_t>(kShortUs) + 10'000, wake_alarm);
+        now + static_cast<int64_t>(us(kShort)) + 10'000, wake_alarm);
     stop_and_delete(skip);
     stop_and_delete(wake);
 }
@@ -473,9 +482,9 @@ TEST_CASE("esp_timer: get_period reports 0 for one-shot timers",
     TEST_ASSERT_EQUAL(ESP_OK, esp_timer_get_period(handle, &period));
     TEST_ASSERT_EQUAL_UINT64(0, period);
 
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_periodic(handle, kShortUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_periodic(handle, us(kShort)));
     TEST_ASSERT_EQUAL(ESP_OK, esp_timer_get_period(handle, &period));
-    TEST_ASSERT_EQUAL_UINT64(kShortUs, period);
+    TEST_ASSERT_EQUAL_UINT64(us(kShort), period);
     stop_and_delete(handle);
 }
 
@@ -495,14 +504,14 @@ TEST_CASE("esp_timer: get_expiry_time reports a one-shot alarm",
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
     const int64_t before = esp_timer_get_time();
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, kShortUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, us(kShort)));
 
     uint64_t expiry = 0;
     TEST_ASSERT_EQUAL(ESP_OK, esp_timer_get_expiry_time(handle, &expiry));
     TEST_ASSERT_GREATER_OR_EQUAL_UINT64(
-        static_cast<uint64_t>(before) + kShortUs, expiry);
+        static_cast<uint64_t>(before) + us(kShort), expiry);
     TEST_ASSERT_LESS_OR_EQUAL_UINT64(
-        static_cast<uint64_t>(before) + kShortUs + 100'000, expiry);
+        static_cast<uint64_t>(before) + us(kShort) + 100'000, expiry);
     stop_and_delete(handle);
 }
 
@@ -510,7 +519,7 @@ TEST_CASE("esp_timer: get_expiry_time rejects a periodic timer",
           "[esp_timer]") {
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_periodic(handle, kShortUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_periodic(handle, us(kShort)));
 
     uint64_t expiry = 0;
     TEST_ASSERT_EQUAL(ESP_ERR_NOT_SUPPORTED,
@@ -525,7 +534,7 @@ TEST_CASE("esp_timer: is_active follows the armed and callback states",
     TEST_ASSERT_NOT_NULL(handle);
     TEST_ASSERT_FALSE(esp_timer_is_active(handle));
 
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, kShortUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, us(kShort)));
     TEST_ASSERT_TRUE(esp_timer_is_active(handle));
     TEST_ASSERT_TRUE(wait_for_calls(1));
     TEST_ASSERT_TRUE(wait_for_inactive(handle));
@@ -536,7 +545,7 @@ TEST_CASE("esp_timer: is_active follows the armed and callback states",
 TEST_CASE("esp_timer: dump writes the active timers", "[esp_timer]") {
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, kLongUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, us(kLong)));
 
     FILE* stream = tmpfile();
     TEST_ASSERT_NOT_NULL(stream);
@@ -564,7 +573,7 @@ TEST_CASE("esp_timer: delete refuses an armed timer", "[esp_timer]") {
     reset_calls();
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, kLongUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, us(kLong)));
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, esp_timer_delete(handle));
     stop_and_delete(handle);
 }
@@ -572,7 +581,7 @@ TEST_CASE("esp_timer: delete refuses an armed timer", "[esp_timer]") {
 TEST_CASE("esp_timer: delete accepts a stopped timer", "[esp_timer]") {
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, kLongUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, us(kLong)));
     TEST_ASSERT_EQUAL(ESP_OK, esp_timer_stop(handle));
     TEST_ASSERT_EQUAL(ESP_OK, esp_timer_delete(handle));
 }
@@ -612,7 +621,7 @@ TEST_CASE("esp_timer: deinit refuses while a timer is armed", "[esp_timer]") {
     reset_calls();
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
-    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, kLongUs));
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, us(kLong)));
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, esp_timer_deinit());
     stop_and_delete(handle);
 }
