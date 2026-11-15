@@ -25,6 +25,8 @@ cmake-build-*/
 components/logic/tests/test-logic/build_linux/
 components/hal/tests/test-hal-stub/build_linux/
 components/hal/tests/test-hal-common/build_linux/
+components/hal/tests/esp_timer/board/build_esp32s3/
+components/hal/tests/esp_timer/stub/build_linux/
 components/espidfcpp/tests/test-espidf-cpp/build_linux/
 components/simulator/tests/test-simulator/build_linux/
 components/simulator/exe/donny/build_linux/
