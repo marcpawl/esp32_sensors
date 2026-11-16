@@ -714,6 +714,11 @@ std::vector<std::unique_ptr<Point>> indirect_points; // BAD: pointer chasing
 - Choosing "clever" low-level code over clear abstractions (Per.4, Per.5)
 - Ignoring data layout and cache behavior (Per.19)
 
+## ESP guidelines
+- Avoid using the heap
+  - Try to used static_vector instead of std::vector
+  - Try to used static_string instead of std::string
+
 ## Quick Reference Checklist
 
 Before marking C++ work complete:

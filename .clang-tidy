@@ -1,0 +1,13 @@
+# Project-wide clang-tidy configuration.
+#
+# `scripts/dev.py clang-tidy` supplies `--header-filter` and
+# `--warnings-as-errors=*` on its own command line, so this file is what an
+# editor or a bare `clang-tidy` invocation reads. Keep `Checks` equal to the
+# gate's behavior: clang-tidy's default set and nothing else.
+Checks: >
+  clang-diagnostic-*,
+  clang-analyzer-*
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*/(mcgowan|components|donny|test-[^/]+)/.*'
+SystemHeaders: false
+FormatStyle: file
