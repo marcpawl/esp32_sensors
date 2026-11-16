@@ -25,6 +25,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 # Make `import dev` work regardless of the caller's cwd: add this script's
 # directory (scripts/) to sys.path, then import the module under test.
@@ -1600,6 +1601,64 @@ class TidyConfigurationTests(unittest.TestCase):
     def test_command_is_registered(self):
         self.assertIn("clang-tidy", dev.COMMANDS)
         self.assertIs(dev.COMMANDS["clang-tidy"], dev.cmd_clang_tidy)
+
+
+class TidyCommandTests(unittest.TestCase):
+    """`_tidy_command` — the argv `cmd_clang_tidy` hands to `run()`."""
+
+    def _units(self):
+        return [
+            {"file": "/project/components/a.cpp"},
+            {"file": "/project/components/b.cpp"},
+        ]
+
+    def test_default_run_does_not_ask_clang_tidy_to_fix(self):
+        command = dev._tidy_command(self._units(), Path("/tmp/db"))
+        self.assertNotIn("--fix", command)
+
+    def test_fix_is_forwarded_to_clang_tidy(self):
+        command = dev._tidy_command(self._units(), Path("/tmp/db"), fix=True)
+        self.assertIn("--fix", command)
+
+    def test_analysis_flags_and_build_path(self):
+        command = dev._tidy_command(self._units(), Path("/tmp/db"))
+        self.assertEqual(command[0], "clang-tidy")
+        # `-p` names the directory holding the compile database, not the file.
+        self.assertEqual(command[command.index("-p") + 1], "/tmp/db")
+        self.assertIn("--warnings-as-errors=*", command)
+        self.assertEqual(
+            command[command.index("--header-filter") + 1],
+            dev._tidy_header_filter(),
+        )
+
+    def test_files_come_last_in_database_order(self):
+        command = dev._tidy_command(self._units(), Path("/tmp/db"), fix=True)
+        self.assertEqual(
+            command[-2:],
+            ["/project/components/a.cpp", "/project/components/b.cpp"],
+        )
+
+    def test_parser_accepts_fix_before_or_after_project_names(self):
+        parser = dev._build_parser()
+        for argv in (
+            ["clang-tidy", "--fix", "test-hal-stub"],
+            ["clang-tidy", "test-hal-stub", "--fix"],
+        ):
+            with self.subTest(argv=argv):
+                args = parser.parse_args(argv)
+                self.assertTrue(args.fix)
+                self.assertEqual(args.projects, ["test-hal-stub"])
+
+    def test_parser_defaults_fix_to_false(self):
+        args = dev._build_parser().parse_args(["clang-tidy", "test-hal-stub"])
+        self.assertFalse(args.fix)
+
+    def test_main_forwards_fix_to_the_command(self):
+        prog = str(dev.REPO_ROOT / "scripts" / "dev.py")
+        with mock.patch.object(dev, "cmd_clang_tidy", return_value=0) as tidy:
+            rc = dev.main([prog, "clang-tidy", "test-hal-stub", "--fix"])
+        self.assertEqual(rc, 0)
+        tidy.assert_called_once_with(["test-hal-stub"], fix=True)
 
 
 class TidyGateTests(unittest.TestCase):

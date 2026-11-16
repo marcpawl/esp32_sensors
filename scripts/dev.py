@@ -1112,7 +1112,33 @@ def _tidy_units(projects: list[str]) -> list[dict] | None:
     return _unique_tidy_units(compilations)
 
 
-def cmd_clang_tidy(projects: list[str]) -> int:
+def _tidy_command(
+    units: list[dict], build_path: Path, fix: bool = False
+) -> list[str]:
+    """The clang-tidy argv `cmd_clang_tidy` hands to `run()`. Pure.
+
+    `build_path` is the directory holding the `compile_commands.json` that
+    seeds the analysis (clang-tidy's `-p`), not the file itself.
+
+    `--fix` applies clang-tidy's suggested fixes in place, so the files it
+    rewrites are the ones in the compile database (inside the container, the
+    bind-mounted working tree). Fixes are not necessarily clang-formatted:
+    run `scripts/dev.py format` afterwards.
+    """
+    command = [
+        "clang-tidy",
+        "-p", str(build_path),
+        "--header-filter", _tidy_header_filter(),
+        "--warnings-as-errors=*",
+        "--quiet",
+    ]
+    if fix:
+        command.append("--fix")
+    command.extend(unit["file"] for unit in units)
+    return command
+
+
+def cmd_clang_tidy(projects: list[str], fix: bool = False) -> int:
     """Static analysis (clang-tidy) over the C/C++ sources. No container hop.
 
     Imports the ESP-IDF compile databases so clang-tidy sees the exact flags,
@@ -1123,10 +1149,14 @@ def cmd_clang_tidy(projects: list[str]) -> int:
     the run fails, so CI cannot quietly analyze stale or partial input. Use
     `scripts/dev.py build` first.
 
-    Uses clang-tidy's default check set (`clang-diagnostic-*`,
-    `clang-analyzer-*`) — the repository commits no `.clang-tidy` — and reports
+    Uses the repository's `.clang-tidy` when present, merged with clang-tidy's
+    default check set (`clang-diagnostic-*`, `clang-analyzer-*`), and reports
     only diagnostics in this repository's own headers, not ESP-IDF's or
     libstdc++'s. Any finding is an error (`--warnings-as-errors=*`).
+
+    With `fix`, `--fix` is passed to clang-tidy so its suggested fixes are
+    applied in place. Findings that cannot be fixed still fail the run, and
+    the rewritten code should be re-formatted (`scripts/dev.py format`).
     """
     change_to_container()
 
@@ -1143,15 +1173,9 @@ def cmd_clang_tidy(projects: list[str]) -> int:
     with tempfile.TemporaryDirectory() as tmp:
         tmp_dir = Path(tmp)
         _tidy_database(units, tmp_dir / "compile_commands.json")
-        print(f"clang-tidy: analyzing {len(units)} C++ sources")
-        return run([
-            "clang-tidy",
-            "-p", str(tmp_dir),
-            "--header-filter", _tidy_header_filter(),
-            "--warnings-as-errors=*",
-            "--quiet",
-            *[unit["file"] for unit in units],
-        ])
+        suffix = " (applying fixes)" if fix else ""
+        print(f"clang-tidy: analyzing {len(units)} C++ sources{suffix}")
+        return run(_tidy_command(units, tmp_dir, fix))
 
 
 def _tidy_header_filter() -> str:
@@ -1486,8 +1510,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     # `clang-tidy` analyzes all analyzed projects by default; naming some
-    # restricts the run (handy while working on one subproject).
+    # restricts the run (handy while working on one subproject). `--fix`
+    # forwards to clang-tidy, which then rewrites the sources in place.
     tidy_parser = subparsers.choices["clang-tidy"]
+    tidy_parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="apply clang-tidy's suggested fixes in place; re-run "
+             "`format` afterwards",
+    )
     tidy_parser.add_argument(
         "projects",
         nargs="*",
@@ -1538,7 +1569,7 @@ def main(argv: list[str]) -> int:
         projects = _parse_subprojects(args.projects)
         if projects is None:
             return 1
-        return cmd_clang_tidy(projects)
+        return cmd_clang_tidy(projects, fix=args.fix)
     return args.handler()
 
 
