@@ -1426,6 +1426,7 @@ class TidyCompileArgumentsTests(unittest.TestCase):
             "-fstrict-volatile-bitfields",
             "-fno-tree-switch-conversion",
             "-fno-jump-tables",
+            "-fno-shrink-wrap",
             "-freorder-blocks",
             "-fno-test-coverage",
             "-std=gnu++26",
@@ -1573,8 +1574,7 @@ class TidyConfigurationTests(unittest.TestCase):
             )
             self.assertEqual(build_dir, expected, project)
 
-    def test_header_filter_covers_our_sources_and_excludes_vendored_code(self):
-        # The filter is anchored at the repository root, which is `/project`
+    def test_header_filter_covers_our_sources_and_excludes_vendored_code(self):        # The filter is anchored at the repository root, which is `/project`
         # inside the container and the checkout path on the host.
         root = str(dev.REPO_ROOT)
         pattern = re.compile(dev._tidy_header_filter())
@@ -1595,6 +1595,25 @@ class TidyConfigurationTests(unittest.TestCase):
             # Vendored code lives outside ROOTS and is not ours to fix.
             f"{root}/third_party/json/json.hpp",
             f"{root}/scripts/dev.py",
+        ):
+            self.assertIsNone(pattern.match(path), path)
+
+    def test_generated_build_headers_are_excluded(self):
+        # `sdkconfig.h` is generated inside every build directory; a "fix"
+        # there is lost on the next build.
+        root = str(dev.REPO_ROOT)
+        pattern = re.compile(dev._tidy_exclude_header_filter())
+        for path in (
+            f"{root}/mcgowan/build_esp32s3/config/sdkconfig.h",
+            f"{root}/components/hal/tests/test-hal-stub/build_linux/"
+            "config/sdkconfig.h",
+            f"{root}/components/hal/tests/esp_timer/board/build_esp32s3/"
+            "config/sdkconfig.h",
+        ):
+            self.assertIsNotNone(pattern.match(path), path)
+        for path in (
+            f"{root}/mcgowan/src/include/constants.hpp",
+            f"{root}/components/hal/hal_common/include/hal/sleep_types.hpp",
         ):
             self.assertIsNone(pattern.match(path), path)
 
@@ -1629,6 +1648,10 @@ class TidyCommandTests(unittest.TestCase):
         self.assertEqual(
             command[command.index("--header-filter") + 1],
             dev._tidy_header_filter(),
+        )
+        self.assertEqual(
+            command[command.index("--exclude-header-filter") + 1],
+            dev._tidy_exclude_header_filter(),
         )
 
     def test_files_come_last_in_database_order(self):

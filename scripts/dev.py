@@ -280,6 +280,7 @@ TIDY_PROJECT_PREFIX = "project:"
 TIDY_DROP_FLAGS = frozenset({
     "-c",
     "-fno-jump-tables",
+    "-fno-shrink-wrap",
     "-fno-test-coverage",
     "-fno-tree-switch-conversion",
     "-freorder-blocks",
@@ -1302,6 +1303,7 @@ def _tidy_command(
         "clang-tidy",
         "-p", str(build_path),
         "--header-filter", _tidy_header_filter(),
+        "--exclude-header-filter", _tidy_exclude_header_filter(),
         "--warnings-as-errors=*",
         "--quiet",
     ]
@@ -1382,6 +1384,19 @@ def _tidy_header_filter() -> str:
     """
     roots = "|".join(re.escape(root) for root in ROOTS if root != "scripts")
     return rf"^{re.escape(str(REPO_ROOT))}/({roots})/"
+
+
+def _tidy_exclude_header_filter() -> str:
+    """Keep generated build output out of the report.
+
+    Every build directory holds ESP-IDF's generated `config/sdkconfig.h`, and
+    its macros are not ours to edit: the next build rewrites the file, so a
+    fix there is lost. The header filter would otherwise report them.
+    """
+    build_dirs = "|".join(re.escape(name) for name in TIDY_BUILD_DIRS)
+    # LLVM's regex engine (what clang-tidy uses) has no non-capturing groups,
+    # so this sticks to plain ones.
+    return rf"^{re.escape(str(REPO_ROOT))}/(.*/)?({build_dirs})/"
 
 
 def cmd_install_hooks() -> int:
