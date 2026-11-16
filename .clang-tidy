@@ -1,0 +1,32 @@
+---
+# Start by disabling everything, then opt-in to specific categories
+Checks: >
+  -*
+  ,clang-analyzer-*
+  ,bugprone-*
+  ,performance-*
+  ,portability-*
+  ,cppcoreguidelines-avoid-goto
+  ,cppcoreguidelines-explicit-constructor
+  ,modernize-use-nullptr
+  ,modernize-use-override
+  ,modernize-use-using
+
+# Treat critical bug-finding checks as warnings or errors based on your CI setup
+WarningsAsErrors: ''
+
+# Limit checking to your project files, ignoring system/IDF component headers to speed up runs
+HeaderFilterRegex: ''
+
+# Custom options for naming or safety behavior
+CheckOptions:
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
+  - key: readability-identifier-naming.FunctionCase
+    value: lower_case
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+---
+`
