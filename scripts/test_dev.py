@@ -1814,6 +1814,8 @@ class TidyDatabaseDiscoveryTests(unittest.TestCase):
         for relative in (
             "components/a/build_linux",
             "mcgowan/build_esp32s3",
+            "components/b/build_esp32s3",
+            "components/c/build_linux",
             "components/a/cmake-build-debug",
             "components/a/build_linux/nested/build_linux",
             ".git/scratch/build_linux",
@@ -1825,12 +1827,18 @@ class TidyDatabaseDiscoveryTests(unittest.TestCase):
 
     def test_only_build_linux_and_build_esp32s3_are_considered(self):
         # The analyzed subprojects' databases come first (firmware first), so
-        # shared sources keep the flags of the chip build.
+        # shared sources keep the flags of the chip build; the projects found
+        # only by a directory scope put build_linux first, because the host
+        # build is the variant CI runs.
         self.assertEqual(
             dev._discover_tidy_databases(self.root),
             [
                 self.root / "mcgowan/build_esp32s3" / "compile_commands.json",
                 self.root / "components/a/build_linux"
+                / "compile_commands.json",
+                self.root / "components/c/build_linux"
+                / "compile_commands.json",
+                self.root / "components/b/build_esp32s3"
                 / "compile_commands.json",
             ],
         )

@@ -1208,11 +1208,14 @@ def _discover_tidy_databases(root: Path = REPO_ROOT) -> list[Path]:
     """The compile databases a directory scope may draw units from.
 
     Every `build_linux`/`build_esp32s3` tree under `root` (see
-    `TIDY_BUILD_DIRS`), with the analyzed subprojects first: a source file that
-    several projects compile then keeps the flags of the first database that
-    lists it, which is the firmware for shared code — the same firmware-first
-    rule `_unique_tidy_units` documents. Vendored submodule trees are skipped,
-    and build trees are not descended into.
+    `TIDY_BUILD_DIRS`), with the analyzed subprojects first and, among the
+    rest, `build_linux` before `build_esp32s3`: a source file that several
+    projects compile then keeps the flags of the first database that lists it.
+    For the analyzed subprojects that is the firmware, as `_unique_tidy_units`
+    documents; for the projects found only by a directory scope it is the host
+    build, which is the variant CI runs (and the chip build of a shared test
+    file can produce spurious analyzer results). Vendored submodule trees are
+    skipped, and build trees are not descended into.
     """
     known = []
     for project, build_dir in TIDY_PROJECTS:
@@ -1234,7 +1237,11 @@ def _discover_tidy_databases(root: Path = REPO_ROOT) -> list[Path]:
             for name in sorted(dirnames)
             if name not in (".git", *VENDORED_DIRS)
         ]
-    return [*known, *sorted(found - set(known))]
+    discovered = sorted(
+        found - set(known),
+        key=lambda path: (path.parent.name != TEST_BUILD_DIR, str(path)),
+    )
+    return [*known, *discovered]
 
 
 def _tidy_units_under(
