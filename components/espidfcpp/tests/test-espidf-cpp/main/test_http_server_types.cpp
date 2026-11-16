@@ -36,7 +36,6 @@ std::optional<std::string_view> normalize(std::string_view url) {
     return std::string_view(buffer.data(), *length);
 }
 
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void assert_normalized(std::string_view url, std::string_view expected) {
     const std::optional<std::string_view> result = normalize(url);
     TEST_ASSERT_TRUE(result.has_value());

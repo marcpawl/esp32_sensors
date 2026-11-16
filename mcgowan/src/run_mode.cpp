@@ -47,8 +47,8 @@ namespace {
 
 constexpr const char* kTag = "run";
 
-// Builds a fixed-size sample record from a reading set (§4.1).
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+// Builds a fixed-size sample record from a reading set (§4.1); `age_base` and
+// `batt_mv` are the record's first two fields, in layout order.
 SampleRecord make_record(std::uint32_t age_base, std::uint16_t batt_mv,
                          const std::vector<DS18B20Reading>& readings) {
     SampleRecord rec{};

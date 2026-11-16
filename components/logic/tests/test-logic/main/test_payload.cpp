@@ -23,7 +23,6 @@ using thermo::payload::NamedSample;
 
 namespace {
 
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 NamedSample make_sample(std::uint32_t age_s, std::uint16_t batt_mv,
                         std::int16_t t1, std::int16_t t2, std::int16_t t3) {
     NamedSample s{};

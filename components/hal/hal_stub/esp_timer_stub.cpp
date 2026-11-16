@@ -313,8 +313,7 @@ esp_err_t esp_timer_start_periodic(esp_timer_handle_t timer,
 // Mirrors ESP-IDF's `esp_timer_start_periodic_at` (`esp_timer.h`), which takes
 // a period and a first-alarm time as two microsecond values in that fixed
 // order. The stub implements the chip's API verbatim so the host tests and the
-// on-target tests call the same signature, so the parameters stay as they are.
-// NOLINTBEGIN(bugprone-easily-swappable-parameters)
+// on-target tests call the same signature.
 esp_err_t esp_timer_start_periodic_at(esp_timer_handle_t timer,
                                       uint64_t period_us,
                                       uint64_t first_alarm_us) {
@@ -356,8 +355,6 @@ esp_err_t esp_timer_start_periodic_at(esp_timer_handle_t timer,
     return ESP_OK;
 }
 
-// NOLINTEND(bugprone-easily-swappable-parameters)
-
 esp_err_t esp_timer_restart(esp_timer_handle_t timer, uint64_t timeout_us) {
     const Microseconds timeout{timeout_us};
     return esp_timer_restart_at(
@@ -367,7 +364,6 @@ esp_err_t esp_timer_restart(esp_timer_handle_t timer, uint64_t timeout_us) {
 // Mirrors ESP-IDF's `esp_timer_restart_at` (`esp_timer.h`) for the same
 // reason: the two microsecond arguments, and their order, come from the chip's
 // API rather than from this stub.
-// NOLINTBEGIN(bugprone-easily-swappable-parameters)
 esp_err_t esp_timer_restart_at(esp_timer_handle_t timer, uint64_t period_us,
                                uint64_t first_alarm_us) {
     if (timer == nullptr) {
@@ -406,8 +402,6 @@ esp_err_t esp_timer_restart_at(esp_timer_handle_t timer, uint64_t period_us,
     }
     return ESP_OK;
 }
-
-// NOLINTEND(bugprone-easily-swappable-parameters)
 
 esp_err_t esp_timer_stop(esp_timer_handle_t timer) {
     if (timer == nullptr) {

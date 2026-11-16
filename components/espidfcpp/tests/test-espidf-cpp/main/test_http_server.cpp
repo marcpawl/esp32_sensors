@@ -196,7 +196,6 @@ bool exchange(std::uint16_t port, std::string_view request,
 }
 
 // True when `headers` contains `needle`, case-insensitively.
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 bool has_header(std::string_view headers, std::string_view needle) {
     std::string lowered(headers);
     std::string lowered_needle(needle);

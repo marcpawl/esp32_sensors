@@ -15,8 +15,8 @@
 namespace thermo::config_page {
 namespace {
 
-// Appends a text input row to the form.
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+// Appends a text input row to the form; `name` is the input's HTML name and
+// `label` its visible label.
 void field(std::string& out, const char* name, const char* label,
            const std::string& value, const char* type = "text",
            const char* extra = "") {
@@ -26,7 +26,6 @@ void field(std::string& out, const char* name, const char* label,
 }
 
 // Appends a numeric input row to the form; `name` and `label` as `field()`.
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void field_num(std::string& out, const char* name, const char* label,
                const std::string& value, const char* step = "1") {
     out += "<p><label>" + html_escape(label) + "<br>";
