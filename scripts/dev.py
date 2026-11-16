@@ -305,9 +305,10 @@ TIDY_DROP_FLAG_PREFIXES = (
     "-fdiagnostics-color",
     "-fmacro-prefix-map=",
     "-specs=",
-    # The `-Wno-error=` companions to `-fanalyzer` name warnings clang does not
-    # have, so clang would reject them as unknown options.
+    # The `-Wno-error=` and `-Wno-` companions to `-fanalyzer` name warnings
+    # clang does not have, so clang would reject them as unknown options.
     "-Wno-error=analyzer-",
+    "-Wno-analyzer-",
 )
 
 
@@ -956,10 +957,10 @@ def _tidy_compile_arguments(argv: list[str]) -> list[str]:
     `-fno-tree-switch-conversion`, `-fno-jump-tables`, `-freorder-blocks`,
     `-fanalyzer` (GCC's static analyzer; clang has no such option) and
     `-specs=...` are GCC-only, and `-fmacro-prefix-map=` is not a clang flag
-    spelling clang accepts. The `-Wno-error=analyzer-...` forms configured
-    alongside it are dropped for the same reason. Left in, they surface as
-    `clang-diagnostic-error`s (or "argument unused" warnings, which
-    `--warnings-as-errors` promotes).
+    spelling clang accepts. The `-Wno-error=analyzer-...` and
+    `-Wno-analyzer-...` forms configured alongside it are dropped for the same
+    reason. Left in, they surface as `clang-diagnostic-error`s (or "argument
+    unused" warnings, which `--warnings-as-errors` promotes).
 
     `argv` is the whole command line, so `argv[0]` (the compiler) is dropped:
     clang-tidy takes the driver from its own argv. The trailing source file is
