@@ -744,6 +744,52 @@ diagnostics are not ours to fix:
 // NOLINTEND
 ```
 
+### Compiler, ESP-IDF and third-party diagnostics
+
+A compiler diagnostic (including `-fanalyzer`) can point into code we do not
+own:
+
+- the compiler's standard library (`libstdc++`, `libc`);
+- ESP-IDF headers;
+- `third_party/` (for example `nlohmann/json`).
+
+There is nothing to fix in those files, but the warning must not be turned off
+for the whole translation unit either: our code must stay under analysis. Wrap
+the **point in our source that reveals the diagnostic** — usually the
+`#include` that pulls the header in, sometimes the statement the analyzer
+names — in a diagnostic pragma that names the exact warning the compiler
+printed:
+
+```cpp
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic ignored "-Wanalyzer-malloc-leak"
+#include <string>
+#pragma GCC diagnostic pop
+// NOLINTEND
+```
+
+A diagnostic revealed at a call site is wrapped there instead:
+
+```cpp
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-null-dereference"
+read();
+#pragma GCC diagnostic pop
+```
+
+- Name the exact warning. GCC has no wildcard form, and a bare `-Wno-...`
+  would also hide findings in our own code.
+- Keep the scope as small as possible: `pop` before our own code resumes, so
+  a real finding still fails the build.
+- Add a comment naming the responsible library and saying why the code is
+  correct.
+- Prefer this local pragma to a global flag in `CMakeLists.txt`; a global flag
+  cannot tell our code from the library's.
+
+`// NOLINTBEGIN` and `// NOLINTEND` around the block keep clang-tidy quiet
+about the pragma itself, as in the wrapper exception above.
+
 ## ESP guidelines
 - Avoid using the heap
   - Try to used static_vector instead of std::vector
@@ -824,10 +870,12 @@ test case, wait for the child, and confirm that it was aborted.
   2. **Turn off clang-tidy** for the block (`// NOLINTBEGIN`).
   3. **`#pragma GCC diagnostic push`**, then (only if needed) disable the
      warnings that come from FreeRTOS/ESP-IDF headers, so third-party warnings
-     never leak into our build. The list is deliberately empty today: the
-     third-party headers in use are warning-clean at the build's warning level,
-     and inventing flags for warnings that do not fire only adds noise. Add an
-     ignore here when a new ESP-IDF header actually trips a diagnostic.
+     never leak into our build. Name the exact warning the compiler prints; see
+     "Compiler, ESP-IDF and third-party diagnostics" below. The list is
+     deliberately empty today: the third-party headers in use are
+     warning-clean at the build's warning level, and inventing flags for
+     warnings that do not fire only adds noise. Add an ignore here when a new
+     ESP-IDF header actually trips a diagnostic.
   4. **`#include` the FreeRTOS headers.**
   5. **`#include` the ESP-IDF headers.**
   6. **`#pragma GCC diagnostic pop`** — restore warnings.
