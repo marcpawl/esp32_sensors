@@ -15,6 +15,13 @@
 # Call `thermo_enable_gcc_analyzer()` once after `project()`; the flags then go
 # on every component target whose directory is in this repository. Pass explicit
 # target names to cover non-component executables a component creates.
+#
+# The analyzer is on by default. `scripts/dev.py build --analyzer=false` passes
+# `-DTHERMO_GCC_ANALYZER=OFF` to the subprojects; a manual `idf.py` build can do
+# the same.
+
+option(THERMO_GCC_ANALYZER
+    "Enable GCC's static analyzer for this repository's C++ code" ON)
 
 # `-fanalyzer` and `-Werror` are paired. Two warning categories come from
 # libstdc++ internals: the analyzer cannot model `std::string`'s
@@ -29,6 +36,10 @@ set(_thermo_gcc_analyzer_options
 )
 
 function(thermo_enable_gcc_analyzer)
+    if(NOT THERMO_GCC_ANALYZER)
+        return()
+    endif()
+
     if(ARGC GREATER 0)
         foreach(target IN LISTS ARGN)
             target_compile_options(${target} PRIVATE

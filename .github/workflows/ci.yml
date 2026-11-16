@@ -66,7 +66,7 @@ jobs:
 
       - name: Run build
         run: |
-          python3 ./scripts/dev.py build
+          python3 ./scripts/dev.py build --analyzer
 
       # Static analysis reads the compile databases the build just produced, so
       # it must run after `build` (it never builds anything itself).
