@@ -35,7 +35,15 @@ inline std::string assert_program_path(const char* program_name) {
     std::string path(exe);
     const std::size_t slash = path.find_last_of('/');
     path.resize(slash == std::string::npos ? 0 : slash + 1);
+    // GCC's analyzer cannot model libstdc++'s std::string concatenation and
+    // reports an uninitialised read here. The code is correct; keep the
+    // diagnostic fatal everywhere else.
+    // NOLINTBEGIN
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
     return path + program_name;
+#pragma GCC diagnostic pop
+    // NOLINTEND
 }
 
 // Forks, execs `program` with `case_name`, and waits for it. Returns true iff

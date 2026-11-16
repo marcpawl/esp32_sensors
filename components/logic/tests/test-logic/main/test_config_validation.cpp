@@ -26,6 +26,12 @@ using thermo::validation::validate_url;
 namespace {
 
 // A configuration that passes every rule; individual tests perturb one field.
+// GCC's analyzer cannot model libstdc++'s std::string internals and reports
+// the aggregate as uninitialised. Every field is assigned below; keep the
+// diagnostic fatal everywhere else.
+// NOLINTBEGIN
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
 Config valid_config() {
     Config cfg;
     cfg.ap_ssid = "ThermoSetup";
@@ -46,6 +52,8 @@ Config valid_config() {
     cfg.batt_cal_gain = 1.0f;
     return cfg;
 }
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 }  // namespace
 

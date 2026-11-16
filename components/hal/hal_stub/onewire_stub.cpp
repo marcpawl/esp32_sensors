@@ -40,16 +40,30 @@ esp_err_t OneWire::init() noexcept {
 }
 
 std::vector<RomId> OneWire::discover_sensors() const noexcept {
+    // GCC's analyzer cannot model libstdc++'s std::vector internals and
+    // reports an uninitialised read while filling and returning the vector.
+    // The code is correct; keep the diagnostic fatal everywhere else.
+    // NOLINTBEGIN
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
     std::vector<RomId> roms;
     roms.reserve(sensors_.size());
     for (const DS18B20Reading& reading : sensors_) {
         roms.push_back(reading.rom);
     }
     return roms;
+#pragma GCC diagnostic pop
+    // NOLINTEND
 }
 
 std::vector<DS18B20Reading> OneWire::read() const noexcept {
+    // Same libstdc++ copy-constructor false positive as discover_sensors().
+    // NOLINTBEGIN
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
     return sensors_;
+#pragma GCC diagnostic pop
+    // NOLINTEND
 }
 
 void OneWire::set_sensors(std::vector<DS18B20Reading> readings) noexcept {

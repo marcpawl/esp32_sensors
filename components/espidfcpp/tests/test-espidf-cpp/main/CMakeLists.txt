@@ -29,6 +29,14 @@ idf_component_register(
     WHOLE_ARCHIVE
 )
 
+# GCC's analyzer emits a locationless uninitialized-value diagnostic from the
+# std::string concatenations in test_http_server.cpp. A diagnostic pragma
+# cannot scope a locationless diagnostic, so disable that one category for
+# this file only; it stays fatal in the rest of the suite.
+set_source_files_properties(
+    "test_http_server.cpp"
+    PROPERTIES COMPILE_OPTIONS "-Wno-analyzer-use-of-uninitialized-value")
+
 # Standalone assert-trigger programs.
 #
 # The Unity tests fork+exec these programs to verify that contract violations

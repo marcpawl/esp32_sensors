@@ -16,21 +16,16 @@
 # on every component target whose directory is in this repository. Pass explicit
 # target names to cover non-component executables a component creates.
 
-# `-fanalyzer` and `-Werror` are paired. `analyzer-use-of-uninitialized-value`
-# is dominated by libstdc++ internals: the analyzer cannot model
-# `std::string`'s reserve() or its `snprintf` model, so it reports reads of
-# uninitialised storage inside libstdc++ headers and at the call sites that
-# inline them. That category is ignored.
-#
-# `analyzer-malloc-leak` has the same libstdc++ cause but a narrower trigger:
-# it fires only from `basic_string`'s reallocating `reserve()`. The source that
-# reveals it suppresses the category locally, around the `#include` that pulls
-# `<string>` in, with the `// NOLINTBEGIN` diagnostic-pragma pattern used
-# elsewhere in the tree. Every other analyzer warning fails the build.
+# `-fanalyzer` and `-Werror` are paired. Two warning categories come from
+# libstdc++ internals: the analyzer cannot model `std::string`'s
+# reserve()/reallocation or its `snprintf` model, so it reports leaks and
+# reads of uninitialised storage inside libstdc++ headers and at the call
+# sites that inline them. Both categories are suppressed locally, where the
+# diagnostic is revealed, with the `// NOLINTBEGIN` diagnostic-pragma pattern
+# used elsewhere in the tree. Every other analyzer warning fails the build.
 set(_thermo_gcc_analyzer_options
     $<$<COMPILE_LANGUAGE:CXX>:-fanalyzer>
     $<$<COMPILE_LANGUAGE:CXX>:-Werror>
-    $<$<COMPILE_LANGUAGE:CXX>:-Wno-analyzer-use-of-uninitialized-value>
 )
 
 function(thermo_enable_gcc_analyzer)

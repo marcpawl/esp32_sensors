@@ -43,7 +43,15 @@ class OneWire {
     // Builds a stub bus for the given pin. Same signature for the hardware and
     // stub implementations; call init() before discover_sensors()/read().
     [[nodiscard]] static OneWire create(int gpio) noexcept {
+        // GCC's analyzer cannot model libstdc++'s std::vector internals and
+        // reports an uninitialised read while returning the bus by value. The
+        // code is correct; keep the diagnostic fatal everywhere else.
+        // NOLINTBEGIN
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
         return OneWire(gpio);
+#pragma GCC diagnostic pop
+        // NOLINTEND
     }
 
     // No-op for the stub (there is no pin to configure); always succeeds.

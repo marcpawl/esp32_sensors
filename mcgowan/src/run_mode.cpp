@@ -72,6 +72,12 @@ SampleRecord make_record(std::uint32_t age_base, std::uint16_t batt_mv,
 
 // Translates buffered records into the name-indexed form used by the payload
 // builder (§9.1). Sensor order is fixed by the record layout (§4.1).
+// GCC's analyzer cannot model libstdc++'s std::vector internals and reports
+// the result as uninitialised. The code is correct; keep the diagnostic fatal
+// everywhere else.
+// NOLINTBEGIN
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
 std::vector<payload::NamedSample> collect_batch(const RtcState& st) {
     std::vector<payload::NamedSample> out;
     out.reserve(st.buffer.size());
@@ -84,6 +90,8 @@ std::vector<payload::NamedSample> collect_batch(const RtcState& st) {
     }
     return out;
 }
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 // Friendly names in column order, padded to the sensor count (§5.1.3).
 std::vector<std::string> names_for(
