@@ -36,4 +36,12 @@ set(EXTRA_COMPONENT_DIRS
 set(COMPONENTS main esp_timer_tests hal_stub)
 set(EXCLUDE_COMPONENTS hal_board)
 
+# GCC's static analyzer for this repository's C++ code only; the module
+# explains why ESP-IDF and vendored components are excluded.
+include("${CMAKE_CURRENT_LIST_DIR}/../../../../../cmake/gcc-analyzer.cmake")
+
 project(esp32_sensors_esp_timer_stub_tests)
+
+# `BUILD_COMPONENTS` is populated by project(); the analyzer flags go
+# on this repository's component targets only.
+thermo_enable_gcc_analyzer()

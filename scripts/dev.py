@@ -283,6 +283,7 @@ TIDY_PROJECT_PREFIX = "project:"
 # meaningless to clang-tidy, which only parses (never code-generates).
 TIDY_DROP_FLAGS = frozenset({
     "-c",
+    "-fanalyzer",
     "-fno-jump-tables",
     "-fno-shrink-wrap",
     "-fno-test-coverage",
@@ -304,6 +305,9 @@ TIDY_DROP_FLAG_PREFIXES = (
     "-fdiagnostics-color",
     "-fmacro-prefix-map=",
     "-specs=",
+    # The `-Wno-error=` companions to `-fanalyzer` name warnings clang does not
+    # have, so clang would reject them as unknown options.
+    "-Wno-error=analyzer-",
 )
 
 
@@ -949,10 +953,13 @@ def _tidy_compile_arguments(argv: list[str]) -> list[str]:
     ESP-IDF compiles with Xtensa GCC, so the compilation database records
     flags the Espressif `clang-tidy` driver (LLVM) rejects: `-mlongcalls`,
     `-mno-target-align`, `-fstrict-volatile-bitfields`,
-    `-fno-tree-switch-conversion`, `-fno-jump-tables`, `-freorder-blocks` and
+    `-fno-tree-switch-conversion`, `-fno-jump-tables`, `-freorder-blocks`,
+    `-fanalyzer` (GCC's static analyzer; clang has no such option) and
     `-specs=...` are GCC-only, and `-fmacro-prefix-map=` is not a clang flag
-    spelling clang accepts. Left in, they surface as `clang-diagnostic-error`s
-    (or "argument unused" warnings, which `--warnings-as-errors` promotes).
+    spelling clang accepts. The `-Wno-error=analyzer-...` forms configured
+    alongside it are dropped for the same reason. Left in, they surface as
+    `clang-diagnostic-error`s (or "argument unused" warnings, which
+    `--warnings-as-errors` promotes).
 
     `argv` is the whole command line, so `argv[0]` (the compiler) is dropped:
     clang-tidy takes the driver from its own argv. The trailing source file is

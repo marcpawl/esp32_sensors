@@ -24,4 +24,12 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 # default component search path (`<project>/components`).
 set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../components")
 
+# GCC's static analyzer for this repository's C++ code only; the module
+# explains why ESP-IDF and vendored components are excluded.
+include("${CMAKE_CURRENT_LIST_DIR}/../../../../../cmake/gcc-analyzer.cmake")
+
 project(esp32_sensors_esp_timer_board_tests)
+
+# `BUILD_COMPONENTS` is populated by project(); the analyzer flags go
+# on this repository's component targets only.
+thermo_enable_gcc_analyzer()

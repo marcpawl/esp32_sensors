@@ -47,6 +47,9 @@ function(add_assert_program name)
     set_target_properties(${name} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     )
+    # These are plain executables, not component libraries, so the project's
+    # `thermo_enable_gcc_analyzer()` loop does not reach them.
+    thermo_enable_gcc_analyzer(${name})
 endfunction()
 
 add_assert_program(static_string_assert)

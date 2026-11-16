@@ -1451,6 +1451,19 @@ class TidyCompileArgumentsTests(unittest.TestCase):
         ])
         self.assertEqual(args, ["-DFOO=1", "a.cpp"])
 
+    def test_drops_gcc_analyzer_flags(self):
+        # `-fanalyzer` and its `-Wno-error=` companions are GCC-only; clang,
+        # which clang-tidy drives, has no such options.
+        args = dev._tidy_compile_arguments([
+            "gcc",
+            "-fanalyzer",
+            "-Wno-error=analyzer-use-of-uninitialized-value",
+            "-Wno-error=analyzer-malloc-leak",
+            "-DFOO=1",
+            "a.cpp",
+        ])
+        self.assertEqual(args, ["-DFOO=1", "a.cpp"])
+
     def test_drops_value_taking_flags_with_their_value(self):
         args = dev._tidy_compile_arguments([
             "gcc",
