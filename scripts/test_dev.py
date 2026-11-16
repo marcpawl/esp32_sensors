@@ -216,34 +216,34 @@ class SubprojectBuildTests(unittest.TestCase):
                     "-DSUBPROJECTS=mcgowan;test-hal-stub;test-hal-common;"
                     "test-logic;test-espidf-cpp;test-simulator;donny;"
                     "test-esp_timer-stub;test-esp_timer-board",
-                    "-DTHERMO_GCC_ANALYZER=ON",
+                    "-DTHERMO_GCC_ANALYZER=OFF",
                 ],
                 ["cmake", "--build", dev.ROOT_BUILD_DIR],
             ],
         )
 
-    def test_root_build_can_turn_the_analyzer_off(self):
+    def test_root_build_can_enable_the_analyzer(self):
         commands = dev._root_build_commands(
-            list(dev.SUBPROJECTS), analyzer=False
+            list(dev.SUBPROJECTS), analyzer=True
         )
-        self.assertIn("-DTHERMO_GCC_ANALYZER=OFF", commands[0])
+        self.assertIn("-DTHERMO_GCC_ANALYZER=ON", commands[0])
 
-    def test_build_parser_defaults_the_analyzer_on(self):
+    def test_build_parser_defaults_the_analyzer_off(self):
         args = dev._build_parser().parse_args(["build", "mcgowan"])
-        self.assertTrue(args.analyzer)
+        self.assertFalse(args.analyzer)
         self.assertEqual(args.subprojects, ["mcgowan"])
 
     def test_build_parser_accepts_analyzer_values(self):
         parser = dev._build_parser()
-        self.assertFalse(
-            parser.parse_args(["build", "--analyzer=false", "mcgowan"]).analyzer
-        )
-        self.assertTrue(
-            parser.parse_args(["build", "--analyzer=true", "mcgowan"]).analyzer
-        )
-        self.assertFalse(
-            parser.parse_args(["build", "--analyzer=OFF"]).analyzer
-        )
+        self.assertFalse(parser.parse_args(
+            ["build", "--analyzer=false", "mcgowan"]
+        ).analyzer)
+        self.assertTrue(parser.parse_args(
+            ["build", "--analyzer=true", "mcgowan"]
+        ).analyzer)
+        self.assertFalse(parser.parse_args(
+            ["build", "--analyzer=OFF"]
+        ).analyzer)
 
     def test_bare_analyzer_does_not_consume_a_subproject(self):
         argv = dev._normalize_analyzer_argv(
@@ -1336,7 +1336,7 @@ class BuildProjectTests(unittest.TestCase):
                 dev._idf(
                     dev.ESPIDF_CPP_TEST_PROJECT,
                     dev.TEST_BUILD_DIR,
-                    "-DTHERMO_GCC_ANALYZER=ON",
+                    "-DTHERMO_GCC_ANALYZER=OFF",
                     "--preview",
                     "set-target",
                     "linux",
@@ -1344,7 +1344,7 @@ class BuildProjectTests(unittest.TestCase):
                 dev._idf(
                     dev.ESPIDF_CPP_TEST_PROJECT,
                     dev.TEST_BUILD_DIR,
-                    "-DTHERMO_GCC_ANALYZER=ON",
+                    "-DTHERMO_GCC_ANALYZER=OFF",
                     "build",
                 ),
             ],
@@ -1358,7 +1358,7 @@ class BuildProjectTests(unittest.TestCase):
                 dev._idf(
                     dev.DONNY_PROJECT,
                     dev.TEST_BUILD_DIR,
-                    "-DTHERMO_GCC_ANALYZER=ON",
+                    "-DTHERMO_GCC_ANALYZER=OFF",
                     "--preview",
                     "set-target",
                     "linux",
@@ -1366,7 +1366,7 @@ class BuildProjectTests(unittest.TestCase):
                 dev._idf(
                     dev.DONNY_PROJECT,
                     dev.TEST_BUILD_DIR,
-                    "-DTHERMO_GCC_ANALYZER=ON",
+                    "-DTHERMO_GCC_ANALYZER=OFF",
                     "build",
                 ),
             ],
@@ -1385,18 +1385,18 @@ class BuildProjectTests(unittest.TestCase):
                 dev._idf(
                     dev.FIRMWARE_PROJECT,
                     dev.FW_BUILD_DIR,
-                    "-DTHERMO_GCC_ANALYZER=ON",
+                    "-DTHERMO_GCC_ANALYZER=OFF",
                     "build",
                 )
             ],
         )
 
-    def test_analyzer_switch_can_turn_the_analyzer_off(self):
+    def test_analyzer_switch_can_turn_the_analyzer_on(self):
         self.assertEqual(
-            dev._build_project(dev.TEST_PROJECT, analyzer=False), 0
+            dev._build_project(dev.TEST_PROJECT, analyzer=True), 0
         )
         for cmd in self.calls:
-            self.assertIn("-DTHERMO_GCC_ANALYZER=OFF", cmd)
+            self.assertIn("-DTHERMO_GCC_ANALYZER=ON", cmd)
 
     def test_analyzer_define_is_always_explicit(self):
         # Passing OFF as well as ON is what stops a previous --analyzer build

@@ -16,12 +16,12 @@
 # on every component target whose directory is in this repository. Pass explicit
 # target names to cover non-component executables a component creates.
 #
-# The analyzer is on by default. `scripts/dev.py build --analyzer=false` passes
-# `-DTHERMO_GCC_ANALYZER=OFF` to the subprojects; a manual `idf.py` build can do
+# The analyzer is off by default. `scripts/dev.py build --analyzer` passes
+# `-DTHERMO_GCC_ANALYZER=ON` to the subprojects; a manual `idf.py` build can do
 # the same.
 
 option(THERMO_GCC_ANALYZER
-    "Enable GCC's static analyzer for this repository's C++ code" ON)
+    "Enable GCC's static analyzer for this repository's C++ code" OFF)
 
 # `-fanalyzer` and `-Werror` are paired. Two warning categories come from
 # libstdc++ internals: the analyzer cannot model `std::string`'s

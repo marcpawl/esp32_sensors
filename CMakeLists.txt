@@ -88,11 +88,11 @@ set_property(CACHE SUBPROJECTS PROPERTY STRINGS
     mcgowan test-hal-stub test-hal-common test-logic test-espidf-cpp
     test-simulator donny test-esp_timer-stub test-esp_timer-board)
 
-# GCC static analyzer for the C++ subprojects. On by default; pass
-# `-DTHERMO_GCC_ANALYZER=OFF` (or `scripts/dev.py build --analyzer=false`) to
-# turn it off.
+# GCC static analyzer for the C++ subprojects. Off by default; pass
+# `-DTHERMO_GCC_ANALYZER=ON` (or `scripts/dev.py build --analyzer`) to turn it
+# on.
 option(THERMO_GCC_ANALYZER
-    "Enable GCC's static analyzer for the C++ subprojects" ON)
+    "Enable GCC's static analyzer for the C++ subprojects" OFF)
 
 set(KNOWN_SUBPROJECTS
     mcgowan test-hal-stub test-hal-common test-logic test-espidf-cpp

@@ -735,7 +735,7 @@ def _analyzer_define(analyzer: bool) -> str:
 
 
 def _root_build_commands(subprojects: list[str],
-                         analyzer: bool = True) -> list[list[str]]:
+                         analyzer: bool = False) -> list[list[str]]:
     """Configure and build the root aggregator project. Pure (testable).
 
     The root project is plain CMake (not ESP-IDF); ``SUBPROJECTS`` selects
@@ -757,7 +757,7 @@ def _root_build_commands(subprojects: list[str],
     ]
 
 
-def _build_subprojects(subprojects: list[str], analyzer: bool = True) -> int:
+def _build_subprojects(subprojects: list[str], analyzer: bool = False) -> int:
     """Build the named subprojects in order. No container hop."""
     if subprojects == list(SUBPROJECTS):
         # The whole tree: let the root aggregator project drive every
@@ -774,7 +774,7 @@ def _build_subprojects(subprojects: list[str], analyzer: bool = True) -> int:
     return 0
 
 
-def _build_project(project: str, analyzer: bool = True) -> int:
+def _build_project(project: str, analyzer: bool = False) -> int:
     """Build one subproject with its own target and build directory.
 
     A project in `LINUX_PROJECTS` is pinned to the `linux` target and builds
@@ -792,13 +792,14 @@ def _build_project(project: str, analyzer: bool = True) -> int:
     return run(_idf(project, FW_BUILD_DIR, define, "build"))
 
 
-def cmd_build(args: list[str], analyzer: bool = True) -> int:
+def cmd_build(args: list[str], analyzer: bool = False) -> int:
     """Build the firmware; with no argument also the other subprojects.
 
-    `build`                    → every subproject, analyzer on
-    `build mcgowan`            → just the ESP32-S3 firmware, analyzer on
+    `build`                    → every subproject, analyzer off
+    `build mcgowan`            → just the ESP32-S3 firmware, analyzer off
     `build <subproject>`       → one subproject; any name in `SUBPROJECTS`
-    `build --analyzer=false`   → any of the above, analyzer off
+    `build --analyzer`         → any of the above, analyzer on
+    `build --analyzer=false`   → explicitly off (the default)
     """
     change_to_container()
     rc = _ensure_submodules()
@@ -1776,11 +1777,12 @@ def _build_parser() -> argparse.ArgumentParser:
     build_parser.add_argument(
         "--analyzer",
         type=_bool_value,
-        default=True,
+        default=False,
         metavar="BOOL",
-        help="enable GCC's static analyzer (-fanalyzer); on by default. Use "
-             "`--analyzer=false` to turn it off (the value must be attached "
-             "with `=`, so a following subproject name is not consumed)",
+        help="enable GCC's static analyzer (-fanalyzer); off by default. Use "
+             "`--analyzer` for on, or `--analyzer=false` for off (the value "
+             "must be attached with `=`, so a following subproject name is "
+             "not consumed)",
     )
     build_parser.add_argument(
         "subprojects",
