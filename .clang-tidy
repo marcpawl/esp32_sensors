@@ -6,6 +6,7 @@ Checks: >
   ,bugprone-*
   ,performance-*
   ,portability-*
+  ,-portability-avoid-pragma-once
   ,cppcoreguidelines-avoid-goto
   ,cppcoreguidelines-explicit-constructor
   ,modernize-use-nullptr
