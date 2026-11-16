@@ -68,14 +68,14 @@ class Timer {
     Timer(Timer&& other) noexcept
         : handle_(std::exchange(other.handle_, nullptr)),
           callback_(std::move(other.callback_)),
-          name_(std::move(other.name_)) {}
+          name_(other.name_) {}
 
     Timer& operator=(Timer&& other) noexcept {
         if (this != &other) {
             destroy();
             handle_ = std::exchange(other.handle_, nullptr);
             callback_ = std::move(other.callback_);
-            name_ = std::move(other.name_);
+            name_ = other.name_;
         }
         return *this;
     }
