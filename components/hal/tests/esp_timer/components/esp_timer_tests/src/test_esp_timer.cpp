@@ -555,7 +555,8 @@ TEST_CASE("esp_timer: dump writes the active timers", "[esp_timer]") {
     TEST_ASSERT_EQUAL(0, std::fseek(stream, 0, SEEK_END));
     const long size = std::ftell(stream);
     TEST_ASSERT_GREATER_THAN(0, size);
-    std::rewind(stream);
+    // Checked instead of `std::rewind`, which cannot report failure.
+    TEST_ASSERT_EQUAL(0, std::fseek(stream, 0, SEEK_SET));
 
     char buffer[256] = {};
     const std::size_t read = std::fread(buffer, 1, sizeof(buffer) - 1, stream);

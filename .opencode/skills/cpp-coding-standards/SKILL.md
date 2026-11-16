@@ -714,6 +714,36 @@ std::vector<std::unique_ptr<Point>> indirect_points; // BAD: pointer chasing
 - Choosing "clever" low-level code over clear abstractions (Per.4, Per.5)
 - Ignoring data layout and cache behavior (Per.19)
 
+### clang-tidy NOLINT
+
+Suppress a finding only when the analyzer is right but the code must stay
+as it is. Then follow these three rules:
+
+- **Name the check**, so the suppression cannot hide a different finding
+  on the same line:
+  `// NOLINTNEXTLINE(performance-no-int-to-ptr)`.
+- **Explain why**, in a comment next to the suppression: what makes the
+  alternative worse (an API contract, a hardware requirement, a test
+  fixture). A later reader must be able to re-check the judgement.
+- **Pick the smallest scope.** `NOLINTNEXTLINE` suppresses the next line,
+  a trailing `NOLINT` the same line, and `NOLINTBEGIN` … `NOLINTEND` a
+  range. A wrapped function signature usually needs the range form:
+  clang-tidy reports the parameter line, not the line carrying the
+  function name, so a `NOLINTNEXTLINE` above the signature misses.
+
+**Wrapper exception.** An `#include` block of ESP-IDF or `third_party/`
+headers is turned off wholesale, without per-check names, because those
+diagnostics are not ours to fix:
+
+```cpp
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+```
+
 ## ESP guidelines
 - Avoid using the heap
   - Try to used static_vector instead of std::vector

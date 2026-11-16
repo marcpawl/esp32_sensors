@@ -310,6 +310,10 @@ esp_err_t esp_timer_start_periodic(esp_timer_handle_t timer,
         static_cast<uint64_t>((now() + period).count()));
 }
 
+// Mirrors ESP-IDF's `esp_timer_start_periodic_at` (`esp_timer.h`), which takes
+// a period and a first-alarm time as two microsecond values in that fixed
+// order. The stub implements the chip's API verbatim so the host tests and the
+// on-target tests call the same signature.
 esp_err_t esp_timer_start_periodic_at(esp_timer_handle_t timer,
                                       uint64_t period_us,
                                       uint64_t first_alarm_us) {
@@ -357,6 +361,9 @@ esp_err_t esp_timer_restart(esp_timer_handle_t timer, uint64_t timeout_us) {
         timer, timeout_us, static_cast<uint64_t>((now() + timeout).count()));
 }
 
+// Mirrors ESP-IDF's `esp_timer_restart_at` (`esp_timer.h`) for the same
+// reason: the two microsecond arguments, and their order, come from the chip's
+// API rather than from this stub.
 esp_err_t esp_timer_restart_at(esp_timer_handle_t timer, uint64_t period_us,
                                uint64_t first_alarm_us) {
     if (timer == nullptr) {

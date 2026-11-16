@@ -193,7 +193,9 @@ TEST_CASE("hal board: wifi() is a live stub device", "[hal_board]") {
     copy_text(ap.password, "hunter22");
     TEST_ASSERT_EQUAL(ESP_OK, b.wifi().start_ap(ap));
     TEST_ASSERT_TRUE(b.wifi().ap_running());
-    TEST_ASSERT_EQUAL_STRING("thermo-setup", b.wifi().ap_config()->ssid.data());
+    const std::optional<AccessPointConfig>& running_ap = b.wifi().ap_config();
+    TEST_ASSERT_TRUE(running_ap.has_value());
+    TEST_ASSERT_EQUAL_STRING("thermo-setup", running_ap->ssid.data());
 
     StationConfig sta;
     copy_text(sta.ssid, "home");
@@ -236,6 +238,7 @@ TEST_CASE("hal board: deep_sleep_start() records the duration and returns",
 
     // A later request overwrites the earlier one.
     b.deep_sleep_start(std::chrono::seconds{3600});
+    TEST_ASSERT_TRUE(b.last_deep_sleep().has_value());
     TEST_ASSERT_EQUAL(3600, b.last_deep_sleep()->count());
 
     // Sleeping arms the wake the real board would see: it enables the RTC

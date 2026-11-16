@@ -72,7 +72,7 @@ jobs:
       # it must run after `build` (it never builds anything itself).
       - name: Run clang-tidy
         run: |
-          python3 ./scripts/dev.py clang-tidy
+          python3 ./scripts/dev.py clang-tidy /project
 
       - name: Run tests
         run: |

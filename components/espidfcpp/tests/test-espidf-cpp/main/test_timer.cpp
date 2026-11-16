@@ -166,7 +166,7 @@ TEST_CASE("espidf_cpp timer: move construction transfers the handle",
     Timer moved(std::move(source));
     // Inspecting the moved-from object is deliberate: the wrapper promises it
     // no longer owns a timer.
-    // NOLINTNEXTLINE(clang-analyzer-cplusplus.Move)
+    // NOLINTNEXTLINE(clang-analyzer-cplusplus.Move, bugprone-use-after-move)
     TEST_ASSERT_NULL(source.handle());
     TEST_ASSERT_EQUAL_PTR(handle, moved.handle());
     TEST_ASSERT_EQUAL_INT(0, fake_esp_timer::state().delete_calls);
@@ -186,7 +186,7 @@ TEST_CASE("espidf_cpp timer: move assignment releases the old timer",
     target = std::move(source);
     // Inspecting the moved-from object is deliberate: the wrapper promises it
     // no longer owns a timer.
-    // NOLINTNEXTLINE(clang-analyzer-cplusplus.Move)
+    // NOLINTNEXTLINE(clang-analyzer-cplusplus.Move, bugprone-use-after-move)
     TEST_ASSERT_NULL(source.handle());
     TEST_ASSERT_EQUAL_PTR(source_handle, target.handle());
     TEST_ASSERT_EQUAL_INT(1, fake_esp_timer::state().delete_calls);

@@ -36,7 +36,7 @@ invoked from the host.
 | both | `format-check` | Non-zero exit if anything is unformatted |
 | both | `format-check-staged` | Same, for staged code only |
 | both | `pycodestyle` | PEP 8 (79 columns) over all Python sources |
-| both | `clang-tidy [PROJECT...]` | Static analysis over built projects |
+| both | `clang-tidy [DIRECTORY\|PROJECT...] [--fix]` | Static analysis over every source under a directory, or over a built project (`project:NAME` forces the project when a directory of the same name exists); `--fix` applies fixes in place |
 | both | `shell [CMD...]` | Run a command in the container; no arguments = login shell |
 | both | `complete` | Internal: list subcommands matching a prefix |
 | host | `install-hooks` | Install the git commit hooks |

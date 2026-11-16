@@ -37,7 +37,7 @@ namespace thermo::hal {
 // values therefore match `esp_sleep_source_t` exactly, so `hal_board` can pass
 // ESP-IDF's bitmap straight through; `board.cpp` asserts that they still line
 // up. Only the sources this firmware can actually wake from are listed.
-enum class WakeCause : std::uint32_t {
+enum class WakeCause : std::uint8_t {
     // The reset was not caused by a wake from sleep (i.e. a cold boot). This
     // is what `esp_sleep_get_wakeup_causes()` reports while running normally.
     kUndefined = 0,

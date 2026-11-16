@@ -46,10 +46,17 @@ ButtonHandler g_handler = std::nullopt;
 // or writes it, so no synchronisation is needed.
 ButtonState g_last_state = ButtonState::kOff;
 
+// The pin the ISR receives through ESP-IDF's `void*` argument.
+// `gpio_isr_handler_add()` carries no typed payload, and casting the pin number
+// to a pointer (an int-to-pointer cast) pessimizes the optimizer, so the value
+// lives in static storage and its address is what travels. Static storage also
+// keeps it valid for as long as the ISR is installed.
+int g_isr_pin = 0;
+
 // GPIO ISR: on any edge, sample the pin and, if the state actually changed,
 // invoke the registered callback with the new state.
 void IRAM_ATTR button_isr(void* arg) noexcept {
-    const auto gpio = static_cast<int>(reinterpret_cast<intptr_t>(arg));
+    const auto gpio = *static_cast<const int*>(arg);
     const ButtonState state =
         state_from_level(gpio_get_level(static_cast<gpio_num_t>(gpio)));
     if (state == g_last_state) {
@@ -89,9 +96,9 @@ void PushButton::set_interrupt(ButtonHandler handler) noexcept {
     }
     // Report both edges so the first press and the first release after
     // registration are both delivered.
+    g_isr_pin = gpio_;
     gpio_set_intr_type(gpio, GPIO_INTR_ANYEDGE);
-    gpio_isr_handler_add(gpio, button_isr,
-                         reinterpret_cast<void*>(static_cast<intptr_t>(gpio_)));
+    gpio_isr_handler_add(gpio, button_isr, &g_isr_pin);
 }
 
 }  // namespace thermo::hal::board

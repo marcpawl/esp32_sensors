@@ -115,6 +115,7 @@ TEST_CASE("hal wifi: restarting the AP replaces its configuration",
     TEST_ASSERT_EQUAL(ESP_OK, radio.start_ap(renamed));
 
     TEST_ASSERT_TRUE(radio.ap_running());
+    TEST_ASSERT_TRUE(radio.ap_config().has_value());
     TEST_ASSERT_EQUAL_STRING("ESP32-Thermo-NEW",
                              radio.ap_config()->ssid.data());
 }

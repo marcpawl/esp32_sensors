@@ -135,7 +135,7 @@ constexpr int hex_digit(char h) noexcept {
     return -1;
 }
 
-enum class DecodeResult {
+enum class DecodeResult : std::uint8_t {
     kDecoded,    // `out` holds the decoded text.
     kTooLong,    // The text does not fit in `out`.
     kMalformed,  // A '%' escape is truncated or not hexadecimal.

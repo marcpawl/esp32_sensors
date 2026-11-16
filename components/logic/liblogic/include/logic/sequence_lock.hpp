@@ -41,7 +41,7 @@ class SequenceLock {
 
   public:
     // The outcome of a write: only a current version is stored.
-    enum class WriteResult {
+    enum class WriteResult : std::uint8_t {
         kStored,    // The version was current; the model was stored.
         kRejected,  // Another writer published first; nothing was stored.
     };

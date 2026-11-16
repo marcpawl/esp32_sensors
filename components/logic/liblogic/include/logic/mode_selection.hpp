@@ -38,7 +38,9 @@ using ModeSelection = std::optional<Mode>;
 //
 // Both-off is reported as `kOff` rather than as an error: the center position
 // cuts power to the regulator, so a running firmware only observes it
-// transiently (e.g. while the switch is passing through center).
+// transiently (e.g. while the switch is passing through center). The
+// parameters are the two poles in the switch's own order (§3.1-§3.3):
+// Configure pole, then Run pole.
 [[nodiscard]] constexpr ModeSelection mode_from_buttons(
     hal::ButtonState config, hal::ButtonState run) noexcept {
     const bool config_on = config == hal::ButtonState::kOn;
