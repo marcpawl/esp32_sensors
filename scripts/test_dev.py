@@ -150,6 +150,8 @@ class SubprojectBuildTests(unittest.TestCase):
                 "test-espidf-cpp",
                 "test-simulator",
                 "donny",
+                "test-esp_timer-stub",
+                "test-esp_timer-board",
             ),
         )
 
@@ -163,6 +165,7 @@ class SubprojectBuildTests(unittest.TestCase):
                 dev.ESPIDF_CPP_TEST_PROJECT,
                 dev.TEST_SIMULATOR_PROJECT,
                 dev.DONNY_PROJECT,
+                dev.ESP_TIMER_STUB_PROJECT,
             ),
         )
         # Every linux project is also a buildable subproject.
@@ -211,7 +214,8 @@ class SubprojectBuildTests(unittest.TestCase):
                     "-S", ".",
                     "-B", dev.ROOT_BUILD_DIR,
                     "-DSUBPROJECTS=mcgowan;test-hal-stub;test-hal-common;"
-                    "test-logic;test-espidf-cpp;test-simulator;donny",
+                    "test-logic;test-espidf-cpp;test-simulator;donny;"
+                    "test-esp_timer-stub;test-esp_timer-board",
                 ],
                 ["cmake", "--build", dev.ROOT_BUILD_DIR],
             ],
@@ -1568,9 +1572,9 @@ class TidyConfigurationTests(unittest.TestCase):
         # agree or the gate would tell the user to build what is already built.
         for project, build_dir in dev.TIDY_PROJECTS:
             expected = (
-                dev.FW_BUILD_DIR
-                if project == dev.FIRMWARE_PROJECT
-                else dev.TEST_BUILD_DIR
+                dev.TEST_BUILD_DIR
+                if project in dev.LINUX_PROJECTS
+                else dev.FW_BUILD_DIR
             )
             self.assertEqual(build_dir, expected, project)
 

@@ -26,6 +26,12 @@ cmake_minimum_required(VERSION 3.22)
 #   components/simulator/exe/donny/
 #                    linux-emulated application (hal_stub, `linux`)
 #                                              -> .../donny/build_linux/
+#   components/hal/tests/esp_timer/stub/
+#                    esp_timer host tests, `linux` target
+#                                    -> .../esp_timer/stub/build_linux/
+#   components/hal/tests/esp_timer/board/
+#                    esp_timer on-target tests, ESP32-S3
+#                                   -> .../esp_timer/board/build_esp32s3/
 #
 # This file only aggregates them, so ONE build covers all of them. It is plain
 # CMake (no repo-root sdkconfig): each target invokes `idf.py` for its
@@ -75,16 +81,16 @@ project(esp32_sensors_subprojects NONE)
 
 # Which subprojects to build. Default: all of them.
 set(SUBPROJECTS
-    "mcgowan;test-hal-stub;test-hal-common;test-logic;test-espidf-cpp;test-simulator;donny"
+    "mcgowan;test-hal-stub;test-hal-common;test-logic;test-espidf-cpp;test-simulator;donny;test-esp_timer-stub;test-esp_timer-board"
     CACHE STRING
-    "Subprojects to build: mcgowan, test-hal-stub, test-hal-common, test-logic, test-espidf-cpp, test-simulator, donny")
+    "Subprojects to build: mcgowan, test-hal-stub, test-hal-common, test-logic, test-espidf-cpp, test-simulator, donny, test-esp_timer-stub, test-esp_timer-board")
 set_property(CACHE SUBPROJECTS PROPERTY STRINGS
     mcgowan test-hal-stub test-hal-common test-logic test-espidf-cpp
-    test-simulator donny)
+    test-simulator donny test-esp_timer-stub test-esp_timer-board)
 
 set(KNOWN_SUBPROJECTS
     mcgowan test-hal-stub test-hal-common test-logic test-espidf-cpp
-    test-simulator donny)
+    test-simulator donny test-esp_timer-stub test-esp_timer-board)
 foreach(sub IN LISTS SUBPROJECTS)
     if(NOT sub IN_LIST KNOWN_SUBPROJECTS)
         message(FATAL_ERROR
@@ -182,4 +188,20 @@ endif()
 if(donny IN_LIST SUBPROJECTS)
     _idf_subproject(donny components/simulator/exe/donny
         build_linux "--preview|set-target|linux" "build")
+endif()
+
+# --- test-esp_timer-stub: esp_timer host tests (linux) -> *_build ---------
+# Same `linux` target rules as the host test projects; built (not run) here,
+# since running means executing the ELF from its build tree.
+if(test-esp_timer-stub IN_LIST SUBPROJECTS)
+    _idf_subproject(test-esp_timer-stub components/hal/tests/esp_timer/stub
+        build_linux "--preview|set-target|linux" "build")
+endif()
+
+# --- test-esp_timer-board: esp_timer on-target tests -> *_build -----------
+# ESP32-S3 image, like the firmware: it needs a board to run, but it builds
+# without one.
+if(test-esp_timer-board IN_LIST SUBPROJECTS)
+    _idf_subproject(test-esp_timer-board components/hal/tests/esp_timer/board
+        build_esp32s3 "build")
 endif()

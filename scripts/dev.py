@@ -160,6 +160,8 @@ HAL_COMMON_TEST_PROJECT = "test-hal-common"
 ESPIDF_CPP_TEST_PROJECT = "test-espidf-cpp"
 TEST_SIMULATOR_PROJECT = "test-simulator"
 DONNY_PROJECT = "donny"
+ESP_TIMER_STUB_PROJECT = "test-esp_timer-stub"
+ESP_TIMER_BOARD_PROJECT = "test-esp_timer-board"
 
 # Directory (repo-relative) where each subproject lives. Only the firmware
 # sits at the repository root; the test projects live under
@@ -177,6 +179,8 @@ PROJECT_DIRS = {
     TEST_SIMULATOR_PROJECT:
         "components/simulator/tests/test-simulator",
     DONNY_PROJECT: "components/simulator/exe/donny",
+    ESP_TIMER_STUB_PROJECT: "components/hal/tests/esp_timer/stub",
+    ESP_TIMER_BOARD_PROJECT: "components/hal/tests/esp_timer/board",
 }
 
 
@@ -222,6 +226,7 @@ LINUX_PROJECTS = (
     ESPIDF_CPP_TEST_PROJECT,
     TEST_SIMULATOR_PROJECT,
     DONNY_PROJECT,
+    ESP_TIMER_STUB_PROJECT,
 )
 
 SUBPROJECTS = (
@@ -232,23 +237,22 @@ SUBPROJECTS = (
     ESPIDF_CPP_TEST_PROJECT,
     TEST_SIMULATOR_PROJECT,
     DONNY_PROJECT,
+    ESP_TIMER_STUB_PROJECT,
+    ESP_TIMER_BOARD_PROJECT,
 )
 
 # Host-side unit tests for this script itself (stdlib `unittest`), run by
 # `scripts/dev.py self-check`.
 SELF_CHECK_MODULE = "scripts.test_dev"
 
-# clang-tidy: the ESP-IDF projects whose compile databases seed the analysis,
-# mapped to their build directory. clang-tidy consumes a compilation database,
-# so these builds must have run first (`scripts/dev.py build`).
-TIDY_PROJECTS = (
-    (FIRMWARE_PROJECT, FW_BUILD_DIR),
-    (HAL_STUB_TEST_PROJECT, TEST_BUILD_DIR),
-    (HAL_COMMON_TEST_PROJECT, TEST_BUILD_DIR),
-    (TEST_PROJECT, TEST_BUILD_DIR),
-    (ESPIDF_CPP_TEST_PROJECT, TEST_BUILD_DIR),
-    (TEST_SIMULATOR_PROJECT, TEST_BUILD_DIR),
-    (DONNY_PROJECT, TEST_BUILD_DIR),
+# clang-tidy: the ESP-IDF projects whose compile databases seed the analysis.
+# Every buildable subproject is analyzed, and each maps to the build directory
+# `build` writes for it (`build_linux` for the `linux` target, `build_esp32s3`
+# otherwise), so the two can never disagree. Deriving the table keeps that
+# true when a subproject is added.
+TIDY_PROJECTS = tuple(
+    (project, TEST_BUILD_DIR if project in LINUX_PROJECTS else FW_BUILD_DIR)
+    for project in SUBPROJECTS
 )
 
 # Source extensions clang-tidy analyzes. The compile database lists every
@@ -726,9 +730,8 @@ def _build_subprojects(subprojects: list[str]) -> int:
 def _build_project(project: str) -> int:
     """Build one subproject with its own target and build directory.
 
-    The host-test projects (`test-hal-stub`, `test-hal-common`, `test-logic`,
-    `test-espidf-cpp`, `test-simulator`) are pinned to the `linux` target and
-    build into `build_linux`; the firmware builds for ESP32-S3 into
+    A project in `LINUX_PROJECTS` is pinned to the `linux` target and builds
+    into `build_linux`; everything else builds for ESP32-S3 into
     `build_esp32s3`.
     """
     if project in LINUX_PROJECTS:
@@ -745,8 +748,7 @@ def cmd_build(args: list[str]) -> int:
 
     `build`               → every subproject (firmware, host tests)
     `build mcgowan`       → just the ESP32-S3 firmware (mcgowan/build_esp32s3)
-    `build test-hal-stub` → any of: mcgowan test-hal-stub test-hal-common
-                            test test-espidf-cpp test-simulator donny
+    `build <subproject>`  → one subproject; any name in `SUBPROJECTS`
     """
     change_to_container()
     rc = _ensure_submodules()
