@@ -27,6 +27,7 @@
 
 #include <chrono>
 #include <cstdlib>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -47,6 +48,7 @@ namespace {
 constexpr const char* kTag = "run";
 
 // Builds a fixed-size sample record from a reading set (§4.1).
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 SampleRecord make_record(std::uint32_t age_base, std::uint16_t batt_mv,
                          const std::vector<DS18B20Reading>& readings) {
     SampleRecord rec{};
@@ -60,8 +62,9 @@ SampleRecord make_record(std::uint32_t age_base, std::uint16_t batt_mv,
                                                        &rec.t3};
     for (std::size_t i = 0; i < readings.size() && i < limits::kSensorCount;
          ++i) {
-        if (readings[i].temp_c_x100) {
-            *slots[i] = *readings[i].temp_c_x100;
+        const auto& temp = readings[i].temp_c_x100;
+        if (temp.has_value()) {
+            *slots[i] = *temp;
         }
     }
     return rec;

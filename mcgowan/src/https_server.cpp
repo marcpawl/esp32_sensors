@@ -15,6 +15,8 @@
 
 #include <cstring>
 
+#include <sys/types.h>
+
 #include "app_config_store.hpp"
 #include "config_page.hpp"
 #include "constants.hpp"
@@ -35,13 +37,17 @@ struct HandlerContext {
     std::string last_warning;
 };
 
-// Sends `body` with the given status and content type.
+// Sends `body` with the given status and content type. 
+// NOLINTBEGIN(bugprone-easily-swappable-parameters)
 esp_err_t send_body(httpd_req_t* req, const std::string& body,
                     const char* content_type, const char* status = "200 OK") {
     httpd_resp_set_status(req, status);
     httpd_resp_set_type(req, content_type);
-    return httpd_resp_send(req, body.c_str(), body.size());
+    return httpd_resp_send(req, body.c_str(),
+                           static_cast<ssize_t>(body.size()));
 }
+
+// NOLINTEND(bugprone-easily-swappable-parameters)
 
 // Collects the request body (with a sane cap) into a string.
 std::optional<std::string> read_body(httpd_req_t* req) {

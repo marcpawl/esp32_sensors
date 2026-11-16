@@ -16,6 +16,7 @@ namespace thermo::config_page {
 namespace {
 
 // Appends a text input row to the form.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void field(std::string& out, const char* name, const char* label,
            const std::string& value, const char* type = "text",
            const char* extra = "") {
@@ -24,6 +25,8 @@ void field(std::string& out, const char* name, const char* label,
            "' value='" + html_escape(value) + "' " + extra + "></label></p>\n";
 }
 
+// Appends a numeric input row to the form; `name` and `label` as `field()`.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void field_num(std::string& out, const char* name, const char* label,
                const std::string& value, const char* step = "1") {
     out += "<p><label>" + html_escape(label) + "<br>";
@@ -220,8 +223,9 @@ std::string render_form(const Config& cfg, const ScanSnapshot& scan,
         out += "<td><input type='text' name='map_" + rom + "' value='" +
                html_escape(name) + "'></td>";
         out += "<td>";
-        if (reading.temp_c_x100) {
-            out += format_temp_c_x100(*reading.temp_c_x100) + " &deg;C";
+        const auto& temp = reading.temp_c_x100;
+        if (temp.has_value()) {
+            out += format_temp_c_x100(*temp) + " &deg;C";
         } else {
             out += "n/a";
         }
