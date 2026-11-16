@@ -38,6 +38,7 @@
 #include <array>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -224,7 +225,8 @@ bool assign_text(std::array<char, Capacity>& buffer, const json& value,
 // "wifi.ap"), so the two are separate: the `wifi` object's keys are `ap` and
 // `station`, not `wifi.ap` and `wifi.station`.
 std::optional<std::string> find_object(const json& object, const char* key,
-                                       const char* label, const json*& out) {
+                                       std::string_view label,
+                                       const json*& out) {
     out = nullptr;
     const auto it = object.find(key);
     if (it == object.end() || it->is_null()) {
@@ -240,7 +242,7 @@ std::optional<std::string> find_object(const json& object, const char* key,
 // Looks up the optional "on"/"off" field `key` inside `object`, following the
 // same present/null/error rules as `find_object`.
 std::optional<std::string> find_switch(const json& object, const char* key,
-                                       const char* label,
+                                       std::string_view label,
                                        std::optional<bool>& out) {
     out.reset();
     const auto it = object.find(key);
@@ -552,7 +554,7 @@ std::optional<std::string> apply(const json& doc, hal::stub::BoardStub& board) {
                     return "sensor \"temp_c_x100\" must be an integer in int16 "
                            "range or null";
                 }
-                reading.temp_c_x100 = *value;
+                reading.temp_c_x100 = value;
             }
             readings.push_back(reading);
         }

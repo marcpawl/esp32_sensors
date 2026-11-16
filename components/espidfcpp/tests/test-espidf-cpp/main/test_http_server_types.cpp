@@ -36,6 +36,7 @@ std::optional<std::string_view> normalize(std::string_view url) {
     return std::string_view(buffer.data(), *length);
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void assert_normalized(std::string_view url, std::string_view expected) {
     const std::optional<std::string_view> result = normalize(url);
     TEST_ASSERT_TRUE(result.has_value());
@@ -128,9 +129,16 @@ TEST_CASE("http_server_types: normalize rejects a path that does not fit",
 
 TEST_CASE("http_server_types: parse_int accepts decimal integers",
           "[http_server_types]") {
-    TEST_ASSERT_EQUAL_INT(0, *parse_int<int>("0"));
-    TEST_ASSERT_EQUAL_INT(42, *parse_int<int>("42"));
-    TEST_ASSERT_EQUAL_UINT(65535, *parse_int<std::uint16_t>("65535"));
+    const std::optional<int> zero = parse_int<int>("0");
+    const std::optional<int> forty_two = parse_int<int>("42");
+    const std::optional<std::uint16_t> max_u16 =
+        parse_int<std::uint16_t>("65535");
+    TEST_ASSERT_TRUE(zero.has_value());
+    TEST_ASSERT_TRUE(forty_two.has_value());
+    TEST_ASSERT_TRUE(max_u16.has_value());
+    TEST_ASSERT_EQUAL_INT(0, *zero);
+    TEST_ASSERT_EQUAL_INT(42, *forty_two);
+    TEST_ASSERT_EQUAL_UINT(65535, *max_u16);
 }
 
 TEST_CASE("http_server_types: parse_int rejects anything else",

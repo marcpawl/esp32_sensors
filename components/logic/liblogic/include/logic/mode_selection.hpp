@@ -39,6 +39,7 @@ using ModeSelection = std::optional<Mode>;
 // Both-off is reported as `kOff` rather than as an error: the center position
 // cuts power to the regulator, so a running firmware only observes it
 // transiently (e.g. while the switch is passing through center).
+// NOLINTBEGIN(bugprone-easily-swappable-parameters)
 [[nodiscard]] constexpr ModeSelection mode_from_buttons(
     hal::ButtonState config, hal::ButtonState run) noexcept {
     const bool config_on = config == hal::ButtonState::kOn;
@@ -55,5 +56,7 @@ using ModeSelection = std::optional<Mode>;
     // Both poles energized: the switch is miswired or shorted.
     return std::nullopt;
 }
+
+// NOLINTEND(bugprone-easily-swappable-parameters)
 
 }  // namespace thermo

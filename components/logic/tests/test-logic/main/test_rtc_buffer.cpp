@@ -28,6 +28,7 @@ using thermo::limits::kSensorCount;
 
 namespace {
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 SampleRecord make_record(std::uint32_t age, std::uint16_t batt,
                          std::int16_t t1) {
     SampleRecord rec{};
