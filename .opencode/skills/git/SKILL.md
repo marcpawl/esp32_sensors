@@ -96,6 +96,7 @@ Every commit ends with trailers describing the AI used.
 ```
 ai-agent: [Agent Name](Agent URL)
 ai-model: [Model Name)(Model URL)
+ai-session: AI agent session name
 ```
 
 ## Pull Request Message
