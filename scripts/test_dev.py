@@ -1578,7 +1578,8 @@ class TidyConfigurationTests(unittest.TestCase):
             )
             self.assertEqual(build_dir, expected, project)
 
-    def test_header_filter_covers_our_sources_and_excludes_vendored_code(self):        # The filter is anchored at the repository root, which is `/project`
+    def test_header_filter_covers_our_sources_and_excludes_vendored_code(self):
+        # The filter is anchored at the repository root, which is `/project`
         # inside the container and the checkout path on the host.
         root = str(dev.REPO_ROOT)
         pattern = re.compile(dev._tidy_header_filter())
