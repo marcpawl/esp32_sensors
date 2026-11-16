@@ -744,6 +744,11 @@ diagnostics are not ours to fix:
 // NOLINTEND
 ```
 
+## ESP guidelines
+- Avoid using the heap
+  - Try to used static_vector instead of std::vector
+  - Try to used static_string instead of std::string
+
 ## Quick Reference Checklist
 
 Before marking C++ work complete:

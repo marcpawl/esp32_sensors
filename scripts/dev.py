@@ -1339,8 +1339,8 @@ def cmd_clang_tidy(scopes: list[TidyScope], fix: bool = False) -> int:
     the run fails, so CI cannot quietly analyze stale or partial input. Use
     `scripts/dev.py build` first.
 
-    Uses the repository's `.clang-tidy` when present, merged with clang-tidy's
-    default check set (`clang-diagnostic-*`, `clang-analyzer-*`), and reports
+    Uses the repository's `.clang-tidy`, which opts in to the check set this
+    repository enforces (merged with clang-tidy's default set), and reports
     only diagnostics in this repository's own headers, not ESP-IDF's or
     libstdc++'s. Any finding is an error (`--warnings-as-errors=*`).
 

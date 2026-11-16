@@ -1,5 +1,11 @@
----
-# Start by disabling everything, then opt-in to specific categories
+# Project-wide clang-tidy configuration.
+#
+# `scripts/dev.py clang-tidy` supplies `--header-filter` and
+# `--warnings-as-errors=*` on its own command line, so this file is what an
+# editor or a bare `clang-tidy` invocation reads.
+#
+# `Checks` opts in to the categories this repository enforces. Everything is
+# disabled first, so a category cannot arrive silently with a tool upgrade.
 Checks: >
   -*
   ,clang-analyzer-*
@@ -14,13 +20,13 @@ Checks: >
   ,modernize-use-override
   ,modernize-use-using
 
-# Treat critical bug-finding checks as warnings or errors based on your CI setup
-WarningsAsErrors: ''
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*/(mcgowan|components|donny|test-[^/]+)/.*'
+SystemHeaders: false
+FormatStyle: file
 
-# Limit checking to your project files, ignoring system/IDF component headers to speed up runs
-HeaderFilterRegex: ''
-
-# Custom options for naming or safety behavior
+# Naming options take effect only when a `readability-identifier-naming` check
+# is enabled; they are kept for editors that turn one on.
 CheckOptions:
   - key: readability-identifier-naming.VariableCase
     value: lower_case
@@ -30,5 +36,3 @@ CheckOptions:
     value: CamelCase
   - key: readability-identifier-naming.StructCase
     value: CamelCase
----
-`
