@@ -717,11 +717,11 @@ std::vector<std::unique_ptr<Point>> indirect_points; // BAD: pointer chasing
 ### clang-tidy NOLINT
 
 Suppress a finding only when the analyzer is right but the code must stay
-as it is. Then follow these four rules:
+as it is. Then follow these three rules:
 
 - **Name the check**, so the suppression cannot hide a different finding
   on the same line:
-  `// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)`.
+  `// NOLINTNEXTLINE(performance-no-int-to-ptr)`.
 - **Explain why**, in a comment next to the suppression: what makes the
   alternative worse (an API contract, a hardware requirement, a test
   fixture). A later reader must be able to re-check the judgement.
@@ -730,10 +730,6 @@ as it is. Then follow these four rules:
   range. A wrapped function signature usually needs the range form:
   clang-tidy reports the parameter line, not the line carrying the
   function name, so a `NOLINTNEXTLINE` above the signature misses.
-- **The one exemption:** a `bugprone-easily-swappable-parameters`
-  suppression needs no explanation. That check fires on any pair of
-  same-typed parameters, so the suppression says little more than that.
-  Add a comment anyway when the argument order is a contract.
 
 **Wrapper exception.** An `#include` block of ESP-IDF or `third_party/`
 headers is turned off wholesale, without per-check names, because those
