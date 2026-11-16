@@ -256,6 +256,23 @@ TIDY_PROJECTS = (
 # C++ sources are ours to check.
 TIDY_EXTENSIONS = (".cpp", ".cc", ".cxx")
 
+# Build directories that hold the compile databases `build` writes. A
+# directory-scoped `clang-tidy` (`clang-tidy components/`) reads databases
+# under these names only, so CLion's `cmake-build-*` trees and stale copies of
+# an old build are never consulted.
+TIDY_BUILD_DIRS = (FW_BUILD_DIR, TEST_BUILD_DIR)
+
+# One `clang-tidy` scope: a named subproject, or a directory inside the
+# repository whose C++ sources are all analyzed.
+TidyScope = tuple[str, str | Path]
+
+# Internal prefix that carries an already-resolved project scope across the
+# container hop. Resolution is directory-first, and the hop re-parses the
+# command inside the container, whose working directory is not the caller's;
+# without this a project name could resolve to a directory of the same name.
+# It is also the way to force the project when such a directory exists.
+TIDY_PROJECT_PREFIX = "project:"
+
 # GCC driver flags clang's driver rejects outright, or accepts only to warn
 # "argument unused" (which `--warnings-as-errors` would turn into a failure).
 # ESP-IDF passes them to the xtensa GCC for code-size reasons; they are
@@ -534,14 +551,20 @@ def compose_run(args: list[str]) -> int:
     return run(command)
 
 
-def change_to_container():
+def change_to_container(trailing: list[str] | None = None):
     """If we are not in the container, then
        reexecute dev.py command in the container.
 
        Otherwise do noting.
+
+       `trailing` replaces the arguments that follow the script path, so a
+       command can pass normalized values (such as container paths) instead of
+       the command line the user typed. With no arguments the current
+       `sys.argv` is re-run verbatim.
     """
     if not is_in_container():
-        rc = compose_run(sys.argv)
+        arguments = sys.argv if trailing is None else [sys.argv[0], *trailing]
+        rc = compose_run(arguments)
         sys.exit(rc)
 
 
@@ -1112,6 +1135,156 @@ def _tidy_units(projects: list[str]) -> list[dict] | None:
     return _unique_tidy_units(compilations)
 
 
+def _resolve_tidy_scope(
+    argument: str, root: Path = REPO_ROOT, cwd: Path | None = None
+) -> TidyScope | None:
+    """Resolve one `clang-tidy` argument to a project or directory scope.
+
+    A directory inside the repository wins over a subproject name of the same
+    spelling: `clang-tidy mcgowan` names the `mcgowan/` tree, not the firmware
+    project (write `clang-tidy mcgowan/src` or the project name from another
+    directory to get the project). A directory covers every C++ source below
+    it, including sources that belong to no analyzed subproject, such as
+    `components/hal/tests/esp_timer/board/`.
+
+    An absolute path is taken as given, except that `/project/...` is mapped
+    onto `root`, so a command written for the container
+    (`clang-tidy /project/components/`) also works from the host. A relative
+    path is resolved against `cwd` (the caller's working directory).
+
+    `project:NAME` names a subproject explicitly, which is how the container
+    hop preserves the choice when a directory of the same name exists.
+
+    Returns None when the argument names neither a directory in the repository
+    nor a subproject. Pure apart from `stat()`.
+    """
+    if argument.startswith(TIDY_PROJECT_PREFIX):
+        name = argument[len(TIDY_PROJECT_PREFIX):]
+        return ("project", name) if name in SUBPROJECTS else None
+
+    path = Path(argument)
+    if path.is_absolute():
+        try:
+            path = root / path.relative_to(CONTAINER_PROJECT_ROOT)
+        except ValueError:
+            pass
+    else:
+        path = (cwd or Path.cwd()) / path
+
+    path = path.resolve()
+    if path.is_dir() and (path == root or root in path.parents):
+        return ("directory", path)
+
+    if argument in SUBPROJECTS:
+        return ("project", argument)
+    return None
+
+
+def _parse_tidy_scopes(arguments: list[str]) -> list[TidyScope] | None:
+    """Resolve `clang-tidy`'s arguments to scopes. No arguments means all.
+
+    Unknown arguments print an error and return None so the caller can exit
+    non-zero.
+    """
+    if not arguments:
+        return [("project", project) for project, _ in TIDY_PROJECTS]
+
+    scopes: list[TidyScope] = []
+    for argument in arguments:
+        scope = _resolve_tidy_scope(argument)
+        if scope is None:
+            print(
+                f"'{argument}' is neither a subproject nor a directory in "
+                f"the repository. Subprojects: {' '.join(SUBPROJECTS)}",
+                file=sys.stderr,
+            )
+            return None
+        scopes.append(scope)
+    return scopes
+
+
+def _discover_tidy_databases(root: Path = REPO_ROOT) -> list[Path]:
+    """The compile databases a directory scope may draw units from.
+
+    Every `build_linux`/`build_esp32s3` tree under `root` (see
+    `TIDY_BUILD_DIRS`), with the analyzed subprojects first: a source file that
+    several projects compile then keeps the flags of the first database that
+    lists it, which is the firmware for shared code — the same firmware-first
+    rule `_unique_tidy_units` documents. Vendored submodule trees are skipped,
+    and build trees are not descended into.
+    """
+    known = []
+    for project, build_dir in TIDY_PROJECTS:
+        database = (
+            root / project_dir(project) / build_dir / "compile_commands.json"
+        )
+        if database.is_file():
+            known.append(database)
+
+    found = set()
+    for dirpath, dirnames, filenames in os.walk(root):
+        if Path(dirpath).name in TIDY_BUILD_DIRS:
+            if "compile_commands.json" in filenames:
+                found.add(Path(dirpath) / "compile_commands.json")
+            dirnames[:] = []
+            continue
+        dirnames[:] = [
+            name
+            for name in sorted(dirnames)
+            if name not in (".git", *VENDORED_DIRS)
+        ]
+    return [*known, *sorted(found - set(known))]
+
+
+def _tidy_units_under(
+    directory: Path, databases: list[Path], root: Path = REPO_ROOT
+) -> list[dict]:
+    """The C++ units of `databases` whose source is under `directory`.
+
+    Entries whose source file no longer exists are skipped: a stale build tree
+    (an old `build_linux` left beside sources that have since moved) would
+    otherwise hand clang-tidy a path it cannot read.
+    """
+    compilations: list[dict] = []
+    for database in databases:
+        for entry in json.loads(database.read_text()):
+            source = Path(entry["file"])
+            if source != directory and directory not in source.parents:
+                continue
+            if not source.is_file():
+                continue
+            compilations.append(entry)
+    return _unique_tidy_units(compilations, root=root)
+
+
+def _container_path(path: Path, root: Path = REPO_ROOT) -> str:
+    """`path` as the container sees it (`/project/...`). Pure."""
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        return path.as_posix()
+    return (Path(CONTAINER_PROJECT_ROOT) / relative).as_posix()
+
+
+def _tidy_container_arguments(
+    scopes: list[TidyScope], fix: bool = False
+) -> list[str]:
+    """The `dev.py clang-tidy` arguments to re-run inside the container.
+
+    Directory scopes become container paths, so the re-executed command names
+    the same trees whatever the caller's host working directory was. Pure.
+    """
+    arguments = ["clang-tidy"]
+    if fix:
+        arguments.append("--fix")
+    for kind, value in scopes:
+        if kind == "project":
+            arguments.append(f"{TIDY_PROJECT_PREFIX}{value}")
+        else:
+            arguments.append(_container_path(value))
+    return arguments
+
+
 def _tidy_command(
     units: list[dict], build_path: Path, fix: bool = False
 ) -> list[str]:
@@ -1138,8 +1311,14 @@ def _tidy_command(
     return command
 
 
-def cmd_clang_tidy(projects: list[str], fix: bool = False) -> int:
-    """Static analysis (clang-tidy) over the C/C++ sources. No container hop.
+def cmd_clang_tidy(scopes: list[TidyScope], fix: bool = False) -> int:
+    """Static analysis (clang-tidy) over the C/C++ sources.
+
+    A scope is either a subproject name (`test-hal-stub`) or a directory
+    inside the repository (`components/hal/`). The directory form covers every
+    C++ source below it, including sources that belong to no analyzed
+    subproject (e.g. `components/hal/tests/esp_timer/board/`), and draws them
+    from every compile database under `TIDY_BUILD_DIRS`.
 
     Imports the ESP-IDF compile databases so clang-tidy sees the exact flags,
     defines, and include paths each file is really built with, including the
@@ -1158,16 +1337,32 @@ def cmd_clang_tidy(projects: list[str], fix: bool = False) -> int:
     applied in place. Findings that cannot be fixed still fail the run, and
     the rewritten code should be re-formatted (`scripts/dev.py format`).
     """
-    change_to_container()
+    change_to_container(_tidy_container_arguments(scopes, fix))
 
     rc = _ensure_submodules()
     if rc != 0:
         return rc
-    units = _tidy_units(projects)
-    if units is None:
-        return 1
+
+    units: list[dict] = []
+    databases: list[Path] | None = None
+    for kind, value in scopes:
+        if kind == "project":
+            batch = _tidy_units([value])
+            if batch is None:
+                return 1
+            units.extend(batch)
+            continue
+        if databases is None:
+            databases = _discover_tidy_databases()
+        units.extend(_tidy_units_under(value, databases))
+    units = _unique_tidy_units(units)
+
     if not units:
-        print("clang-tidy: no C++ sources to analyze", file=sys.stderr)
+        print(
+            "clang-tidy: no C++ sources to analyze; "
+            "run `scripts/dev.py build` first.",
+            file=sys.stderr,
+        )
         return 1
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -1510,8 +1705,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     # `clang-tidy` analyzes all analyzed projects by default; naming some
-    # restricts the run (handy while working on one subproject). `--fix`
-    # forwards to clang-tidy, which then rewrites the sources in place.
+    # restricts the run (handy while working on one subproject). A directory
+    # argument instead covers every C++ source below it. `--fix` forwards to
+    # clang-tidy, which then rewrites the sources in place.
     tidy_parser = subparsers.choices["clang-tidy"]
     tidy_parser.add_argument(
         "--fix",
@@ -1520,11 +1716,14 @@ def _build_parser() -> argparse.ArgumentParser:
              "`format` afterwards",
     )
     tidy_parser.add_argument(
-        "projects",
+        "scopes",
         nargs="*",
-        metavar="PROJECT",
-        help=f"subprojects to analyze (any of: {' '.join(SUBPROJECTS)}); "
-             "omit for all of them",
+        metavar="DIRECTORY|PROJECT",
+        help=f"directories (every C++ source under one is analyzed; a "
+             f"directory wins over a subproject of the same name, prefix a "
+             f"subproject with `project:` to force it) or subprojects "
+             f"(any of: {' '.join(SUBPROJECTS)}); omit for all analyzed "
+             f"subprojects",
     )
 
     shell_parser = subparsers.choices["shell"]
@@ -1566,10 +1765,10 @@ def main(argv: list[str]) -> int:
     if args.command == "build":
         return cmd_build(args.subprojects)
     if args.command == "clang-tidy":
-        projects = _parse_subprojects(args.projects)
-        if projects is None:
+        scopes = _parse_tidy_scopes(args.scopes)
+        if scopes is None:
             return 1
-        return cmd_clang_tidy(projects, fix=args.fix)
+        return cmd_clang_tidy(scopes, fix=args.fix)
     return args.handler()
 
 

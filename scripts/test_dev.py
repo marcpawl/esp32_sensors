@@ -1638,7 +1638,7 @@ class TidyCommandTests(unittest.TestCase):
             ["/project/components/a.cpp", "/project/components/b.cpp"],
         )
 
-    def test_parser_accepts_fix_before_or_after_project_names(self):
+    def test_parser_accepts_fix_before_or_after_scopes(self):
         parser = dev._build_parser()
         for argv in (
             ["clang-tidy", "--fix", "test-hal-stub"],
@@ -1647,18 +1647,213 @@ class TidyCommandTests(unittest.TestCase):
             with self.subTest(argv=argv):
                 args = parser.parse_args(argv)
                 self.assertTrue(args.fix)
-                self.assertEqual(args.projects, ["test-hal-stub"])
+                self.assertEqual(args.scopes, ["test-hal-stub"])
 
     def test_parser_defaults_fix_to_false(self):
         args = dev._build_parser().parse_args(["clang-tidy", "test-hal-stub"])
         self.assertFalse(args.fix)
 
+    def test_container_arguments_map_directories_into_the_project_mount(self):
+        scopes = [
+            ("project", "test-hal-stub"),
+            ("directory", dev.REPO_ROOT / "components"),
+        ]
+        self.assertEqual(
+            dev._tidy_container_arguments(scopes, fix=True),
+            [
+                "clang-tidy",
+                "--fix",
+                "project:test-hal-stub",
+                "/project/components",
+            ],
+        )
+
+    def test_resolved_scopes_survive_the_container_hop(self):
+        # The hop re-parses the command in the container, whose working
+        # directory is not the caller's, so the resolved choice must not be
+        # re-derived from a bare name.
+        scopes = [
+            ("project", "test-hal-stub"),
+            ("directory", dev.REPO_ROOT / "components"),
+        ]
+        arguments = dev._tidy_container_arguments(scopes)
+        self.assertEqual(dev._parse_tidy_scopes(arguments[1:]), scopes)
+
     def test_main_forwards_fix_to_the_command(self):
+        # Resolution is covered by TidyScopeTests; this pins the forwarding.
         prog = str(dev.REPO_ROOT / "scripts" / "dev.py")
-        with mock.patch.object(dev, "cmd_clang_tidy", return_value=0) as tidy:
+        scope = ("project", "test-hal-stub")
+        with mock.patch.object(
+            dev, "_resolve_tidy_scope", return_value=scope
+        ), mock.patch.object(dev, "cmd_clang_tidy", return_value=0) as tidy:
             rc = dev.main([prog, "clang-tidy", "test-hal-stub", "--fix"])
         self.assertEqual(rc, 0)
-        tidy.assert_called_once_with(["test-hal-stub"], fix=True)
+        tidy.assert_called_once_with([scope], fix=True)
+
+    def test_main_passes_a_directory_through_as_a_directory_scope(self):
+        prog = str(dev.REPO_ROOT / "scripts" / "dev.py")
+        components = str(dev.REPO_ROOT / "components")
+        with mock.patch.object(dev, "cmd_clang_tidy", return_value=0) as tidy:
+            rc = dev.main([prog, "clang-tidy", components])
+        self.assertEqual(rc, 0)
+        tidy.assert_called_once_with(
+            [("directory", dev.REPO_ROOT / "components")], fix=False
+        )
+
+
+class TidyScopeTests(unittest.TestCase):
+    """`clang-tidy` arguments: subproject names or repository directories."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name).resolve()
+        (self.root / "components" / "hal").mkdir(parents=True)
+
+    def test_a_subproject_name_is_a_project_scope(self):
+        self.assertEqual(
+            dev._resolve_tidy_scope(
+                "test-hal-stub", root=self.root, cwd=self.root
+            ),
+            ("project", "test-hal-stub"),
+        )
+
+    def test_a_directory_wins_over_a_subproject_name(self):
+        # Directory first: `clang-tidy mcgowan` names the tree, not the
+        # firmware project.
+        (self.root / "mcgowan").mkdir()
+        self.assertEqual(
+            dev._resolve_tidy_scope("mcgowan", root=self.root, cwd=self.root),
+            ("directory", self.root / "mcgowan"),
+        )
+
+    def test_the_project_prefix_forces_a_subproject(self):
+        (self.root / "test-hal-stub").mkdir()
+        self.assertEqual(
+            dev._resolve_tidy_scope(
+                "project:test-hal-stub", root=self.root, cwd=self.root
+            ),
+            ("project", "test-hal-stub"),
+        )
+
+    def test_a_relative_directory_is_resolved_against_the_caller(self):
+        self.assertEqual(
+            dev._resolve_tidy_scope(
+                "components/hal", root=self.root, cwd=self.root
+            ),
+            ("directory", self.root / "components" / "hal"),
+        )
+
+    def test_a_container_path_works_from_the_host(self):
+        # `/project` is the container's name for the repository root.
+        self.assertEqual(
+            dev._resolve_tidy_scope("/project/components", root=self.root),
+            ("directory", self.root / "components"),
+        )
+
+    def test_a_file_is_not_a_scope(self):
+        source = self.root / "components" / "hal" / "x.cpp"
+        source.write_text("")
+        self.assertIsNone(dev._resolve_tidy_scope(str(source), root=self.root))
+
+    def test_a_missing_directory_is_rejected(self):
+        self.assertIsNone(
+            dev._resolve_tidy_scope(
+                "components/nope", root=self.root, cwd=self.root
+            )
+        )
+
+    def test_a_directory_outside_the_repository_is_rejected(self):
+        self.assertIsNone(
+            dev._resolve_tidy_scope(str(self.root.parent), root=self.root)
+        )
+
+    def test_no_arguments_means_every_analyzed_project(self):
+        self.assertEqual(
+            dev._parse_tidy_scopes([]),
+            [("project", project) for project, _ in dev.TIDY_PROJECTS],
+        )
+
+    def test_an_unknown_argument_is_reported_and_rejected(self):
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            self.assertIsNone(dev._parse_tidy_scopes(["no-such-scope"]))
+        self.assertIn("no-such-scope", stderr.getvalue())
+
+
+class TidyDatabaseDiscoveryTests(unittest.TestCase):
+    """`_discover_tidy_databases` reads only the trees `build` writes."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name).resolve()
+        for relative in (
+            "components/a/build_linux",
+            "mcgowan/build_esp32s3",
+            "components/a/cmake-build-debug",
+            "components/a/build_linux/nested/build_linux",
+            ".git/scratch/build_linux",
+            "third_party/sml/build_linux",
+        ):
+            directory = self.root / relative
+            directory.mkdir(parents=True)
+            (directory / "compile_commands.json").write_text("[]")
+
+    def test_only_build_linux_and_build_esp32s3_are_considered(self):
+        # The analyzed subprojects' databases come first (firmware first), so
+        # shared sources keep the flags of the chip build.
+        self.assertEqual(
+            dev._discover_tidy_databases(self.root),
+            [
+                self.root / "mcgowan/build_esp32s3" / "compile_commands.json",
+                self.root / "components/a/build_linux"
+                / "compile_commands.json",
+            ],
+        )
+
+
+class TidyUnitsUnderTests(unittest.TestCase):
+    """A directory scope takes only the units below it that still exist."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name).resolve()
+        self.hal = self.root / "components" / "hal"
+        self.logic = self.root / "components" / "logic"
+        self.hal.mkdir(parents=True)
+        self.logic.mkdir(parents=True)
+        self.hal_source = self.hal / "a.cpp"
+        self.hal_source.write_text("")
+        self.logic_source = self.logic / "b.cpp"
+        self.logic_source.write_text("")
+        self.missing = self.hal / "gone.cpp"
+        self.vendored = self.root / "third_party" / "sml" / "c.cpp"
+        self.vendored.parent.mkdir(parents=True)
+        self.vendored.write_text("")
+        self.database = self.root / "build_linux" / "compile_commands.json"
+        self.database.parent.mkdir()
+        self.database.write_text(json.dumps([
+            {"file": str(self.hal_source)},
+            {"file": str(self.hal / "header.hpp")},
+            {"file": str(self.logic_source)},
+            {"file": str(self.missing)},
+            {"file": str(self.vendored)},
+        ]))
+
+    def test_units_are_limited_to_the_directory(self):
+        units = dev._tidy_units_under(
+            self.hal, [self.database], root=self.root
+        )
+        self.assertEqual(units, [{"file": str(self.hal_source)}])
+
+    def test_a_missing_source_is_skipped(self):
+        # A stale build tree lists sources that have moved away.
+        units = dev._tidy_units_under(
+            self.hal, [self.database], root=self.root
+        )
+        self.assertNotIn({"file": str(self.missing)}, units)
 
 
 class TidyGateTests(unittest.TestCase):
