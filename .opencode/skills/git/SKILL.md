@@ -137,9 +137,35 @@ Every commit ends with trailers describing the AI used.
 
 ```
 ai-agent: [Agent Name](Agent URL)
-ai-model: [Model Name)(Model URL)
+ai-model: [Model Name](Model URL)
 ai-session: AI agent session name
+ai-session-cost: USD 0.010756
 ```
+
+### Session cost
+
+`ai-session-cost` is the running cost of the OpenCode session that writes the
+commit, in US dollars. It is a snapshot taken when the commit message is
+written: the tool calls that commit and push afterwards add a small amount that
+the trailer cannot include.
+
+Get it from the session's `info.cost` field, with the session export the
+OpenCode CLI already provides:
+
+```bash
+opencode session export "$OPENCODE_SESSION_ID" | python3 -c '
+import json, sys
+info = json.load(sys.stdin)["info"]
+print("ai-session-cost: USD %s" % format(info["cost"], ".6f"))'
+```
+
+Run that on the **host**, not through `./scripts/dev.py shell`. The session
+store and `OPENCODE_SESSION_ID` belong to the host process, and the variable is
+not passed into the container. Six decimals keep the value meaningful, because
+a session usually costs a few thousandths of a dollar.
+
+The other three trailers are fixed for the session, so this is the only one
+that is re-read for each commit.
 
 ## Pull Request Message
 
