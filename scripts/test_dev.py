@@ -494,7 +494,7 @@ class IdfRunnerTests(unittest.TestCase):
 
 
 class ClionRunConfigurationTests(unittest.TestCase):
-    """CLion CMake run configurations name the root CMake project.
+    """The committed CLion configuration stays consistent with the repo.
 
     A CMake run configuration is bound to one CMake project by
     `PROJECT_NAME`, which must be the name the root `project()` declares.
@@ -504,9 +504,14 @@ class ClionRunConfigurationTests(unittest.TestCase):
     target. CLion rewrites the attribute itself once it resolves the project,
     which is why leaving it stale is a latent breakage rather than a fix.
 
-    Only `PROJECT_NAME` is checked: the comments and the trailing newline are
-    also lost on a CLion rewrite, and the tracked copies are the ones that
-    should keep them.
+    The same applies to the profile each configuration names
+    (`CONFIG_NAME`), the target it builds (`TARGET_NAME`), and the profile's
+    own `GENERATION_DIR` after the subprojects moved under `components/`.
+    Every shell configuration must likewise call a `dev.py` command that
+    exists, since a typo there only surfaces at run time.
+
+    The comments and the trailing newline are also lost on a CLion rewrite,
+    and the tracked copies are the ones that should keep them.
     """
 
     def _root_project_name(self) -> str:
@@ -532,6 +537,41 @@ class ClionRunConfigurationTests(unittest.TestCase):
                     found.append((path.name, configuration))
         self.assertTrue(found, "no CMake run configurations found")
         return found
+
+    def _shell_run_configurations(self):
+        """(filename, SCRIPT_TEXT) for every shell-script run configuration."""
+        import xml.etree.ElementTree as ET
+
+        directory = dev.REPO_ROOT / ".idea" / "runConfigurations"
+        self.assertTrue(directory.is_dir(), f"missing {directory}")
+        found = []
+        for path in sorted(directory.glob("*.xml")):
+            root = ET.parse(path).getroot()
+            for configuration in root.iter("configuration"):
+                if configuration.get("type") != "ShConfigurationType":
+                    continue
+                scripts = [
+                    option.get("value")
+                    for option in configuration.iter("option")
+                    if option.get("name") == "SCRIPT_TEXT"
+                ]
+                found.append((path.name, scripts))
+        self.assertTrue(found, "no shell run configurations found")
+        return found
+
+    def _cmake_profiles(self):
+        """profile name -> element for every profile in .idea/cmake.xml."""
+        import xml.etree.ElementTree as ET
+
+        path = dev.REPO_ROOT / ".idea" / "cmake.xml"
+        root = ET.parse(path).getroot()
+        profiles = {
+            configuration.get("PROFILE_NAME"): configuration
+            for configuration in root.iter("configuration")
+            if configuration.get("PROFILE_NAME")
+        }
+        self.assertTrue(profiles, ".idea/cmake.xml declares no profiles")
+        return profiles
 
     def test_every_cmake_run_configuration_names_the_root_project(self):
         expected = self._root_project_name()
@@ -589,6 +629,70 @@ class ClionRunConfigurationTests(unittest.TestCase):
                     f"{configuration.get('TARGET_NAME')!r} is not a target of "
                     f"{project_name!r} (has {sorted(root)})",
                 )
+
+    def test_every_profile_is_used_by_a_run_configuration(self):
+        # A profile nothing selects is dead weight, and the run configuration
+        # is where the name is easy to get wrong. Requiring every profile to
+        # appear as some configuration's CONFIG_NAME keeps the pair together:
+        # the "Host tests (utility-test)" profile needs its utility run
+        # configuration, and vice versa.
+        used = {
+            configuration.get("CONFIG_NAME")
+            for _, configuration in self._cmake_run_configurations()
+        }
+        self.assertEqual(set(self._cmake_profiles()), used)
+
+    def test_generation_dirs_point_at_an_existing_subproject(self):
+        # The subprojects moved under components/; a GENERATION_DIR left
+        # behind points CLion at a directory that no longer exists, so the
+        # profile configures nothing and the "cannot find any profile" /
+        # empty-code-model symptoms return. The build directory is
+        # <subproject>/cmake-build-* (see .idea/cmake.xml), so its parent is
+        # the subproject and must be an ESP-IDF project directory.
+        for name, profile in self._cmake_profiles().items():
+            with self.subTest(profile=name):
+                generation_dir = profile.get("GENERATION_DIR", "")
+                self.assertTrue(
+                    generation_dir.startswith("$PROJECT_DIR$/"),
+                    f"{name}: unexpected GENERATION_DIR {generation_dir!r}",
+                )
+                subproject = Path(
+                    generation_dir.replace("$PROJECT_DIR$", str(dev.REPO_ROOT))
+                ).parent
+                self.assertTrue(
+                    subproject.is_dir(), f"{name}: {subproject} does not exist"
+                )
+                self.assertTrue(
+                    (subproject / "CMakeLists.txt").is_file(),
+                    f"{name}: {subproject} is not an ESP-IDF project",
+                )
+
+    def test_shell_run_configurations_call_a_dev_py_command(self):
+        # Every container command has a shared shell configuration whose
+        # SCRIPT_TEXT is `python3 scripts/dev.py <command>`. A typo, or a
+        # command that dev.py later renames, only fails when the
+        # configuration is run - and the on-target suite cannot be exercised
+        # by this host suite at all - so pin it here.
+        commands = set()
+        for name, scripts in self._shell_run_configurations():
+            with self.subTest(configuration=name):
+                self.assertEqual(
+                    len(scripts), 1, f"{name}: expected one SCRIPT_TEXT"
+                )
+                words = scripts[0].split()
+                self.assertGreaterEqual(len(words), 3)
+                self.assertEqual(words[:2], ["python3", "scripts/dev.py"])
+                self.assertIn(
+                    words[2],
+                    dev.COMMANDS,
+                    f"{name}: {words[2]!r} is not a dev.py command",
+                )
+                commands.add(words[2])
+        self.assertIn(
+            "test-esp32-timer",
+            commands,
+            "the on-target esp_timer suite has no shared run configuration",
+        )
 
 
 class DevImageTests(unittest.TestCase):

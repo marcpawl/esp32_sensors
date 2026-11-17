@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Shared CLion run configuration for the host unit tests (`test/`).
+  Shared CLion run configuration for the host unit tests
+  (`components/logic/tests/test-logic/`).
 
   A native CLion *CMake* run configuration (not a shell script): CLion builds
-  `test_build` (the root aggregator's target that runs `idf.py build` in
-  `test/`) from the "Host tests (test)" profile in .idea/cmake.xml. Selecting
+  `test-logic_build` (the root aggregator's target that runs `idf.py build` in
+  `components/logic/tests/test-logic/`) from the "Host tests (test)" profile in
+  .idea/cmake.xml. Selecting
   this configuration also makes that profile the active one, so the IDE's
   resolve configuration - and therefore navigation, hovers and C++
   refactorings - is the `linux`-target view of the code (hal_stub rather than
@@ -15,9 +17,9 @@
   results; this one exists so the test project is buildable from the IDE.
 
   TARGET_NAME must be a target of the CMake project named by PROJECT_NAME -
-  that is, of the ROOT aggregator, not of `test/`. The root only defines
-  `<subproject>_build` custom targets, so `test_build` is the reachable name
-  and `esp32_sensors_tests.elf` (an ESP-IDF target of `test/`'s own CMake
+  that is, of the ROOT aggregator, not of `test-logic/`. The root only defines
+  `<subproject>_build` custom targets, so `test-logic_build` is the reachable
+  name and `test-logic.elf` (an ESP-IDF target of that project's own CMake
   project) is not; naming the ELF fails with "cannot find target".
   CONFIG_NAME must name an *existing* profile from .idea/cmake.xml.
   PROJECT_NAME must be the root CMake project's name

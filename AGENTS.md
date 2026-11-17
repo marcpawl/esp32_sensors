@@ -123,11 +123,13 @@ required.
 - **Toolchain/CMake:** select the container as the remote host (SSH into the
   Dev Container). CLion configures and builds **each subproject** under its own
   CMake build directory (all from `.idea/cmake.xml`):
-  `mcgowan/cmake-build-esp32s3/`, `test/cmake-build-linux-test/`,
-  `espidf-cpp-test/cmake-build-linux-espidf-cpp-test/`,
-  `donny/cmake-build-linux-donny/` — so the IDE and `idf.py` never share a
-  CMake cache. `mcgowan/build_esp32s3/` remains the canonical `idf.py` build
-  used by `scripts/dev.py build`/`flash`.
+  `mcgowan/cmake-build-esp32s3/`,
+  `components/logic/tests/test-logic/cmake-build-linux-test/`,
+  `components/utility/tests/test-utility/cmake-build-linux-utility-test/`,
+  `components/espidfcpp/tests/test-espidf-cpp/cmake-build-linux-espidf-cpp-test/`,
+  `components/simulator/exe/donny/cmake-build-linux-donny/` — so the IDE and
+  `idf.py` never share a CMake cache. `mcgowan/build_esp32s3/` remains the
+  canonical `idf.py` build used by `scripts/dev.py build`/`flash`.
 - **Why one CMake profile per subproject.** A CLion CMake profile has no way to
   point CMake at a *sub*directory — a profile *is* a project. The repo root is
   only an aggregator (`project(... NONE)`) that shells out to `idf.py`, so a
@@ -136,9 +138,9 @@ required.
   is a standalone ESP-IDF project and ESP-IDF sets
   `CMAKE_EXPORT_COMPILE_COMMANDS` on by default
   (`$IDF_PATH/tools/cmake/project.cmake`), so each one produces a database that
-  CLion turns into a full resolve configuration. The four profiles coexist
+  CLion turns into a full resolve configuration. The profiles coexist
   rather than being merged because the projects share sources (`mcgowan/src` is
-  compiled by both `mcgowan` and `test`; `components/*` by three or four of
+  compiled by both `mcgowan` and `test-logic`; `components/*` by several of
   them) and genuinely need different defines/include paths — notably
   `hal_board` (Xtensa) vs `hal_stub` (host/linux). The active profile is chosen
   by the run configuration's `CONFIG_NAME`.
@@ -147,11 +149,11 @@ required.
   > `GENERATION_DIR` sets only the *build* directory; the *source* directory is
   > the single CMake workspace in `.idea/misc.xml`
   > (`CMakeWorkspace PROJECT_DIR="$PROJECT_DIR$"`), which is the repo root for
-  > every profile. After a clean CLion rebuild all four `cmake-build-*` trees
+  > every profile. After a clean CLion rebuild the `cmake-build-*` trees
   > recorded `CMAKE_HOME_DIRECTORY=/project`, none contained a
   > `compile_commands.json`, and each codemodel named project
-  > `esp32_sensors_subprojects` with only the four aggregate custom targets —
-  > all `UTILITY`, i.e. no compilable translation units. So all four profiles
+  > `esp32_sensors_subprojects` with only the aggregate custom targets —
+  > all `UTILITY`, i.e. no compilable translation units. So the profiles
   > build the same root aggregator, `-DIDF_TARGET=...` is unused by
   > `project(... NONE)`, and CLion gets no code model from them. Fixing it
   > needs either one CLion project per subproject or a merged
@@ -166,11 +168,11 @@ required.
 
 #### Run configurations
 
-Eight shared run configurations are committed under `.idea/runConfigurations/`
-(and mirrored in the local `.idea/workspace.xml`). Six call `scripts/dev.py`,
+Twelve shared run configurations are committed under `.idea/runConfigurations/`
+(and mirrored in the local `.idea/workspace.xml`). Seven call `scripts/dev.py`,
 so a single script is the source of truth for container commands — run them
-from the CLion Run/Debug toolbar. The other two kinds are native
-CLion **CMake** run configurations: the four below (one per subproject profile)
+from the CLion Run/Debug toolbar. The other five are native
+CLion **CMake** run configurations: the five below (one per subproject profile)
 are meant to drive CLion's own CMake project model, which is what would make
 the compile database live and therefore enable code navigation and
 C++ **refactorings** — but see the "Verified reality" note above: they
@@ -187,11 +189,13 @@ symptom, not a fix; `ClionRunConfigurationTests` pins both invariants.
 | Run configuration | Kind | What it does |
 |---|---|---|
 | esp32_sensors (container CMake) | CMake | Builds the `mcgowan_build` aggregate target via the `Espressif ESP32-S3` profile; intended (not yet achieved) to index the firmware for refactorings |
-| Host tests (test, container CMake) | CMake | Builds the `test_build` aggregate target via the `Host tests (test)` profile |
+| Host tests (test, container CMake) | CMake | Builds the `test-logic_build` aggregate target via the `Host tests (test)` profile |
+| Host tests (utility-test, container CMake) | CMake | Builds the `test-utility_build` aggregate target via the `Host tests (utility-test)` profile |
 | Host tests (espidf-cpp-test, container CMake) | CMake | Builds the `test-espidf-cpp_build` aggregate target via the `Host tests (espidf-cpp-test)` profile |
 | Linux app (donny, container CMake) | CMake | Builds the `donny_build` aggregate target via the `Linux app (donny)` profile |
 | Build firmware (container) | `scripts/dev.py build` | `idf.py -C mcgowan -B mcgowan/build_esp32s3 build` (and the other subprojects) |
 | Flash & monitor (container) | `scripts/dev.py flash` | `idf.py -C mcgowan -B mcgowan/build_esp32s3 -p $ESP32_PORT flash monitor` (default `/dev/ttyUSB0`) |
+| On-target esp_timer test (container) | `scripts/dev.py test-esp32-timer` | builds `components/hal/tests/esp_timer/board/`, flashes it, and waits for the suite's sentinel on the serial port (default `/dev/ttyUSB0`) |
 | Host unit tests (container) | `scripts/dev.py test` | runs all six host test suites (below) in layer order; each suite also has a command that runs it alone |
 | clang-format check (container) | `scripts/dev.py format-check` | `clang-format --dry-run --Werror` |
 | menuconfig (container) | `scripts/dev.py menuconfig` | Kconfig UI |

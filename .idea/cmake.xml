@@ -47,14 +47,15 @@
   ESP-IDF turns on CMAKE_EXPORT_COMPILE_COMMANDS by default
   (esp-idf/tools/cmake/project.cmake), so configuring any of them emits a
   compile_commands.json that CLion turns into a full resolve configuration.
-  Hence four profiles, keyed by profile name to the matching CMake run
+  Hence five profiles, keyed by profile name to the matching CMake run
   configuration in .idea/runConfigurations/:
 
-      profile                       subproject          CLion build dir
-      Espressif ESP32-S3            mcgowan/            cmake-build-esp32s3
-      Host tests (test)             test/               cmake-build-linux-test
-      Host tests (espidf-cpp-test)  espidf-cpp-test/    cmake-build-linux-espidf-cpp-test
-      Linux app (donny)             donny/              cmake-build-linux-donny
+      profile                       subproject                                  build dir
+      Espressif ESP32-S3            mcgowan/                                    cmake-build-esp32s3
+      Host tests (test)             components/logic/tests/test-logic/          cmake-build-linux-test
+      Host tests (utility-test)     components/utility/tests/test-utility/      cmake-build-linux-utility-test
+      Host tests (espidf-cpp-test)  components/espidfcpp/tests/test-espidf-cpp/ cmake-build-linux-espidf-cpp-test
+      Linux app (donny)             components/simulator/exe/donny/             cmake-build-linux-donny
 
   The root aggregator (`scripts/dev.py build`, or the "esp32_sensors
   (container CMake)" run configuration) remains the way to build *everything*
@@ -64,15 +65,14 @@
   =================
   Each profile keeps its OWN build tree, named cmake-build-*, so CLion never
   shares a CMake cache with the canonical `idf.py` trees that
-  `scripts/dev.py` writes (mcgowan/build_esp32s3, test/build_linux,
-  espidf-cpp-test/build_linux, donny/build_linux). Sharing a directory does
-  not work: idf.py and CLion overwrite each other's CMake cache and Ninja
+  `scripts/dev.py` writes (mcgowan/build_esp32s3, and build_linux inside each
+  host-test and simulator project). Sharing a directory does not work: idf.py and CLion overwrite each other's CMake cache and Ninja
   state. All cmake-build-* directories are git-ignored (`.gitignore`).
 
   COEXISTING RESOLVE CONFIGURATIONS
   =================================
-  The four projects share sources - mcgowan/src is compiled by both mcgowan
-  and test, and components/* by three or four of them - and mcgowan (Xtensa,
+  The subprojects share sources - mcgowan/src is compiled by both mcgowan
+  and test-logic, and components/* by several of them - and mcgowan (Xtensa,
   esp32s3) and the others (host, linux) genuinely need different defines and
   include paths, notably which of hal_board / hal_stub is in view. CLion
   keeps each profile's resolve configuration separate and switches with the
@@ -90,12 +90,12 @@
   exist. GENERATION_DIR is only the *build* directory; the *source* directory
   comes from the single CMake workspace, .idea/misc.xml
   (CMakeWorkspace PROJECT_DIR="$PROJECT_DIR$"), which is the repo root for
-  every profile. Observed after a clean CLion rebuild: all four
-  cmake-build-* trees record CMAKE_HOME_DIRECTORY=/project, none contains a
-  compile_commands.json, each one's codemodel names project
-  `esp32_sensors_subprojects`, and the only targets are the four aggregate
-  custom targets (donny_build, espidf-cpp-test_build, mcgowan_build,
-  test_build) - all of type UTILITY, i.e. no compilable translation units. A
+  every profile. Observed after a clean CLion rebuild: every
+  cmake-build-* tree recorded CMAKE_HOME_DIRECTORY=/project, none contained a
+  compile_commands.json, each one's codemodel named project
+  `esp32_sensors_subprojects`, and the only targets were the aggregate
+  custom targets (mcgowan_build, test-utility_build, ...) - all of type
+  UTILITY, i.e. no compilable translation units. A
   profile has no per-profile source directory, so fixing this means opening
   the subprojects as separate CLion projects, or giving CLion a merged
   compile_commands.json for the root. Until then, navigation and refactorings
@@ -106,9 +106,10 @@
   <component name="CMakeSharedSettings">
     <configurations>
       <configuration PROFILE_NAME="Espressif ESP32-S3" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/mcgowan/cmake-build-esp32s3" GENERATION_OPTIONS="-DIDF_TARGET=esp32s3 -DCMAKE_BUILD_TYPE=Debug" />
-      <configuration PROFILE_NAME="Host tests (test)" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/test/cmake-build-linux-test" GENERATION_OPTIONS="-DIDF_TARGET=linux -DCMAKE_BUILD_TYPE=Debug" />
-      <configuration PROFILE_NAME="Host tests (espidf-cpp-test)" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/espidf-cpp-test/cmake-build-linux-espidf-cpp-test" GENERATION_OPTIONS="-DIDF_TARGET=linux -DCMAKE_BUILD_TYPE=Debug" />
-      <configuration PROFILE_NAME="Linux app (donny)" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/donny/cmake-build-linux-donny" GENERATION_OPTIONS="-DIDF_TARGET=linux -DCMAKE_BUILD_TYPE=Debug" />
+      <configuration PROFILE_NAME="Host tests (test)" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/components/logic/tests/test-logic/cmake-build-linux-test" GENERATION_OPTIONS="-DIDF_TARGET=linux -DCMAKE_BUILD_TYPE=Debug" />
+      <configuration PROFILE_NAME="Host tests (utility-test)" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/components/utility/tests/test-utility/cmake-build-linux-utility-test" GENERATION_OPTIONS="-DIDF_TARGET=linux -DCMAKE_BUILD_TYPE=Debug" />
+      <configuration PROFILE_NAME="Host tests (espidf-cpp-test)" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/components/espidfcpp/tests/test-espidf-cpp/cmake-build-linux-espidf-cpp-test" GENERATION_OPTIONS="-DIDF_TARGET=linux -DCMAKE_BUILD_TYPE=Debug" />
+      <configuration PROFILE_NAME="Linux app (donny)" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/components/simulator/exe/donny/cmake-build-linux-donny" GENERATION_OPTIONS="-DIDF_TARGET=linux -DCMAKE_BUILD_TYPE=Debug" />
     </configurations>
   </component>
 </project>

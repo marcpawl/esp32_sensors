@@ -1,16 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Shared CLion run configuration for the linux-emulated application
-  (`donny/`).
+  (`components/simulator/exe/donny/`).
 
   A native CLion *CMake* run configuration (not a shell script): CLion builds
   `donny_build` (the root aggregator's target that runs `idf.py build` in
-  `donny/`) from the "Linux app (donny)" profile in .idea/cmake.xml.
+  `components/simulator/exe/donny/`) from the "Linux app (donny)" profile in
+  .idea/cmake.xml.
   Selecting it makes that profile active, so the IDE's resolve configuration
   is donny's `linux`-target one (hal_stub, host include paths).
 
   `donny` links the same shared components as the firmware and the tests
-  (`components/espidf_cpp`, `components/logic`, `components/hal_stub`), so
+  (`components/espidfcpp`, `components/logic`, `components/hal/hal_stub`), so
   having its profile enabled keeps those sources resolvable in a third,
   consistent way.
 

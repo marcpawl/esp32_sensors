@@ -1,22 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Shared CLion run configuration for the `espidf_cpp` wrapper tests
-  (`espidf-cpp-test/`).
+  Shared CLion run configuration for the `libespidfcpp` wrapper tests
+  (`components/espidfcpp/tests/test-espidf-cpp/`).
 
   A native CLion *CMake* run configuration (not a shell script): CLion builds
-  `espidf-cpp-test_build` (the root aggregator's target that runs `idf.py
-  build` in `espidf-cpp-test/`) from the "Host tests (espidf-cpp-test)"
-  profile in .idea/cmake.xml. Selecting it makes that profile active, so the
-  IDE's resolve configuration for `components/espidf_cpp` is the `linux`-target
-  one - which is what its tests and the linux app assume.
+  `test-espidf-cpp_build` (the root aggregator's target that runs `idf.py
+  build` in `components/espidfcpp/tests/test-espidf-cpp/`) from the "Host
+  tests (espidf-cpp-test)" profile in .idea/cmake.xml. Selecting it makes that
+  profile active, so the IDE's resolve configuration for
+  `components/espidfcpp/libespidfcpp` is the `linux`-target one - which is what
+  its tests and the linux app assume.
 
   This configuration *builds* the tests. To run them use "Host unit tests
   (container)" (`scripts/dev.py test`), which also covers this suite.
 
   TARGET_NAME must be a target of the CMake project named by PROJECT_NAME -
-  that is, of the ROOT aggregator, not of `espidf-cpp-test/`. The root only
-  defines `<subproject>_build` custom targets, so `espidf-cpp-test_build` is
-  the reachable name and `esp32_sensors_espidf_cpp_tests.elf` (an ESP-IDF
+  that is, of the ROOT aggregator, not of `test-espidf-cpp/`. The root only
+  defines `<subproject>_build` custom targets, so `test-espidf-cpp_build` is
+  the reachable name and `test-espidf-cpp.elf` (an ESP-IDF
   target of the subproject's own CMake project) is not; naming the ELF fails
   with "cannot find target". CONFIG_NAME must name an *existing* profile from
   .idea/cmake.xml.
