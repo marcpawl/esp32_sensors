@@ -163,3 +163,12 @@ on-target tests). The vocabulary the former pins is the shared one — the
 Run them with `./scripts/dev.py test-hal-common` and
 `./scripts/dev.py test-hal-stub`, or through `./scripts/dev.py test`, which
 runs every suite.
+
+The on-target `esp_timer` suite is the exception that needs hardware: the same
+`esp_timer_tests` cases run against the chip in
+`components/hal/tests/esp_timer/board/`, and its `test.py` driver flashes the
+board and waits for the sentinel that `main.cpp` prints after Unity finishes.
+Run it with `./scripts/dev.py test-esp32-timer`. The host equivalent in
+`components/hal/tests/esp_timer/stub/` links `hal_stub`; its
+`esp_timer_stub.cpp` deliberately matches the chip's behaviour apart from
+timer resolution.

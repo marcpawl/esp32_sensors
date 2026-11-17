@@ -547,6 +547,16 @@ TEST_CASE("esp_timer: dump writes the active timers", "[esp_timer]") {
     TEST_ASSERT_NOT_NULL(handle);
     TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, us(kLong)));
 
+    // The chip implementation treats a null stream as "produce no output" and
+    // still reports success, and the stub matches that. The call is worthless
+    // if it silently accepts any stream, so both targets also pin the text
+    // below where they can.
+    TEST_ASSERT_EQUAL(ESP_OK, esp_timer_dump(nullptr));
+
+#if defined(CONFIG_IDF_TARGET_LINUX)
+    // The text check needs a memory-backed stream. `tmpfile()` provides one on
+    // the host only: the target has no filesystem, so `tmpfile()` returns NULL
+    // there. The return-code contract above is what runs on both.
     FILE* stream = tmpfile();
     TEST_ASSERT_NOT_NULL(stream);
     TEST_ASSERT_EQUAL(ESP_OK, esp_timer_dump(stream));
@@ -564,7 +574,7 @@ TEST_CASE("esp_timer: dump writes the active timers", "[esp_timer]") {
     TEST_ASSERT_NOT_NULL(std::strstr(buffer, "Name"));
 
     std::fclose(stream);
-    TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, esp_timer_dump(nullptr));
+#endif
     stop_and_delete(handle);
 }
 

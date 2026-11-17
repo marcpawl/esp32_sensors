@@ -22,9 +22,11 @@ with arguments it runs them in the container (shell syntax works).
 
 The container runs as your UID/GID (`scripts/dev.py` passes
 `--user "$(id -u):$(id -g)"`), so build artifacts are owned by you and no
-chown or user-namespace remapping is involved; the `dialout` group is joined
-for serial access. `$HOME` is a directory that uid can actually write (see
-below), so ccache works.
+chown or user-namespace remapping is involved. Both serial groups are joined
+for board access: `dialout` for a USB-UART bridge, and `plugdev` because the
+ESP32-S3's built-in USB-serial/JTAG node is often owned by that group instead.
+`$HOME` is a directory that uid can actually write (see below), so ccache
+works.
 
 ## ccache and non-1000 uids
 
