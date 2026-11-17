@@ -4,6 +4,7 @@
 // peripheral.
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "driver/gpio.h"
 #include "esp_sleep.h"
 #pragma GCC diagnostic pop
 // NOLINTEND
@@ -36,7 +37,12 @@ Board::Board(BoardPins pins) noexcept
       user_switch_(Switch::create(pins.user_switch)),
       config_switch_(Switch::create(pins.config_switch)),
       run_switch_(Switch::create(pins.run_switch)),
-      wifi_(WifiRadio::create()) {}
+      wifi_(WifiRadio::create()) {
+    // The switch ISRs are installed by `Switch::set_interrupt()`, which needs
+    // the GPIO ISR service. `ESP_ERR_INVALID_STATE` means it is already
+    // installed (the service is process-wide), which is not an error.
+    (void)gpio_install_isr_service(0);
+}
 
 esp_err_t Board::init_all() noexcept {
     if (esp_err_t err = chip_temperature_.init(); err != ESP_OK) {

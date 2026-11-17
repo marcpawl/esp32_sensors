@@ -30,6 +30,7 @@
 // NOLINTEND
 
 #include <chrono>
+#include <concepts>
 #include <type_traits>
 
 #include "hal/chip_temperature_types.hpp"
@@ -81,6 +82,12 @@ struct BoardPins {
 // The accessors are declared for both a mutable and a const `Board`, so callers
 // can reach a device's `read()` (and, for stubs, its `set_*()`) through either.
 //
+// A board also names its concrete device types: `T::LedType` (the type of
+// `green()`) and `T::SwitchType` (the type of `config_switch()`, which is also
+// the type of the other two switches). A board-independent template such as
+// `logic::ToggleSwitch<Board>` derives the device type it needs without naming
+// either HAL implementation.
+//
 // Deep sleep (§3.8) is part of the contract, not a device accessor: it is the
 // board that powers down, so the board owns both halves of it — sleeping for a
 // duration (`deep_sleep_start()`) and reporting why the last wake happened
@@ -100,6 +107,14 @@ concept BoardLike = std::is_class_v<T> && requires(
     { board.init_all() } -> std::same_as<esp_err_t>;
     { board.deep_sleep_start(duration) } -> std::same_as<void>;
     { const_board.sleep_get_wakeup_causes() } -> std::same_as<WakeCauses>;
+
+    // The concrete device types a board-independent template needs. `LedType`
+    // is the type of `green()` and `SwitchType` the type of `config_switch()`
+    // (all three switch accessors return the same type).
+    requires std::same_as<typename T::LedType,
+                          std::remove_cvref_t<decltype(board.green())>>;
+    requires std::same_as<typename T::SwitchType,
+                          std::remove_cvref_t<decltype(board.config_switch())>>;
 
     // Every accessor returns a type satisfying the matching `hal_common`
     // device concept. Naming only the concepts keeps this header free of

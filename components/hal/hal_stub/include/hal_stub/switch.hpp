@@ -5,8 +5,8 @@
 // the header-only `hal_common` component (`hal/switch_types.hpp`); this
 // header adds the software-driven `Switch` class. `hal_board` provides an
 // identical `Switch` (same ctor, inline `create()` factory, `init()`,
-// `read()`), so a project states its choice by including
-// `<hal_stub/switch.hpp>`.
+// `read()`, `gpio()`, `set_interrupt()`), so a project states its choice by
+// including `<hal_stub/switch.hpp>`.
 //
 // This stub replaces the GPIO-backed `hal_board` implementation where the
 // input pin does not exist. The reported state is held in software and can be
@@ -28,7 +28,8 @@ namespace thermo::hal::stub {
 // Represents a switch whose state is held in software.
 class Switch {
   public:
-    // `gpio` is ignored by the stub.
+    // `gpio` is kept for interface parity and reported by `gpio()`; the stub
+    // does not touch a pin.
     explicit Switch(int gpio) noexcept;
 
     Switch(Switch const&) = delete;
@@ -51,23 +52,28 @@ class Switch {
     // Returns the state set by `set()`, defaulting to open (`kOff`).
     [[nodiscard]] SwitchState read() const noexcept;
 
+    // The pin this switch was built for, as passed to `create()`.
+    [[nodiscard]] int gpio() const noexcept { return gpio_; }
+
     // Sets the state reported by subsequent `read()` calls. Intended for host
     // tests. If the state actually changes and a callback is
     // registered (see `set_interrupt()`), the callback is invoked synchronously
     // with the new state (simulating the hardware interrupt).
     void set(SwitchState state) noexcept;
 
-    // Registers the callback invoked whenever `set()` changes the state,
-    // passing the new state. The stub has no real interrupt, so the callback
-    // runs on the caller's thread, synchronously inside `set()`.
+    // Registers the callback invoked whenever `set()` changes the state. The
+    // callback takes no argument: it reads the new state through `read()`. The
+    // stub has no real interrupt, so the callback runs on the caller's thread,
+    // synchronously inside `set()`.
     //
-    // Passing `std::nullopt` (or `{}`) unregisters any callback, so nothing is
+    // Passing an empty `SwitchCallback` unregisters the callback, so nothing is
     // invoked on a state change; polling via read() still works.
-    void set_interrupt(SwitchHandler handler) noexcept;
+    void set_interrupt([[thermo::isr_safe]] SwitchCallback handler) noexcept;
 
   private:
+    int gpio_ = 0;
     SwitchState state_ = SwitchState::kOff;
-    SwitchHandler handler_ = std::nullopt;
+    SwitchCallback handler_;
 };
 
 static_assert(SwitchLike<Switch>, "Switch must satisfy the SwitchLike concept");

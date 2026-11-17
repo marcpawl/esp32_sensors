@@ -36,6 +36,11 @@ namespace thermo::hal::board {
 // Owns every HAL device on the board.
 class Board {
   public:
+    // The concrete device types a template derives from the board
+    // (`BoardLike` requires both).
+    using LedType = Led;
+    using SwitchType = Switch;
+
     // `pins` describes the wiring; see `BoardPins`. Constructs the devices but
     // does not touch any hardware — call init_all() for that.
     explicit Board(BoardPins pins) noexcept;

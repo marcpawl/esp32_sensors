@@ -51,6 +51,11 @@ namespace thermo::hal::stub {
 // Owns every stub HAL device on the board.
 class BoardStub {
   public:
+    // The concrete device types a template derives from the board
+    // (`BoardLike` requires both).
+    using LedType = Led;
+    using SwitchType = Switch;
+
     // `pins` describes the wiring; see `BoardPins`. The stub ignores the pin
     // numbers but keeps the LED labels for logging. Constructs the devices but
     // does not touch any hardware — call init_all() for that.
