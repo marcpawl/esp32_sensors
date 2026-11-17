@@ -70,7 +70,7 @@ esp_err_t WifiAp::start(const Config& cfg) {
     return ESP_OK;
 }
 
-std::string WifiAp::ip_address() const {
+IpAddressText WifiAp::ip_address() const {
     const char* address = "192.168.4.1";
     char buf[16]{};
     if (g_ap_netif != nullptr) {
@@ -80,15 +80,7 @@ std::string WifiAp::ip_address() const {
             address = buf;
         }
     }
-    // GCC's analyzer cannot model the std::string return here and reports an
-    // uninitialised read. The code is correct; keep the diagnostic fatal
-    // everywhere else.
-    // NOLINTBEGIN
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
-    return std::string(address);
-#pragma GCC diagnostic pop
-    // NOLINTEND
+    return IpAddressText(address);
 }
 
 }  // namespace thermo
