@@ -50,18 +50,7 @@ class Mutex {
     // Creates the mutex. Aborts if FreeRTOS cannot allocate it: without the
     // semaphore there is no lock to hand out, so there is nothing useful to
     // continue with.
-    explicit Mutex(Kind kind = Kind::normal)
-        : recursive_{kind == Kind::recursive} {
-        SemaphoreHandle_t const handle = recursive_
-                                             ? xSemaphoreCreateRecursiveMutex()
-                                             : xSemaphoreCreateMutex();
-        if (handle == nullptr) {
-            ESP_LOGE(kTag, "mutex creation failed");
-            assert(false && "FreeRTOS could not create the mutex");
-            std::abort();
-        }
-        handle_.reset(handle);
-    }
+    explicit Mutex(Kind kind = Kind::normal);
 
     // A mutex is neither copied nor moved: a Lock stores the Mutex's address,
     // which a move would leave dangling while the lock is held.
@@ -106,16 +95,7 @@ class Mutex {
 
     // Releases the mutex. Aborts when the release fails, which means this task
     // did not hold the mutex (a double unlock or an unlock without a lock).
-    void unlock() noexcept {
-        BaseType_t const released = recursive_
-                                        ? xSemaphoreGiveRecursive(handle_.get())
-                                        : xSemaphoreGive(handle_.get());
-        if (released != pdTRUE) {
-            ESP_LOGE(kTag, "unlocking a mutex this task does not hold");
-            assert(false && "FreeRTOS could not give the mutex");
-            std::abort();
-        }
-    }
+    void unlock() noexcept;
 
     [[nodiscard]] bool take(TickType_t ticks_to_wait) noexcept {
         BaseType_t const taken =

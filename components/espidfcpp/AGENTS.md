@@ -25,8 +25,8 @@ its depth in the tree.
 ## The component
 
 `libespidfcpp` provides C++ wrappers around ESP-IDF and FreeRTOS code, to make
-usage less error prone. The headers are in namespace `thermo::espidf_cpp`
-(`HttpServer` has one `.cpp`, listed in the component's `SRCS`):
+usage less error prone. The headers are in namespace `thermo::espidf_cpp`; the
+compiled sources are listed in the component's `SRCS`:
 
 | Header | Provides |
 |---|---|
