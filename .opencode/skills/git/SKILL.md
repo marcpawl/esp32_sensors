@@ -165,4 +165,29 @@ commit is written in this repository, not the way a review comment is:
 pull_request: https://github.com/OWNER/REPO/pull/N
 ```
 
-Apply it with `gh pr edit N --body-file FILE`.
+### Applying the description
+
+Write the description to a file and send it with `gh api`, **not**
+`gh pr edit`:
+
+```bash
+gh api -X PATCH repos/{owner}/{repo}/pulls/N -F body=@/tmp/pr_body.md
+```
+
+`-F` (not `-f`) reads the file; `-f` would send the literal path.
+
+Every `gh pr edit` call fails on the installed `gh` 2.45.0, with or without
+`--body-file`:
+
+```
+GraphQL: Projects (classic) is being deprecated in favor of the new Projects
+experience ... (repository.pullRequest.projectCards)
+```
+
+The command still asks for `projectCards` when it loads the pull request, so
+the mutation is never sent and the description stays as it was. `gh pr create`,
+`gh pr view` and `gh pr list` do work; only `gh pr edit` is affected.
+
+Issue #90 tracks the host `gh` upgrade. When it lands, run `gh --version`,
+confirm `gh pr edit` and go back to `gh pr edit N --body-file FILE`; this
+detour is not meant to outlive the old binary.
