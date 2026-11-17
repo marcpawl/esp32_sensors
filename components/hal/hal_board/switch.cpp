@@ -7,9 +7,9 @@
 //
 // Interrupts: `set_interrupt()` installs a GPIO ISR on any edge. The ISR runs
 // in interrupt context — it must be short and allocate nothing — so it only
-// forwards the new state to the registered callback (IRAM-safe, no logging).
-// The state change is detected by comparing the sampled level against the last
-// one observed by the ISR.
+// reports the edge to the registered callback (IRAM-safe, no logging). Each
+// GPIO has its own slot, so several switches can register handlers
+// independently.
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "driver/gpio.h"
@@ -17,10 +17,28 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
+#include <array>
+#include <utility>
+
+#include <cassert>
+#include <cstddef>
+
 #include "hal_board/switch.hpp"
 
 namespace thermo::hal::board {
 namespace {
+
+// One slot per GPIO, indexed by the pin number. The slot's address travels
+// through `gpio_isr_handler_add()`'s `void*` argument, so the ISR can reach its
+// own state without converting an integer to a pointer (which pessimizes the
+// optimizer).
+struct IsrSlot {
+    int gpio = 0;
+    SwitchState last_state = SwitchState::kOff;
+    SwitchCallback handler;
+};
+
+std::array<IsrSlot, static_cast<std::size_t>(GPIO_NUM_MAX)> g_slots{};
 
 gpio_config_t input_config(int gpio) {
     gpio_config_t cfg = {};
@@ -39,32 +57,18 @@ IRAM_ATTR SwitchState state_from_level(int level) noexcept {
     return level == 0 ? SwitchState::kOn : SwitchState::kOff;
 }
 
-// Callback registered via `set_interrupt()` (or empty).
-SwitchHandler g_handler = std::nullopt;
-
-// Last state observed by the ISR, used to detect changes. Only the ISR reads
-// or writes it, so no synchronisation is needed.
-SwitchState g_last_state = SwitchState::kOff;
-
-// The pin the ISR receives through ESP-IDF's `void*` argument.
-// `gpio_isr_handler_add()` carries no typed payload, and casting the pin number
-// to a pointer (an int-to-pointer cast) pessimizes the optimizer, so the value
-// lives in static storage and its address is what travels. Static storage also
-// keeps it valid for as long as the ISR is installed.
-int g_isr_pin = 0;
-
 // GPIO ISR: on any edge, sample the pin and, if the state actually changed,
-// invoke the registered callback with the new state.
+// invoke the registered callback. The callback reads the new state itself.
 void IRAM_ATTR switch_isr(void* arg) noexcept {
-    const auto gpio = *static_cast<const int*>(arg);
+    auto& slot = *static_cast<IsrSlot*>(arg);
     const SwitchState state =
-        state_from_level(gpio_get_level(static_cast<gpio_num_t>(gpio)));
-    if (state == g_last_state) {
+        state_from_level(gpio_get_level(static_cast<gpio_num_t>(slot.gpio)));
+    if (state == slot.last_state) {
         return;
     }
-    g_last_state = state;
-    if (g_handler.has_value()) {
-        g_handler.value()(state);
+    slot.last_state = state;
+    if (slot.handler) {
+        slot.handler();
     }
 }
 
@@ -83,12 +87,15 @@ SwitchState Switch::read() const noexcept {
     return state_from_level(gpio_get_level(static_cast<gpio_num_t>(gpio_)));
 }
 
-void Switch::set_interrupt(SwitchHandler handler) noexcept {
-    g_handler = handler;
-    g_last_state = read();
+void Switch::set_interrupt(SwitchCallback handler) noexcept {
+    assert(gpio_ >= 0 && gpio_ < GPIO_NUM_MAX);
+    auto& slot = g_slots[static_cast<std::size_t>(gpio_)];
+    slot.gpio = gpio_;
+    slot.handler = std::move(handler);
+    slot.last_state = read();
 
     auto gpio = static_cast<gpio_num_t>(gpio_);
-    if (!handler.has_value()) {
+    if (!slot.handler) {
         // Unregistering: disable the ISR on this pin.
         gpio_set_intr_type(gpio, GPIO_INTR_DISABLE);
         gpio_isr_handler_remove(gpio);
@@ -96,9 +103,8 @@ void Switch::set_interrupt(SwitchHandler handler) noexcept {
     }
     // Report both edges so the first close and the first open after
     // registration are both delivered.
-    g_isr_pin = gpio_;
     gpio_set_intr_type(gpio, GPIO_INTR_ANYEDGE);
-    gpio_isr_handler_add(gpio, switch_isr, &g_isr_pin);
+    gpio_isr_handler_add(gpio, switch_isr, &slot);
 }
 
 }  // namespace thermo::hal::board

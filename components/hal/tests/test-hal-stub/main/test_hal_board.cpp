@@ -49,6 +49,8 @@ using thermo::hal::WakeCause;
 using thermo::hal::WakeCauses;
 using thermo::hal::woke_from;
 using thermo::hal::stub::BoardStub;
+using thermo::hal::stub::Led;
+using thermo::hal::stub::Switch;
 
 // Pin numbers are irrelevant to the stub, but every device takes them for
 // interface parity with the GPIO-backed implementation.
@@ -323,6 +325,9 @@ TEST_CASE("hal board: stub BoardStub models BoardLike", "[hal_board]") {
     static_assert(thermo::hal::BoardLike<BoardStub>);
     // create() must return the same concrete type (part of the concept).
     static_assert(std::same_as<decltype(BoardStub::create(kPins)), BoardStub>);
+    // The nested aliases name the concrete device types the board owns.
+    static_assert(std::same_as<BoardStub::SwitchType, Switch>);
+    static_assert(std::same_as<BoardStub::LedType, Led>);
     // Deep sleep is part of the contract, so the concept covers it. The stub
     // returns from it while the hardware board does not, which is why the
     // concept only requires that the call is well-formed.

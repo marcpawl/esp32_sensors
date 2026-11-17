@@ -11,12 +11,11 @@
 
 #include "hal_stub/switch.hpp"
 
+#include <utility>
+
 namespace thermo::hal::stub {
 
-Switch::Switch(int gpio) noexcept {
-    // Accepted for interface parity with the real implementation; unused.
-    (void)gpio;
-}
+Switch::Switch(int gpio) noexcept : gpio_(gpio) {}
 
 esp_err_t Switch::init() noexcept {
     return ESP_OK;
@@ -31,15 +30,15 @@ void Switch::set(SwitchState state) noexcept {
         return;
     }
     state_ = state;
-    // Simulate the hardware interrupt: notify the registered callback of the
-    // new state (no-op when none is registered).
-    if (handler_.has_value()) {
-        handler_.value()(state_);
+    // Simulate the hardware interrupt: notify the registered callback
+    // (no-op when none is registered). The callback reads the new state.
+    if (handler_) {
+        handler_();
     }
 }
 
-void Switch::set_interrupt(SwitchHandler handler) noexcept {
-    handler_ = handler;
+void Switch::set_interrupt(SwitchCallback handler) noexcept {
+    handler_ = std::move(handler);
 }
 
 }  // namespace thermo::hal::stub

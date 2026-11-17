@@ -15,9 +15,10 @@
 // `REQUIRES hal_common`.)
 //
 // A switch is reported without semantics: it only exposes whether it is
-// currently on (polled via `read()`) and can invoke a registered callback
-// whenever that state changes (via `set_interrupt()`). Interpreting an edge
-// (debouncing, hold timing) is the caller's job.
+// currently on (polled via `read()`), the pin it is wired to (`gpio()`), and a
+// registered callback invoked whenever that state changes (via
+// `set_interrupt()`). Interpreting an edge (debouncing, hold timing) is the
+// caller's job.
 #pragma once
 
 // NOLINTBEGIN
@@ -26,10 +27,12 @@
 // NOLINTEND
 
 #include <concepts>
-#include <optional>
+#include <functional>
 #include <type_traits>
 
 #include <cstdint>
+
+#include "utility/isr_safe.hpp"
 
 namespace thermo::hal {
 
@@ -39,27 +42,32 @@ enum class SwitchState : std::uint8_t {
     kOn,
 };
 
-// Handler invoked when the switch's state changes. It receives the new state
-// (`SwitchState::kOn` when the switch closes, `SwitchState::kOff` when it
-// opens).
-using SwitchCallback = void (*)(SwitchState new_state) noexcept;
-
-// Registered interrupt handler, or `std::nullopt` when none is registered.
-// Passing `std::nullopt` to `set_interrupt()` disables the callback, so
-// nothing is invoked on a state change.
-using SwitchHandler = std::optional<SwitchCallback>;
+// Handler invoked when the switch's state changes. It takes no argument: the
+// switch's new state is read through the switch itself (`Switch::read()`).
+// This lets a handler capture the object it belongs to.
+//
+// The handler runs in the GPIO interrupt, so it must be ISR-safe: no blocking,
+// no heap, no mutex. `set_interrupt()` annotates its parameter
+// `[[thermo::isr_safe]]` to make that requirement explicit.
+//
+// An empty `std::function` means "no handler"; passing one to
+// `set_interrupt()` unregisters the callback, so nothing is invoked on a
+// state change.
+using SwitchCallback = std::function<void()>;
 
 // Concept: a switch type that exposes the shared interface — an inline
-// static `create(gpio)` factory, a `read()` returning `SwitchState`, and a
-// `set_interrupt()` that registers (or clears) a state-change callback.
-// `hal_board` and `hal_stub` both satisfy it, so a project can `static_assert`
-// which implementation it linked in.
+// static `create(gpio)` factory, a `read()` returning `SwitchState`, a
+// `gpio()` getter, and a `set_interrupt()` that registers (or clears) a
+// state-change callback. `hal_board` and `hal_stub` both satisfy it, so a
+// project can `static_assert` which implementation it linked in.
 template<typename T>
 concept SwitchLike =
-    std::is_class_v<T> && requires(int gpio, SwitchHandler handler) {
+    std::is_class_v<T> &&
+    requires(int gpio, [[thermo::isr_safe]] SwitchCallback callback) {
         { T::create(gpio) } -> std::same_as<T>;
+        { std::declval<T const&>().gpio() } -> std::same_as<int>;
         { std::declval<T&>().read() } -> std::same_as<SwitchState>;
-        { std::declval<T&>().set_interrupt(handler) } -> std::same_as<void>;
+        { std::declval<T&>().set_interrupt(callback) } -> std::same_as<void>;
     };
 
 }  // namespace thermo::hal

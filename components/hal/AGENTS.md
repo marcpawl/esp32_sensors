@@ -33,18 +33,38 @@ Each HAL device has a header pair: the shared vocabulary in `hal_common` (e.g.
 it and adds the concrete class. For the switch:
 
 - `hal/switch_types.hpp` (`hal_common`) defines
-  `thermo::hal::SwitchState`, `thermo::hal::SwitchCallback`,
-  `thermo::hal::SwitchHandler`, and the `thermo::hal::SwitchLike` concept —
-  the single definition of the shared types.
+  `thermo::hal::SwitchState`, `thermo::hal::SwitchCallback`, and the
+  `thermo::hal::SwitchLike` concept — the single definition of the shared
+  types. `SwitchCallback` is a `std::function<void()>`: the handler reads the
+  new state through the switch (`read()`), so it can capture the object it
+  belongs to. An empty function unregisters.
+
+  The handler runs in the GPIO interrupt, so `set_interrupt()` annotates its
+  parameter `[[thermo::isr_safe]]` (see `utility/isr_safe.hpp`).
 - `hal_board/switch.hpp` and `hal_stub/switch.hpp` (one each) define
   `thermo::hal::board::Switch` and `thermo::hal::stub::Switch` with an
-  identical public interface (same ctor,
-  inline `create()` factory, `init()`, `read()`, `set_interrupt()`). Each
-  `static_assert`s `SwitchLike<Switch>`, so the two implementations
-  cannot drift from the shared contract (or from each other).
+  identical public interface (same ctor, inline `create()` factory, `init()`,
+  `read()`, `gpio()`, `set_interrupt()`). Each `static_assert`s
+  `SwitchLike<Switch>`, so the two implementations cannot drift from the shared
+  contract (or from each other).
 
 The device is a **switch**, not a push button: the board's inputs are switch
 poles, and a momentary button is just a switch a caller closes and opens again.
+
+`gpio()` reports the pin the switch was built for, so a consumer can name it in
+a diagnostic. `hal_board` installs its interrupt handlers per GPIO (one slot
+each), so several switches can register handlers independently. The GPIO ISR
+service is installed once by the aggregate `Board` constructor; `BoardStub`
+calls the same entry point, which `hal_stub/gpio_stub.cpp` supplies as a no-op
+because `esp_driver_gpio` registers an empty component on the `linux` target.
+
+## The board names its device types
+
+`BoardLike` requires every board to declare two nested aliases:
+`T::LedType` (the type returned by `green()`) and `T::SwitchType` (the type
+returned by `config_switch()`, shared by all three switches). A
+board-independent template derives the concrete device type it needs from the
+board, without naming `hal_board` or `hal_stub`.
 
 ## The HAL is semantics-free
 
@@ -159,7 +179,8 @@ on-target tests). The vocabulary the former pins is the shared one — the
 - **`test-hal-common/`** covers the implementation-free `hal_common`
   vocabulary. `test_hal_board_types.cpp` pins the `BoardLike` contract from the
   other side: `BoardPins` defaults to the §2.4 pin map, a model spells out every
-  requirement using the real stub devices so the concept accepts it, and a
+  requirement using the real stub devices so the concept accepts it, a model
+  without the nested `LedType` / `SwitchType` aliases is rejected, and a
   non-class, a class with none of the board interface, and a reference are each
   rejected. `test_hal_sleep_types.cpp` pins the wake-cause vocabulary
   (`WakeCause` at ESP-IDF's bit positions, `wake_cause_bit()`, and
@@ -167,7 +188,8 @@ on-target tests). The vocabulary the former pins is the shared one — the
 - **`test-hal-stub/`** covers the pin-free `hal_stub` devices. Each device's
   own file exercises its stub contract and its `hal_common` concept:
   `test_hal_led.cpp` (`LedLike`), `test_hal_switch.cpp` (`SwitchLike`,
-  including the `set()` control the mode-sense poles use),
+  including the `gpio()` getter, capturing handlers, two independent switches,
+  and the `set()` control the mode-sense poles use),
   `test_hal_onewire.cpp` (`OneWireLike` plus `set_sensors()`),
   `test_hal_chip_temperature.cpp` (`ChipTemperatureLike`), and
   `test_hal_wifi.cpp` (`WifiRadioLike`, AP/station start/stop independence, and

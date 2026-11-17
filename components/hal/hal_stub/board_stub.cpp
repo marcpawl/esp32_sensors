@@ -16,6 +16,11 @@
 
 #include "hal_stub/board_stub.hpp"
 
+// `esp_driver_gpio` registers an empty component on the `linux` target, so
+// `driver/gpio.h` is not on the include path. The stub board still installs the
+// ISR service like the hardware board; the symbol comes from `gpio_stub.cpp`.
+extern "C" esp_err_t gpio_install_isr_service(int intr_alloc_flags);
+
 namespace thermo::hal::stub {
 
 BoardStub::BoardStub(BoardPins pins) noexcept
@@ -26,7 +31,11 @@ BoardStub::BoardStub(BoardPins pins) noexcept
       user_switch_(Switch::create(pins.user_switch)),
       config_switch_(Switch::create(pins.config_switch)),
       run_switch_(Switch::create(pins.run_switch)),
-      wifi_(WifiRadio::create()) {}
+      wifi_(WifiRadio::create()) {
+    // Match the hardware board: switch handlers need the GPIO ISR service, so
+    // the stub "installs" it too (a no-op on the host).
+    (void)gpio_install_isr_service(0);
+}
 
 esp_err_t BoardStub::init_all() noexcept {
     if (esp_err_t err = chip_temperature_.init(); err != ESP_OK) {

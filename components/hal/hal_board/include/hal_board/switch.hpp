@@ -5,13 +5,15 @@
 // the header-only `hal_common` component (`hal/switch_types.hpp`); this
 // header adds the concrete, GPIO-backed `Switch` class. `hal_stub`
 // provides an identical `Switch` (same ctor, inline `create()` factory,
-// `init()`, `read()`), so a project states its choice by including
-// `<hal_board/switch.hpp>`.
+// `init()`, `read()`, `gpio()`, `set_interrupt()`), so a project states its
+// choice by including `<hal_board/switch.hpp>`.
 //
 // The switch is reported without semantics: `read()` returns `kOn` while the
-// switch is closed and `kOff` while it is open. A registered interrupt
-// callback (`set_interrupt()`) is invoked on every state change. Interpreting
-// further (debouncing, hold timing) is the caller's job.
+// switch is closed and `kOff` while it is open. `gpio()` reports the pin the
+// switch was built for, so callers can name it in diagnostics. A registered
+// interrupt callback (`set_interrupt()`) is invoked on every state change and
+// reads the new state through `read()`. Interpreting further (debouncing, hold
+// timing) is the caller's job.
 #pragma once
 
 // NOLINTBEGIN
@@ -51,16 +53,21 @@ class Switch {
     // `SwitchState::kOn` when closed, `SwitchState::kOff` when open.
     [[nodiscard]] SwitchState read() const noexcept;
 
+    // The input pin this switch was built for, as passed to `create()`.
+    [[nodiscard]] int gpio() const noexcept { return gpio_; }
+
     // Registers the callback invoked from the GPIO interrupt whenever the
-    // switch's state changes, passing the new state. Call this *after* init()
-    // (the handler is installed on the pin, which init() configures).
+    // switch's state changes. The callback takes no argument: it reads the
+    // new state through `read()`. Call this *after* init() (the handler is
+    // installed on the pin, which init() configures).
     //
-    // The GPIO ISR service must already be installed (gpio_install_isr_service)
-    // before registering a handler; this HAL does not install it.
+    // The GPIO ISR service must already be installed (the aggregate Board
+    // installs it in its constructor). Each switch gets its own interrupt slot,
+    // so several switches can register handlers independently.
     //
-    // Passing `std::nullopt` (or `{}`) unregisters any callback, so nothing is
+    // Passing an empty `SwitchCallback` unregisters the callback, so nothing is
     // invoked on a state change; polling via read() still works.
-    void set_interrupt(SwitchHandler handler) noexcept;
+    void set_interrupt([[thermo::isr_safe]] SwitchCallback handler) noexcept;
 
   private:
     int const gpio_;

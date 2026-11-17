@@ -7,6 +7,9 @@
 #
 # Deep sleep (§3.8) needs no ESP-IDF dependency here: the stub implements it
 # entirely in software.
+#
+# `gpio_stub.cpp` supplies `gpio_install_isr_service()` for the `linux` target,
+# where `esp_driver_gpio` registers an empty component (no sources, no headers).
 
 idf_component_register(
     SRCS
@@ -16,6 +19,7 @@ idf_component_register(
         "chip_temperature_stub.cpp"
         "wifi_stub.cpp"
         "esp_timer_stub.cpp"
+        "gpio_stub.cpp"
         "board_stub.cpp"
     INCLUDE_DIRS
         "include"

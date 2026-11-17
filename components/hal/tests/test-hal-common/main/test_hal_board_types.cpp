@@ -44,12 +44,10 @@ using thermo::hal::stub::WifiRadio;
 // A class with none of the board interface.
 struct NotABoard {};
 
-// A complete board model. The devices are the real stubs, so their types — and
-// therefore every accessor's return type — are exactly what the concept asks
-// for; only the board itself is a model.
-struct CompleteBoard {
-    static CompleteBoard create(BoardPins /*pins*/) noexcept { return {}; }
-
+// The board interface, without the nested device-type aliases. Both models
+// below add `create()`, so the aliases are the only difference between the
+// accepted board and the rejected one.
+struct BoardDeviceSet {
     esp_err_t init_all() noexcept { return ESP_OK; }
 
     void deep_sleep_start(std::chrono::seconds /*duration*/) noexcept {}
@@ -100,7 +98,7 @@ struct CompleteBoard {
 
     [[nodiscard]] WifiRadio const& wifi() const noexcept { return wifi_; }
 
-  private:
+  protected:
     ChipTemperature chip_temperature_;
     OneWire one_wire_ = OneWire::create(4);
     Led green_ = Led::create(17, "Green");
@@ -109,6 +107,24 @@ struct CompleteBoard {
     Switch config_switch_ = Switch::create(1);
     Switch run_switch_ = Switch::create(2);
     WifiRadio wifi_;
+};
+
+// A complete board model: the full device set plus the nested aliases the
+// concept requires.
+struct CompleteBoard : BoardDeviceSet {
+    using LedType = Led;
+    using SwitchType = Switch;
+
+    static CompleteBoard create(BoardPins /*pins*/) noexcept { return {}; }
+};
+
+// The same interface, but without `LedType` / `SwitchType`. A board that omits
+// them cannot serve a board-independent template, so `BoardLike` must reject
+// it.
+struct BoardWithoutDeviceTypes : BoardDeviceSet {
+    static BoardWithoutDeviceTypes create(BoardPins /*pins*/) noexcept {
+        return {};
+    }
 };
 
 }  // namespace
@@ -136,6 +152,14 @@ TEST_CASE("hal board types: BoardPins defaults to the board pin map (§2.4)",
 TEST_CASE("hal board types: a complete board models BoardLike",
           "[hal_board_types]") {
     static_assert(BoardLike<CompleteBoard>);
+    TEST_PASS();
+}
+
+TEST_CASE("hal board types: BoardLike rejects a board without device types",
+          "[hal_board_types]") {
+    // The device interface is complete, but `LedType` / `SwitchType` are
+    // missing, so a template could not derive them from the board.
+    static_assert(!BoardLike<BoardWithoutDeviceTypes>);
     TEST_PASS();
 }
 
