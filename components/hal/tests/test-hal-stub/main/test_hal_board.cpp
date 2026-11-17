@@ -22,7 +22,6 @@
 #include <chrono>
 #include <concepts>
 #include <utility>
-#include <vector>
 
 #include <cstdint>
 
@@ -64,7 +63,7 @@ constexpr BoardPins kPins{
     .run_button = 2,
 };
 
-// GCC's analyzer cannot model libstdc++'s std::string/std::vector internals and
+// GCC's analyzer cannot model libstdc++'s std::string internals and
 // reports the board returned by create() as uninitialised. The code is
 // correct; keep the diagnostic fatal everywhere else.
 // NOLINTBEGIN
@@ -124,9 +123,9 @@ TEST_CASE("hal board: one_wire() is a live stub device", "[hal_board]") {
     // The stub starts with the three example sensors from §5.1.3.
     TEST_ASSERT_EQUAL(3, b.one_wire().read().size());
 
-    const std::vector<thermo::hal::DS18B20Reading> readings = {
-        {{0x28, 0xFF, 0x64, 0xA1, 0xB2, 0x16, 0x03, 0xC4}, 2150},
-    };
+    thermo::hal::ReadingList readings;
+    readings.push_back(
+        {{0x28, 0xFF, 0x64, 0xA1, 0xB2, 0x16, 0x03, 0xC4}, 2150});
     b.one_wire().set_sensors(readings);
     TEST_ASSERT_EQUAL(1, b.one_wire().discover_sensors().size());
     TEST_ASSERT_EQUAL(1, b.one_wire().read().size());

@@ -10,7 +10,6 @@
 #include <functional>
 #include <optional>
 #include <string>
-#include <vector>
 
 #include "app_config.hpp"
 #include "power_manager.hpp"
@@ -18,22 +17,12 @@
 
 namespace thermo {
 
-// GCC's analyzer cannot model libstdc++'s std::vector internals and reports
-// the snapshot as uninitialised. The code is correct; keep the diagnostic
-// fatal everywhere else.
-// NOLINTBEGIN
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
-
 struct ScanSnapshot {
     PowerSource power_source;
     /** Battery strength, absent when running without a battery (on USB). */
     std::optional<std::uint32_t> battery_mv = std::nullopt;
-    std::vector<DS18B20Reading> sensors;
+    ReadingList sensors;
 };
-
-#pragma GCC diagnostic pop
-// NOLINTEND
 
 // Callback used by the server to obtain a fresh /scan snapshot on demand.
 using ScanProvider = std::function<ScanSnapshot()>;

@@ -19,7 +19,6 @@
 // NOLINTEND
 
 #include <optional>
-#include <vector>
 
 #include <cstddef>
 #include <cstdint>
@@ -55,15 +54,16 @@ class OneWire {
     esp_err_t init() noexcept;
 
     // Walks the 1-Wire search tree and returns the ROM IDs of every DS18B20
-    // (family code 0x28) present on the bus. Returns an empty vector when no
-    // device responds.
-    [[nodiscard]] std::vector<RomId> discover_sensors() noexcept;
+    // (family code 0x28) present on the bus. Returns an empty list when no
+    // device responds; a bus with more devices than `kMaxSensors` reports
+    // the first `kMaxSensors` of them (§2.1).
+    [[nodiscard]] RomIdList discover_sensors() noexcept;
 
     // Discovers the sensors on the bus and reads a temperature from each,
     // returning one reading (ROM ID + temperature) per sensor, in discovery
     // order. A sensor whose scratchpad read fails or whose CRC is bad yields a
     // reading with `temp_c_x100 == std::nullopt`.
-    [[nodiscard]] std::vector<DS18B20Reading> read() noexcept;
+    [[nodiscard]] ReadingList read() noexcept;
 
   private:
     // Low-level bit-slot primitives (1-Wire protocol).

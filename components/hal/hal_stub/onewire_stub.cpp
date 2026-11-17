@@ -10,9 +10,6 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
-#include <iterator>
-#include <utility>
-
 #include "hal_stub/onewire.hpp"
 
 namespace thermo::hal::stub {
@@ -29,45 +26,32 @@ inline constexpr DS18B20Reading kDefaultSensors[] = {
 
 }  // namespace
 
-OneWire::OneWire(int gpio) noexcept
-    : sensors_(std::begin(kDefaultSensors), std::end(kDefaultSensors)) {
+OneWire::OneWire(int gpio) noexcept {
     // Accepted for interface parity with the real implementation; unused.
     (void)gpio;
+    for (const DS18B20Reading& reading : kDefaultSensors) {
+        sensors_.push_back(reading);
+    }
 }
 
 esp_err_t OneWire::init() noexcept {
     return ESP_OK;
 }
 
-std::vector<RomId> OneWire::discover_sensors() const noexcept {
-    // GCC's analyzer cannot model libstdc++'s std::vector internals and
-    // reports an uninitialised read while filling and returning the vector.
-    // The code is correct; keep the diagnostic fatal everywhere else.
-    // NOLINTBEGIN
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
-    std::vector<RomId> roms;
-    roms.reserve(sensors_.size());
+RomIdList OneWire::discover_sensors() const noexcept {
+    RomIdList roms;
     for (const DS18B20Reading& reading : sensors_) {
-        roms.push_back(reading.rom);
+        roms.try_push_back(reading.rom);
     }
     return roms;
-#pragma GCC diagnostic pop
-    // NOLINTEND
 }
 
-std::vector<DS18B20Reading> OneWire::read() const noexcept {
-    // Same libstdc++ copy-constructor false positive as discover_sensors().
-    // NOLINTBEGIN
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
+ReadingList OneWire::read() const noexcept {
     return sensors_;
-#pragma GCC diagnostic pop
-    // NOLINTEND
 }
 
-void OneWire::set_sensors(std::vector<DS18B20Reading> readings) noexcept {
-    sensors_ = std::move(readings);
+void OneWire::set_sensors(ReadingList readings) noexcept {
+    sensors_ = readings;
 }
 
 }  // namespace thermo::hal::stub

@@ -25,11 +25,17 @@
 
 #include <concepts>
 #include <type_traits>
-#include <vector>
 
-#include "hal/ds18b20_types.hpp"  // RomId, DS18B20Reading
+#include "hal/ds18b20_types.hpp"      // RomId, DS18B20Reading, kMaxSensors
+#include "utility/static_vector.hpp"  // static_vector
 
 namespace thermo::hal {
+
+// The fixed-capacity lists the bus returns. They live here so both
+// implementations return the same types and the `OneWireLike` concept can name
+// them exactly; `kMaxSensors` is the §2.1 bus capacity.
+using RomIdList = utility::static_vector<RomId, kMaxSensors>;
+using ReadingList = utility::static_vector<DS18B20Reading, kMaxSensors>;
 
 // Concept: a 1-Wire bus type that exposes the shared interface — an inline
 // static `create(gpio)` factory, an `init()`, a `discover_sensors()` that
@@ -40,10 +46,8 @@ template<typename T>
 concept OneWireLike = std::is_class_v<T> && requires(int gpio) {
     { T::create(gpio) } -> std::same_as<T>;
     { std::declval<T&>().init() } -> std::same_as<esp_err_t>;
-    {
-        std::declval<T&>().discover_sensors()
-    } -> std::same_as<std::vector<RomId>>;
-    { std::declval<T&>().read() } -> std::same_as<std::vector<DS18B20Reading>>;
+    { std::declval<T&>().discover_sensors() } -> std::same_as<RomIdList>;
+    { std::declval<T&>().read() } -> std::same_as<ReadingList>;
 };
 
 }  // namespace thermo::hal

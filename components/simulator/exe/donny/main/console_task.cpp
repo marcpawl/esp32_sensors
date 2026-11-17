@@ -40,7 +40,6 @@
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 #include <cstddef>
 #include <cstdint>
@@ -543,8 +542,7 @@ std::optional<std::string> apply(const json& doc, hal::stub::BoardStub& board) {
         if (!it->is_array()) {
             return "sensors must be an array";
         }
-        std::vector<hal::DS18B20Reading> readings;
-        readings.reserve(it->size());
+        hal::ReadingList readings;
         for (const json& entry : *it) {
             if (!entry.is_object()) {
                 return "each sensor must be an object";
@@ -568,9 +566,11 @@ std::optional<std::string> apply(const json& doc, hal::stub::BoardStub& board) {
                 }
                 reading.temp_c_x100 = value;
             }
-            readings.push_back(reading);
+            if (!readings.try_push_back(reading)) {
+                return "sensors must hold at most three entries";
+            }
         }
-        board.one_wire().set_sensors(std::move(readings));
+        board.one_wire().set_sensors(readings);
     }
 
     // WiFi.
