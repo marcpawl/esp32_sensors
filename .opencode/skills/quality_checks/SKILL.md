@@ -34,10 +34,10 @@ Individual host suites are also available as `test-hal-common`,
 Cheapest first:
 
 1. `./scripts/dev.py pycodestyle`
-2. `./scripts/dev.py build`
-3. `./scripts/dev.py clang-tidy`
-4. `./scripts/dev.py format-check-staged` (or `format-check` for the whole
+2. `./scripts/dev.py format-check-staged` (or `format-check` for the whole
    tree)
+3. `./scripts/dev.py build`
+4. `./scripts/dev.py clang-tidy`
 5. `./scripts/dev.py test`
 
 CI (`build-and-test` in `.github/workflows/ci.yml`) adds
