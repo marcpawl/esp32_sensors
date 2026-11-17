@@ -4,7 +4,7 @@
 // --------
 // One JSON *object* per line, in both directions. Every field is optional on
 // input: a missing field leaves that piece of board state alone, which lets a
-// driver send `{"config_button":"on"}` to press a button without touching
+// driver send `{"config_switch":"on"}` to close a switch without touching
 // anything else. On output every field is always present, so the document is a
 // complete snapshot of the board.
 //
@@ -51,7 +51,7 @@
 
 #include "hal/ds18b20_types.hpp"
 #include "hal/led_types.hpp"
-#include "hal/push_button_types.hpp"
+#include "hal/switch_types.hpp"
 #include "hal/wifi_types.hpp"
 #include "logic/rom_id.hpp"
 
@@ -156,8 +156,8 @@ std::optional<std::string> read_line(std::array<char, kLineCapacity>& buffer) {
 
 // --- Small value helpers ---------------------------------------------------
 
-constexpr const char* to_text(hal::ButtonState state) noexcept {
-    return state == hal::ButtonState::kOn ? "on" : "off";
+constexpr const char* to_text(hal::SwitchState state) noexcept {
+    return state == hal::SwitchState::kOn ? "on" : "off";
 }
 
 constexpr const char* to_text(hal::LedState state) noexcept {
@@ -323,9 +323,9 @@ json snapshot(const hal::stub::BoardStub& board) {
     }
 
     return json{
-        {"button", to_text(board.button().read())},
-        {"config_button", to_text(board.config_button().read())},
-        {"run_button", to_text(board.run_button().read())},
+        {"user_switch", to_text(board.user_switch().read())},
+        {"config_switch", to_text(board.config_switch().read())},
+        {"run_switch", to_text(board.run_switch().read())},
         {"leds", json{{"green", to_text(board.green().state())},
                       {"red", to_text(board.red().state())}}},
         {"chip_temp_c_x100", board.chip_temperature().read()},
@@ -492,11 +492,11 @@ std::optional<std::string> apply(const json& doc, hal::stub::BoardStub& board) {
         return "document must be a JSON object";
     }
 
-    // Buttons.
-    for (const auto& [key, button] :
-         {std::pair{"button", &board.button()},
-          std::pair{"config_button", &board.config_button()},
-          std::pair{"run_button", &board.run_button()}}) {
+    // Switches.
+    for (const auto& [key, sw] :
+         {std::pair{"user_switch", &board.user_switch()},
+          std::pair{"config_switch", &board.config_switch()},
+          std::pair{"run_switch", &board.run_switch()}}) {
         const auto it = doc.find(key);
         if (it == doc.end()) {
             continue;
@@ -505,7 +505,7 @@ std::optional<std::string> apply(const json& doc, hal::stub::BoardStub& board) {
         if (!pressed.has_value()) {
             return std::string{key} + " must be \"on\" or \"off\"";
         }
-        button->set(*pressed ? hal::ButtonState::kOn : hal::ButtonState::kOff);
+        sw->set(*pressed ? hal::SwitchState::kOn : hal::SwitchState::kOff);
     }
 
     // LEDs. `write()` is the only mutator the HAL offers (and it logs).

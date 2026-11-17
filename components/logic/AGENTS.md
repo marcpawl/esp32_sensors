@@ -32,7 +32,7 @@ The headers are included with the `logic/` prefix:
 | `logic/limits.hpp` | the fixed capacities: `kSensorCount` (from `hal::kMaxSensors`), `kMaxBufferRecords` (256), `kMaxSensorNameLength` / `kMaxDeviceNameLength` (32), and `kMaxPayloadBytes` (1024) — shared by the sample buffer, the payload, and the sensor layer (§2.1, §4.1, §4.2, §5.1, §9.1). Depends only on the `hal_common` sensor vocabulary |
 | `logic/led_task.hpp` | `thermo::LedState`, `thermo::ledtask::*` (`Step`, `CycleSteps`, `LedRunner<Board>`), `thermo::LedTask<Board>` — the LED status task built on `espidf_cpp::Task` |
 | `logic/mode.hpp` | `thermo::Mode` (`kOff` / `kConfigure` / `kRun`) and `thermo::to_string(Mode)` — the operating modes (§3), board-independent vocabulary |
-| `logic/mode_selection.hpp` | `thermo::ModeSelection` (`std::optional<Mode>`) and `thermo::mode_from_buttons(ButtonState config, ButtonState run)` — the pure, `constexpr` mapping from the two mode-sense poles to a mode, reporting a both-poles-on miswire as `std::nullopt` |
+| `logic/mode_selection.hpp` | `thermo::ModeSelection` (`std::optional<Mode>`) and `thermo::mode_from_switches(SwitchState config, SwitchState run)` — the pure, `constexpr` mapping from the two mode-sense poles to a mode, reporting a both-poles-on miswire as `std::nullopt` |
 | `logic/temp_format.hpp` / `src/temp_format.cpp` | `thermo::kTempNull` (the int16 `0x8000` sensor-failure sentinel) and `thermo::format_temp_c_x100()` returning `thermo::TempText`, a fixed-capacity string — centred-hundredths formatting for the config UI and the payload (§4.2, §9); no ESP-IDF dependency |
 | `logic/rom_id.hpp` / `src/rom_id.cpp` | `thermo::rom_id_to_hex()` and `thermo::rom_id_from_hex()` — the free functions that render a `thermo::hal::RomId` as the 16-character uppercase hex key of §5.1.3 / §6.1 and parse one back (`std::nullopt` on a wrong length or a non-hex character). Free functions, not members: `RomId` in `hal_common` stays pure data. No ESP-IDF dependency |
 | `logic/payload.hpp` / `src/payload.cpp` | `thermo::payload::NamedSample`, `SensorName(s)`, `DeviceName`, `Payload`, and `build_batch_json()` — the §9.1 upload document (key names, ordering, `batch_size`, JSON escaping) built from the buffered records. Everything it appends is fixed-capacity, so formatting a batch never touches the heap; an over-long document aborts at `kMaxPayloadBytes`. The temperatures go through `logic/temp_format.hpp`. No ESP-IDF dependency |
@@ -90,13 +90,13 @@ sources under `mcgowan/src` (`app_config.cpp`, `config_page.cpp`,
 deliberately free of chip-specific ESP-IDF dependencies so they build for the
 `linux` target. The header-only `logic/mode_selection.hpp` is the same idea
 applied to the mode-sense poles: it depends only on
-`hal/push_button_types.hpp` (for `ButtonState`) and `logic/mode.hpp`, and is
+`hal/switch_types.hpp` (for `SwitchState`) and `logic/mode.hpp`, and is
 `constexpr`, so `test_mode_selection.cpp` exercises it directly and covers all
 four pole combinations — including the both-on hardware fault, which the
 header reports as `std::nullopt` instead of rebooting.
 
 `test_led_runner.cpp` instantiates the templated `LedRunner<Board>` against the
-stub `BoardStub`. The `hal_stub` component itself (the pin-free buttons, LEDs,
+stub `BoardStub`. The `hal_stub` component itself (the pin-free switches, LEDs,
 1-Wire bus, chip-temperature sensor, WiFi radio, and aggregate board) is covered
 by `components/hal/tests/test-hal-stub/`.
 

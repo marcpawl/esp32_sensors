@@ -1,13 +1,13 @@
 // Tests for the stub aggregate `BoardStub` (`hal_stub`).
 //
 // `BoardStub` is a convenience aggregate: it owns one stub device per HAL
-// device (chip temperature, 1-Wire bus, green/red LEDs, push buttons, WiFi
+// device (chip temperature, 1-Wire bus, green/red LEDs, switches, WiFi
 // radio) and exposes them. These tests cover the *aggregate* contract —
 // construction from `BoardPins`, `init_all()`, that each accessor returns a
 // live, usable device, that the underlying stub controls (`set_sensors()`,
 // `set()`, `set_celsius()`, `write()`) remain reachable through the board, and
 // the board-wide deep sleep (§3.8). The devices' own behaviour is covered by
-// their dedicated tests (test_hal_led.cpp, test_hal_push_button.cpp,
+// their dedicated tests (test_hal_led.cpp, test_hal_switch.cpp,
 // test_hal_onewire.cpp, test_hal_chip_temperature.cpp); here we only verify
 // the wiring.
 //
@@ -31,7 +31,7 @@
 #include "hal_stub/chip_temperature.hpp"
 #include "hal_stub/led.hpp"
 #include "hal_stub/onewire.hpp"
-#include "hal_stub/push_button.hpp"
+#include "hal_stub/switch.hpp"
 #include "hal_stub/wifi.hpp"
 #include "unity.h"
 
@@ -40,10 +40,10 @@ namespace {
 // Convenience aliases for the shared HAL vocabulary.
 using thermo::hal::AccessPointConfig;
 using thermo::hal::BoardPins;
-using thermo::hal::ButtonState;
 using thermo::hal::copy_text;
 using thermo::hal::LedState;
 using thermo::hal::StationConfig;
+using thermo::hal::SwitchState;
 using thermo::hal::wake_cause_bit;
 using thermo::hal::WakeCause;
 using thermo::hal::WakeCauses;
@@ -58,9 +58,9 @@ constexpr BoardPins kPins{
     .red_led = 16,
     .green_name = "Green",
     .red_name = "Red",
-    .button = 0,
-    .config_button = 1,
-    .run_button = 2,
+    .user_switch = 0,
+    .config_switch = 1,
+    .run_switch = 2,
 };
 
 // GCC's analyzer cannot model libstdc++'s std::string internals and
@@ -97,8 +97,8 @@ TEST_CASE("hal board: create() returns a usable, inited board", "[hal_board]") {
     // init_all() always succeeds for the stub (every device init is a no-op).
     TEST_ASSERT_EQUAL(ESP_OK, b.init_all());
     // Each accessor returns a live device.
-    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
-                      static_cast<int>(b.button().read()));
+    TEST_ASSERT_EQUAL(static_cast<int>(SwitchState::kOff),
+                      static_cast<int>(b.user_switch().read()));
 }
 
 TEST_CASE("hal board: init_all() is idempotent and returns ESP_OK",
@@ -154,40 +154,40 @@ TEST_CASE("hal board: green() and red() are distinct, live stub devices",
                       static_cast<int>(b.green().state()));
 }
 
-TEST_CASE("hal board: button() is a live stub device", "[hal_board]") {
+TEST_CASE("hal board: user_switch() is a live stub device", "[hal_board]") {
     BoardStub b = make_board();
-    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
-                      static_cast<int>(b.button().read()));
-    b.button().set(ButtonState::kOn);
-    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOn),
-                      static_cast<int>(b.button().read()));
+    TEST_ASSERT_EQUAL(static_cast<int>(SwitchState::kOff),
+                      static_cast<int>(b.user_switch().read()));
+    b.user_switch().set(SwitchState::kOn);
+    TEST_ASSERT_EQUAL(static_cast<int>(SwitchState::kOn),
+                      static_cast<int>(b.user_switch().read()));
 }
 
-TEST_CASE("hal board: config_button() is a live, independent stub device",
+TEST_CASE("hal board: config_switch() is a live, independent stub device",
           "[hal_board]") {
     BoardStub b = make_board();
-    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
-                      static_cast<int>(b.config_button().read()));
-    b.config_button().set(ButtonState::kOn);
-    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOn),
-                      static_cast<int>(b.config_button().read()));
-    // The mode-sense buttons and the plain button are separate devices.
-    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
-                      static_cast<int>(b.run_button().read()));
-    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
-                      static_cast<int>(b.button().read()));
+    TEST_ASSERT_EQUAL(static_cast<int>(SwitchState::kOff),
+                      static_cast<int>(b.config_switch().read()));
+    b.config_switch().set(SwitchState::kOn);
+    TEST_ASSERT_EQUAL(static_cast<int>(SwitchState::kOn),
+                      static_cast<int>(b.config_switch().read()));
+    // The mode-sense poles and the plain switch are separate devices.
+    TEST_ASSERT_EQUAL(static_cast<int>(SwitchState::kOff),
+                      static_cast<int>(b.run_switch().read()));
+    TEST_ASSERT_EQUAL(static_cast<int>(SwitchState::kOff),
+                      static_cast<int>(b.user_switch().read()));
 }
 
-TEST_CASE("hal board: run_button() is a live, independent stub device",
+TEST_CASE("hal board: run_switch() is a live, independent stub device",
           "[hal_board]") {
     BoardStub b = make_board();
-    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
-                      static_cast<int>(b.run_button().read()));
-    b.run_button().set(ButtonState::kOn);
-    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOn),
-                      static_cast<int>(b.run_button().read()));
-    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
-                      static_cast<int>(b.config_button().read()));
+    TEST_ASSERT_EQUAL(static_cast<int>(SwitchState::kOff),
+                      static_cast<int>(b.run_switch().read()));
+    b.run_switch().set(SwitchState::kOn);
+    TEST_ASSERT_EQUAL(static_cast<int>(SwitchState::kOn),
+                      static_cast<int>(b.run_switch().read()));
+    TEST_ASSERT_EQUAL(static_cast<int>(SwitchState::kOff),
+                      static_cast<int>(b.config_switch().read()));
 }
 
 TEST_CASE("hal board: wifi() is a live stub device", "[hal_board]") {
@@ -298,12 +298,12 @@ TEST_CASE("hal board: const accessors yield const device references",
     // Reading through a const board is well-formed (proves the const overloads
     // exist and return the const-qualified device types).
     TEST_ASSERT_EQUAL(2500, b.chip_temperature().read());
-    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
-                      static_cast<int>(b.button().read()));
-    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
-                      static_cast<int>(b.config_button().read()));
-    TEST_ASSERT_EQUAL(static_cast<int>(ButtonState::kOff),
-                      static_cast<int>(b.run_button().read()));
+    TEST_ASSERT_EQUAL(static_cast<int>(SwitchState::kOff),
+                      static_cast<int>(b.user_switch().read()));
+    TEST_ASSERT_EQUAL(static_cast<int>(SwitchState::kOff),
+                      static_cast<int>(b.config_switch().read()));
+    TEST_ASSERT_EQUAL(static_cast<int>(SwitchState::kOff),
+                      static_cast<int>(b.run_switch().read()));
     // The 1-Wire stub defaults to the three example sensors from §5.1.3.
     TEST_ASSERT_EQUAL(3, b.one_wire().read().size());
     TEST_ASSERT_EQUAL(static_cast<int>(LedState::kOff),

@@ -5,7 +5,7 @@
 // and any other consumer share one definition.
 //
 // The switch itself is not a HAL device: the board exposes its two mode-sense
-// poles as independent push buttons, and `logic/mode_selection.hpp` maps that
+// poles as independent switches, and `logic/mode_selection.hpp` maps that
 // pair onto these values.
 #pragma once
 

@@ -26,7 +26,7 @@
 #include "hal_stub/chip_temperature.hpp"
 #include "hal_stub/led.hpp"
 #include "hal_stub/onewire.hpp"
-#include "hal_stub/push_button.hpp"
+#include "hal_stub/switch.hpp"
 #include "hal_stub/wifi.hpp"
 #include "unity.h"
 
@@ -38,7 +38,7 @@ using thermo::hal::WakeCauses;
 using thermo::hal::stub::ChipTemperature;
 using thermo::hal::stub::Led;
 using thermo::hal::stub::OneWire;
-using thermo::hal::stub::PushButton;
+using thermo::hal::stub::Switch;
 using thermo::hal::stub::WifiRadio;
 
 // A class with none of the board interface.
@@ -78,22 +78,22 @@ struct CompleteBoard {
 
     [[nodiscard]] Led const& red() const noexcept { return red_; }
 
-    [[nodiscard]] PushButton& button() noexcept { return button_; }
+    [[nodiscard]] Switch& user_switch() noexcept { return user_switch_; }
 
-    [[nodiscard]] PushButton const& button() const noexcept { return button_; }
-
-    [[nodiscard]] PushButton& config_button() noexcept {
-        return config_button_;
+    [[nodiscard]] Switch const& user_switch() const noexcept {
+        return user_switch_;
     }
 
-    [[nodiscard]] PushButton const& config_button() const noexcept {
-        return config_button_;
+    [[nodiscard]] Switch& config_switch() noexcept { return config_switch_; }
+
+    [[nodiscard]] Switch const& config_switch() const noexcept {
+        return config_switch_;
     }
 
-    [[nodiscard]] PushButton& run_button() noexcept { return run_button_; }
+    [[nodiscard]] Switch& run_switch() noexcept { return run_switch_; }
 
-    [[nodiscard]] PushButton const& run_button() const noexcept {
-        return run_button_;
+    [[nodiscard]] Switch const& run_switch() const noexcept {
+        return run_switch_;
     }
 
     [[nodiscard]] WifiRadio& wifi() noexcept { return wifi_; }
@@ -105,9 +105,9 @@ struct CompleteBoard {
     OneWire one_wire_ = OneWire::create(4);
     Led green_ = Led::create(17, "Green");
     Led red_ = Led::create(16, "Red");
-    PushButton button_ = PushButton::create(0);
-    PushButton config_button_ = PushButton::create(1);
-    PushButton run_button_ = PushButton::create(2);
+    Switch user_switch_ = Switch::create(0);
+    Switch config_switch_ = Switch::create(1);
+    Switch run_switch_ = Switch::create(2);
     WifiRadio wifi_;
 };
 
@@ -123,10 +123,10 @@ TEST_CASE("hal board types: BoardPins defaults to the board pin map (§2.4)",
     TEST_ASSERT_EQUAL(thermo::pins::kWireBus, def.one_wire);
     TEST_ASSERT_EQUAL(thermo::pins::kGreenLed, def.green_led);
     TEST_ASSERT_EQUAL(thermo::pins::kRedLed, def.red_led);
-    TEST_ASSERT_EQUAL(thermo::pins::kConfig, def.config_button);
-    TEST_ASSERT_EQUAL(thermo::pins::kRun, def.run_button);
-    // The plain button has no dedicated pin on the reference board.
-    TEST_ASSERT_EQUAL(0, def.button);
+    TEST_ASSERT_EQUAL(thermo::pins::kConfig, def.config_switch);
+    TEST_ASSERT_EQUAL(thermo::pins::kRun, def.run_switch);
+    // The plain (user) switch has no dedicated pin on the reference board.
+    TEST_ASSERT_EQUAL(0, def.user_switch);
     TEST_ASSERT_EQUAL_STRING("Green", def.green_name);
     TEST_ASSERT_EQUAL_STRING("Red", def.red_name);
 }

@@ -1,32 +1,32 @@
-// Deterministic push-button stub for the host tests.
+// Deterministic switch stub for the host tests.
 //
 // There is no input pin to read, so the reported state is held in software.
 // `init()` always succeeds and `read()` returns whatever `set()` last set
-// (default: released). A callback registered with `set_interrupt()` is invoked
+// (default: open). A callback registered with `set_interrupt()` is invoked
 // synchronously by `set()` whenever the state actually changes.
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #pragma GCC diagnostic pop
 // NOLINTEND
 
-#include "hal_stub/push_button.hpp"
+#include "hal_stub/switch.hpp"
 
 namespace thermo::hal::stub {
 
-PushButton::PushButton(int gpio) noexcept {
+Switch::Switch(int gpio) noexcept {
     // Accepted for interface parity with the real implementation; unused.
     (void)gpio;
 }
 
-esp_err_t PushButton::init() noexcept {
+esp_err_t Switch::init() noexcept {
     return ESP_OK;
 }
 
-ButtonState PushButton::read() const noexcept {
+SwitchState Switch::read() const noexcept {
     return state_;
 }
 
-void PushButton::set(ButtonState state) noexcept {
+void Switch::set(SwitchState state) noexcept {
     if (state == state_) {
         return;
     }
@@ -38,7 +38,7 @@ void PushButton::set(ButtonState state) noexcept {
     }
 }
 
-void PushButton::set_interrupt(ButtonHandler handler) noexcept {
+void Switch::set_interrupt(SwitchHandler handler) noexcept {
     handler_ = handler;
 }
 

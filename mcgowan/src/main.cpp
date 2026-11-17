@@ -1,6 +1,6 @@
 // Firmware entry point.
 //
-// Reads the mode-selection buttons, initializes NVS + RTC state, then
+// Reads the mode-selection switch poles, initializes NVS + RTC state, then
 // dispatches to Configure mode (implemented) or Run mode (stubbed) per §3.
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
@@ -18,7 +18,7 @@
 #include "app_config_store.hpp"
 #include "configure_mode.hpp"
 #include "hal_board/board.hpp"
-#include "hal_board/push_button.hpp"
+#include "hal_board/switch.hpp"
 #include "logic/application.hpp"
 #include "logic/led_task.hpp"
 #include "logic/mode.hpp"
@@ -36,8 +36,8 @@ constexpr const char* kTag = "app_main";
 // itself is pure and host-tested (`logic/mode_selection.hpp`); this wrapper
 // only turns its hardware-fault result into the firmware's fail-loudly policy.
 thermo::Mode read_mode(thermo::hal::board::Board& board) {
-    const thermo::ModeSelection selection = thermo::mode_from_buttons(
-        board.config_button().read(), board.run_button().read());
+    const thermo::ModeSelection selection = thermo::mode_from_switches(
+        board.config_switch().read(), board.run_switch().read());
     if (!selection.has_value()) {
         // Both poles energized: the switch is miswired or shorted. Fail loudly
         // rather than guess a mode.
@@ -64,8 +64,8 @@ esp_err_t init_nvs() {
 
 extern "C" void app_main(void) {
     // The board is created first because both the boot policy and the
-    // mode-sense buttons go through it: `rtc_state_init()` asks it why the last
-    // wake happened (§3.8) and `read_mode()` reads the switch poles. It is
+    // mode-sense switch poles go through it: `rtc_state_init()` asks it why the
+    // last wake happened (§3.8) and `read_mode()` reads the switch poles. It is
     // shared: `LedTask` holds a `std::shared_ptr` to it instead of owning it,
     // so it cannot be destroyed while the task still uses it.
     auto board = std::make_shared<thermo::hal::board::Board>(
