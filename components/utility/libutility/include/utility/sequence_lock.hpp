@@ -89,8 +89,14 @@ class SequenceLock {
             return WriteResult::kRejected;
         }
 
-        // Mark the cell as being written before replacing the model.
-        cell_.version.store(current + 1, std::memory_order_release);
+        // Enter the writing state in one atomic step. If another writer moved
+        // the version since the load above, this model is stale.
+        std::uint32_t expected = current;
+        if (!cell_.version.compare_exchange_strong(expected, current + 1,
+                                                   std::memory_order_release,
+                                                   std::memory_order_relaxed)) {
+            return WriteResult::kRejected;
+        }
         cell_.model = versioned_model.model;
 
         // Publish the completed model by returning the version to even. The
