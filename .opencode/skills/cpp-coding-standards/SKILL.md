@@ -714,87 +714,6 @@ std::vector<std::unique_ptr<Point>> indirect_points; // BAD: pointer chasing
 - Choosing "clever" low-level code over clear abstractions (Per.4, Per.5)
 - Ignoring data layout and cache behavior (Per.19)
 
-### clang-tidy NOLINT
-
-Suppress a finding only when the analyzer is right but the code must stay
-as it is. Then follow these three rules:
-
-- **Name the check**, so the suppression cannot hide a different finding
-  on the same line:
-  `// NOLINTNEXTLINE(performance-no-int-to-ptr)`.
-- **Explain why**, in a comment next to the suppression: what makes the
-  alternative worse (an API contract, a hardware requirement, a test
-  fixture). A later reader must be able to re-check the judgement.
-- **Pick the smallest scope.** `NOLINTNEXTLINE` suppresses the next line,
-  a trailing `NOLINT` the same line, and `NOLINTBEGIN` … `NOLINTEND` a
-  range. A wrapped function signature usually needs the range form:
-  clang-tidy reports the parameter line, not the line carrying the
-  function name, so a `NOLINTNEXTLINE` above the signature misses.
-
-**Wrapper exception.** An `#include` block of ESP-IDF or `third_party/`
-headers is turned off wholesale, without per-check names, because those
-diagnostics are not ours to fix:
-
-```cpp
-// NOLINTBEGIN
-#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
-#include "esp_log.h"
-#include "freertos/FreeRTOS.h"
-#pragma GCC diagnostic pop
-// NOLINTEND
-```
-
-### Compiler, ESP-IDF and third-party diagnostics
-
-A compiler diagnostic (including `-fanalyzer`) can point into code we do not
-own:
-
-- the compiler's standard library (`libstdc++`, `libc`);
-- ESP-IDF headers;
-- `third_party/` (for example `nlohmann/json`).
-
-There is nothing to fix in those files, but the warning must not be turned off
-for the whole translation unit either: our code must stay under analysis. Wrap
-the **point in our source that reveals the diagnostic** — usually the
-`#include` that pulls the header in, sometimes the statement the analyzer
-names — in a diagnostic pragma that names the exact warning the compiler
-printed:
-
-```cpp
-// NOLINTBEGIN
-#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
-#pragma GCC diagnostic ignored "-Wanalyzer-malloc-leak"
-#include <string>
-#pragma GCC diagnostic pop
-// NOLINTEND
-```
-
-A diagnostic revealed at a call site is wrapped there instead:
-
-```cpp
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wanalyzer-null-dereference"
-read();
-#pragma GCC diagnostic pop
-```
-
-- Name the exact warning. GCC has no wildcard form, and a bare `-Wno-...`
-  would also hide findings in our own code.
-- Keep the scope as small as possible: `pop` before our own code resumes, so
-  a real finding still fails the build.
-- Add a comment naming the responsible library and saying why the code is
-  correct.
-- Prefer this local pragma to a global flag in `CMakeLists.txt`; a global flag
-  cannot tell our code from the library's.
-
-`// NOLINTBEGIN` and `// NOLINTEND` around the block keep clang-tidy quiet
-about the pragma itself, as in the wrapper exception above.
-
-## ESP guidelines
-- Avoid using the heap
-  - Try to used static_vector instead of std::vector
-  - Try to used static_string instead of std::string
-
 ## Quick Reference Checklist
 
 Before marking C++ work complete:
@@ -913,3 +832,93 @@ hand. Write includes fully qualified (`"esp_log.h"`, `"freertos/FreeRTOS.h"`,
 clang-format inserts the blank line after `#pragma GCC diagnostic pop` unless
 another pragma follows it; run `scripts/dev.py format` after editing an include
 block.
+
+### clang-tidy NOLINT
+
+Suppress a finding only when the analyzer is right but the code must stay
+as it is. Then follow these three rules:
+
+- **Name the check**, so the suppression cannot hide a different finding
+  on the same line:
+  `// NOLINTNEXTLINE(performance-no-int-to-ptr)`.
+- **Explain why**, in a comment next to the suppression: what makes the
+  alternative worse (an API contract, a hardware requirement, a test
+  fixture). A later reader must be able to re-check the judgement.
+- **Pick the smallest scope.** `NOLINTNEXTLINE` suppresses the next line,
+  a trailing `NOLINT` the same line, and `NOLINTBEGIN` … `NOLINTEND` a
+  range. A wrapped function signature usually needs the range form:
+  clang-tidy reports the parameter line, not the line carrying the
+  function name, so a `NOLINTNEXTLINE` above the signature misses.
+
+**Wrapper exception.** An `#include` block of ESP-IDF or `third_party/`
+headers is turned off wholesale, without per-check names, because those
+diagnostics are not ours to fix:
+
+```cpp
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+```
+
+### Compiler, ESP-IDF and third-party diagnostics
+
+A compiler diagnostic (including `-fanalyzer`) can point into code we do not
+own:
+
+- the compiler's standard library (`libstdc++`, `libc`);
+- ESP-IDF headers;
+- `third_party/` (for example `nlohmann/json`).
+
+There is nothing to fix in those files, but the warning must not be turned off
+for the whole translation unit either: our code must stay under analysis. Wrap
+the **point in our source that reveals the diagnostic** — usually the
+`#include` that pulls the header in, sometimes the statement the analyzer
+names — in a diagnostic pragma that names the exact warning the compiler
+printed:
+
+```cpp
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic ignored "-Wanalyzer-malloc-leak"
+#include <string>
+#pragma GCC diagnostic pop
+// NOLINTEND
+```
+
+A diagnostic revealed at a call site is wrapped there instead:
+
+```cpp
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-null-dereference"
+read();
+#pragma GCC diagnostic pop
+```
+
+- Name the exact warning. GCC has no wildcard form, and a bare `-Wno-...`
+  would also hide findings in our own code.
+- Keep the scope as small as possible: `pop` before our own code resumes, so
+  a real finding still fails the build.
+- Add a comment naming the responsible library and saying why the code is
+  correct.
+- Prefer this local pragma to a global flag in `CMakeLists.txt`; a global flag
+  cannot tell our code from the library's.
+
+`// NOLINTBEGIN` and `// NOLINTEND` around the block keep clang-tidy quiet
+about the pragma itself, as in the wrapper exception above.
+
+### inline function bodies
+
+Declare member function bodies outside of the class
+definition when the body exceeds 5 lines.
+
+For non-templated classes or functions use .cpp files for functions
+that are longer than five lines.
+
+## ESP guidelines
+- Avoid using the heap
+  - Try to used static_vector instead of std::vector
+  - Try to used static_string instead of std::string
+
