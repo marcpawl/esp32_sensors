@@ -224,6 +224,16 @@ The container task runner and its command table are documented in
 `scripts/AGENTS.md`. Run `./scripts/dev.py --help` for the live
 list.
 
+### Reuse one container shell
+
+The first time a shell is needed, open one with `./scripts/dev.py shell`.
+Run every subsequent command in that shell rather than calling
+`./scripts/dev.py shell <cmd>` again. Each wrapper call starts a new
+container and discards it when the command exits, so environment changes,
+the working directory, and anything built up interactively are lost between
+calls; one open shell keeps them and avoids paying the container startup
+cost every time.
+
 
 
 ### Flash and monitor
