@@ -41,7 +41,10 @@ ScanSnapshot make_snapshot(Config& cfg, SensorManager& sensors,
     for (const auto& m : cfg.mappings) {
         if (auto rom = rom_id_from_hex(m.rom)) {
             if (!roms.try_push_back(*rom)) {
-                break;  // §2.1: at most kMaxSensors sensors are logged.
+                // A mapping table larger than the bus capacity is user
+                // input, not a programming error: keep the first
+                // `kMaxSensors` and ignore the rest.
+                break;
             }
         }
     }

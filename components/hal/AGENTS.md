@@ -63,9 +63,9 @@ three sensors) slots, so discovery and reading never touch the heap.
 That is also why the firmware and the simulator build under
 `-fanalyzer` without a diagnostic suppression around the bus.
 
-A bus with more devices than the capacity reports the first `kMaxSensors`
-of them. The `hal_stub` mirror stores its collection the same way, and its
-`set_sensors()` takes the same list type.
+More devices than the capacity is a wiring fault for the §2.1 bus, so the
+list aborts rather than dropping a sensor. The `hal_stub` mirror stores its
+collection the same way, and its `set_sensors()` takes the same list type.
 
 ## The mode switch is not a HAL device
 

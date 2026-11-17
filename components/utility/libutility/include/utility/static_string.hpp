@@ -216,6 +216,18 @@ class static_string {
         return true;
     }
 
+    // Appends a C string. Asserts if the result would exceed capacity().
+    constexpr static_string& operator+=(const char* s) {
+        append(s);
+        return *this;
+    }
+
+    // Appends a single character. Asserts when full.
+    constexpr static_string& operator+=(char c) {
+        push_back(c);
+        return *this;
+    }
+
     // Empties the string (buffer still holds the NUL terminator).
     constexpr void clear() noexcept {
         size_ = 0;

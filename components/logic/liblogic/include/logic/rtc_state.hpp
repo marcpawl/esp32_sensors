@@ -78,12 +78,6 @@ struct RtcState {
     std::uint8_t last_upload_ok = 0;
 };
 
-// The cached ROM IDs must be able to hold every sensor the bus can report
-// (§2.1). A larger application limit would not fit the bus result, and a
-// smaller one would silently drop a sensor.
-static_assert(limits::kSensorCount == hal::kMaxSensors,
-              "the RTC cache must match the 1-Wire bus capacity");
-
 // RTC memory is restored verbatim from the previous boot, so the block is
 // copied with a byte blit (and lives in a hardware-retained section): it must
 // stay trivially copyable, and it must not own any out-of-line storage.

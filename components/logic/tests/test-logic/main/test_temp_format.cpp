@@ -17,9 +17,10 @@
 
 using thermo::format_temp_c_x100;
 using thermo::kTempNull;
+using thermo::TempText;
 
 namespace {
-std::string fmt(std::int16_t v) {
+TempText fmt(std::int16_t v) {
     // The diagnostic belongs to format_temp_c_x100()'s snprintf buffer; see
     // the comment there. Keep it fatal everywhere else.
     // NOLINTBEGIN

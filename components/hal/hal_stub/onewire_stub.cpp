@@ -41,7 +41,7 @@ esp_err_t OneWire::init() noexcept {
 RomIdList OneWire::discover_sensors() const noexcept {
     RomIdList roms;
     for (const DS18B20Reading& reading : sensors_) {
-        roms.try_push_back(reading.rom);
+        roms.push_back(reading.rom);
     }
     return roms;
 }

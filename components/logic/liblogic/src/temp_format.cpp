@@ -12,7 +12,7 @@
 
 namespace thermo {
 
-std::string format_temp_c_x100(std::int16_t temp_c_x100) {
+TempText format_temp_c_x100(std::int16_t temp_c_x100) {
     // §9.3 round-half-away-from-zero at one decimal place:
     //   sign = (v < 0) ? -1 : 1
     //   a    = abs(v)
@@ -49,7 +49,7 @@ std::string format_temp_c_x100(std::int16_t temp_c_x100) {
     // NOLINTBEGIN
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
-    return buf;
+    return TempText(buf);
 #pragma GCC diagnostic pop
     // NOLINTEND
 }

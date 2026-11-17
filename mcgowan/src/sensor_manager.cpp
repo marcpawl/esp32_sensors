@@ -44,7 +44,7 @@ ReadingList SensorManager::read_all(const RomIdList& roms,
         ESP_LOGW(kTag, "no presence pulse; all readings null");
         ReadingList nulls;
         for (const auto& rom : active) {
-            nulls.try_push_back({rom, std::nullopt});
+            nulls.push_back({rom, std::nullopt});
         }
         return nulls;
     }
@@ -52,7 +52,7 @@ ReadingList SensorManager::read_all(const RomIdList& roms,
 
     ReadingList readings;
     for (const auto& rom : active) {
-        readings.try_push_back({rom, device_.read_temperature(rom)});
+        readings.push_back({rom, device_.read_temperature(rom)});
     }
     return readings;
 }
