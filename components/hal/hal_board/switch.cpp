@@ -76,6 +76,17 @@ void IRAM_ATTR switch_isr(void* arg) noexcept {
 
 Switch::Switch(int gpio) noexcept : gpio_(gpio) {}
 
+Switch::Switch(Switch&& other) noexcept
+    : gpio_(other.gpio_), valid_(std::exchange(other.valid_, false)) {}
+
+Switch::~Switch() noexcept {
+    // A moved-from switch is invalid and must not touch the moved-to
+    // switch's registration.
+    if (valid_) {
+        set_interrupt({});
+    }
+}
+
 esp_err_t Switch::init() noexcept {
     auto cfg = input_config(gpio_);
     return gpio_config(&cfg);

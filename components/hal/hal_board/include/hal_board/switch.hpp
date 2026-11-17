@@ -34,9 +34,12 @@ class Switch {
 
     Switch(Switch const&) = delete;
     // Movable so `create()` (and containers/factories) can hand a Switch
-    // back by value without needing guaranteed copy elision.
-    Switch(Switch&&) noexcept = default;
-    ~Switch() = default;
+    // back by value without needing guaranteed copy elision. The moved-from
+    // switch is marked invalid, so its destructor does not unregister the
+    // moved-to switch's handler.
+    Switch(Switch&& other) noexcept;
+    // Unregisters any handler: an ISR must not call into a destroyed switch.
+    ~Switch() noexcept;
     Switch& operator=(Switch const&) = delete;
     Switch& operator=(Switch&&) = delete;
 
@@ -71,6 +74,9 @@ class Switch {
 
   private:
     int const gpio_;
+    // False on a moved-from switch, so its destructor does not unregister the
+    // moved-to switch's handler. The pin stays const.
+    bool valid_ = true;
 };
 
 static_assert(SwitchLike<Switch>, "Switch must satisfy the SwitchLike concept");

@@ -36,7 +36,8 @@ class Switch {
     // Movable so `create()` (and containers/factories) can hand a Switch
     // back by value without needing guaranteed copy elision.
     Switch(Switch&&) noexcept = default;
-    ~Switch() = default;
+    // Releases any handler, matching the hardware switch's destructor.
+    ~Switch() noexcept;
     Switch& operator=(Switch const&) = delete;
     Switch& operator=(Switch&&) = delete;
 
