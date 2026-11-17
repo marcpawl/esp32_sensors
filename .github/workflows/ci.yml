@@ -64,20 +64,24 @@ jobs:
         run: |
           python3 ./scripts/dev.py pycodestyle
 
-      - name: Run build
+      # Checking C++ formatting does not need the compile database
+      # and is fast to run, catching formatting errors before
+      # running the expensive checks.
+      - name:format-check
+        run: |
+          python3 ./scripts/dev.py format-check
+
+      - name:build
         run: |
           python3 ./scripts/dev.py build --analyzer
 
       # Static analysis reads the compile databases the build just produced, so
       # it must run after `build` (it never builds anything itself).
-      - name: Run clang-tidy
+      - name:clang-tidy
         run: |
           python3 ./scripts/dev.py clang-tidy /project
 
-      - name: Run tests
+      - name:tests
         run: |
           python3 ./scripts/dev.py test
 
-      - name: Run format-check
-        run: |
-          python3 ./scripts/dev.py format-check
