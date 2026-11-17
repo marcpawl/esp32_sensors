@@ -34,7 +34,15 @@ NamedSample make_sample(std::uint32_t age_s, std::uint16_t batt_mv,
 
 std::vector<std::string> names(const std::string& a, const std::string& b,
                                const std::string& c) {
+    // GCC's analyzer cannot model libstdc++'s initializer-list construction
+    // and reports an uninitialised read. The code is correct; keep the
+    // diagnostic fatal everywhere else.
+    // NOLINTBEGIN
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
     return {a, b, c};
+#pragma GCC diagnostic pop
+    // NOLINTEND
 }
 
 }  // namespace

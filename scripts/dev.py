@@ -283,6 +283,7 @@ TIDY_PROJECT_PREFIX = "project:"
 # meaningless to clang-tidy, which only parses (never code-generates).
 TIDY_DROP_FLAGS = frozenset({
     "-c",
+    "-fanalyzer",
     "-fno-jump-tables",
     "-fno-shrink-wrap",
     "-fno-test-coverage",
@@ -304,6 +305,10 @@ TIDY_DROP_FLAG_PREFIXES = (
     "-fdiagnostics-color",
     "-fmacro-prefix-map=",
     "-specs=",
+    # The `-Wno-error=` and `-Wno-` companions to `-fanalyzer` name warnings
+    # clang does not have, so clang would reject them as unknown options.
+    "-Wno-error=analyzer-",
+    "-Wno-analyzer-",
 )
 
 
@@ -691,13 +696,54 @@ def _parse_subprojects(args: list[str]) -> list[str] | None:
     return args
 
 
-def _root_build_commands(subprojects: list[str]) -> list[list[str]]:
+_ANALYZER_FLAG = "--analyzer"
+_TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
+_FALSE_VALUES = frozenset({"0", "false", "no", "off"})
+
+
+def _bool_value(text: str) -> bool:
+    """Parse the boolean value accepted by `--analyzer=`."""
+    lowered = text.lower()
+    if lowered in _TRUE_VALUES:
+        return True
+    if lowered in _FALSE_VALUES:
+        return False
+    raise argparse.ArgumentTypeError(
+        f"expected a boolean (true/false), got {text!r}"
+    )
+
+
+def _normalize_analyzer_argv(argv: list[str]) -> list[str]:
+    """Turn a bare `--analyzer` into `--analyzer=true`.
+
+    The value must be attached with `=`, so a bare `--analyzer` cannot consume
+    the next token (a subproject name) as its value. Pure (testable).
+    """
+    return [
+        f"{_ANALYZER_FLAG}=true" if token == _ANALYZER_FLAG else token
+        for token in argv
+    ]
+
+
+def _analyzer_define(analyzer: bool) -> str:
+    """The CMake cache value that turns the GCC analyzer on or off.
+
+    Always passed explicitly (ON *and* OFF) so switching `--analyzer=false`
+    cannot leave a previous ON in a subproject's cache.
+    """
+    return f"-DTHERMO_GCC_ANALYZER={'ON' if analyzer else 'OFF'}"
+
+
+def _root_build_commands(subprojects: list[str],
+                         analyzer: bool = False) -> list[list[str]]:
     """Configure and build the root aggregator project. Pure (testable).
 
     The root project is plain CMake (not ESP-IDF); ``SUBPROJECTS`` selects
     which of its ``<subproject>_build`` targets are built. It is passed on the
     configure command line rather than cached so the selection never goes
-    stale. Returns the configure command followed by the build command.
+    stale. ``THERMO_GCC_ANALYZER`` is passed the same way and forwarded to each
+    subproject's `idf.py`. Returns the configure command followed by the build
+    command.
     """
     return [
         [
@@ -705,50 +751,55 @@ def _root_build_commands(subprojects: list[str]) -> list[list[str]]:
             "-S", ".",
             "-B", ROOT_BUILD_DIR,
             f"-DSUBPROJECTS={';'.join(subprojects)}",
+            _analyzer_define(analyzer),
         ],
         ["cmake", "--build", ROOT_BUILD_DIR],
     ]
 
 
-def _build_subprojects(subprojects: list[str]) -> int:
+def _build_subprojects(subprojects: list[str], analyzer: bool = False) -> int:
     """Build the named subprojects in order. No container hop."""
     if subprojects == list(SUBPROJECTS):
         # The whole tree: let the root aggregator project drive every
         # subproject (one CMake build over all of them).
-        for cmd in _root_build_commands(subprojects):
+        for cmd in _root_build_commands(subprojects, analyzer):
             rc = run(cmd)
             if rc != 0:
                 return rc
         return 0
     for project in subprojects:
-        rc = _build_project(project)
+        rc = _build_project(project, analyzer)
         if rc != 0:
             return rc
     return 0
 
 
-def _build_project(project: str) -> int:
+def _build_project(project: str, analyzer: bool = False) -> int:
     """Build one subproject with its own target and build directory.
 
     A project in `LINUX_PROJECTS` is pinned to the `linux` target and builds
     into `build_linux`; everything else builds for ESP32-S3 into
-    `build_esp32s3`.
+    `build_esp32s3`. The analyzer define is passed explicitly so a previous
+    `--analyzer=false` cannot stick in the CMake cache.
     """
+    define = _analyzer_define(analyzer)
     if project in LINUX_PROJECTS:
-        rc = run(_idf(project, TEST_BUILD_DIR, "--preview", "set-target",
-                      "linux"))
+        rc = run(_idf(project, TEST_BUILD_DIR, define, "--preview",
+                      "set-target", "linux"))
         if rc != 0:
             return rc
-        return run(_idf(project, TEST_BUILD_DIR, "build"))
-    return run(_idf(project, FW_BUILD_DIR, "build"))
+        return run(_idf(project, TEST_BUILD_DIR, define, "build"))
+    return run(_idf(project, FW_BUILD_DIR, define, "build"))
 
 
-def cmd_build(args: list[str]) -> int:
+def cmd_build(args: list[str], analyzer: bool = False) -> int:
     """Build the firmware; with no argument also the other subprojects.
 
-    `build`               → every subproject (firmware, host tests)
-    `build mcgowan`       → just the ESP32-S3 firmware (mcgowan/build_esp32s3)
-    `build <subproject>`  → one subproject; any name in `SUBPROJECTS`
+    `build`                    → every subproject, analyzer off
+    `build mcgowan`            → just the ESP32-S3 firmware, analyzer off
+    `build <subproject>`       → one subproject; any name in `SUBPROJECTS`
+    `build --analyzer`         → any of the above, analyzer on
+    `build --analyzer=false`   → explicitly off (the default)
     """
     change_to_container()
     rc = _ensure_submodules()
@@ -757,7 +808,7 @@ def cmd_build(args: list[str]) -> int:
     subprojects = _parse_subprojects(args)
     if subprojects is None:
         return 1
-    return _build_subprojects(subprojects)
+    return _build_subprojects(subprojects, analyzer)
 
 
 def cmd_build_test_espidf_cpp() -> int:
@@ -949,10 +1000,13 @@ def _tidy_compile_arguments(argv: list[str]) -> list[str]:
     ESP-IDF compiles with Xtensa GCC, so the compilation database records
     flags the Espressif `clang-tidy` driver (LLVM) rejects: `-mlongcalls`,
     `-mno-target-align`, `-fstrict-volatile-bitfields`,
-    `-fno-tree-switch-conversion`, `-fno-jump-tables`, `-freorder-blocks` and
+    `-fno-tree-switch-conversion`, `-fno-jump-tables`, `-freorder-blocks`,
+    `-fanalyzer` (GCC's static analyzer; clang has no such option) and
     `-specs=...` are GCC-only, and `-fmacro-prefix-map=` is not a clang flag
-    spelling clang accepts. Left in, they surface as `clang-diagnostic-error`s
-    (or "argument unused" warnings, which `--warnings-as-errors` promotes).
+    spelling clang accepts. The `-Wno-error=analyzer-...` and
+    `-Wno-analyzer-...` forms configured alongside it are dropped for the same
+    reason. Left in, they surface as `clang-diagnostic-error`s (or "argument
+    unused" warnings, which `--warnings-as-errors` promotes).
 
     `argv` is the whole command line, so `argv[0]` (the compiler) is dropped:
     clang-tidy takes the driver from its own argv. The trailing source file is
@@ -1721,6 +1775,16 @@ def _build_parser() -> argparse.ArgumentParser:
     # `build` takes optional subproject names (default: all of them).
     build_parser = subparsers.choices["build"]
     build_parser.add_argument(
+        "--analyzer",
+        type=_bool_value,
+        default=False,
+        metavar="BOOL",
+        help="enable GCC's static analyzer (-fanalyzer); off by default. Use "
+             "`--analyzer` for on, or `--analyzer=false` for off (the value "
+             "must be attached with `=`, so a following subproject name is "
+             "not consumed)",
+    )
+    build_parser.add_argument(
         "subprojects",
         nargs="*",
         metavar="SUBPROJECT",
@@ -1783,11 +1847,11 @@ def main(argv: list[str]) -> int:
     sys.argv[0] = str(relative_prog)
 
     parser = _build_parser()
-    args = parser.parse_args(argv[1:])
+    args = parser.parse_args(_normalize_analyzer_argv(argv[1:]))
     if args.command == "shell":
         return cmd_shell(args.args, args.directory)
     if args.command == "build":
-        return cmd_build(args.subprojects)
+        return cmd_build(args.subprojects, analyzer=args.analyzer)
     if args.command == "clang-tidy":
         scopes = _parse_tidy_scopes(args.scopes)
         if scopes is None:

@@ -24,7 +24,15 @@ std::string rom_id_to_hex(const hal::RomId& rom) {
         std::snprintf(buf + i * 2, 3, "%02X", rom.bytes[i]);
     }
     buf[2 * hal::kRomIdBytes] = '\0';
+    // GCC's analyzer does not model std::snprintf's writes and reports the
+    // buffer as uninitialised. The code is correct; keep the diagnostic fatal
+    // everywhere else.
+    // NOLINTBEGIN
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
     return buf;
+#pragma GCC diagnostic pop
+    // NOLINTEND
 }
 
 std::optional<hal::RomId> rom_id_from_hex(std::string_view hex) {

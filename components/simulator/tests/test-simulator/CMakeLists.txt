@@ -49,5 +49,13 @@ set(EXTRA_COMPONENT_DIRS
 set(COMPONENTS main libsimulator)
 set(EXCLUDE_COMPONENTS hal_board)
 
+# GCC's static analyzer for this repository's C++ code only; the module
+# explains why ESP-IDF and vendored components are excluded.
+include("${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/gcc-analyzer.cmake")
+
 # The test ELF is named after this project: test-simulator.
 project(test-simulator)
+
+# `BUILD_COMPONENTS` is populated by project(); the analyzer flags go
+# on this repository's component targets only.
+thermo_enable_gcc_analyzer()

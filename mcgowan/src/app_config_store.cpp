@@ -1,5 +1,10 @@
 // NVS-backed configuration persistence (§5.2).
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic ignored "-Wanalyzer-malloc-leak"
 #include "app_config_store.hpp"
+#pragma GCC diagnostic pop
+// NOLINTEND
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "esp_log.h"

@@ -55,11 +55,21 @@ DS18B20Reading make_reading(std::initializer_list<unsigned> bytes,
     return DS18B20Reading{make_rom(bytes), temp};
 }
 
+// GCC's analyzer cannot model libstdc++'s std::vector internals and reports
+// the bus returned by create() as uninitialised. The code is correct; keep the
+// diagnostic fatal everywhere else.
+// NOLINTBEGIN
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
+
 OneWire make_bus() {
     OneWire bus = OneWire::create(kDataGpio);
     bus.init();
     return bus;
 }
+
+#pragma GCC diagnostic pop
+// NOLINTEND
 
 }  // namespace
 

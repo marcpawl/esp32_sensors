@@ -43,3 +43,11 @@ idf_component_register(
         hal_stub
     WHOLE_ARCHIVE
 )
+
+# GCC's analyzer emits a locationless uninitialized-value diagnostic from the
+# std::string concatenations in config_page.cpp on the host compiler. A
+# diagnostic pragma cannot scope a locationless diagnostic, so disable that
+# one category for this file only; it stays fatal in the rest of the suite.
+set_source_files_properties(
+    "${CMAKE_CURRENT_LIST_DIR}/../../../../../mcgowan/src/config_page.cpp"
+    PROPERTIES COMPILE_OPTIONS "-Wno-analyzer-use-of-uninitialized-value")

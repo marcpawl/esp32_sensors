@@ -19,11 +19,12 @@
 // server, clears every route, and starts it again on a fresh port.
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic ignored "-Wanalyzer-malloc-leak"
+#include <string>
 #pragma GCC diagnostic pop
 // NOLINTEND
 
 #include <array>
-#include <string>
 #include <string_view>
 
 #include <cctype>

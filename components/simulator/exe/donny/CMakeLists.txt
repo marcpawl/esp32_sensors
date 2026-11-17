@@ -71,5 +71,13 @@ set(COMPONENTS main hal_stub libsimulator)
 # view. Must be set before project().
 set(EXCLUDE_COMPONENTS hal_board)
 
+# GCC's static analyzer for this repository's C++ code only; the module
+# explains why ESP-IDF and vendored components are excluded.
+include("${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/gcc-analyzer.cmake")
+
 # The ELF/app binary name derives from the project name: donny.elf.
 project(donny)
+
+# `BUILD_COMPONENTS` is populated by project(); the analyzer flags go
+# on this repository's component targets only.
+thermo_enable_gcc_analyzer()

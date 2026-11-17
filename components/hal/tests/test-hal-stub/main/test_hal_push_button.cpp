@@ -68,6 +68,14 @@ void record_callback(ButtonState state) noexcept {
     g_log.record(state);
 }
 
+// A second callback and log, so the replacement test can prove that events
+// reach the new handler and not the old one.
+CallbackLog g_other_log;
+
+void other_callback(ButtonState state) noexcept {
+    g_other_log.record(state);
+}
+
 }  // namespace
 
 // --- Construction / factory -------------------------------------------------
@@ -210,15 +218,14 @@ TEST_CASE("hal push button: set_interrupt() can replace the callback",
           "[hal_push_button]") {
     PushButton b = make_button();
     g_log = {};
+    g_other_log = {};
     b.set_interrupt(record_callback);
 
-    CallbackLog other;
-    // A capture-less lambda converts to the function pointer the handler holds;
-    // it writes into a different log to prove the handler was replaced.
-    b.set_interrupt([](ButtonState state) noexcept { g_log.record(state); });
+    // Replace the handler: the press must reach the new callback only.
+    b.set_interrupt(other_callback);
     b.set(ButtonState::kOn);
-    TEST_ASSERT_EQUAL(1, g_log.calls);
-    TEST_ASSERT_EQUAL(0, other.calls);
+    TEST_ASSERT_EQUAL(1, g_other_log.calls);
+    TEST_ASSERT_EQUAL(0, g_log.calls);
 }
 
 // --- The stub satisfies the shared concept ---------------------------------

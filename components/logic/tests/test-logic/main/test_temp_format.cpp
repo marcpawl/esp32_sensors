@@ -20,7 +20,14 @@ using thermo::kTempNull;
 
 namespace {
 std::string fmt(std::int16_t v) {
+    // The diagnostic belongs to format_temp_c_x100()'s snprintf buffer; see
+    // the comment there. Keep it fatal everywhere else.
+    // NOLINTBEGIN
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
     return format_temp_c_x100(v);
+#pragma GCC diagnostic pop
+    // NOLINTEND
 }
 }  // namespace
 

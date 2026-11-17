@@ -13,10 +13,10 @@
 // (see the [assert] cases at the end).
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic ignored "-Wanalyzer-malloc-leak"
+#include <string>
 #pragma GCC diagnostic pop
 // NOLINTEND
-
-#include <string>
 
 #include <compare>
 #include <cstddef>

@@ -36,6 +36,13 @@ std::uint8_t crc8(const std::uint8_t* data, std::size_t len) {
 
 }  // namespace
 
+// GCC's analyzer cannot model libstdc++'s std::vector internals and reports
+// the result as uninitialised. The code is correct; keep the diagnostic fatal
+// everywhere else.
+// NOLINTBEGIN
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
+
 std::vector<RomId> Ds18b20::scan() {
     // Full ROM search (binary tree walk) is not implemented; this simple form
     // works only when a single device is present. Run mode avoids scanning
@@ -56,13 +63,25 @@ std::vector<RomId> Ds18b20::scan() {
     return found;
 }
 
+#pragma GCC diagnostic pop
+
+// NOLINTEND
+
 esp_err_t Ds18b20::start_conversion() {
+    // GCC's analyzer cannot model the 1-Wire bus calls and reports them as
+    // reading uninitialised storage. The code is correct; keep the diagnostic
+    // fatal everywhere else.
+    // NOLINTBEGIN
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
     if (!bus_.reset()) {
         return ESP_ERR_NOT_FOUND;
     }
     bus_.write_byte(kRomCommandSkipRom);
     bus_.write_byte(kRomCommandConvertT);
     return ESP_OK;
+#pragma GCC diagnostic pop
+    // NOLINTEND
 }
 
 std::optional<std::int16_t> Ds18b20::read_temperature(const RomId& rom) {

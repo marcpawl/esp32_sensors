@@ -88,6 +88,12 @@ set_property(CACHE SUBPROJECTS PROPERTY STRINGS
     mcgowan test-hal-stub test-hal-common test-logic test-espidf-cpp
     test-simulator donny test-esp_timer-stub test-esp_timer-board)
 
+# GCC static analyzer for the C++ subprojects. Off by default; pass
+# `-DTHERMO_GCC_ANALYZER=ON` (or `scripts/dev.py build --analyzer`) to turn it
+# on.
+option(THERMO_GCC_ANALYZER
+    "Enable GCC's static analyzer for the C++ subprojects" OFF)
+
 set(KNOWN_SUBPROJECTS
     mcgowan test-hal-stub test-hal-common test-logic test-espidf-cpp
     test-simulator donny test-esp_timer-stub test-esp_timer-board)
@@ -124,6 +130,7 @@ function(_idf_subproject name dir build_dir)
         idf.py
         -C "${CMAKE_CURRENT_SOURCE_DIR}/${dir}"
         -B "${CMAKE_CURRENT_SOURCE_DIR}/${dir}/${build_dir}"
+        "-DTHERMO_GCC_ANALYZER=${THERMO_GCC_ANALYZER}"
         --no-hints)
     set(commands)
     foreach(step IN LISTS ARGN)

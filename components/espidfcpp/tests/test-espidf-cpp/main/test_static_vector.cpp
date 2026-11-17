@@ -9,10 +9,10 @@
 // try_push_back reports overflow via a return value and is tested inline.
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic ignored "-Wanalyzer-malloc-leak"
+#include <string>
 #pragma GCC diagnostic pop
 // NOLINTEND
-
-#include <string>
 
 #include <cstddef>
 #include <cstdint>

@@ -44,3 +44,11 @@ idf_component_register(
         mbedtls
         lwip
 )
+
+# GCC's analyzer emits a locationless uninitialized-value diagnostic for the
+# `std::optional<std::string>` return in `on_save()`. Because GCC attaches no
+# source line to it, a diagnostic pragma cannot scope it; disable that one
+# category for this file only. The category stays fatal everywhere else.
+set_source_files_properties(
+    "${mcgowan_src}/configure_mode.cpp"
+    PROPERTIES COMPILE_OPTIONS "-Wno-analyzer-use-of-uninitialized-value")

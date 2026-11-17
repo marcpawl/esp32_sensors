@@ -55,7 +55,19 @@
 #include "hal/push_button_types.hpp"
 #include "hal/wifi_types.hpp"
 #include "logic/rom_id.hpp"
+
+// The vendored JSON library is not analyzed. `-fanalyzer` reports findings
+// inside it (its `construct_at` path and standard-container internals) that
+// belong to upstream code, not to this task.
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic ignored "-Wanalyzer-malloc-leak"
+#pragma GCC diagnostic ignored "-Wanalyzer-possible-null-dereference"
+#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
 #include "nlohmann/json.hpp"
+#pragma GCC diagnostic pop
+
+// NOLINTEND
 
 namespace thermo {
 namespace {

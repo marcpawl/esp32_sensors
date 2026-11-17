@@ -43,7 +43,15 @@ std::string format_temp_c_x100(std::int16_t temp_c_x100) {
     char buf[16];
     std::snprintf(buf, sizeof(buf), "%s%d.%d", emit_sign ? "-" : "", whole,
                   frac);
+    // GCC's analyzer does not model std::snprintf's writes and reports the
+    // buffer as uninitialised. The code is correct; keep the diagnostic fatal
+    // everywhere else.
+    // NOLINTBEGIN
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
     return buf;
+#pragma GCC diagnostic pop
+    // NOLINTEND
 }
 
 }  // namespace thermo

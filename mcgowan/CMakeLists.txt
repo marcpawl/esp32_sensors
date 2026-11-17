@@ -40,5 +40,13 @@ list(APPEND EXTRA_COMPONENT_DIRS
 # implementation in view. Must be set before project().
 set(EXCLUDE_COMPONENTS hal_stub)
 
+# GCC's static analyzer for this repository's C++ code only; the module
+# explains why ESP-IDF and vendored components are excluded.
+include("${CMAKE_CURRENT_LIST_DIR}/../cmake/gcc-analyzer.cmake")
+
 # The ELF/app binary name derives from the project name: mcgowan.bin.
 project(mcgowan)
+
+# `BUILD_COMPONENTS` is populated by project(); the analyzer flags go
+# on this repository's component targets only.
+thermo_enable_gcc_analyzer()

@@ -20,7 +20,7 @@ invoked from the host.
 | host | `pull` | Pull the pinned prebuilt dev image |
 | host | `image` | Build the dev image locally from the `Dockerfile` |
 | both | `submodules` | Fetch the pinned git submodules (`third_party/sml`) |
-| both | `build [SUBPROJECT...]` | Build all subprojects via the root aggregator, or just the named ones |
+| both | `build [--analyzer[=BOOL]] [SUBPROJECT...]` | Build all subprojects via the root aggregator, or just the named ones; the analyzer is off by default, `--analyzer` enables it |
 | both | `build-test-espidf-cpp` | Build the `libespidfcpp` unit tests for `linux` |
 | both | `test` | Run all host suites in order |
 | both | `test-hal-stub` | Build and run the `test-hal-stub/` suite |

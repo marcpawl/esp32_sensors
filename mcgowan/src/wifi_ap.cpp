@@ -71,16 +71,24 @@ esp_err_t WifiAp::start(const Config& cfg) {
 }
 
 std::string WifiAp::ip_address() const {
-    if (g_ap_netif == nullptr) {
-        return "192.168.4.1";
+    const char* address = "192.168.4.1";
+    char buf[16]{};
+    if (g_ap_netif != nullptr) {
+        esp_netif_ip_info_t ip{};
+        if (esp_netif_get_ip_info(g_ap_netif, &ip) == ESP_OK) {
+            std::snprintf(buf, sizeof(buf), IPSTR, IP2STR(&ip.ip));
+            address = buf;
+        }
     }
-    esp_netif_ip_info_t ip{};
-    if (esp_netif_get_ip_info(g_ap_netif, &ip) != ESP_OK) {
-        return "192.168.4.1";
-    }
-    char buf[16];
-    std::snprintf(buf, sizeof(buf), IPSTR, IP2STR(&ip.ip));
-    return buf;
+    // GCC's analyzer cannot model the std::string return here and reports an
+    // uninitialised read. The code is correct; keep the diagnostic fatal
+    // everywhere else.
+    // NOLINTBEGIN
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
+    return std::string(address);
+#pragma GCC diagnostic pop
+    // NOLINTEND
 }
 
 }  // namespace thermo

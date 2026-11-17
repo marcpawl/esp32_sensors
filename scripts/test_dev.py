@@ -216,10 +216,54 @@ class SubprojectBuildTests(unittest.TestCase):
                     "-DSUBPROJECTS=mcgowan;test-hal-stub;test-hal-common;"
                     "test-logic;test-espidf-cpp;test-simulator;donny;"
                     "test-esp_timer-stub;test-esp_timer-board",
+                    "-DTHERMO_GCC_ANALYZER=OFF",
                 ],
                 ["cmake", "--build", dev.ROOT_BUILD_DIR],
             ],
         )
+
+    def test_root_build_can_enable_the_analyzer(self):
+        commands = dev._root_build_commands(
+            list(dev.SUBPROJECTS), analyzer=True
+        )
+        self.assertIn("-DTHERMO_GCC_ANALYZER=ON", commands[0])
+
+    def test_build_parser_defaults_the_analyzer_off(self):
+        args = dev._build_parser().parse_args(["build", "mcgowan"])
+        self.assertFalse(args.analyzer)
+        self.assertEqual(args.subprojects, ["mcgowan"])
+
+    def test_build_parser_accepts_analyzer_values(self):
+        parser = dev._build_parser()
+        self.assertFalse(parser.parse_args(
+            ["build", "--analyzer=false", "mcgowan"]
+        ).analyzer)
+        self.assertTrue(parser.parse_args(
+            ["build", "--analyzer=true", "mcgowan"]
+        ).analyzer)
+        self.assertFalse(parser.parse_args(
+            ["build", "--analyzer=OFF"]
+        ).analyzer)
+
+    def test_bare_analyzer_does_not_consume_a_subproject(self):
+        argv = dev._normalize_analyzer_argv(
+            ["dev.py", "build", "--analyzer", "mcgowan"]
+        )
+        self.assertEqual(
+            argv, ["dev.py", "build", "--analyzer=true", "mcgowan"]
+        )
+        args = dev._build_parser().parse_args(argv[1:])
+        self.assertTrue(args.analyzer)
+        self.assertEqual(args.subprojects, ["mcgowan"])
+
+    def test_last_analyzer_value_wins(self):
+        parser = dev._build_parser()
+        self.assertTrue(parser.parse_args(dev._normalize_analyzer_argv(
+            ["build", "--analyzer=false", "--analyzer=true"]
+        )).analyzer)
+        self.assertFalse(parser.parse_args(dev._normalize_analyzer_argv(
+            ["build", "--analyzer=true", "--analyzer=false"]
+        )).analyzer)
 
     def test_firmware_binary_is_named_after_the_project(self):
         # The ESP-IDF project name (mcgowan/) determines the app binary name.
@@ -1292,6 +1336,7 @@ class BuildProjectTests(unittest.TestCase):
                 dev._idf(
                     dev.ESPIDF_CPP_TEST_PROJECT,
                     dev.TEST_BUILD_DIR,
+                    "-DTHERMO_GCC_ANALYZER=OFF",
                     "--preview",
                     "set-target",
                     "linux",
@@ -1299,6 +1344,7 @@ class BuildProjectTests(unittest.TestCase):
                 dev._idf(
                     dev.ESPIDF_CPP_TEST_PROJECT,
                     dev.TEST_BUILD_DIR,
+                    "-DTHERMO_GCC_ANALYZER=OFF",
                     "build",
                 ),
             ],
@@ -1312,11 +1358,17 @@ class BuildProjectTests(unittest.TestCase):
                 dev._idf(
                     dev.DONNY_PROJECT,
                     dev.TEST_BUILD_DIR,
+                    "-DTHERMO_GCC_ANALYZER=OFF",
                     "--preview",
                     "set-target",
                     "linux",
                 ),
-                dev._idf(dev.DONNY_PROJECT, dev.TEST_BUILD_DIR, "build"),
+                dev._idf(
+                    dev.DONNY_PROJECT,
+                    dev.TEST_BUILD_DIR,
+                    "-DTHERMO_GCC_ANALYZER=OFF",
+                    "build",
+                ),
             ],
         )
 
@@ -1329,8 +1381,30 @@ class BuildProjectTests(unittest.TestCase):
         self.assertEqual(dev._build_project(dev.FIRMWARE_PROJECT), 0)
         self.assertEqual(
             self.calls,
-            [dev._idf(dev.FIRMWARE_PROJECT, dev.FW_BUILD_DIR, "build")],
+            [
+                dev._idf(
+                    dev.FIRMWARE_PROJECT,
+                    dev.FW_BUILD_DIR,
+                    "-DTHERMO_GCC_ANALYZER=OFF",
+                    "build",
+                )
+            ],
         )
+
+    def test_analyzer_switch_can_turn_the_analyzer_on(self):
+        self.assertEqual(
+            dev._build_project(dev.TEST_PROJECT, analyzer=True), 0
+        )
+        for cmd in self.calls:
+            self.assertIn("-DTHERMO_GCC_ANALYZER=ON", cmd)
+
+    def test_analyzer_define_is_always_explicit(self):
+        # Passing OFF as well as ON is what stops a previous --analyzer build
+        # from leaving the analyzer enabled in a cached build tree.
+        self.assertEqual(dev._analyzer_define(True),
+                         "-DTHERMO_GCC_ANALYZER=ON")
+        self.assertEqual(dev._analyzer_define(False),
+                         "-DTHERMO_GCC_ANALYZER=OFF")
 
 
 class GitHooksInstallationTests(unittest.TestCase):
@@ -1446,6 +1520,19 @@ class TidyCompileArgumentsTests(unittest.TestCase):
             "-fdebug-prefix-map=/project/=/",
             "-ffile-prefix-map=/project/=/",
             "-fdiagnostics-color=always",
+            "-DFOO=1",
+            "a.cpp",
+        ])
+        self.assertEqual(args, ["-DFOO=1", "a.cpp"])
+
+    def test_drops_gcc_analyzer_flags(self):
+        # `-fanalyzer` and its `-Wno-error=` / `-Wno-` companions are GCC-only;
+        # clang, which clang-tidy drives, has no such options.
+        args = dev._tidy_compile_arguments([
+            "gcc",
+            "-fanalyzer",
+            "-Wno-error=analyzer-use-of-uninitialized-value",
+            "-Wno-analyzer-malloc-leak",
             "-DFOO=1",
             "a.cpp",
         ])
