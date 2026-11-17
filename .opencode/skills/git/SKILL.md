@@ -101,22 +101,93 @@ ai-session: AI agent session name
 
 ## Pull Request Message
 
+The merge commit is written by GitHub, not by the session, so the pull request
+has to read the way the commit should before the merge button is pressed. Two
+repository settings decide how much of the pull request reaches the commit
+message:
+
+- `merge_commit_title=PR_TITLE` — the commit subject becomes the pull request
+  title plus its number, e.g.
+  `Stop the on-target esp_timer tests building all of ESP-IDF (#88)`;
+- `merge_commit_message=PR_BODY` — the pull request **description** becomes
+  the commit body, starting on the third line.
+
+GitHub calls this combination "Pull request title and description". Only three
+combinations are accepted, and none of them keeps the older
+`Merge pull request #N from OWNER/BRANCH` subject alongside a description:
+
+- `PR_TITLE` + `PR_BODY` — title and description; what this repository uses;
+- `PR_TITLE` + `BLANK` — title only;
+- `MERGE_MESSAGE` + `PR_TITLE` — classic merge subject plus title, no
+  description. That was the setting until 2026-11-16, which is why merge
+  commit `8ac8725` carried only the title line.
+
+Check the settings before pushing; a wrong value silently drops the
+description:
+
+```bash
+gh api repos/{owner}/{repo} \
+  --jq '{merge_commit_title, merge_commit_message}'
+# expect {"merge_commit_title":"PR_TITLE","merge_commit_message":"PR_BODY"}
+```
+
+Repair them if they differ:
+
+```bash
+gh api -X PATCH repos/{owner}/{repo} \
+  -f merge_commit_title=PR_TITLE \
+  -f merge_commit_message=PR_BODY
+```
+
 Before an OpenCode session pushes to GitHub:
-- Create a draft pull request if there is not already one
-- rewrite the pull request's extended description.
 
-Derive the description from:
+- create a draft pull request if there is not already one;
+- rewrite the pull request's extended description;
+- give the pull request a title that is a complete commit subject: imperative
+  mood, no trailing period, ≤ 72 columns **including** the ` (#N)` that GitHub
+  appends.
 
-- the issue the pull request is bound to, when there is one;
-- the pull request summary;
-- the git log entries for the commits that are part of the request.
+### Writing the description
 
-Summarize it to **under 100 words**, in one paragraph, describing what the
-commits solve rather than listing them. End it with a trailer, so the merge
-commit carries a link to the detail instead of repeating it:
+The description is the merge commit's body, so write it the way the body of a
+commit is written in this repository, not the way a review comment is:
+
+- derive it from the issue the pull request is bound to, when there is one;
+  from the pull request summary; and from the git log entries for the commits
+  in the request;
+- **under 100 words**, in one paragraph, describing what the commits solve
+  rather than listing them;
+- wrapped at **72–79 columns**, so the commit body matches the log;
+- end with a trailer, so the merge commit points at the pull request for the
+  diff, the review, and the issue it closes:
 
 ```
 pull_request: https://github.com/OWNER/REPO/pull/N
 ```
 
-Apply it with `gh pr edit N --body-file FILE`.
+### Applying the description
+
+Write the description to a file and send it with `gh api`, **not**
+`gh pr edit`:
+
+```bash
+gh api -X PATCH repos/{owner}/{repo}/pulls/N -F body=@/tmp/pr_body.md
+```
+
+`-F` (not `-f`) reads the file; `-f` would send the literal path.
+
+Every `gh pr edit` call fails on the installed `gh` 2.45.0, with or without
+`--body-file`:
+
+```
+GraphQL: Projects (classic) is being deprecated in favor of the new Projects
+experience ... (repository.pullRequest.projectCards)
+```
+
+The command still asks for `projectCards` when it loads the pull request, so
+the mutation is never sent and the description stays as it was. `gh pr create`,
+`gh pr view` and `gh pr list` do work; only `gh pr edit` is affected.
+
+Issue #90 tracks the host `gh` upgrade. When it lands, run `gh --version`,
+confirm `gh pr edit` and go back to `gh pr edit N --body-file FILE`; this
+detour is not meant to outlive the old binary.
