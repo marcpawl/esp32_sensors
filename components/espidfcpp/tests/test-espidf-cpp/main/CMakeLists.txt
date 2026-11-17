@@ -6,6 +6,7 @@
 
 set(test_srcs
     "test_main.cpp"
+    "test_mutex.cpp"
     "test_one_message_queue.cpp"
     "test_http_server_types.cpp"
     "test_http_server.cpp"
