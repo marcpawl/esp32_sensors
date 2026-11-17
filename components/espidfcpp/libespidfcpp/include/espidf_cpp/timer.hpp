@@ -93,8 +93,15 @@ class Timer {
     }
 
     // Restarts a running timer, taking a new delay (and, for a periodic timer,
-    // a new period).
+    // a new period). A timer that is not running is started instead: as a
+    // periodic timer with `delay` as its new period when it has one, and as a
+    // one-shot timer otherwise.
     esp_err_t restart(std::chrono::microseconds delay) {
+        if (!is_active()) {
+            return period() > std::chrono::microseconds::zero()
+                       ? start_periodic(delay)
+                       : start_once(delay);
+        }
         return esp_timer_restart(handle_, to_microseconds(delay));
     }
 

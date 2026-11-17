@@ -101,6 +101,50 @@ TEST_CASE("espidf_cpp timer: restart delegates a new delay",
     TEST_ASSERT_EQUAL_UINT64(25'000, fake_esp_timer::state().last_delay_us);
 }
 
+TEST_CASE("espidf_cpp timer: restart starts a timer that never ran",
+          "[espidf_cpp_timer]") {
+    fake_esp_timer::reset();
+    Timer timer(&timer_callback);
+
+    TEST_ASSERT_EQUAL(ESP_OK, timer.restart(std::chrono::milliseconds{25}));
+    TEST_ASSERT_EQUAL_INT(0, fake_esp_timer::state().restart_calls);
+    TEST_ASSERT_EQUAL_INT(1, fake_esp_timer::state().start_once_calls);
+    TEST_ASSERT_EQUAL_UINT64(25'000, fake_esp_timer::state().last_delay_us);
+    TEST_ASSERT_TRUE(timer.is_active());
+    TEST_ASSERT_FALSE(fake_esp_timer::state().periodic);
+}
+
+TEST_CASE("espidf_cpp timer: restart starts a stopped one-shot timer",
+          "[espidf_cpp_timer]") {
+    fake_esp_timer::reset();
+    Timer timer(&timer_callback);
+    TEST_ASSERT_EQUAL(ESP_OK, timer.start_once(std::chrono::milliseconds{100}));
+    TEST_ASSERT_EQUAL(ESP_OK, timer.stop());
+
+    TEST_ASSERT_EQUAL(ESP_OK, timer.restart(std::chrono::milliseconds{25}));
+    TEST_ASSERT_EQUAL_INT(0, fake_esp_timer::state().restart_calls);
+    TEST_ASSERT_EQUAL_INT(2, fake_esp_timer::state().start_once_calls);
+    TEST_ASSERT_EQUAL_UINT64(25'000, fake_esp_timer::state().last_delay_us);
+    TEST_ASSERT_TRUE(timer.is_active());
+    TEST_ASSERT_FALSE(fake_esp_timer::state().periodic);
+}
+
+TEST_CASE("espidf_cpp timer: restart starts a stopped periodic timer",
+          "[espidf_cpp_timer]") {
+    fake_esp_timer::reset();
+    Timer timer(&timer_callback);
+    TEST_ASSERT_EQUAL(ESP_OK,
+                      timer.start_periodic(std::chrono::milliseconds{100}));
+    TEST_ASSERT_EQUAL(ESP_OK, timer.stop());
+
+    TEST_ASSERT_EQUAL(ESP_OK, timer.restart(std::chrono::milliseconds{25}));
+    TEST_ASSERT_EQUAL_INT(0, fake_esp_timer::state().restart_calls);
+    TEST_ASSERT_EQUAL_INT(2, fake_esp_timer::state().start_periodic_calls);
+    TEST_ASSERT_EQUAL_UINT64(25'000, fake_esp_timer::state().last_delay_us);
+    TEST_ASSERT_TRUE(timer.is_active());
+    TEST_ASSERT_EQUAL_INT64(25'000, timer.period().count());
+}
+
 TEST_CASE("espidf_cpp timer: stop and cancel delegate", "[espidf_cpp_timer]") {
     fake_esp_timer::reset();
     Timer timer(&timer_callback);
