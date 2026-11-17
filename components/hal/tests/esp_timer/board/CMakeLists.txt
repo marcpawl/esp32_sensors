@@ -24,6 +24,13 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 # default component search path (`<project>/components`).
 set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../components")
 
+# Restrict the component set to `main` and the components it requires. Left
+# unrestricted, the build also pulls in every default IDF component (Wi-Fi,
+# Bluetooth, the display stack, ...), which this test never touches: it costs
+# most of the build time and makes ESP-IDF's own component validation report
+# warnings about its `esp_wifi` / `wpa_supplicant` include directories.
+set(COMPONENTS main esp_timer_tests)
+
 # GCC's static analyzer for this repository's C++ code only; the module
 # explains why ESP-IDF and vendored components are excluded.
 include("${CMAKE_CURRENT_LIST_DIR}/../../../../../cmake/gcc-analyzer.cmake")

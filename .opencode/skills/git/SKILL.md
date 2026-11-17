@@ -101,10 +101,9 @@ ai-session: AI agent session name
 
 ## Pull Request Message
 
-When the push comes from an OpenCode session, rewrite the pull request's
-extended description as part of it. A push made anywhere else — from a
-shell, an IDE, or a script — leaves the description untouched; no git hook
-enforces this.
+Before an OpenCode session pushes to GitHub:
+- Create a draft pull request if there is not already one
+- rewrite the pull request's extended description.
 
 Derive the description from:
 
@@ -117,7 +116,7 @@ commits solve rather than listing them. End it with a trailer, so the merge
 commit carries a link to the detail instead of repeating it:
 
 ```
-PULL_REQUEST: https://github.com/OWNER/REPO/pull/N
+pull_request: https://github.com/OWNER/REPO/pull/N
 ```
 
 Apply it with `gh pr edit N --body-file FILE`.
