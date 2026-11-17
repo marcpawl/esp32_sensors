@@ -43,7 +43,7 @@
 #include "hal_stub/chip_temperature.hpp"
 #include "hal_stub/led.hpp"
 #include "hal_stub/onewire.hpp"
-#include "hal_stub/push_button.hpp"
+#include "hal_stub/switch.hpp"
 #include "hal_stub/wifi.hpp"
 
 namespace thermo::hal::stub {
@@ -107,25 +107,25 @@ class BoardStub {
 
     [[nodiscard]] Led const& red() const noexcept { return red_; }
 
-    // The push button (stub; state via set()).
-    [[nodiscard]] PushButton& button() noexcept { return button_; }
+    // The plain (user) switch (stub; state via set()).
+    [[nodiscard]] Switch& user_switch() noexcept { return user_switch_; }
 
-    [[nodiscard]] PushButton const& button() const noexcept { return button_; }
-
-    // The Configure-mode sense button (stub; state via set()).
-    [[nodiscard]] PushButton& config_button() noexcept {
-        return config_button_;
+    [[nodiscard]] Switch const& user_switch() const noexcept {
+        return user_switch_;
     }
 
-    [[nodiscard]] PushButton const& config_button() const noexcept {
-        return config_button_;
+    // The Configure-mode sense switch (stub; state via set()).
+    [[nodiscard]] Switch& config_switch() noexcept { return config_switch_; }
+
+    [[nodiscard]] Switch const& config_switch() const noexcept {
+        return config_switch_;
     }
 
-    // The Run-mode sense button (stub; state via set()).
-    [[nodiscard]] PushButton& run_button() noexcept { return run_button_; }
+    // The Run-mode sense switch (stub; state via set()).
+    [[nodiscard]] Switch& run_switch() noexcept { return run_switch_; }
 
-    [[nodiscard]] PushButton const& run_button() const noexcept {
-        return run_button_;
+    [[nodiscard]] Switch const& run_switch() const noexcept {
+        return run_switch_;
     }
 
     // The WiFi radio (stub; state via ap_running() / station_running(),
@@ -172,9 +172,9 @@ class BoardStub {
     OneWire one_wire_;
     Led green_;
     Led red_;
-    PushButton button_;
-    PushButton config_button_;
-    PushButton run_button_;
+    Switch user_switch_;
+    Switch config_switch_;
+    Switch run_switch_;
     WifiRadio wifi_;
     // Wake causes reported by `sleep_get_wakeup_causes()`. A fresh stub
     // models a cold boot, which is what the real board reports while running

@@ -36,8 +36,8 @@
 #include "hal/led_types.hpp"
 #include "hal/onewire_types.hpp"
 #include "hal/pin_map.hpp"
-#include "hal/push_button_types.hpp"
 #include "hal/sleep_types.hpp"
+#include "hal/switch_types.hpp"
 #include "hal/wifi_types.hpp"
 
 namespace thermo::hal {
@@ -62,15 +62,16 @@ struct BoardPins {
     int red_led = pins::kRedLed;
     const char* green_name = "Green";
     const char* red_name = "Red";
-    // Push-button input pin. The reference board has no dedicated button, so
-    // this defaults to 0 and callers should set it explicitly if wired.
-    int button = 0;
-    // Mode-selection push buttons, one per mode-sense pole. ESP-IDF has no
+    // Plain (user) switch input pin. The reference board has no dedicated
+    // switch, so this defaults to 0 and callers should set it explicitly if
+    // wired.
+    int user_switch = 0;
+    // Mode-selection switch pins, one per mode-sense pole. ESP-IDF has no
     // direct notion of the 3-position (DPDT) switch, so the board reports each
-    // sense pole as an independent button; mapping the pair to a mode is logic
+    // sense pole as an independent switch; mapping the pair to a mode is logic
     // (§3.1).
-    int config_button = pins::kConfig;
-    int run_button = pins::kRun;
+    int config_switch = pins::kConfig;
+    int run_switch = pins::kRun;
 };
 
 // Concept: a board type that owns one of each HAL device and exposes them
@@ -114,16 +115,15 @@ concept BoardLike = std::is_class_v<T> && requires(
     requires LedLike<std::remove_cvref_t<decltype(const_board.green())>>;
     requires LedLike<std::remove_cvref_t<decltype(board.red())>>;
     requires LedLike<std::remove_cvref_t<decltype(const_board.red())>>;
-    requires PushButtonLike<std::remove_cvref_t<decltype(board.button())>>;
-    requires PushButtonLike<
-        std::remove_cvref_t<decltype(const_board.button())>>;
-    requires PushButtonLike<
-        std::remove_cvref_t<decltype(board.config_button())>>;
-    requires PushButtonLike<
-        std::remove_cvref_t<decltype(const_board.config_button())>>;
-    requires PushButtonLike<std::remove_cvref_t<decltype(board.run_button())>>;
-    requires PushButtonLike<
-        std::remove_cvref_t<decltype(const_board.run_button())>>;
+    requires SwitchLike<std::remove_cvref_t<decltype(board.user_switch())>>;
+    requires SwitchLike<
+        std::remove_cvref_t<decltype(const_board.user_switch())>>;
+    requires SwitchLike<std::remove_cvref_t<decltype(board.config_switch())>>;
+    requires SwitchLike<
+        std::remove_cvref_t<decltype(const_board.config_switch())>>;
+    requires SwitchLike<std::remove_cvref_t<decltype(board.run_switch())>>;
+    requires SwitchLike<
+        std::remove_cvref_t<decltype(const_board.run_switch())>>;
     requires WifiRadioLike<std::remove_cvref_t<decltype(board.wifi())>>;
     requires WifiRadioLike<std::remove_cvref_t<decltype(const_board.wifi())>>;
 };

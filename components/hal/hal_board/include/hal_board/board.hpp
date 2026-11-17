@@ -9,10 +9,10 @@
 // aggregate-board header (`hal_board/board.hpp` or `hal_stub/board_stub.hpp`).
 //
 // The board owns one instance of each HAL device (chip temperature, 1-Wire bus,
-// green/red LEDs, push button, mode-sense buttons) and exposes them. It carries
-// no behaviour of its own beyond delegating `init_all()` to the devices, plus
-// deep sleep (§3.8), which belongs to the board rather than to a peripheral
-// because it powers the whole board down.
+// green/red LEDs, user switch, mode-sense switch poles) and exposes them. It
+// carries no behaviour of its own beyond delegating `init_all()` to the
+// devices, plus deep sleep (§3.8), which belongs to the board rather than to a
+// peripheral because it powers the whole board down.
 #pragma once
 
 // NOLINTBEGIN
@@ -28,7 +28,7 @@
 #include "hal_board/chip_temperature.hpp"
 #include "hal_board/led.hpp"
 #include "hal_board/onewire.hpp"
-#include "hal_board/push_button.hpp"
+#include "hal_board/switch.hpp"
 #include "hal_board/wifi.hpp"
 
 namespace thermo::hal::board {
@@ -82,25 +82,25 @@ class Board {
 
     [[nodiscard]] Led const& red() const noexcept { return red_; }
 
-    // The push button.
-    [[nodiscard]] PushButton& button() noexcept { return button_; }
+    // The plain (user) switch.
+    [[nodiscard]] Switch& user_switch() noexcept { return user_switch_; }
 
-    [[nodiscard]] PushButton const& button() const noexcept { return button_; }
-
-    // The Configure-mode sense button (one pole of the 3-position switch).
-    [[nodiscard]] PushButton& config_button() noexcept {
-        return config_button_;
+    [[nodiscard]] Switch const& user_switch() const noexcept {
+        return user_switch_;
     }
 
-    [[nodiscard]] PushButton const& config_button() const noexcept {
-        return config_button_;
+    // The Configure-mode sense switch (one pole of the 3-position switch).
+    [[nodiscard]] Switch& config_switch() noexcept { return config_switch_; }
+
+    [[nodiscard]] Switch const& config_switch() const noexcept {
+        return config_switch_;
     }
 
-    // The Run-mode sense button (one pole of the 3-position switch).
-    [[nodiscard]] PushButton& run_button() noexcept { return run_button_; }
+    // The Run-mode sense switch (one pole of the 3-position switch).
+    [[nodiscard]] Switch& run_switch() noexcept { return run_switch_; }
 
-    [[nodiscard]] PushButton const& run_button() const noexcept {
-        return run_button_;
+    [[nodiscard]] Switch const& run_switch() const noexcept {
+        return run_switch_;
     }
 
     // The WiFi radio (§3.2, §3.9). Initialized by init_all(), but neither
@@ -129,9 +129,9 @@ class Board {
     OneWire one_wire_;
     Led green_;
     Led red_;
-    PushButton button_;
-    PushButton config_button_;
-    PushButton run_button_;
+    Switch user_switch_;
+    Switch config_switch_;
+    Switch run_switch_;
     WifiRadio wifi_;
 };
 

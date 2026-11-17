@@ -1,9 +1,9 @@
-// Real push-button implementation for the dev board. Configures the GPIO as an
+// Real switch implementation for the dev board. Configures the GPIO as an
 // input with a pull-up and reads the pin level; no debouncing or edge
 // interpretation happens here.
 //
-// Mapping: a pressed button reads `ButtonState::kOn`, a released button reads
-// `ButtonState::kOff`.
+// Mapping: a closed switch reads `SwitchState::kOn`, an open switch reads
+// `SwitchState::kOff`.
 //
 // Interrupts: `set_interrupt()` installs a GPIO ISR on any edge. The ISR runs
 // in interrupt context — it must be short and allocate nothing — so it only
@@ -17,7 +17,7 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
-#include "hal_board/push_button.hpp"
+#include "hal_board/switch.hpp"
 
 namespace thermo::hal::board {
 namespace {
@@ -26,25 +26,25 @@ gpio_config_t input_config(int gpio) {
     gpio_config_t cfg = {};
     cfg.pin_bit_mask = 1ULL << gpio;
     cfg.mode = GPIO_MODE_INPUT;
-    // The button is expected to short the pin to ground when pressed, so the
-    // internal pull-up keeps the released reading a defined high.
+    // The switch is expected to short the pin to ground when closed, so the
+    // internal pull-up keeps the open reading a defined high.
     cfg.pull_up_en = GPIO_PULLUP_ENABLE;
     cfg.pull_down_en = GPIO_PULLDOWN_DISABLE;
     cfg.intr_type = GPIO_INTR_DISABLE;
     return cfg;
 }
 
-// Maps a raw pin level to a state (active-low: low == pressed).
-IRAM_ATTR ButtonState state_from_level(int level) noexcept {
-    return level == 0 ? ButtonState::kOn : ButtonState::kOff;
+// Maps a raw pin level to a state (active-low: low == closed).
+IRAM_ATTR SwitchState state_from_level(int level) noexcept {
+    return level == 0 ? SwitchState::kOn : SwitchState::kOff;
 }
 
 // Callback registered via `set_interrupt()` (or empty).
-ButtonHandler g_handler = std::nullopt;
+SwitchHandler g_handler = std::nullopt;
 
 // Last state observed by the ISR, used to detect changes. Only the ISR reads
 // or writes it, so no synchronisation is needed.
-ButtonState g_last_state = ButtonState::kOff;
+SwitchState g_last_state = SwitchState::kOff;
 
 // The pin the ISR receives through ESP-IDF's `void*` argument.
 // `gpio_isr_handler_add()` carries no typed payload, and casting the pin number
@@ -55,9 +55,9 @@ int g_isr_pin = 0;
 
 // GPIO ISR: on any edge, sample the pin and, if the state actually changed,
 // invoke the registered callback with the new state.
-void IRAM_ATTR button_isr(void* arg) noexcept {
+void IRAM_ATTR switch_isr(void* arg) noexcept {
     const auto gpio = *static_cast<const int*>(arg);
-    const ButtonState state =
+    const SwitchState state =
         state_from_level(gpio_get_level(static_cast<gpio_num_t>(gpio)));
     if (state == g_last_state) {
         return;
@@ -70,20 +70,20 @@ void IRAM_ATTR button_isr(void* arg) noexcept {
 
 }  // namespace
 
-PushButton::PushButton(int gpio) noexcept : gpio_(gpio) {}
+Switch::Switch(int gpio) noexcept : gpio_(gpio) {}
 
-esp_err_t PushButton::init() noexcept {
+esp_err_t Switch::init() noexcept {
     auto cfg = input_config(gpio_);
     return gpio_config(&cfg);
 }
 
-ButtonState PushButton::read() const noexcept {
-    // Active-low wiring: the pin reads low while the button is pressed, so map
-    // that to `kOn` (pressed) and the released high to `kOff`.
+SwitchState Switch::read() const noexcept {
+    // Active-low wiring: the pin reads low while the switch is closed, so map
+    // that to `kOn` (closed) and the open high to `kOff`.
     return state_from_level(gpio_get_level(static_cast<gpio_num_t>(gpio_)));
 }
 
-void PushButton::set_interrupt(ButtonHandler handler) noexcept {
+void Switch::set_interrupt(SwitchHandler handler) noexcept {
     g_handler = handler;
     g_last_state = read();
 
@@ -94,11 +94,11 @@ void PushButton::set_interrupt(ButtonHandler handler) noexcept {
         gpio_isr_handler_remove(gpio);
         return;
     }
-    // Report both edges so the first press and the first release after
+    // Report both edges so the first close and the first open after
     // registration are both delivered.
     g_isr_pin = gpio_;
     gpio_set_intr_type(gpio, GPIO_INTR_ANYEDGE);
-    gpio_isr_handler_add(gpio, button_isr, &g_isr_pin);
+    gpio_isr_handler_add(gpio, switch_isr, &g_isr_pin);
 }
 
 }  // namespace thermo::hal::board

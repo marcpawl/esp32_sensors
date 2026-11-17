@@ -28,25 +28,28 @@ is shared by everything and is never excluded.
 ## The header pair
 
 Each HAL device has a header pair: the shared vocabulary in `hal_common` (e.g.
-`hal/push_button_types.hpp`) plus a per-implementation header of the same name
-(e.g. `hal_board/push_button.hpp` or `hal_stub/push_button.hpp`) that includes
-it and adds the concrete class. For the push button:
+`hal/switch_types.hpp`) plus a per-implementation header of the same name
+(e.g. `hal_board/switch.hpp` or `hal_stub/switch.hpp`) that includes
+it and adds the concrete class. For the switch:
 
-- `hal/push_button_types.hpp` (`hal_common`) defines
-  `thermo::hal::ButtonState`, `thermo::hal::ButtonCallback`,
-  `thermo::hal::ButtonHandler`, and the `thermo::hal::PushButtonLike` concept —
+- `hal/switch_types.hpp` (`hal_common`) defines
+  `thermo::hal::SwitchState`, `thermo::hal::SwitchCallback`,
+  `thermo::hal::SwitchHandler`, and the `thermo::hal::SwitchLike` concept —
   the single definition of the shared types.
-- `hal_board/push_button.hpp` and `hal_stub/push_button.hpp` (one each) define
-  `thermo::hal::board::PushButton` and `thermo::hal::stub::PushButton` with an
+- `hal_board/switch.hpp` and `hal_stub/switch.hpp` (one each) define
+  `thermo::hal::board::Switch` and `thermo::hal::stub::Switch` with an
   identical public interface (same ctor,
   inline `create()` factory, `init()`, `read()`, `set_interrupt()`). Each
-  `static_assert`s `PushButtonLike<PushButton>`, so the two implementations
+  `static_assert`s `SwitchLike<Switch>`, so the two implementations
   cannot drift from the shared contract (or from each other).
+
+The device is a **switch**, not a push button: the board's inputs are switch
+poles, and a momentary button is just a switch a caller closes and opens again.
 
 ## The HAL is semantics-free
 
-`PushButton::read()` returns `ButtonState::kOn` while the button is pressed and
-`ButtonState::kOff` while it is released, and interpreting a press (edge
+`Switch::read()` returns `SwitchState::kOn` while the switch is closed and
+`SwitchState::kOff` while it is open, and interpreting a transition (edge
 detection, debouncing, hold timing) is the caller's job. Every device follows
 the same rule: the HAL moves bytes and reports state, it never decides what
 that state means.
@@ -67,14 +70,14 @@ More devices than the capacity is a wiring fault for the §2.1 bus, so the
 list aborts rather than dropping a sensor. The `hal_stub` mirror stores its
 collection the same way, and its `set_sensors()` takes the same list type.
 
-## The mode switch is not a HAL device
+## The mode switch is not one HAL device
 
 ESP-IDF has no direct notion of a DPDT switch, so the board models each of its
-two mode-sense poles as an independent `PushButton` — `board.config_button()`
-and `board.run_button()` — and the DPDT knowledge (both poles on is a hardware
+two mode-sense poles as an independent `Switch` — `board.config_switch()` and
+`board.run_switch()` — and the DPDT knowledge (both poles on is a hardware
 fault, both off is the center/Off position, one of them selects Configure or
-Run) lives in the logic layer. The stub's `PushButton::set()` simulates
-presses, so bad hardware is reproducible in tests.
+Run) lives in the logic layer. The stub's `Switch::set()` simulates the poles,
+so bad hardware is reproducible in tests.
 
 ## The WiFi radio
 
@@ -163,7 +166,7 @@ on-target tests). The vocabulary the former pins is the shared one — the
   `woke_from()`).
 - **`test-hal-stub/`** covers the pin-free `hal_stub` devices. Each device's
   own file exercises its stub contract and its `hal_common` concept:
-  `test_hal_led.cpp` (`LedLike`), `test_hal_push_button.cpp` (`PushButtonLike`,
+  `test_hal_led.cpp` (`LedLike`), `test_hal_switch.cpp` (`SwitchLike`,
   including the `set()` control the mode-sense poles use),
   `test_hal_onewire.cpp` (`OneWireLike` plus `set_sensors()`),
   `test_hal_chip_temperature.cpp` (`ChipTemperatureLike`), and
@@ -171,7 +174,7 @@ on-target tests). The vocabulary the former pins is the shared one — the
   the empty-SSID rejection). `test_freertos_timers.cpp` verifies that FreeRTOS
   software timers create, fire exactly once, re-arm, and stay silent after a
   cancel. `test_hal_board.cpp` covers the aggregate `BoardStub`: that
-  `config_button()` / `run_button()` / `wifi()` are wired up, that `init_all()`
+  `config_switch()` / `run_switch()` / `wifi()` are wired up, that `init_all()`
   initializes but does not start the radio, and that `deep_sleep_start()`
   records the duration while `sleep_get_wakeup_causes()` / `set_wakeup_causes()`
   model the next boot's wake cause.

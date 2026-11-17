@@ -1,7 +1,7 @@
 // Maps the two mode-sense pole states onto an operating mode (§3).
 //
 // The board exposes the 3-position ON-OFF-ON switch (a DPDT, §2.3) as two
-// independent `PushButton`s — `config_button()` and `run_button()` — one
+// independent `Switch` poles — `config_switch()` and `run_switch()` — one
 // per mode-sense pole. Interpreting that pair is logic, not hardware, so it
 // lives here in the `liblogic` component rather than in the HAL.
 //
@@ -18,7 +18,7 @@
 
 #include <optional>
 
-#include "hal/push_button_types.hpp"
+#include "hal/switch_types.hpp"
 
 #include "logic/mode.hpp"
 
@@ -41,10 +41,10 @@ using ModeSelection = std::optional<Mode>;
 // transiently (e.g. while the switch is passing through center). The
 // parameters are the two poles in the switch's own order (§3.1-§3.3):
 // Configure pole, then Run pole.
-[[nodiscard]] constexpr ModeSelection mode_from_buttons(
-    hal::ButtonState config, hal::ButtonState run) noexcept {
-    const bool config_on = config == hal::ButtonState::kOn;
-    const bool run_on = run == hal::ButtonState::kOn;
+[[nodiscard]] constexpr ModeSelection mode_from_switches(
+    hal::SwitchState config, hal::SwitchState run) noexcept {
+    const bool config_on = config == hal::SwitchState::kOn;
+    const bool run_on = run == hal::SwitchState::kOn;
     if (config_on && !run_on) {
         return Mode::kConfigure;
     }
