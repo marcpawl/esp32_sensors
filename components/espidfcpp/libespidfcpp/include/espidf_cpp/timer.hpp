@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <cstdlib>
 
+#include "utility/isr_safe.hpp"
 #include "utility/static_string.hpp"
 
 namespace thermo::espidf_cpp {
@@ -37,8 +38,10 @@ inline constexpr std::size_t kTimerNameCapacity = 32;
 class Timer {
   public:
     // Creates the timer with the given callback, name, and light-sleep policy.
-    // The callback runs in the esp_timer task. A failed create, or an empty
-    // callback, is fatal because there is no useful object to return.
+    // The callback runs in the esp_timer task, so it does *not* have to be
+    // ISR-safe (and is not annotated `[[thermo::isr_safe]]`). A failed create,
+    // or an empty callback, is fatal because there is no useful object to
+    // return.
     Timer(std::function<void()> callback, const char* name = "timer",
           bool skip_unhandled_events = false)
         : callback_(
@@ -70,7 +73,8 @@ class Timer {
     Timer(Timer&& other) noexcept
         : handle_(std::exchange(other.handle_, nullptr)),
           callback_(std::move(other.callback_)),
-          name_(other.name_) {}
+          name_(other.name_),
+          periodic_(other.periodic_) {}
 
     Timer& operator=(Timer&& other) noexcept {
         if (this != &other) {
@@ -78,31 +82,53 @@ class Timer {
             handle_ = std::exchange(other.handle_, nullptr);
             callback_ = std::move(other.callback_);
             name_ = other.name_;
+            periodic_ = other.periodic_;
         }
         return *this;
     }
 
-    // Starts a one-shot timer. The timer must not already be running.
+    // Starts a one-shot timer. The timer must not already be running. Remembers
+    // the timer's kind so `restart()` can start it again if it was stopped.
     esp_err_t start_once(std::chrono::microseconds delay) {
-        return esp_timer_start_once(handle_, to_microseconds(delay));
+        const esp_err_t result =
+            esp_timer_start_once(handle_, to_microseconds(delay));
+        if (result == ESP_OK) {
+            periodic_ = false;
+        }
+        return result;
     }
 
     // Starts a periodic timer. The timer must not already be running.
+    // Remembers the timer's kind so `restart()` can start it again if it was
+    // stopped.
     esp_err_t start_periodic(std::chrono::microseconds period) {
-        return esp_timer_start_periodic(handle_, to_microseconds(period));
+        const esp_err_t result =
+            esp_timer_start_periodic(handle_, to_microseconds(period));
+        if (result == ESP_OK) {
+            periodic_ = true;
+        }
+        return result;
     }
 
     // Restarts a running timer, taking a new delay (and, for a periodic timer,
     // a new period). A timer that is not running is started instead: as a
     // periodic timer with `delay` as its new period when it has one, and as a
     // one-shot timer otherwise.
-    esp_err_t restart(std::chrono::microseconds delay) {
-        if (!is_active()) {
-            return period() > std::chrono::microseconds::zero()
-                       ? start_periodic(delay)
-                       : start_once(delay);
+    //
+    // ISR-safe: this path calls only `esp_timer_restart()` and, for a timer
+    // that is not running, the `esp_timer_start_*()` entry points. It does not
+    // query the timer or allocate. (`is_active()` and `period()` are for task
+    // context; they are not used here.)
+    [[thermo::isr_safe]] esp_err_t restart(std::chrono::microseconds delay) {
+        // `esp_timer_restart()` reports ESP_ERR_INVALID_STATE when the timer is
+        // not running. That is the only case that falls back to a start; any
+        // other result is the caller's to see.
+        const esp_err_t result =
+            esp_timer_restart(handle_, to_microseconds(delay));
+        if (result != ESP_ERR_INVALID_STATE) {
+            return result;
         }
-        return esp_timer_restart(handle_, to_microseconds(delay));
+        return periodic_ ? start_periodic(delay) : start_once(delay);
     }
 
     // Disarms the timer without waiting for an in-flight callback.
@@ -172,6 +198,10 @@ class Timer {
     // address is what esp_timer passes back to `invoke`.
     std::unique_ptr<std::function<void()>> callback_;
     static_string<kTimerNameCapacity> name_;
+    // Whether this timer was last started as a periodic timer. `restart()`
+    // needs it to choose the start call when the timer is not running, without
+    // querying the timer (which is not ISR-safe on the host stub).
+    bool periodic_ = false;
 };
 
 }  // namespace thermo::espidf_cpp

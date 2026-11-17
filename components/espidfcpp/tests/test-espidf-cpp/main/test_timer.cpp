@@ -145,6 +145,49 @@ TEST_CASE("espidf_cpp timer: restart starts a stopped periodic timer",
     TEST_ASSERT_EQUAL_INT64(25'000, timer.period().count());
 }
 
+TEST_CASE("espidf_cpp timer: restart() is the ISR-safe path (no queries)",
+          "[espidf_cpp_timer]") {
+    fake_esp_timer::reset();
+    Timer timer(&timer_callback);
+    TEST_ASSERT_EQUAL(ESP_OK, timer.start_once(std::chrono::milliseconds{100}));
+
+    fake_esp_timer::state().is_active_calls = 0;
+    fake_esp_timer::state().get_period_calls = 0;
+    TEST_ASSERT_EQUAL(ESP_OK, timer.restart(std::chrono::milliseconds{25}));
+
+    // `restart()` must not query the timer: the restart path has to be usable
+    // from an ISR, and the queries take a blocking path on the host stub.
+    TEST_ASSERT_EQUAL(0, fake_esp_timer::state().is_active_calls);
+    TEST_ASSERT_EQUAL(0, fake_esp_timer::state().get_period_calls);
+    TEST_ASSERT_EQUAL(1, fake_esp_timer::state().restart_calls);
+}
+
+TEST_CASE("espidf_cpp timer: restart() starts a stopped timer without queries",
+          "[espidf_cpp_timer]") {
+    fake_esp_timer::reset();
+    Timer timer(&timer_callback);
+
+    // The timer never ran, so `esp_timer_restart` reports INVALID_STATE and the
+    // wrapper starts it. Neither query may be used on this path either.
+    TEST_ASSERT_EQUAL(ESP_OK, timer.restart(std::chrono::milliseconds{25}));
+    TEST_ASSERT_EQUAL(0, fake_esp_timer::state().is_active_calls);
+    TEST_ASSERT_EQUAL(0, fake_esp_timer::state().get_period_calls);
+    TEST_ASSERT_EQUAL(1, fake_esp_timer::state().start_once_calls);
+
+    // A stopped periodic timer uses the periodic start on the same path.
+    TEST_ASSERT_EQUAL(ESP_OK, timer.stop());
+    TEST_ASSERT_EQUAL(ESP_OK,
+                      timer.start_periodic(std::chrono::milliseconds{100}));
+    TEST_ASSERT_EQUAL(ESP_OK, timer.stop());
+    fake_esp_timer::state().is_active_calls = 0;
+    fake_esp_timer::state().get_period_calls = 0;
+    TEST_ASSERT_EQUAL(ESP_OK, timer.restart(std::chrono::milliseconds{25}));
+    TEST_ASSERT_EQUAL(0, fake_esp_timer::state().is_active_calls);
+    TEST_ASSERT_EQUAL(0, fake_esp_timer::state().get_period_calls);
+    TEST_ASSERT_EQUAL(2, fake_esp_timer::state().start_periodic_calls);
+    TEST_ASSERT_EQUAL_UINT64(25'000, fake_esp_timer::state().last_delay_us);
+}
+
 TEST_CASE("espidf_cpp timer: stop and cancel delegate", "[espidf_cpp_timer]") {
     fake_esp_timer::reset();
     Timer timer(&timer_callback);

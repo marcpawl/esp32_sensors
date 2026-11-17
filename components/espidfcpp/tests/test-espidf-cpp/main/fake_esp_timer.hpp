@@ -28,6 +28,8 @@ struct State {
     int restart_calls = 0;
     int stop_calls = 0;
     int stop_blocking_calls = 0;
+    int is_active_calls = 0;
+    int get_period_calls = 0;
 
     esp_timer_cb_t callback = nullptr;
     void* arg = nullptr;

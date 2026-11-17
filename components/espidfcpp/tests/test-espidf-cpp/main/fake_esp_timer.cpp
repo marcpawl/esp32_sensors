@@ -143,10 +143,12 @@ esp_err_t esp_timer_stop_blocking(esp_timer_handle_t timer,
 }
 
 bool esp_timer_is_active(esp_timer_handle_t timer) {
+    ++g_state.is_active_calls;
     return timer != nullptr && g_state.active;
 }
 
 esp_err_t esp_timer_get_period(esp_timer_handle_t timer, uint64_t* period) {
+    ++g_state.get_period_calls;
     if (timer == nullptr || period == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }

@@ -37,6 +37,7 @@ type allocates:
 |---|---|
 | `utility/static_vector.hpp` | `static_vector<T, N>`: fixed-capacity, inline-storage sequence; `try_push_back` reports overflow instead of aborting |
 | `utility/static_string.hpp` | `static_string<N>`: fixed-capacity, NUL-terminated string (`try_push_back` / `try_append` for the non-aborting path) |
+| `utility/isr_safe.hpp` | documents `[[thermo::isr_safe]]`; see below |
 
 Neither depends on ESP-IDF or FreeRTOS, so both build for the chip and the
 host. Exceptions are disabled in the firmware; exceeding a capacity is a hard
@@ -45,6 +46,22 @@ caller's control.
 
 Use these instead of `std::vector` and `std::string` whenever the maximum size
 is known (see the `cpp-coding-standards` skill, "ESP guidelines").
+
+## The `isr_safe` annotation
+
+`utility/isr_safe.hpp` documents `[[thermo::isr_safe]]`, the repository's
+interrupt-safety contract:
+
+- on a function, it means the function may be called from an ISR and from task
+  context;
+- on a function-typed parameter, it means the function passed in must itself be
+  ISR-safe.
+
+The attribute is documentation only. An ISR-safe function must not block,
+allocate, take a mutex, or call a non-ISR-safe API.
+`cmake/compiler-warnings.cmake` disables `-Wattributes` for our targets because
+neither compiler knows the attribute; do not use an unknown attribute for
+anything else.
 
 ## The host tests
 

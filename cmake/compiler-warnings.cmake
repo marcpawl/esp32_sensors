@@ -22,7 +22,10 @@
 # `-Werror` options: clang's `-Werror=<group>` re-enables every warning in the
 # group (GCC's does not), which would raise diagnostics inside ESP-IDF headers
 # that clang-tidy then reports as errors. This module makes the warnings
-# ESP-IDF emits fatal; it does not add new ones.
+# ESP-IDF emits fatal; it does not add new ones. It also suppresses
+# `-Wattributes`, because `[[thermo::isr_safe]]` is a deliberate
+# documentation-only annotation (see `utility/isr_safe.hpp`) that neither
+# compiler understands.
 #
 # Include this file and call `thermo_enable_compiler_warnings()` after
 # `project()`. Pass explicit target names for plain executables the component
@@ -47,6 +50,10 @@ set(_thermo_compiler_warning_options
     "SHELL:-Wno-unused-parameter"
     "SHELL:-Wno-sign-compare"
     "SHELL:-Wno-enum-conversion"
+    # `[[thermo::isr_safe]]` (utility/isr_safe.hpp) is a documentation-only
+    # annotation, so both compilers would otherwise report it as an unknown
+    # attribute. This suppression is deliberate and limited to our targets.
+    -Wno-attributes
 )
 
 function(thermo_enable_compiler_warnings)
