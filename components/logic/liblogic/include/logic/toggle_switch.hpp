@@ -79,9 +79,10 @@ class ToggleSwitch {
     using State = hal::SwitchState;
 
     // `sw` must be initialized (`init()`) and must outlive this object.
-    // `callback` runs in the esp_timer task, outside the state lock. The
-    // optional thresholds exist for tests; leave them at their defaults in
-    // the firmware.
+    // `callback` runs in the esp_timer task, outside the state lock.
+    //
+    // `debounce` and `stability` exist for host tests: the firmware uses the
+    // defaults (`toggle::kDebounce`, `toggle::kStability`).
     ToggleSwitch(SwitchType& sw, CallbackFn callback,
                  std::chrono::milliseconds debounce = toggle::kDebounce,
                  std::chrono::milliseconds stability = toggle::kStability)
@@ -102,11 +103,11 @@ class ToggleSwitch {
     ToggleSwitch& operator=(ToggleSwitch&&) = delete;
 
     ~ToggleSwitch() {
-        // No new edges may reach a partially destroyed object. The timers are
-        // declared last, so they are destroyed first and their destructor
-        // waits for an in-flight callback before the state below goes away.
+        // The board owns the switch and outlives this object, so the
+        // interrupt must be cleared here; otherwise the ISR would call into a
+        // destroyed ToggleSwitch. `~Timer` stops the timer and waits for an
+        // in-flight callback before the state below is destroyed.
         the_switch_.set_interrupt({});
-        debounce_timer_.cancel();
     }
 
     // The last settled state, or `std::nullopt` until the first debounce
@@ -121,77 +122,11 @@ class ToggleSwitch {
 
     // GPIO interrupt: record the new state and restart the debounce timer.
     // This is the only code that runs in interrupt context.
-    [[thermo::isr_safe]] void on_interrupt() noexcept {
-        const State new_state = the_switch_.read();
-        const std::int64_t now_us = esp_timer_get_time();
-
-        bool restart = true;
-        portENTER_CRITICAL_SAFE(&burst_lock_);
-        current_state_ = new_state;
-        pending_ = true;
-        if (!burst_active_) {
-            burst_active_ = true;
-            burst_start_us_ = now_us;
-        }
-        if (toggle::burst_exceeded(now_us, burst_start_us_,
-                                   stability_threshold_)) {
-            // Do not restart the timer: let the pending expiry report the
-            // fault from task context. An ISR must not log or abort.
-            unstable_ = true;
-            restart = false;
-        }
-        portEXIT_CRITICAL_SAFE(&burst_lock_);
-
-        if (restart) {
-            (void)debounce_timer_.restart(debounce_threshold_);
-        }
-    }
+    [[thermo::isr_safe]] void on_interrupt() noexcept;
 
     // esp_timer task: settle the state once the switch has been still for the
     // debounce window, or abort if the burst never settled.
-    void on_debounce() noexcept {
-        bool unstable = false;
-        bool pending = false;
-        State new_state = State::kOff;
-        {
-            portENTER_CRITICAL_SAFE(&burst_lock_);
-            unstable = unstable_;
-            pending = pending_;
-            if (pending) {
-                // An edge raced this expiry; the ISR has already restarted
-                // the timer. Re-arm and wait for the switch to be still.
-                pending_ = false;
-            } else {
-                new_state = current_state_;
-                burst_active_ = false;
-                unstable_ = false;
-            }
-            portEXIT_CRITICAL_SAFE(&burst_lock_);
-        }
-
-        if (unstable) {
-            ESP_LOGE(kTag, "switch on GPIO %d never settled",
-                     the_switch_.gpio());
-            std::abort();
-        }
-
-        if (pending) {
-            (void)debounce_timer_.restart(debounce_threshold_);
-            return;
-        }
-
-        std::optional<State> previous;
-        {
-            espidf_cpp::Lock lock(state_mutex_);
-            previous = previous_state_;
-            previous_state_ = new_state;
-        }
-
-        if (!previous.has_value() || *previous != new_state) {
-            // Outside the lock: the callback may call get_state().
-            callback_fn_(new_state);
-        }
-    }
+    void on_debounce() noexcept;
 
     SwitchType& the_switch_;
     CallbackFn callback_fn_;
@@ -215,5 +150,75 @@ class ToggleSwitch {
     // callback, so it cannot touch the state above after that state is gone.
     espidf_cpp::Timer debounce_timer_;
 };
+
+template<hal::BoardLike Board>
+[[thermo::isr_safe]] void ToggleSwitch<Board>::on_interrupt() noexcept {
+    const State new_state = the_switch_.read();
+    const std::int64_t now_us = esp_timer_get_time();
+
+    bool restart = true;
+    portENTER_CRITICAL_SAFE(&burst_lock_);
+    current_state_ = new_state;
+    pending_ = true;
+    if (!burst_active_) {
+        burst_active_ = true;
+        burst_start_us_ = now_us;
+    }
+    if (toggle::burst_exceeded(now_us, burst_start_us_, stability_threshold_)) {
+        // Do not restart the timer: let the pending expiry report the fault
+        // from task context. An ISR must not log or abort.
+        unstable_ = true;
+        restart = false;
+    }
+    portEXIT_CRITICAL_SAFE(&burst_lock_);
+
+    if (restart) {
+        (void)debounce_timer_.restart(debounce_threshold_);
+    }
+}
+
+template<hal::BoardLike Board>
+void ToggleSwitch<Board>::on_debounce() noexcept {
+    bool unstable = false;
+    bool pending = false;
+    State new_state = State::kOff;
+    {
+        portENTER_CRITICAL_SAFE(&burst_lock_);
+        unstable = unstable_;
+        pending = pending_;
+        if (pending) {
+            // An edge raced this expiry; the ISR has already restarted the
+            // timer. Re-arm and wait for the switch to be still.
+            pending_ = false;
+        } else {
+            new_state = current_state_;
+            burst_active_ = false;
+            unstable_ = false;
+        }
+        portEXIT_CRITICAL_SAFE(&burst_lock_);
+    }
+
+    if (unstable) {
+        ESP_LOGE(kTag, "switch on GPIO %d never settled", the_switch_.gpio());
+        std::abort();
+    }
+
+    if (pending) {
+        (void)debounce_timer_.restart(debounce_threshold_);
+        return;
+    }
+
+    std::optional<State> previous;
+    {
+        espidf_cpp::Lock lock(state_mutex_);
+        previous = previous_state_;
+        previous_state_ = new_state;
+    }
+
+    if (!previous.has_value() || *previous != new_state) {
+        // Outside the lock: the callback may call get_state().
+        callback_fn_(new_state);
+    }
+}
 
 }  // namespace thermo

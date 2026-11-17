@@ -107,8 +107,10 @@ of reporting an un-debounced state.
 
 The template lives for the firmware's lifetime in `mcgowan` and `donny`, and
 is created and destroyed in tests. The destructor unregisters the switch
-interrupt and cancels the timer; the timer is declared last, so its destructor
-waits for an in-flight callback before the state it touches is destroyed.
+interrupt, because the board-owned switch outlives the `ToggleSwitch`. The
+timer's own destructor stops it and waits for an in-flight callback; the timer
+is declared last, so that wait happens before the state it touches is
+destroyed.
 
 ## The host tests
 
