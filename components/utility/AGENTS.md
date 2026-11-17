@@ -8,7 +8,8 @@ layering rules are in the `platform_layers` skill
 ## Why this is its own layer
 
 `libutility` is the **lowest** layer in the tree: it owns the fixed-capacity
-containers and nothing else, and it depends on no other component.
+containers and the generic `SequenceLock`, and it depends on no other
+component.
 
 It is separate from `libespidfcpp` because the HAL needs it. The shared 1-Wire
 vocabulary (`hal/onewire_types.hpp`, in `hal_common`) names `static_vector` in
@@ -37,6 +38,7 @@ type allocates:
 |---|---|
 | `utility/static_vector.hpp` | `static_vector<T, N>`: fixed-capacity, inline-storage sequence; `try_push_back` reports overflow instead of aborting |
 | `utility/static_string.hpp` | `static_string<N>`: fixed-capacity, NUL-terminated string (`try_push_back` / `try_append` for the non-aborting path) |
+| `utility/sequence_lock.hpp` | `SequenceLock<Model>`: versioned model with lock-free reads and serialized writers (see below) |
 | `utility/isr_safe.hpp` | documents `[[thermo::isr_safe]]`; see below |
 
 Neither depends on ESP-IDF or FreeRTOS, so both build for the chip and the
@@ -46,6 +48,14 @@ caller's control.
 
 Use these instead of `std::vector` and `std::string` whenever the maximum size
 is known (see the `cpp-coding-standards` skill, "ESP guidelines").
+
+## The sequence lock
+
+`SequenceLock<Model>` publishes a versioned model: writers serialize through a
+`std::mutex`, while readers retry a sequence counter and never take the lock.
+`Model` must be default constructible and trivially copyable, so a read cannot
+invoke a user-defined copy. It has no ESP-IDF dependency, which is why it lives
+here rather than in `liblogic`.
 
 ## The `isr_safe` annotation
 
@@ -65,7 +75,7 @@ anything else.
 
 ## The host tests
 
-`tests/test-utility/` covers both containers:
+`tests/test-utility/` covers the containers and the sequence lock:
 
 - `test_static_vector.cpp` — construction (default and iterator range),
   growth, clearing, `try_push_back`, `emplace_back`, `resize`, iterators,
@@ -73,6 +83,9 @@ anything else.
 - `test_static_string.cpp` — construction, appending, assignment,
   `try_push_back` / `try_append`, comparison and ordering, embedded NULs, and
   the abort paths past capacity.
+- `test_sequence_lock.cpp` — version round trips, stale-writer rejection,
+  scalar and padded models, and concurrent readers/writers driven by real
+  FreeRTOS tasks.
 
 The abort paths use standalone programs whose names end in `_assert`
 (`test_static_vector_assert.cpp`, `test_static_string_assert.cpp`), with the
