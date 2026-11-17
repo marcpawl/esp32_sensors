@@ -7,6 +7,48 @@ description: Commit with git using a message file and `git commit -F`. Use
 
 # Committing with git in this repository
 
+## Run git and gh in the container
+
+Every `git` and `gh` command runs inside the dev container, not on the host.
+The examples in this skill show the command itself; run it through
+`./scripts/dev.py shell`:
+
+```bash
+./scripts/dev.py shell git status
+./scripts/dev.py shell git commit -F .git/commit_msg.txt
+./scripts/dev.py shell git push origin BRANCH
+./scripts/dev.py shell gh pr view N
+```
+
+The host `gh` is 2.45.0, the Ubuntu package. That release asks for
+`projectCards` when it loads a pull request, GitHub now rejects the whole
+query because Projects (classic) is sunset, and `gh pr edit` fails on every
+call (issue #90). The image ships `gh` 2.104.0, which no longer sends that
+field. Upgrading the host copy is deliberately out of scope: the repository
+already has one toolchain in the image, and a host install is a second copy
+that drifts from it.
+
+Credentials work differently for the two tools:
+
+- `git push` uses the host `~/.ssh`, mounted read-only, so the key never
+  enters the image and the host's `known_hosts` already trusts GitHub.
+- `gh` is an API client and needs a token. The host stores it in the desktop
+  keyring, which the container cannot read, so pass it in for the command:
+
+  ```bash
+  GH_TOKEN="$(gh auth token)" ./scripts/dev.py shell gh pr view N
+  ```
+
+  `gh auth token` runs on the host, where the keyring is reachable, and the
+  `GH_TOKEN` passthrough in `docker/docker-compose.yml` carries the value
+  into the container. Without it, `gh auth status` reports "The token in
+  default is invalid" and every API call fails with HTTP 401.
+
+The container's `/tmp` is its own directory, not the host's. A file written
+on the host under `/tmp` is invisible inside the container, so put scratch
+files the container must read inside the repository (for example under
+`.git/`), or create them in the container.
+
 ## Quality checks
 
 Applicable quality checks should be run prior to pushing
@@ -26,15 +68,15 @@ for a code change.
 file first, then commit with `-F`:
 
 ```bash
-# 1. Write the message to a temporary file.
-$EDITOR "$(mktemp)"
-# ...or write it with the Write tool to a path under /tmp.
+# 1. Write the message inside the repository, because the container's /tmp is
+#    not the host's. Write it with the Write tool to `.git/commit_msg.txt`.
+$EDITOR .git/commit_msg.txt
 
-# 2. Commit, reading the message from that file.
-git commit -F /tmp/commit_msg.txt
+# 2. Commit in the container, reading the message from that file.
+./scripts/dev.py shell git commit -F .git/commit_msg.txt
 
 # 3. Remove the file.
-rm /tmp/commit_msg.txt
+rm .git/commit_msg.txt
 ```
 
 Do not stop to ask for approval of the message. Commit with it; rewording
@@ -167,27 +209,20 @@ pull_request: https://github.com/OWNER/REPO/pull/N
 
 ### Applying the description
 
-Write the description to a file and send it with `gh api`, **not**
-`gh pr edit`:
+Write the description to a file and apply it with `gh pr edit` **in the
+container**:
 
 ```bash
-gh api -X PATCH repos/{owner}/{repo}/pulls/N -F body=@/tmp/pr_body.md
+GH_TOKEN="$(gh auth token)" ./scripts/dev.py shell \
+  gh pr edit N --body-file .git/pr_body.md
 ```
 
-`-F` (not `-f`) reads the file; `-f` would send the literal path.
+Use `--body-file`, not `--body`, so the shell never has to quote the
+description. The file must be inside the repository, because the container
+cannot see a host file under `/tmp`.
 
-Every `gh pr edit` call fails on the installed `gh` 2.45.0, with or without
-`--body-file`:
-
-```
-GraphQL: Projects (classic) is being deprecated in favor of the new Projects
-experience ... (repository.pullRequest.projectCards)
-```
-
-The command still asks for `projectCards` when it loads the pull request, so
-the mutation is never sent and the description stays as it was. `gh pr create`,
-`gh pr view` and `gh pr list` do work; only `gh pr edit` is affected.
-
-Issue #90 tracks the host `gh` upgrade. When it lands, run `gh --version`,
-confirm `gh pr edit` and go back to `gh pr edit N --body-file FILE`; this
-detour is not meant to outlive the old binary.
+Do not fall back to `gh api -X PATCH repos/{owner}/{repo}/pulls/N`. That
+detour existed only while the host `gh` 2.45.0 was in use: it cannot edit a
+pull request because it still asks for the sunset `projectCards` field
+(issue #90). The container's `gh` 2.104.0 makes the same call without it, so
+`gh pr edit` is the command again.
