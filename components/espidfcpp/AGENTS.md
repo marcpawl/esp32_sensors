@@ -33,6 +33,7 @@ compiled sources are listed in the component's `SRCS`:
 | `espidf_cpp/task.hpp` | `Task<Runner>` (typed `[[noreturn]]` task body), `TaskParams` |
 | `espidf_cpp/mutex.hpp` | `Mutex` (owned normal or recursive FreeRTOS mutex; acquired only through `Lock`) and `Lock` (scope lock, with static `try_lock` / `try_lock_for` factories returning `std::optional<Lock>`) |
 | `espidf_cpp/one_message_queue.hpp` | `OneMessageQueue<T>` (single-slot, trivially-copyable messages) |
+| `espidf_cpp/timer.hpp` | `Timer` (RAII `esp_timer` owner: `start_once()`, `start_periodic()`, `restart()`, `stop()`; `restart()` is `[[thermo::isr_safe]]` and does not query the timer) |
 | `espidf_cpp/handle.hpp` | `HandleDeleter`, `UniqueTaskHandle`, `UniqueQueueHandle`, `UniqueSemaphoreHandle` |
 | `espidf_cpp/http_server_types.hpp` | `HttpServer` vocabulary: `HttpMethod`, `HttpField(s)`, `HttpRequest`, `HttpStatus`, `HttpResponse`, `HttpHandler`, `parse_int`, `normalize_url` (no ESP-IDF dependency) |
 | `espidf_cpp/http_server.hpp` | `HttpServer<BodyCapacity>` — prefix routes over `esp_http_server` with one GET/POST handler each; fixed-size request/response buffers, bad input becomes an HTTP error (never an abort) |
@@ -53,6 +54,10 @@ The test project lives in `tests/test-espidf-cpp/` and covers the wrappers:
 - `test_one_message_queue.cpp` — the single-slot queue: creation, send and
   receive, overwrite semantics, the tick and chrono timeouts, the ISR send,
   and that copies are disabled while moves transfer the handle.
+- `test_timer.cpp` — `Timer`: construction, the start/stop/query
+  delegations, move-only ownership, and the restart path. The restart tests
+  use the fake's `is_active_calls` / `get_period_calls` counters to prove that
+  `restart()` queries neither, so it stays usable from an ISR.
 - `test_mutex.cpp` — `Mutex` and `Lock`:
   - normal and recursive creation;
   - blocking acquisition through the `Lock` constructor;
