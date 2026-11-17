@@ -21,6 +21,7 @@
 // NOLINTEND
 
 #include <concepts>
+#include <utility>
 
 #include "hal/switch_types.hpp"
 #include "hal_stub/switch.hpp"
@@ -259,6 +260,19 @@ TEST_CASE("hal switch: two switches keep independent handlers",
     b.set(SwitchState::kOff);
     TEST_ASSERT_EQUAL(1, a_calls);
     TEST_ASSERT_EQUAL(2, b_calls);
+}
+
+// --- Move -------------------------------------------------------------------
+
+TEST_CASE("hal switch: moving transfers the handler to the destination",
+          "[hal_switch]") {
+    Switch source = make_switch();
+    int calls = 0;
+    source.set_interrupt([&calls] { ++calls; });
+
+    Switch moved = std::move(source);
+    moved.set(SwitchState::kOn);
+    TEST_ASSERT_EQUAL(1, calls);
 }
 
 // --- The stub satisfies the shared concept ---------------------------------

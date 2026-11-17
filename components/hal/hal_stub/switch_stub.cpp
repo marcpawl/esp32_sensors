@@ -17,6 +17,10 @@ namespace thermo::hal::stub {
 
 Switch::Switch(int gpio) noexcept : gpio_(gpio) {}
 
+Switch::~Switch() noexcept {
+    set_interrupt({});
+}
+
 esp_err_t Switch::init() noexcept {
     return ESP_OK;
 }

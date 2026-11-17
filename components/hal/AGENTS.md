@@ -58,6 +58,10 @@ service is installed once by the aggregate `Board` constructor; `BoardStub`
 calls the same entry point, which `hal_stub/gpio_stub.cpp` supplies as a no-op
 because `esp_driver_gpio` registers an empty component on the `linux` target.
 
+`Switch`'s destructor unregisters the handler, so an ISR cannot call into a
+destroyed switch. On `hal_board`, moving a switch marks the source invalid, so
+destroying a moved-from switch does not remove the moved-to switch's handler.
+
 ## The board names its device types
 
 `BoardLike` requires every board to declare two nested aliases:
@@ -189,7 +193,7 @@ on-target tests). The vocabulary the former pins is the shared one — the
   own file exercises its stub contract and its `hal_common` concept:
   `test_hal_led.cpp` (`LedLike`), `test_hal_switch.cpp` (`SwitchLike`,
   including the `gpio()` getter, capturing handlers, two independent switches,
-  and the `set()` control the mode-sense poles use),
+  move, and the `set()` control the mode-sense poles use),
   `test_hal_onewire.cpp` (`OneWireLike` plus `set_sensors()`),
   `test_hal_chip_temperature.cpp` (`ChipTemperatureLike`), and
   `test_hal_wifi.cpp` (`WifiRadioLike`, AP/station start/stop independence, and
