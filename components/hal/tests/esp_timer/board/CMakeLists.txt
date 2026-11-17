@@ -35,8 +35,13 @@ set(COMPONENTS main esp_timer_tests)
 # explains why ESP-IDF and vendored components are excluded.
 include("${CMAKE_CURRENT_LIST_DIR}/../../../../../cmake/gcc-analyzer.cmake")
 
+# Warnings are errors in this repository's own code; the module
+# explains the ESP-IDF defaults it overrides.
+include("${CMAKE_CURRENT_LIST_DIR}/../../../../../cmake/compiler-warnings.cmake")
+
 project(esp32_sensors_esp_timer_board_tests)
 
-# `BUILD_COMPONENTS` is populated by project(); the analyzer flags go
-# on this repository's component targets only.
+# `BUILD_COMPONENTS` is populated by project(); both flag helpers go on
+# this repository's component targets only.
 thermo_enable_gcc_analyzer()
+thermo_enable_compiler_warnings()

@@ -76,9 +76,14 @@ set(EXCLUDE_COMPONENTS hal_board)
 # explains why ESP-IDF and vendored components are excluded.
 include("${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/gcc-analyzer.cmake")
 
+# Warnings are errors in this repository's own code; the module
+# explains the ESP-IDF defaults it overrides.
+include("${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/compiler-warnings.cmake")
+
 # The ELF/app binary name derives from the project name: donny.elf.
 project(donny)
 
-# `BUILD_COMPONENTS` is populated by project(); the analyzer flags go
-# on this repository's component targets only.
+# `BUILD_COMPONENTS` is populated by project(); both flag helpers go on
+# this repository's component targets only.
 thermo_enable_gcc_analyzer()
+thermo_enable_compiler_warnings()
