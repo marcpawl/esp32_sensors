@@ -20,6 +20,7 @@
 using thermo::kTempNull;
 using thermo::payload::build_batch_json;
 using thermo::payload::NamedSample;
+using thermo::payload::SensorNames;
 
 namespace {
 
@@ -32,17 +33,12 @@ NamedSample make_sample(std::uint32_t age_s, std::uint16_t batt_mv,
     return s;
 }
 
-std::vector<std::string> names(const std::string& a, const std::string& b,
-                               const std::string& c) {
-    // GCC's analyzer cannot model libstdc++'s initializer-list construction
-    // and reports an uninitialised read. The code is correct; keep the
-    // diagnostic fatal everywhere else.
-    // NOLINTBEGIN
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
-    return {a, b, c};
-#pragma GCC diagnostic pop
-    // NOLINTEND
+SensorNames names(const char* a, const char* b, const char* c) {
+    SensorNames list;
+    list.push_back(a);
+    list.push_back(b);
+    list.push_back(c);
+    return list;
 }
 
 }  // namespace
@@ -50,8 +46,7 @@ std::vector<std::string> names(const std::string& a, const std::string& b,
 // --- Structure with no samples ---------------------------------------------
 
 TEST_CASE("payload: empty batch has zero size and empty array", "[payload]") {
-    const std::string json =
-        build_batch_json("greenhouse", names("a", "b", "c"), {});
+    const auto json = build_batch_json("greenhouse", names("a", "b", "c"), {});
 
     TEST_ASSERT_EQUAL_STRING(
         "{\"device\":\"greenhouse\",\"unit\":\"C\",\"batt_unit\":\"mV\","
@@ -65,7 +60,7 @@ TEST_CASE("payload: single sample with names and values", "[payload]") {
     const std::vector<NamedSample> samples{
         make_sample(120, 3900, 2315, -437, 8500)};
 
-    const std::string json =
+    const auto json =
         build_batch_json("greenhouse", names("soil", "air", "water"), samples);
 
     TEST_ASSERT_EQUAL_STRING(
@@ -84,8 +79,7 @@ TEST_CASE("payload: batch_size equals sample count", "[payload]") {
         make_sample(180, 3820, 120, 220, 320),
     };
 
-    const std::string json =
-        build_batch_json("dev1", names("a", "b", "c"), samples);
+    const auto json = build_batch_json("dev1", names("a", "b", "c"), samples);
 
     TEST_ASSERT_NOT_NULL(strstr(json.c_str(), "\"batch_size\":3"));
 }
@@ -97,14 +91,13 @@ TEST_CASE("payload: multiple samples are comma-separated oldest-first",
         make_sample(120, 3810, 200, 0, 0),
     };
 
-    const std::string json =
-        build_batch_json("dev1", names("a", "b", "c"), samples);
+    const auto json = build_batch_json("dev1", names("a", "b", "c"), samples);
 
     // First sample appears before the second in the document.
-    const std::size_t first = json.find("\"age_s\":60");
-    const std::size_t second = json.find("\"age_s\":120");
-    TEST_ASSERT_TRUE(first != std::string::npos);
-    TEST_ASSERT_TRUE(second != std::string::npos);
+    const char* first = strstr(json.c_str(), "\"age_s\":60");
+    const char* second = strstr(json.c_str(), "\"age_s\":120");
+    TEST_ASSERT_NOT_NULL(first);
+    TEST_ASSERT_NOT_NULL(second);
     TEST_ASSERT_TRUE(first < second);
 }
 
@@ -114,8 +107,7 @@ TEST_CASE("payload: missing reading serializes as null", "[payload]") {
     const std::vector<NamedSample> samples{
         make_sample(30, 3700, kTempNull, 1234, kTempNull)};
 
-    const std::string json =
-        build_batch_json("dev1", names("a", "b", "c"), samples);
+    const auto json = build_batch_json("dev1", names("a", "b", "c"), samples);
 
     TEST_ASSERT_NOT_NULL(strstr(json.c_str(), "\"a\":null"));
     TEST_ASSERT_NOT_NULL(strstr(json.c_str(), "\"b\":12.3"));
@@ -128,8 +120,7 @@ TEST_CASE("payload: empty name falls back to sensorN key", "[payload]") {
     const std::vector<NamedSample> samples{
         make_sample(30, 3700, 1000, 2000, 3000)};
 
-    const std::string json =
-        build_batch_json("dev1", names("", "", ""), samples);
+    const auto json = build_batch_json("dev1", names("", "", ""), samples);
 
     TEST_ASSERT_NOT_NULL(strstr(json.c_str(), "\"sensor1\":10.0"));
     TEST_ASSERT_NOT_NULL(strstr(json.c_str(), "\"sensor2\":20.0"));
@@ -142,8 +133,9 @@ TEST_CASE("payload: short names vector pads with sensorN keys", "[payload]") {
 
     // Only one name supplied; the remaining two must still be emitted so the
     // per-sample key count stays constant (§9.2 column layout).
-    const std::string json =
-        build_batch_json("dev1", std::vector<std::string>{"soil"}, samples);
+    SensorNames short_names;
+    short_names.push_back("soil");
+    const auto json = build_batch_json("dev1", short_names, samples);
 
     TEST_ASSERT_NOT_NULL(strstr(json.c_str(), "\"soil\":10.0"));
     TEST_ASSERT_NOT_NULL(strstr(json.c_str(), "\"sensor2\":20.0"));
@@ -153,8 +145,7 @@ TEST_CASE("payload: short names vector pads with sensorN keys", "[payload]") {
 // --- Untrusted names must be escaped ---------------------------------------
 
 TEST_CASE("payload: device name is JSON-escaped", "[payload]") {
-    const std::string json =
-        build_batch_json("a\"b\\c", names("x", "y", "z"), {});
+    const auto json = build_batch_json("a\"b\\c", names("x", "y", "z"), {});
 
     TEST_ASSERT_NOT_NULL(strstr(json.c_str(), "\"device\":\"a\\\"b\\\\c\""));
 }
@@ -167,7 +158,8 @@ TEST_CASE("payload: control characters are escaped as \\u00XX", "[payload]") {
         "ctrl";
 
     const std::vector<NamedSample> samples{make_sample(1, 1, 1, 1, 1)};
-    const std::string json = build_batch_json("dev", {name, "b", "c"}, samples);
+    const auto json =
+        build_batch_json("dev", names(name.c_str(), "b", "c"), samples);
 
     TEST_ASSERT_NOT_NULL(strstr(json.c_str(), "\\n"));
     TEST_ASSERT_NOT_NULL(strstr(json.c_str(), "\\t"));
@@ -178,8 +170,7 @@ TEST_CASE("payload: control characters are escaped as \\u00XX", "[payload]") {
 
 TEST_CASE("payload: every sample has exactly the expected keys", "[payload]") {
     const std::vector<NamedSample> samples{make_sample(5, 3750, 111, 222, 333)};
-    const std::string json =
-        build_batch_json("d", names("a", "b", "c"), samples);
+    const auto json = build_batch_json("d", names("a", "b", "c"), samples);
 
     for (const char* key :
          {"\"age_s\":", "\"batt_mv\":", "\"a\":", "\"b\":", "\"c\":"}) {
@@ -189,8 +180,7 @@ TEST_CASE("payload: every sample has exactly the expected keys", "[payload]") {
 
 TEST_CASE("payload: zero-age and zero-battery sample is valid", "[payload]") {
     const std::vector<NamedSample> samples{make_sample(0, 0, 0, 0, 0)};
-    const std::string json =
-        build_batch_json("d", names("a", "b", "c"), samples);
+    const auto json = build_batch_json("d", names("a", "b", "c"), samples);
 
     TEST_ASSERT_NOT_NULL(strstr(json.c_str(), "\"age_s\":0"));
     TEST_ASSERT_NOT_NULL(strstr(json.c_str(), "\"batt_mv\":0"));

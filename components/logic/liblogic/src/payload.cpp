@@ -13,6 +13,7 @@
 // NOLINTEND
 
 #include <cstddef>
+#include <string_view>
 
 #include "logic/temp_format.hpp"  // format_temp_c_x100, kTempNull
 
@@ -22,7 +23,7 @@ namespace {
 // Appends `s` as a JSON string literal, escaping the characters JSON requires
 // and anything below U+0020. The device/network names come from the config
 // page, so they are untrusted input and must not break the document.
-void append_json_string(std::string& out, const std::string& s) {
+void append_json_string(Payload& out, std::string_view s) {
     out.push_back('"');
     for (const char c : s) {
         switch (c) {
@@ -64,30 +65,39 @@ void append_json_string(std::string& out, const std::string& s) {
     out.push_back('"');
 }
 
-void append_u32(std::string& out, std::uint32_t value) {
-    out += std::to_string(value);
+// Appends `value` in decimal without a temporary string.
+void append_u32(Payload& out, std::uint32_t value) {
+    char digits[10]{};
+    std::size_t count = 0;
+    do {
+        digits[count++] = static_cast<char>('0' + (value % 10));
+        value /= 10;
+    } while (value != 0);
+    while (count > 0) {
+        out.push_back(digits[--count]);
+    }
 }
 
 // Appends a temperature x100 as a §9.3 one-decimal JSON number, or `null`.
-void append_temp(std::string& out, std::int16_t temp_c_x100) {
+void append_temp(Payload& out, std::int16_t temp_c_x100) {
     if (temp_c_x100 == kTempNull) {
         out += "null";
         return;
     }
-    out += format_temp_c_x100(temp_c_x100);
+    out += format_temp_c_x100(temp_c_x100).c_str();
 }
 
 }  // namespace
 
-std::string build_batch_json(const std::string& device,
-                             const std::vector<std::string>& names,
-                             const std::vector<NamedSample>& samples) {
-    std::string out;
-    // Rough sizing: header plus ~48 bytes per sample keeps reallocation down.
-    out.reserve(128 + samples.size() * 64);
+Payload build_batch_json(const DeviceName& device, const SensorNames& names,
+                         const std::vector<NamedSample>& samples) {
+    // Fixed capacity: an over-long batch aborts here. That is a bad state,
+    // because it means many samples are still buffered and untransmitted,
+    // and the abort loses them with the RTC buffer.
+    Payload out;
 
     out += "{\"device\":";
-    append_json_string(out, device);
+    append_json_string(out, device.c_str());
     out += ",\"unit\":\"C\",\"batt_unit\":\"mV\",\"batch_size\":";
     append_u32(out, static_cast<std::uint32_t>(samples.size()));
     out += ",\"samples\":[";
@@ -108,7 +118,7 @@ std::string build_batch_json(const std::string& device,
         for (std::size_t s = 0; s < limits::kSensorCount; ++s) {
             out.push_back(',');
             if (s < names.size() && !names[s].empty()) {
-                append_json_string(out, names[s]);
+                append_json_string(out, names[s].c_str());
             } else {
                 out += "\"sensor";
                 append_u32(out, static_cast<std::uint32_t>(s + 1));

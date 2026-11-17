@@ -97,20 +97,18 @@ std::vector<payload::NamedSample> collect_batch(const RtcState& st) {
 // NOLINTEND
 
 // Friendly names in column order, padded to the sensor count (§5.1.3).
-std::vector<std::string> names_for(const Config& cfg,
-                                   const ReadingList& readings) {
-    std::vector<std::string> names;
-    names.reserve(limits::kSensorCount);
+payload::SensorNames names_for(const Config& cfg, const ReadingList& readings) {
+    payload::SensorNames names;
     for (std::size_t i = 0; i < limits::kSensorCount && i < readings.size();
          ++i) {
-        std::string name;
+        payload::SensorName name;
         for (const auto& mapping : cfg.mappings) {
             if (mapping.rom == rom_id_to_hex(readings[i].rom)) {
-                name = mapping.name;
+                name.assign(mapping.name.c_str());
                 break;
             }
         }
-        names.push_back(std::move(name));
+        names.push_back(name);
     }
     return names;
 }
@@ -120,8 +118,9 @@ std::vector<std::string> names_for(const Config& cfg,
 // false to represent "not yet implemented", which triggers backoff (§3.7).
 bool stub_upload(const Config& cfg, RtcState& st, const ReadingList& readings) {
     const auto batch = collect_batch(st);
-    const std::string json = payload::build_batch_json(
-        cfg.dev_name, names_for(cfg, readings), batch);
+    const payload::DeviceName device(cfg.dev_name.c_str());
+    const payload::Payload json =
+        payload::build_batch_json(device, names_for(cfg, readings), batch);
     ESP_LOGW(kTag,
              "STUB: %u samples to '%s' not uploaded. Payload (%u bytes): %s",
              static_cast<unsigned>(st.buffer.size()), cfg.dest_url.c_str(),
@@ -173,9 +172,7 @@ template<hal::BoardLike Board>
     if (st.rom_ids.empty() && !discovered.empty()) {
         st.rom_ids.clear();
         for (const RomId& rom : discovered) {
-            if (!st.rom_ids.try_push_back(rom)) {
-                break;  // §2.1: at most kSensorCount sensors are logged.
-            }
+            st.rom_ids.push_back(rom);
         }
         ESP_LOGI(kTag, "cached %u ROM IDs",
                  static_cast<unsigned>(st.rom_ids.size()));

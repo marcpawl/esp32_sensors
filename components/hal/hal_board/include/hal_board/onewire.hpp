@@ -55,8 +55,8 @@ class OneWire {
 
     // Walks the 1-Wire search tree and returns the ROM IDs of every DS18B20
     // (family code 0x28) present on the bus. Returns an empty list when no
-    // device responds; a bus with more devices than `kMaxSensors` reports
-    // the first `kMaxSensors` of them (§2.1).
+    // device responds. More devices than `kMaxSensors` is a wiring fault for
+    // the §2.1 bus, and aborts.
     [[nodiscard]] RomIdList discover_sensors() noexcept;
 
     // Discovers the sensors on the bus and reads a temperature from each,

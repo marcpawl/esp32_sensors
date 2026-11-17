@@ -1,5 +1,7 @@
 // Configuration validation rules (§5.1). Pure logic, no I/O.
 #include "app_config.hpp"
+
+#include "logic/limits.hpp"
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #pragma GCC diagnostic pop
@@ -81,7 +83,7 @@ std::optional<std::string> validate_interval(std::string_view v) {
 }
 
 std::optional<std::string> validate_device_name(const std::string& v) {
-    return check_length(v, 1, 32, "Device name");
+    return check_length(v, 1, limits::kMaxDeviceNameLength, "Device name");
 }
 
 std::optional<std::string> validate_ntp_server(const std::string& v) {
@@ -119,6 +121,18 @@ ValidationResult validate(const Config& cfg) {
     add("interval_s", validate_interval(std::to_string(cfg.interval_s)));
     add("dev_name", validate_device_name(cfg.dev_name));
     add("ntp_server", validate_ntp_server(cfg.ntp_server));
+
+    // Friendly names become fixed-capacity payload keys, so an over-long
+    // name would abort while formatting a batch instead of being rejected
+    // here. One error is enough: the form re-renders with the messages.
+    for (const auto& mapping : cfg.mappings) {
+        if (mapping.name.empty() ||
+            mapping.name.size() > limits::kMaxSensorNameLength) {
+            result.errors.push_back(
+                {"mappings", "Sensor names must be 1-32 characters"});
+            break;
+        }
+    }
 
     if (cfg.retry_base_s == 0) {
         result.errors.push_back({"retry_base_s", "must be > 0"});

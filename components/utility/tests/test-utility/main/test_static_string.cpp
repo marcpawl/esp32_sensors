@@ -158,6 +158,15 @@ TEST_CASE("static_string: exactly-capacity construction fits",
 
 // --- append / assign --------------------------------------------------------
 
+TEST_CASE("static_string: operator+= appends text and characters",
+          "[static_string]") {
+    static_string<8> s("ab");
+    s += "cd";
+    s += 'e';
+    TEST_ASSERT_EQUAL_STRING("abcde", s.c_str());
+    TEST_ASSERT_EQUAL_UINT(5, s.size());
+}
+
 TEST_CASE("static_string: append concatenates", "[static_string]") {
     static_string<10> s("foo");
     s.append("bar");

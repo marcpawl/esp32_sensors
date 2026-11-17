@@ -11,9 +11,11 @@
 #include <string>
 
 #include "app_config.hpp"
+#include "logic/limits.hpp"
 #include "unity.h"
 
 using thermo::Config;
+using thermo::limits::kMaxSensorNameLength;
 using thermo::validation::validate;
 using thermo::validation::validate_ap_password;
 using thermo::validation::validate_device_name;
@@ -132,6 +134,19 @@ TEST_CASE("validate_device_name: 1-32 characters", "[validation]") {
     TEST_ASSERT_FALSE(validate_device_name("shed").has_value());
     TEST_ASSERT_TRUE(validate_device_name("").has_value());
     TEST_ASSERT_TRUE(validate_device_name(std::string(33, 'd')).has_value());
+}
+
+TEST_CASE("validate: a sensor name over the payload capacity is rejected",
+          "[validation]") {
+    Config cfg = valid_config();
+    cfg.mappings.push_back(
+        {"28FF64A1B21603C4", std::string(kMaxSensorNameLength, 'a')});
+    TEST_ASSERT_TRUE(validate(cfg).ok);
+
+    cfg.mappings[0].name.push_back('a');  // One character too long.
+    const auto result = validate(cfg);
+    TEST_ASSERT_FALSE(result.ok);
+    TEST_ASSERT_EQUAL_STRING("mappings", result.errors[0].field.c_str());
 }
 
 TEST_CASE("validate_ntp_server: hostname, no scheme", "[validation]") {

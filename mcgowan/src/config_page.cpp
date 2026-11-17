@@ -123,7 +123,7 @@ std::string render_scan_json(const Config& cfg, const ScanSnapshot& scan) {
         out += "    { \"rom\": \"" + rom + "\", \"name\": \"" +
                html_escape(name) + "\", \"temp_c\": ";
         if (reading.temp_c_x100) {
-            out += format_temp_c_x100(*reading.temp_c_x100);
+            out += format_temp_c_x100(*reading.temp_c_x100).c_str();
         } else {
             out += "null";
         }
@@ -225,7 +225,8 @@ std::string render_form(const Config& cfg, const ScanSnapshot& scan,
         out += "<td>";
         const auto& temp = reading.temp_c_x100;
         if (temp.has_value()) {
-            out += format_temp_c_x100(*temp) + " &deg;C";
+            out += format_temp_c_x100(*temp).c_str();
+            out += " &deg;C";
         } else {
             out += "n/a";
         }

@@ -51,7 +51,7 @@ RomIdList Ds18b20::scan() {
     }
     if (id.bytes[0] == kFamilyDs18b20 &&
         crc8(id.bytes.data(), 7) == id.bytes[7]) {
-        found.try_push_back(id);
+        found.push_back(id);
     }
     return found;
 }

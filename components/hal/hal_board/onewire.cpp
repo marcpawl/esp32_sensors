@@ -225,11 +225,7 @@ RomIdList OneWire::discover_sensors() noexcept {
             for (std::size_t i = 0; i < kRomIdBytes; ++i) {
                 id.bytes[i] = rom[i];
             }
-            if (!found.try_push_back(id)) {
-                // §2.1: the shared bus carries at most `kMaxSensors`
-                // sensors, so anything beyond that is not logged.
-                break;
-            }
+            found.push_back(id);
         }
     }
 
@@ -277,7 +273,7 @@ ReadingList OneWire::read() noexcept {
     }
 
     for (const RomId& rom : roms) {
-        readings.try_push_back({rom, read_temperature(rom)});
+        readings.push_back({rom, read_temperature(rom)});
     }
     return readings;
 }
