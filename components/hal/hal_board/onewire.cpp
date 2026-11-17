@@ -158,18 +158,11 @@ std::uint8_t OneWire::read_byte() noexcept {
     return value;
 }
 
-// GCC's analyzer cannot model libstdc++'s std::vector internals and reports
-// the result as uninitialised. The code is correct; keep the diagnostic fatal
-// everywhere else.
-// NOLINTBEGIN
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
-
-std::vector<RomId> OneWire::discover_sensors() noexcept {
+RomIdList OneWire::discover_sensors() noexcept {
     // Standard 1-Wire search (Maxim AN187): a binary tree walk over the 64-bit
     // ROM space. `last_discrepancy` remembers where the previous pass chose the
     // '0' branch, so each pass enumerates one device until none remain.
-    std::vector<RomId> found;
+    RomIdList found;
     if (!reset()) {
         return found;
     }
@@ -232,16 +225,16 @@ std::vector<RomId> OneWire::discover_sensors() noexcept {
             for (std::size_t i = 0; i < kRomIdBytes; ++i) {
                 id.bytes[i] = rom[i];
             }
-            found.push_back(id);
+            if (!found.try_push_back(id)) {
+                // §2.1: the shared bus carries at most `kMaxSensors`
+                // sensors, so anything beyond that is not logged.
+                break;
+            }
         }
     }
 
     return found;
 }
-
-#pragma GCC diagnostic pop
-
-// NOLINTEND
 
 std::optional<std::int16_t> OneWire::read_temperature(
     const RomId& rom) noexcept {
@@ -268,11 +261,10 @@ std::optional<std::int16_t> OneWire::read_temperature(
     return static_cast<std::int16_t>(raw * 100 / 16);
 }
 
-std::vector<DS18B20Reading> OneWire::read() noexcept {
-    const std::vector<RomId> roms = discover_sensors();
+ReadingList OneWire::read() noexcept {
+    const RomIdList roms = discover_sensors();
 
-    std::vector<DS18B20Reading> readings;
-    readings.reserve(roms.size());
+    ReadingList readings;
     if (roms.empty()) {
         return readings;
     }
@@ -285,7 +277,7 @@ std::vector<DS18B20Reading> OneWire::read() noexcept {
     }
 
     for (const RomId& rom : roms) {
-        readings.push_back({rom, read_temperature(rom)});
+        readings.try_push_back({rom, read_temperature(rom)});
     }
     return readings;
 }

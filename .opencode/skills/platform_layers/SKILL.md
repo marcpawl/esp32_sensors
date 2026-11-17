@@ -20,12 +20,16 @@ The hardware-abstraction layer (layers 1 and 2 below) is documented in
 
 | Layer | Components | Test / application projects |
 |---|---|---|
-| 1 (lowest) | `hal_common` | `test-hal-common` |
+| 0 (lowest) | `libutility` | `test-utility` |
+| 1 | `hal_common` | `test-hal-common` |
 | 2 | `hal_board`, `hal_stub` | `test-hal-stub` |
 | 3 | `libespidfcpp` | `test-espidf-cpp` |
 | 4 | `liblogic` | `test-logic` |
 | 5 | `libsimulator` | `test-simulator` |
 | 6 (highest) | — | `mcgowan`, `donny` |
+
+`libutility` is header-only. It owns the fixed-capacity containers
+(`static_vector`, `static_string`) and depends on no ESP-IDF driver.
 
 `hal_common` is header-only.
 
@@ -58,8 +62,8 @@ today and must never be required by a chip-target project.
 | Target | May link | Must not link |
 |---|---|---|
 | ESP32-S3 (`mcgowan`) | `hal_board` | `hal_stub` |
-| `linux` (`test-hal-common`, `test-hal-stub`, `test-logic`, `test-espidf-cpp`, `test-simulator`, `donny`) | `hal_stub` | `hal_board` |
-| Platform-neutral components (`hal_common`, `libespidfcpp`, `liblogic`) | neither | both |
+| `linux` (`test-utility`, `test-hal-common`, `test-hal-stub`, `test-logic`, `test-espidf-cpp`, `test-simulator`, `donny`) | `hal_stub` | `hal_board` |
+| Platform-neutral components (`libutility`, `hal_common`, `libespidfcpp`, `liblogic`) | neither | both |
 
 `libespidfcpp` and `liblogic` build for both the chip and the host, so they
 must not name either HAL implementation. They use the `hal_common` vocabulary
@@ -71,31 +75,59 @@ supplies `hal::board::Board` while the host tests supply `hal::stub::BoardStub`.
 
 ## Walk order
 
-When writing or editing a list of components or test projects, go from the
-lowest layer to the highest:
+When creating or moving a component, test project, or application, go from
+the lowest layer to the highest.
 
-- Components: `hal_common`, `hal_board`, `hal_stub`, `libespidfcpp`,
-  `liblogic`, `libsimulator`.
-- Test projects: `test-hal-common`, `test-hal-stub`, `test-espidf-cpp`,
-  `test-logic`, `test-simulator`.
-- Applications: `mcgowan`, `donny`.
+**Components:**
 
-`./scripts/dev.py test` currently runs `test-logic` before `test-espidf-cpp`
-and `test-simulator`; that is the command's existing order, not the layer order
-to use for a new list.
+1. `libutility`
+2. `hal_common`
+3. `hal_board`
+4. `hal_stub`
+5. `libespidfcpp`
+6. `liblogic`
+7. `libsimulator`
+
+**Test projects:**
+
+1. `test-utility`
+2. `test-hal-common`
+3. `test-hal-stub`
+4. `test-espidf-cpp`
+5. `test-logic`
+6. `test-simulator`
+
+**Applications:**
+
+1. `mcgowan`
+2. `donny`
+
+`./scripts/dev.py test` runs the suites in this order:
+
+1. `test-utility`
+2. `test-hal-common`
+3. `test-hal-stub`
+4. `test-logic`
+5. `test-espidf-cpp`
+6. `test-simulator`
+
+That is the command's existing order, not the layer order to use for a new
+list.
 
 ## Current dependency edges
 
 | Component / project | Repository-layer requirements |
 |---|---|
-| `hal_common` | none (ESP-IDF `esp_common` only) |
+| `libutility` | none |
+| `hal_common` | `libutility`; ESP-IDF `esp_common` only |
 | `hal_board` | `hal_common` |
 | `hal_stub` | `hal_common` |
-| `libespidfcpp` | none (ESP-IDF `esp_http_server` only) |
-| `liblogic` | `libespidfcpp`, `hal_common`, `sml` |
+| `libespidfcpp` | `libutility`; ESP-IDF `esp_http_server` only |
+| `liblogic` | `libespidfcpp`, `libutility`, `hal_common`, `sml` |
 | `libsimulator` | none yet |
-| `mcgowan` | `hal_board`, `liblogic`, `libespidfcpp` |
+| `mcgowan` | `hal_board`, `liblogic`, `libespidfcpp`, `libutility` |
 | `donny` | `hal_stub`, `liblogic`, `libespidfcpp`, `libsimulator`, vendored `json` |
+| `test-utility` | `libutility` |
 | `test-hal-common` | `hal_common`; privately `hal_stub` |
 | `test-hal-stub` | `hal_stub` |
 | `test-espidf-cpp` | `libespidfcpp`; privately `hal_stub` |
@@ -111,13 +143,16 @@ never require either implementation.
 
 ## Where the rule is enforced
 
-- Each subproject's top-level `CMakeLists.txt` points `EXTRA_COMPONENT_DIRS` at
-  the repo-root `components/` (the `sml` wrapper), at `components/hal/` (the
-  three HAL components), at `components/espidfcpp/` (the ESP-IDF wrappers), at
-  `components/logic/` (the application logic) and — where the simulator is
-  linked — at `components/simulator/` (the simulator component), because its
-  own project root is not on the default search path. All entries are needed:
-  ESP-IDF scans a component directory one level deep
+- Each subproject's top-level `CMakeLists.txt` points `EXTRA_COMPONENT_DIRS`
+  at one entry per grouping directory:
+  - the repo-root `components/` (the `sml` wrapper);
+  - `components/utility/` (the shared containers);
+  - `components/hal/` (the three HAL components);
+  - `components/espidfcpp/` (the ESP-IDF wrappers);
+  - `components/logic/` (the application logic);
+  - `components/simulator/` (the simulator component), where it is linked.
+
+  All entries are needed: ESP-IDF scans a component directory one level deep
   (`__project_component_dir` globs `dir/*` and does not descend), so a grouping
   directory is only found when it is named on its own. Each project also sets
   `EXCLUDE_COMPONENTS` before `project()`: `mcgowan` excludes `hal_stub`; every

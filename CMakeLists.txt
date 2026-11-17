@@ -14,6 +14,9 @@ cmake_minimum_required(VERSION 3.22)
 #   components/hal/tests/test-hal-common/
 #                    host tests for components/hal/hal_common, `linux`
 #                                            -> .../test-hal-common/build_linux/
+#   components/utility/tests/test-utility/
+#                    host tests for components/utility/libutility, `linux`
+#                                           -> .../test-utility/build_linux/
 #   components/logic/tests/test-logic/
 #                    host unit tests, `linux` target (hal_stub)
 #                                                -> .../test-logic/build_linux/
@@ -81,12 +84,13 @@ project(esp32_sensors_subprojects NONE)
 
 # Which subprojects to build. Default: all of them.
 set(SUBPROJECTS
-    "mcgowan;test-hal-stub;test-hal-common;test-logic;test-espidf-cpp;test-simulator;donny;test-esp_timer-stub;test-esp_timer-board"
+    "mcgowan;test-utility;test-hal-stub;test-hal-common;test-logic;test-espidf-cpp;test-simulator;donny;test-esp_timer-stub;test-esp_timer-board"
     CACHE STRING
-    "Subprojects to build: mcgowan, test-hal-stub, test-hal-common, test-logic, test-espidf-cpp, test-simulator, donny, test-esp_timer-stub, test-esp_timer-board")
+    "Subprojects to build: mcgowan, test-utility, test-hal-stub, test-hal-common, test-logic, test-espidf-cpp, test-simulator, donny, test-esp_timer-stub, test-esp_timer-board")
 set_property(CACHE SUBPROJECTS PROPERTY STRINGS
-    mcgowan test-hal-stub test-hal-common test-logic test-espidf-cpp
-    test-simulator donny test-esp_timer-stub test-esp_timer-board)
+    mcgowan test-utility test-hal-stub test-hal-common test-logic
+    test-espidf-cpp test-simulator donny test-esp_timer-stub
+    test-esp_timer-board)
 
 # GCC static analyzer for the C++ subprojects. Off by default; pass
 # `-DTHERMO_GCC_ANALYZER=ON` (or `scripts/dev.py build --analyzer`) to turn it
@@ -95,8 +99,9 @@ option(THERMO_GCC_ANALYZER
     "Enable GCC's static analyzer for the C++ subprojects" OFF)
 
 set(KNOWN_SUBPROJECTS
-    mcgowan test-hal-stub test-hal-common test-logic test-espidf-cpp
-    test-simulator donny test-esp_timer-stub test-esp_timer-board)
+    mcgowan test-utility test-hal-stub test-hal-common test-logic
+    test-espidf-cpp test-simulator donny test-esp_timer-stub
+    test-esp_timer-board)
 foreach(sub IN LISTS SUBPROJECTS)
     if(NOT sub IN_LIST KNOWN_SUBPROJECTS)
         message(FATAL_ERROR
@@ -148,6 +153,14 @@ endfunction()
 # --- mcgowan: ESP32-S3 firmware (mcgowan.bin) -> target mcgowan_build ------
 if(mcgowan IN_LIST SUBPROJECTS)
     _idf_subproject(mcgowan mcgowan build_esp32s3 "build")
+endif()
+
+# --- test-utility: libutility container tests (linux) -> target *_build ---
+# Same `linux` target rules as `test-logic/`; built (not run) here, since
+# running is `scripts/dev.py test-utility`'s job (`test` runs every suite).
+if(test-utility IN_LIST SUBPROJECTS)
+    _idf_subproject(test-utility components/utility/tests/test-utility
+        build_linux "--preview|set-target|linux" "build")
 endif()
 
 # --- test-hal-stub: hal_stub device tests (linux) -> target *_build ------

@@ -12,5 +12,8 @@ idf_component_register(
     INCLUDE_DIRS
         "include"
     REQUIRES
+        # `hal/onewire_types.hpp` names `utility::static_vector` in the shared
+        # `OneWireLike` concept, so the container is a public requirement.
+        libutility
         esp_common
 )

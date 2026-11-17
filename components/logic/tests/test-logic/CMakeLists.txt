@@ -36,6 +36,7 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 # directory is not descended into.
 set(EXTRA_COMPONENT_DIRS
     "${CMAKE_CURRENT_LIST_DIR}/../../.."
+    "${CMAKE_CURRENT_LIST_DIR}/../../../utility"
     "${CMAKE_CURRENT_LIST_DIR}/../../../hal"
     "${CMAKE_CURRENT_LIST_DIR}/../../../espidfcpp"
     "${CMAKE_CURRENT_LIST_DIR}/../.."

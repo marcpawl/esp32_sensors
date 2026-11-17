@@ -29,6 +29,7 @@ idf_component_register(
     REQUIRES
         hal_board
         liblogic
+        libutility
         libespidfcpp
         nvs_flash
         esp_wifi

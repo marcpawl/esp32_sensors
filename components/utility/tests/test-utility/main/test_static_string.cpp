@@ -1,7 +1,7 @@
 // Tests for the fixed-capacity NUL-terminated string
-// (thermo::espidf_cpp::static_string).
+// (thermo::utility::static_string).
 //
-// static_string wraps thermo::espidf_cpp::static_vector<char, N + 1> and
+// static_string wraps thermo::utility::static_vector<char, N + 1> and
 // guarantees a valid NUL terminator, so c_str() is always safe. `N` counts
 // characters only (the terminator has its own reserved slot), so `remaining()`
 // is exactly how many characters can still be appended and the try_* appends
@@ -23,10 +23,10 @@
 #include <cstring>
 
 #include "assert_unity_support.hpp"
-#include "espidf_cpp/static_string.hpp"
 #include "unity.h"
+#include "utility/static_string.hpp"
 
-using thermo::espidf_cpp::static_string;
+using thermo::utility::static_string;
 
 // --- constexpr usability ----------------------------------------------------
 //

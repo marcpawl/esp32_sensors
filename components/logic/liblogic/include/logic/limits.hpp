@@ -21,7 +21,10 @@
 
 namespace thermo::limits {
 
-constexpr std::size_t kSensorCount = 3;  // Three DS18B20 on the shared bus.
+// Three DS18B20 on the shared bus. This is the application's sensor count;
+// the bus capacity itself is `hal::kMaxSensors`, and `logic/rtc_state.hpp`
+// asserts that the two agree.
+constexpr std::size_t kSensorCount = 3;
 
 // §4.1 record is ~12-18 bytes; §4.2 RTC slow memory yields ~450 samples.
 // Caps are deliberately conservative to keep the RTC struct small.

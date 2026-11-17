@@ -8,13 +8,18 @@
 // NOLINTEND
 
 #include <optional>
-#include <string>
 
+#include <cstddef>
 #include <cstdint>
 
 #include "app_config.hpp"
+#include "utility/static_string.hpp"
 
 namespace thermo {
+
+// Longest IPv4 dotted-quad text: "255.255.255.255" is 15 characters.
+inline constexpr std::size_t kIpAddressTextCapacity = 15;
+using IpAddressText = utility::static_string<kIpAddressTextCapacity>;
 
 // RAII Wi-Fi station connection for Run mode / NTP sync. Stubbed minimally
 // here since Run mode is stubbed.
@@ -24,7 +29,7 @@ class WifiAp {
     esp_err_t start(const Config& cfg);
 
     // Returns the AP's IP address (typically 192.168.4.1) once started.
-    std::string ip_address() const;
+    [[nodiscard]] IpAddressText ip_address() const;
 
   private:
     bool started_ = false;

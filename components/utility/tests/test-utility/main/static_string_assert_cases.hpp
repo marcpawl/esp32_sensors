@@ -1,6 +1,6 @@
-// Shared assert-trigger cases for thermo::espidf_cpp::static_string.
+// Shared assert-trigger cases for thermo::utility::static_string.
 //
-// These triggers intentionally violate thermo::espidf_cpp::static_string's
+// These triggers intentionally violate thermo::utility::static_string's
 // contract so the process aborts. They are compiled into a standalone program
 // whose filename contains "_assert" (see test_static_string_assert.cpp) and are
 // also included by the Unity tests, which fork+exec that program and confirm it
@@ -16,7 +16,7 @@
 #include <span>
 
 #include "assert_test_support.hpp"
-#include "espidf_cpp/static_string.hpp"
+#include "utility/static_string.hpp"
 
 namespace static_string_assert_cases {
 
@@ -24,25 +24,25 @@ using assert_test_support::Case;
 
 // Constructing past capacity: strlen("abcdefgh") == 8 > capacity() == 4.
 inline void construct_overflow() {
-    thermo::espidf_cpp::static_string<4> s("abcdefgh");
+    thermo::utility::static_string<4> s("abcdefgh");
     (void)s;
 }
 
 // Appending past capacity: remaining() == 2 but strlen("defgh") == 5.
 inline void append_overflow() {
-    thermo::espidf_cpp::static_string<5> s("abc");
+    thermo::utility::static_string<5> s("abc");
     s.append("defgh");
 }
 
 // Assigning past capacity: strlen("toolong") == 7 > capacity() == 3.
 inline void assign_overflow() {
-    thermo::espidf_cpp::static_string<3> s("x");
+    thermo::utility::static_string<3> s("x");
     s.assign("toolong");
 }
 
 // push_back with no remaining capacity.
 inline void push_back_when_full() {
-    thermo::espidf_cpp::static_string<2> s;
+    thermo::utility::static_string<2> s;
     s.push_back('a');
     s.push_back('b');
     s.push_back('c');  // Full: remaining() == 0.

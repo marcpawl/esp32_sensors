@@ -1,7 +1,7 @@
 ---
 name: quality_checks
 description: Run this repository's quality gates (clang-format, pycodestyle,
-  clang-tidy, build, the five host test suites, and the dev.py self-check) and
+  clang-tidy, build, the six host test suites, and the dev.py self-check) and
   fix what they report. Use before committing, before opening or updating a
   pull request, or whenever asked to verify quality.
 ---
@@ -18,16 +18,22 @@ commands with ad-hoc `docker compose run`.
 | Gate | Command | What it checks |
 |---|---|---|
 | Python style | `./scripts/dev.py pycodestyle` | PEP 8 with pycodestyle's defaults (79 columns). Every `*.py` file **and** every extensionless Python shebang script; `third_party/` is excluded. |
-| Build | `./scripts/dev.py build [SUBPROJECT...]` | All subprojects through the root aggregator, or just the named ones (`mcgowan`, `test-hal-stub`, `test-hal-common`, `test-logic`, `test-espidf-cpp`, `test-simulator`, `donny`). Fetches the pinned submodules first. |
+| Build | `./scripts/dev.py build [SUBPROJECT...]` | All subprojects through the root aggregator, or just the named ones (`mcgowan`, `test-utility`, `test-hal-stub`, `test-hal-common`, `test-logic`, `test-espidf-cpp`, `test-simulator`, `donny`). Fetches the pinned submodules first. |
 | Static analysis | `./scripts/dev.py clang-tidy [DIRECTORY\|PROJECT...] [--fix]` | The repository's `.clang-tidy` check set plus clang-tidy's defaults (`clang-diagnostic-*`, `clang-analyzer-*`) over every C++ source under a named directory (which may include projects that are not analyzed subprojects), or over an analyzed subproject (`project:NAME` forces the project over a directory of the same name). `--fix` applies the suggested fixes in place (re-run `format` afterwards). **Reads the compile databases; it never builds them**, so `build` must have run first. Vendored code is excluded. |
 | Formatting (apply) | `./scripts/dev.py format` | clang-format over the tracked **and untracked** C/C++ sources under `mcgowan/` and `components/` (which now holds every host suite and the simulator application). |
 | Formatting (check) | `./scripts/dev.py format-check` | Same file set as `format`, fails instead of editing. |
 | Formatting (staged) | `./scripts/dev.py format-check-staged` | clang-format over the **staged** content only, honouring nested `.clang-format` / `.clang-format-ignore` files. This is the hook's variant. |
-| Tests | `./scripts/dev.py test` | Every host suite, in order: `test-hal-common`, `test-hal-stub`, `test-logic`, `test-espidf-cpp`, `test-simulator`. Stops at the first failure. |
+| Tests | `./scripts/dev.py test` | Every host suite, in order: `test-utility`, `test-hal-common`, `test-hal-stub`, `test-logic`, `test-espidf-cpp`, `test-simulator`. Stops at the first failure. |
 | Harness self-check | `./scripts/dev.py self-check` | Stdlib unit tests for `scripts/dev.py` itself. **Host-only**: it refuses to run in the container (the host-side decisions it pins never happen there). CI runs it on the runner. |
 
-Individual host suites are also available as `test-hal-common`,
-`test-hal-stub`, `test-logic`, `test-espidf-cpp`, and `test-simulator`.
+Each host suite is also available on its own:
+
+- `test-utility`
+- `test-hal-common`
+- `test-hal-stub`
+- `test-logic`
+- `test-espidf-cpp`
+- `test-simulator`
 
 ## Order to run them
 

@@ -10,8 +10,9 @@
 #
 # Usage:
 #   scripts/dev.py [pull|image|submodules|build|build-test-espidf-cpp|flash|\
-#                   monitor|menuconfig|test|test-hal-common|test-hal-stub|\
-#                   test-logic|test-espidf-cpp|test-simulator|\
+#                   monitor|menuconfig|test|test-utility|test-hal-common|\
+#                   test-hal-stub|test-logic|test-espidf-cpp|\
+#                   test-simulator|\
 #                   test-esp32-timer|self-check|format|format-check|\
 #                   format-check-staged|pycodestyle|clang-tidy|install-hooks|\
 #                   shell]
@@ -139,6 +140,9 @@ FORMAT_ARGS = ("--dry-run", "--Werror")
 #   components/hal/tests/test-hal-common/
 #             host tests for components/hal/hal_common (linux target)
 #                                            -> .../test-hal-common/build_linux
+#   components/utility/tests/test-utility/
+#             host tests for components/utility/libutility (linux target)
+#                                          -> .../test-utility/build_linux
 #   components/logic/tests/test-logic/
 #             host unit tests (linux target)      -> .../test-logic/build_linux
 #   components/espidfcpp/tests/test-espidf-cpp/
@@ -154,6 +158,7 @@ FORMAT_ARGS = ("--dry-run", "--Werror")
 # Build directories are named after the ESP-IDF target so the esp32s3 and
 # linux builds stay separate.
 FIRMWARE_PROJECT = "mcgowan"
+UTILITY_TEST_PROJECT = "test-utility"
 TEST_PROJECT = "test-logic"
 HAL_STUB_TEST_PROJECT = "test-hal-stub"
 HAL_COMMON_TEST_PROJECT = "test-hal-common"
@@ -171,6 +176,8 @@ ESP_TIMER_BOARD_PROJECT = "test-esp_timer-board"
 # slash.
 PROJECT_DIRS = {
     FIRMWARE_PROJECT: FIRMWARE_PROJECT,
+    UTILITY_TEST_PROJECT:
+        "components/utility/tests/test-utility",
     HAL_STUB_TEST_PROJECT: "components/hal/tests/test-hal-stub",
     HAL_COMMON_TEST_PROJECT: "components/hal/tests/test-hal-common",
     TEST_PROJECT: "components/logic/tests/test-logic",
@@ -209,6 +216,7 @@ FW_BINARY = "mcgowan.bin"
 # commands between them cover this table, so no suite is reachable only through
 # the aggregate `test`.
 HOST_TEST_PROJECTS = (
+    (UTILITY_TEST_PROJECT, "test-utility.elf"),
     (HAL_COMMON_TEST_PROJECT, "esp32_sensors_hal_common_tests.elf"),
     (HAL_STUB_TEST_PROJECT, "esp32_sensors_hal_stub_tests.elf"),
     (TEST_PROJECT, "test-logic.elf"),
@@ -220,6 +228,7 @@ HOST_TEST_PROJECTS = (
 # `donny` is an application rather than a test suite, so it is built but is not
 # run by `test` (see HOST_TEST_PROJECTS).
 LINUX_PROJECTS = (
+    UTILITY_TEST_PROJECT,
     HAL_STUB_TEST_PROJECT,
     HAL_COMMON_TEST_PROJECT,
     TEST_PROJECT,
@@ -231,6 +240,7 @@ LINUX_PROJECTS = (
 
 SUBPROJECTS = (
     FIRMWARE_PROJECT,
+    UTILITY_TEST_PROJECT,
     HAL_STUB_TEST_PROJECT,
     HAL_COMMON_TEST_PROJECT,
     TEST_PROJECT,
@@ -846,8 +856,9 @@ def _host_test_projects(projects: tuple[str, ...]) -> list[tuple[str, str]]:
 
     Keeping the table as the single source of truth means a suite cannot be
     added to one command and forgotten in another: `test` asks for every entry
-    (`HOST_TEST_PROJECTS`), while `test-hal-stub` / `test-hal-common` /
-    `test-logic` / `test-espidf-cpp` / `test-simulator` ask for the one project
+    (`HOST_TEST_PROJECTS`), while `test-utility` / `test-hal-stub` /
+    `test-hal-common` / `test-logic` / `test-espidf-cpp` /
+    `test-simulator` ask for the one project
     they name. An
     unknown project means a stale constant, so it trips an assertion rather
     than silently running fewer suites.
@@ -888,6 +899,12 @@ def _run_host_tests(projects: tuple[str, ...]) -> int:
 
     print(f"SUCCESS: host tests passed ({', '.join(projects)})")
     return 0
+
+
+def cmd_test_utility() -> int:
+    """Host tests for components/utility/libutility (`linux` target)."""
+    change_to_container()
+    return _run_host_tests((UTILITY_TEST_PROJECT,))
 
 
 def cmd_test_hal_stub() -> int:
@@ -936,10 +953,11 @@ def cmd_test_esp32_timer() -> int:
 
 
 def cmd_test() -> int:
-    """Run every host unit test suite, `test-hal-common` first.
+    """Run every host unit test suite, `test-utility` first.
 
-    Then `test-hal-stub`, `test-logic`, `test-espidf-cpp`, and
-    `test-simulator`, in `HOST_TEST_PROJECTS` order. The aggregate the
+    Then `test-hal-common`, `test-hal-stub`, `test-logic`,
+    `test-espidf-cpp`, and `test-simulator`, in `HOST_TEST_PROJECTS`
+    order. The aggregate the
     pre-commit hook and CI call, so a suite added to `HOST_TEST_PROJECTS` is
     picked up here without touching either.
     """
@@ -974,9 +992,9 @@ def cmd_self_check() -> int:
             "    ./scripts/dev.py self-check\n"
             "\n"
             "Inside the container use `./scripts/dev.py test`, which builds\n"
-            "and runs the ESP-IDF `linux`-target suites (`test-hal-stub/`,\n"
-            "`test-hal-common/`, `test-logic/`, `test-espidf-cpp/`, and\n"
-            "`test-simulator/`).",
+            "and runs the ESP-IDF `linux`-target suites (`test-utility/`,\n"
+            "`test-hal-stub/`, `test-hal-common/`, `test-logic/`,\n"
+            "`test-espidf-cpp/`, and `test-simulator/`).",
             file=sys.stderr,
         )
         return 1
@@ -1745,6 +1763,7 @@ COMMANDS = {
     "menuconfig": cmd_menuconfig,
     "test": cmd_test,
     "test-hal-common": cmd_test_hal_common,
+    "test-utility": cmd_test_utility,
     "test-hal-stub": cmd_test_hal_stub,
     "test-logic": cmd_test_logic,
     "test-espidf-cpp": cmd_test_espidf_cpp,
