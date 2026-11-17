@@ -307,7 +307,13 @@ documented in the `quality_checks` skill
 `scripts/dev.py`; see the `quality_checks`, `cpp_qc`, and `python_qc` skills
 for the required subsets.
 
-
+Compiler warnings are errors in this repository's own code.
+`cmake/compiler-warnings.cmake` re-enables the categories ESP-IDF downgrades
+with `-Wno-error=...` on our component targets only, so ESP-IDF and
+`third_party/` keep their upstream defaults while a warning in our sources
+fails `scripts/dev.py build`. When a warning points into code we do not own,
+suppress it at the offending `#include` with a diagnostic pragma — see the
+`cpp-coding-standards` skill — rather than relaxing the flags.
 
 ### CMake
 
