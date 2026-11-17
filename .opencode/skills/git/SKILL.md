@@ -101,6 +101,23 @@ ai-session: AI agent session name
 
 ## Pull Request Message
 
-The description of the pull request should describe briefly all
-commits in the request.  When pushing into an existing PR,
-modify the description.
+When the push comes from an OpenCode session, rewrite the pull request's
+extended description as part of it. A push made anywhere else — from a
+shell, an IDE, or a script — leaves the description untouched; no git hook
+enforces this.
+
+Derive the description from:
+
+- the issue the pull request is bound to, when there is one;
+- the pull request summary;
+- the git log entries for the commits that are part of the request.
+
+Summarize it to **under 100 words**, in one paragraph, describing what the
+commits solve rather than listing them. End it with a trailer, so the merge
+commit carries a link to the detail instead of repeating it:
+
+```
+PULL_REQUEST: https://github.com/OWNER/REPO/pull/N
+```
+
+Apply it with `gh pr edit N --body-file FILE`.
