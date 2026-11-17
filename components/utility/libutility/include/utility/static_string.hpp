@@ -1,5 +1,7 @@
-// A fixed-capacity, NUL-terminated string built on thermo::static_vector.
+// A fixed-capacity, NUL-terminated string built on
+// `thermo::utility::static_vector`.
 //
+// Part of the `libutility` component (see `static_vector.hpp`).
 // `static_string<N>` stores up to `N` characters plus a terminating NUL. The
 // underlying storage is `static_vector<char, N + 1>`, i.e. `N` usable character
 // slots and one reserved for the terminator. The buffer always holds a valid
@@ -24,9 +26,9 @@
 #include <cstring>
 #include <type_traits>
 
-#include "espidf_cpp/static_vector.hpp"
+#include "utility/static_vector.hpp"
 
-namespace thermo::espidf_cpp {
+namespace thermo::utility {
 
 namespace detail {
 
@@ -324,4 +326,4 @@ class static_string {
     size_type size_ = 0;
 };
 
-}  // namespace thermo::espidf_cpp
+}  // namespace thermo::utility

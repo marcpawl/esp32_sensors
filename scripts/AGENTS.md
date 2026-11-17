@@ -23,6 +23,7 @@ invoked from the host.
 | both | `build [--analyzer[=BOOL]] [SUBPROJECT...]` | Build all subprojects via the root aggregator, or just the named ones; the analyzer is off by default, `--analyzer` enables it |
 | both | `build-test-espidf-cpp` | Build the `libespidfcpp` unit tests for `linux` |
 | both | `test` | Run all host suites in order |
+| both | `test-utility` | Build and run the `test-utility/` suite |
 | both | `test-hal-stub` | Build and run the `test-hal-stub/` suite |
 | both | `test-hal-common` | Build and run the `test-hal-common/` suite |
 | both | `test-logic` | Build and run the `test-logic/` suite |

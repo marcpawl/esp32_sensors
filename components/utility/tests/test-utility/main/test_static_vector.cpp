@@ -1,5 +1,5 @@
 // Tests for the project-local fixed-capacity container
-// (thermo::espidf_cpp::static_vector).
+// (thermo::utility::static_vector).
 //
 // This stands in for C++26 std::static_vector, which the toolchain's libstdc++
 // does not yet provide. It is pure logic with no IDF dependencies, so it is
@@ -18,10 +18,10 @@
 #include <cstdint>
 
 #include "assert_unity_support.hpp"
-#include "espidf_cpp/static_vector.hpp"
 #include "unity.h"
+#include "utility/static_vector.hpp"
 
-using thermo::espidf_cpp::static_vector;
+using thermo::utility::static_vector;
 
 // --- constexpr usability ----------------------------------------------------
 //
@@ -62,6 +62,15 @@ TEST_CASE("static_vector: default is empty with full capacity",
     TEST_ASSERT_TRUE(v.empty());
     TEST_ASSERT_FALSE(v.full());
     TEST_ASSERT_EQUAL_UINT(4, v.capacity());
+}
+
+TEST_CASE("static_vector: constructs from an iterator range",
+          "[static_vector]") {
+    const int values[] = {7, 8};
+    const static_vector<int, 3> v(values, values + 2);
+    TEST_ASSERT_EQUAL_UINT(2, v.size());
+    TEST_ASSERT_EQUAL_INT(7, v[0]);
+    TEST_ASSERT_EQUAL_INT(8, v[1]);
 }
 
 TEST_CASE("static_vector: push_back grows size and reaches full",

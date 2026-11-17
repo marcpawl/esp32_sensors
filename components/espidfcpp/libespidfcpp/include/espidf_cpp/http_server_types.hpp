@@ -32,10 +32,13 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "espidf_cpp/static_string.hpp"
-#include "espidf_cpp/static_vector.hpp"
+#include "utility/static_string.hpp"
+#include "utility/static_vector.hpp"
 
 namespace thermo::espidf_cpp {
+
+using thermo::utility::static_string;
+using thermo::utility::static_vector;
 
 // --- Tunables ---------------------------------------------------------------
 //

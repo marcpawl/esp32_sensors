@@ -7,8 +7,6 @@
 set(test_srcs
     "test_main.cpp"
     "test_one_message_queue.cpp"
-    "test_static_vector.cpp"
-    "test_static_string.cpp"
     "test_http_server_types.cpp"
     "test_http_server.cpp"
     "test_timer.cpp"
@@ -36,29 +34,3 @@ idf_component_register(
 set_source_files_properties(
     "test_http_server.cpp"
     PROPERTIES COMPILE_OPTIONS "-Wno-analyzer-use-of-uninitialized-value")
-
-# Standalone assert-trigger programs.
-#
-# The Unity tests fork+exec these programs to verify that contract violations
-# abort, without aborting the test runner itself. Each is built as a plain host
-# executable (no IDF runtime) into the build directory next to the test ELF, so
-# the corresponding test can locate it via a path derived from /proc/self/exe.
-# The `_assert_cases.hpp` headers are shared between the trigger program and
-# the Unity test; the component's own include directory comes from
-# `libespidfcpp`.
-function(add_assert_program name)
-    add_executable(${name} "test_${name}.cpp")
-    target_link_libraries(${name} PRIVATE idf::libespidfcpp)
-    target_include_directories(${name} PRIVATE
-        "${CMAKE_CURRENT_LIST_DIR}"
-    )
-    set_target_properties(${name} PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
-    )
-    # These are plain executables, not component libraries, so the project's
-    # `thermo_enable_gcc_analyzer()` loop does not reach them.
-    thermo_enable_gcc_analyzer(${name})
-endfunction()
-
-add_assert_program(static_string_assert)
-add_assert_program(static_vector_assert)

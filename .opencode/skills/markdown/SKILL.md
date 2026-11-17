@@ -6,12 +6,15 @@ description: How the Markdown files in this repository are written. Use before
 
 # Markdown
 
-## The two rules
+## The rules
 
-1. Wrap prose at **fewer than 80 columns**, wherever wrapping does not change
-   the formatting.
-2. When a passage describes several items, make it a **list or a subsection**,
-   not a sentence that runs the items together.
+1. Wrap prose at **fewer than 80 columns**, wherever wrapping does not
+   change the formatting.
+2. When a sentence describes more than two items, make it a **list**
+   rather than a sentence that puts the items together, separated by
+   commas.
+3. When a paragraph describes more than two items, make it a **list** or
+   use **subsections**.
 
 ## Keep the lines short
 

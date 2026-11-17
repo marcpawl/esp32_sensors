@@ -20,9 +20,11 @@
 #include <cstdlib>
 
 #include "espidf_cpp/handle.hpp"
-#include "espidf_cpp/static_string.hpp"
+#include "utility/static_string.hpp"
 
 namespace thermo::espidf_cpp {
+
+using thermo::utility::static_string;
 
 // Maximum number of characters (excluding the terminating NUL) in a task name.
 // FreeRTOS copies at most configMAX_TASK_NAME_LEN bytes, so this is a safe

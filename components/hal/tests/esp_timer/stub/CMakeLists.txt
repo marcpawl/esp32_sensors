@@ -27,6 +27,7 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 # each grouping directory needs its own entry.
 set(EXTRA_COMPONENT_DIRS
     "${CMAKE_CURRENT_LIST_DIR}/../../../.."
+    "${CMAKE_CURRENT_LIST_DIR}/../../../../utility"
     "${CMAKE_CURRENT_LIST_DIR}/../../.."
     "${CMAKE_CURRENT_LIST_DIR}/../components"
 )

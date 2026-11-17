@@ -23,6 +23,9 @@ idf_component_register(
         "include"
     REQUIRES
         libespidfcpp
+        # `logic/rtc_state.hpp` names `utility::static_vector` in its public
+        # members, so the plain-capacity container is a public requirement too.
+        libutility
         hal_common
         # boost-ext/sml (v1.2.0), via the wrapper component in
         # `components/sml` that exposes the `third_party/sml` submodule. The

@@ -1,6 +1,10 @@
 // A minimal fixed-capacity sequence container, standing in for C++26's
 // `std::static_vector` (not yet implemented in the toolchain's libstdc++).
 //
+// Part of the `libutility` component: the lowest layer of the tree, so the HAL
+// vocabulary, the ESP-IDF wrappers and the application logic all share one
+// definition without any of them depending on a higher layer.
+//
 // Storage is inline (no heap): the elements live in a `std::array<T, N>` and
 // the container tracks its current size. Elements are value-initialized on
 // `push_back`/`emplace_back`/`resize`, covering the parts of the standard
@@ -24,7 +28,7 @@
 #include <cstddef>
 #include <cstdlib>
 
-namespace thermo::espidf_cpp {
+namespace thermo::utility {
 
 // Fixed-capacity vector with `N` slots of inline storage.
 //
@@ -41,6 +45,15 @@ class static_vector {
     static constexpr size_type capacity() noexcept { return N; }
 
     constexpr static_vector() noexcept = default;
+
+    // Constructs from an iterator range. Asserts if the range does not fit.
+    template<typename It>
+    constexpr static_vector(It first, It last) {
+        for (; first != last; ++first) {
+            assert(size_ < N);
+            data_[size_++] = *first;
+        }
+    }
 
     constexpr size_type size() const noexcept { return size_; }
 
@@ -136,4 +149,4 @@ class static_vector {
     size_type size_ = 0;
 };
 
-}  // namespace thermo::espidf_cpp
+}  // namespace thermo::utility
