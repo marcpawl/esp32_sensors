@@ -11,6 +11,7 @@
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 #pragma GCC diagnostic pop
 // NOLINTEND
@@ -38,5 +39,12 @@ using UniqueTaskHandle =
 using UniqueQueueHandle =
     std::unique_ptr<std::remove_pointer_t<QueueHandle_t>,
                     HandleDeleter<QueueHandle_t, vQueueDelete>>;
+
+// `SemaphoreHandle_t` is `QueueHandle_t`, and FreeRTOS deletes a semaphore
+// with `vQueueDelete` (`vSemaphoreDelete` is only a function-like macro, so it
+// cannot be passed as a deleter).
+using UniqueSemaphoreHandle =
+    std::unique_ptr<std::remove_pointer_t<SemaphoreHandle_t>,
+                    HandleDeleter<SemaphoreHandle_t, vQueueDelete>>;
 
 }  // namespace thermo::espidf_cpp
