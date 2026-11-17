@@ -42,6 +42,7 @@ std::uint8_t crc8(const std::uint8_t* data, std::size_t len) {
 // NOLINTBEGIN
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
+
 std::vector<RomId> Ds18b20::scan() {
     // Full ROM search (binary tree walk) is not implemented; this simple form
     // works only when a single device is present. Run mode avoids scanning
@@ -61,7 +62,9 @@ std::vector<RomId> Ds18b20::scan() {
     }
     return found;
 }
+
 #pragma GCC diagnostic pop
+
 // NOLINTEND
 
 esp_err_t Ds18b20::start_conversion() {

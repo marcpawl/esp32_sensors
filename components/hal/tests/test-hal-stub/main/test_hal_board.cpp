@@ -70,11 +70,13 @@ constexpr BoardPins kPins{
 // NOLINTBEGIN
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
+
 BoardStub make_board() {
     BoardStub b = BoardStub::create(kPins);
     b.init_all();
     return b;
 }
+
 #pragma GCC diagnostic pop
 // NOLINTEND
 

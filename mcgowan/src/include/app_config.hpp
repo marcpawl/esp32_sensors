@@ -30,6 +30,7 @@ struct SensorMapping {
 // NOLINTBEGIN
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
+
 struct Config {
     // §5.1.1 Network & Upload.
     std::string ap_ssid;
@@ -57,7 +58,9 @@ struct Config {
     // §5.1.3 / §5.2 map_<ROMID> friendly names.
     std::vector<SensorMapping> mappings;
 };
+
 #pragma GCC diagnostic pop
+
 // NOLINTEND
 
 // A single field-level validation failure, surfaced back to the config page.

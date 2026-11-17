@@ -164,6 +164,7 @@ std::uint8_t OneWire::read_byte() noexcept {
 // NOLINTBEGIN
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
+
 std::vector<RomId> OneWire::discover_sensors() noexcept {
     // Standard 1-Wire search (Maxim AN187): a binary tree walk over the 64-bit
     // ROM space. `last_discrepancy` remembers where the previous pass chose the
@@ -237,7 +238,9 @@ std::vector<RomId> OneWire::discover_sensors() noexcept {
 
     return found;
 }
+
 #pragma GCC diagnostic pop
+
 // NOLINTEND
 
 std::optional<std::int16_t> OneWire::read_temperature(

@@ -61,11 +61,13 @@ DS18B20Reading make_reading(std::initializer_list<unsigned> bytes,
 // NOLINTBEGIN
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
+
 OneWire make_bus() {
     OneWire bus = OneWire::create(kDataGpio);
     bus.init();
     return bus;
 }
+
 #pragma GCC diagnostic pop
 // NOLINTEND
 

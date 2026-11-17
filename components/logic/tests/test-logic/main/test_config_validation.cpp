@@ -32,6 +32,7 @@ namespace {
 // NOLINTBEGIN
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
+
 Config valid_config() {
     Config cfg;
     cfg.ap_ssid = "ThermoSetup";
@@ -52,6 +53,7 @@ Config valid_config() {
     cfg.batt_cal_gain = 1.0f;
     return cfg;
 }
+
 #pragma GCC diagnostic pop
 // NOLINTEND
 

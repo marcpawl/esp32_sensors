@@ -24,12 +24,14 @@ namespace thermo {
 // NOLINTBEGIN
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
+
 struct ScanSnapshot {
     PowerSource power_source;
     /** Battery strength, absent when running without a battery (on USB). */
     std::optional<std::uint32_t> battery_mv = std::nullopt;
     std::vector<DS18B20Reading> sensors;
 };
+
 #pragma GCC diagnostic pop
 // NOLINTEND
 

@@ -66,6 +66,7 @@
 #pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
 #include "nlohmann/json.hpp"
 #pragma GCC diagnostic pop
+
 // NOLINTEND
 
 namespace thermo {
