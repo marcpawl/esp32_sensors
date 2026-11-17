@@ -33,6 +33,7 @@ The headers are included with the `logic/` prefix:
 | `logic/led_task.hpp` | `thermo::LedState`, `thermo::ledtask::*` (`Step`, `CycleSteps`, `LedRunner<Board>`), `thermo::LedTask<Board>` — the LED status task built on `espidf_cpp::Task` |
 | `logic/mode.hpp` | `thermo::Mode` (`kOff` / `kConfigure` / `kRun`) and `thermo::to_string(Mode)` — the operating modes (§3), board-independent vocabulary |
 | `logic/mode_selection.hpp` | `thermo::ModeSelection` (`std::optional<Mode>`) and `thermo::mode_from_switches(SwitchState config, SwitchState run)` — the pure, `constexpr` mapping from the two mode-sense poles to a mode, reporting a both-poles-on miswire as `std::nullopt` |
+| `logic/toggle_switch.hpp` | `thermo::ToggleSwitch<Board>` and `thermo::toggle::burst_exceeded()` / `kDebounce` / `kStability` — debounced switch state with an ISR-safe edge handler, a timer-based debounce, a `void(SwitchState)` callback, and a stability-window abort |
 | `logic/temp_format.hpp` / `src/temp_format.cpp` | `thermo::kTempNull` (the int16 `0x8000` sensor-failure sentinel) and `thermo::format_temp_c_x100()` returning `thermo::TempText`, a fixed-capacity string — centred-hundredths formatting for the config UI and the payload (§4.2, §9); no ESP-IDF dependency |
 | `logic/rom_id.hpp` / `src/rom_id.cpp` | `thermo::rom_id_to_hex()` and `thermo::rom_id_from_hex()` — the free functions that render a `thermo::hal::RomId` as the 16-character uppercase hex key of §5.1.3 / §6.1 and parse one back (`std::nullopt` on a wrong length or a non-hex character). Free functions, not members: `RomId` in `hal_common` stays pure data. No ESP-IDF dependency |
 | `logic/payload.hpp` / `src/payload.cpp` | `thermo::payload::NamedSample`, `SensorName(s)`, `DeviceName`, `Payload`, and `build_batch_json()` — the §9.1 upload document (key names, ordering, `batch_size`, JSON escaping) built from the buffered records. Everything it appends is fixed-capacity, so formatting a batch never touches the heap; an over-long document aborts at `kMaxPayloadBytes`. The temperatures go through `logic/temp_format.hpp`. No ESP-IDF dependency |
@@ -79,6 +80,36 @@ before
 starting the task. The HAL itself is unchanged: both boards stay non-copyable
 and movable.
 
+## `ToggleSwitch<Board>`
+
+`logic/toggle_switch.hpp` is the debounced-switch template from issue #51.
+It takes `Board::SwitchType&` (the nested alias `BoardLike` requires) and a
+`std::function<void(hal::SwitchState)>` callback. The callback receives the
+settled state, so it does not call `get_state()` itself.
+
+The GPIO handler is `[[thermo::isr_safe]]`: it reads the switch, records the
+new state, tracks the burst, and restarts the debounce timer with
+`espidf_cpp::Timer::restart()` (the ISR-safe path). Everything else runs in
+the esp_timer task: the settle decision, the unstable-switch log (including
+the GPIO from `Switch::gpio()`), the `abort()`, and the user callback.
+
+Two synchronisation primitives are deliberate:
+
+- the burst fields shared with the ISR (`current_state_`, `pending_`,
+  `burst_active_`, `unstable_`, `burst_start_us_`) use a
+  `portMUX_TYPE` critical section, because a FreeRTOS mutex must not be taken
+  in an interrupt;
+- the settled state read by `get_state()` uses `espidf_cpp::Mutex`/`Lock`,
+  and the callback runs outside that lock.
+
+A `pending_` flag makes a timer expiry that races a fresh edge re-arm instead
+of reporting an un-debounced state.
+
+The template lives for the firmware's lifetime in `mcgowan` and `donny`, and
+is created and destroyed in tests. The destructor unregisters the switch
+interrupt and cancels the timer; the timer is declared last, so its destructor
+waits for an in-flight callback before the state it touches is destroyed.
+
 ## The host tests
 
 The test project compiles the component's `.cpp` files through
@@ -96,7 +127,10 @@ four pole combinations — including the both-on hardware fault, which the
 header reports as `std::nullopt` instead of rebooting.
 
 `test_led_runner.cpp` instantiates the templated `LedRunner<Board>` against the
-stub `BoardStub`. The `hal_stub` component itself (the pin-free switches, LEDs,
+stub `BoardStub`. `test_toggle_switch.cpp` does the same for
+`ToggleSwitch<BoardStub>`: initial settle, `std::nullopt` before it, a single
+close, bounce coalescing, a later edge, destruction, and the pure stability
+boundary. The `hal_stub` component itself (the pin-free switches, LEDs,
 1-Wire bus, chip-temperature sensor, WiFi radio, and aggregate board) is covered
 by `components/hal/tests/test-hal-stub/`.
 

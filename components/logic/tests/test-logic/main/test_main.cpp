@@ -12,9 +12,12 @@
 //   ./build_linux/esp32_sensors_tests.elf'
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_err.h"
+#include "esp_timer.h"
 #pragma GCC diagnostic pop
 // NOLINTEND
 
+#include <cstdio>
 #include <cstdlib>
 
 #include "unity.h"
@@ -26,6 +29,20 @@ void setUp(void) {}
 void tearDown(void) {}
 
 extern "C" void app_main(void) {
+    // The host `esp_timer` implementation starts uninitialized; the board's
+    // startup code does this on the chip. `test_toggle_switch.cpp` creates
+    // `espidf_cpp::Timer`s, so initialize the library once for the suite.
+    const esp_err_t early = esp_timer_early_init();
+    if (early != ESP_OK) {
+        std::printf("esp_timer_early_init failed: %d\n", early);
+        std::exit(EXIT_FAILURE);
+    }
+    const esp_err_t init = esp_timer_init();
+    if (init != ESP_OK && init != ESP_ERR_INVALID_STATE) {
+        std::printf("esp_timer_init failed: %d\n", init);
+        std::exit(EXIT_FAILURE);
+    }
+
     // `unity_run_all_tests()` runs every registered case (printing PASS/FAIL)
     // and returns; it does not terminate the process. Exit explicitly with a
     // non-zero status when any case failed so `idf.py`/CI/shell can detect it,

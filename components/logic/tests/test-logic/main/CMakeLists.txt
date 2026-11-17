@@ -20,6 +20,7 @@ set(test_srcs
     "test_rtc_buffer.cpp"
     "test_mode_selection.cpp"
     "test_led_runner.cpp"
+    "test_toggle_switch.cpp"
     "test_reboot.cpp"
     "test_sequence_lock.cpp"
 )
