@@ -1,4 +1,4 @@
-// Tests for `SequenceLock<Model>` (`logic/sequence_lock.hpp`).
+// Tests for `SequenceLock<Model>` (`utility/sequence_lock.hpp`).
 //
 // The lock stores a versioned model: `read()` returns a `VersionedModel`
 // (model plus the sequence number it was read at) and retries while a writer
@@ -24,8 +24,8 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "logic/sequence_lock.hpp"
 #include "unity.h"
+#include "utility/sequence_lock.hpp"
 
 namespace {
 
