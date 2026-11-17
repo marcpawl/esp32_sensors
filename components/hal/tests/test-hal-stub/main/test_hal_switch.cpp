@@ -37,11 +37,22 @@ using thermo::hal::stub::Switch;
 // reports them back.
 constexpr int kSwitchGpio = 0;
 
+// GCC's analyzer cannot model libstdc++'s std::function internals and reports
+// the switch returned by create() as uninitialised. The code is correct; keep
+// the diagnostic fatal everywhere else.
+// NOLINTBEGIN
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
+
 Switch make_switch(int gpio = kSwitchGpio) {
     Switch b = Switch::create(gpio);
     b.init();
     return b;
 }
+
+#pragma GCC diagnostic pop
+
+// NOLINTEND
 
 // Records the calls a registered callback receives, so tests can assert on the
 // sequence of state changes. The callback reads the switch itself, so the log

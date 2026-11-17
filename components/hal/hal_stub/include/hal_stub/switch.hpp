@@ -43,7 +43,15 @@ class Switch {
     // Builds a stub switch for the given pin. Same signature for the hardware
     // and stub implementations; call init() before read().
     [[nodiscard]] static Switch create(int gpio) noexcept {
+        // GCC's analyzer cannot model libstdc++'s std::function internals and
+        // reports an uninitialized read while returning the switch by value.
+        // The code is correct; keep the diagnostic fatal everywhere else.
+        // NOLINTBEGIN
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
         return Switch(gpio);
+#pragma GCC diagnostic pop
+        // NOLINTEND
     }
 
     // No-op for the stub (there is no pin to configure); always succeeds.
