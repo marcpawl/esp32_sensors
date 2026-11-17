@@ -280,8 +280,10 @@ There are two kinds of test suite, runnable from the host via `scripts/dev.py`:
 
 Run the suites with `./scripts/dev.py test` (all five, stopping at the first
 failure), or run one with `test-hal-common`, `test-hal-stub`, `test-logic`,
-`test-espidf-cpp`, or `test-simulator`. See the `quality_checks` skill for the
-gates and the fixing
+`test-espidf-cpp`, or `test-simulator`. The on-target `esp_timer` suite runs
+with `./scripts/dev.py test-esp32-timer`: it builds the ESP32-S3 project,
+flashes it, and waits up to 120 seconds for the suite's sentinel on the serial
+port. See the `quality_checks` skill for the gates and the fixing
 policy.
 
 ### Quality checks

@@ -3,3 +3,8 @@ CONFIG_IDF_TARGET="linux"
 
 # Keep logging quiet during test runs; Unity prints the results we care about.
 CONFIG_LOG_DEFAULT_LEVEL_WARN=y
+
+# The shared cases assert on the 64-bit values `esp_timer` returns
+# (`int64_t` microseconds), so the suite needs the same Unity feature set on
+# both targets.
+CONFIG_UNITY_ENABLE_64BIT=y

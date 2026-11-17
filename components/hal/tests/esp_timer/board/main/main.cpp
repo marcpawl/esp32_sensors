@@ -41,7 +41,10 @@ extern "C" void app_main(void) {
 
     unity_run_all_tests();
 
-    std::printf("esp_timer board tests: %d failure(s)\n",
-                static_cast<int>(Unity.TestFailures));
+    const int failures = static_cast<int>(Unity.TestFailures);
+    std::printf("esp_timer board tests: %d failure(s)\n", failures);
+    // Machine-readable end-of-run line for `test.py`, which has no other way to
+    // learn the board's result. Keep it the last line the suite prints.
+    std::printf("ESP_TIMER_BOARD_TESTS: %s\n", failures == 0 ? "PASS" : "FAIL");
     std::fflush(stdout);
 }

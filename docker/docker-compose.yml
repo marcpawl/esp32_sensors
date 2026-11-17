@@ -26,7 +26,8 @@
 # The host `/dev` tree is bind-mounted into the container, so any USB serial
 # device that appears on the host (e.g. /dev/ttyUSB0, /dev/ttyACM0) is visible
 # inside the container. Serial access is granted by joining the host `dialout`
-# GID via `group_add`, so the container does NOT need --privileged.
+# and `plugdev` GIDs via `group_add`, so the container does NOT need
+# --privileged.
 #
 # Because `/dev` is bind-mounted, no device needs to be hard-coded in this
 # file — which also means `docker compose run` works fine when no board is
@@ -64,10 +65,14 @@ services:
     tty: true
     init: true
 
-    # Join the host `dialout` GID so serial devices in the bind-mounted /dev
-    # are readable/writable without --privileged.
+    # Join the host's serial groups so the board is readable without
+    # --privileged. `dialout` covers a USB-UART bridge; the ESP32-S3's own
+    # USB-serial/JTAG peripheral is often owned by `plugdev` instead, and the
+    # two nodes can appear with either group. The numeric defaults match
+    # Debian/Ubuntu (a host whose GIDs differ can override them).
     group_add:
       - "${DIALOUT_GID:-20}"
+      - "${PLUGDEV_GID:-46}"
 
     device_cgroup_rules:
       - 'c *:* rmw' # Essential: Allows container to read/write/make new char devices

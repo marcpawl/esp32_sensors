@@ -590,17 +590,25 @@ esp_err_t esp_timer_get_expiry_time(esp_timer_handle_t timer,
 }
 
 esp_err_t esp_timer_dump(FILE* stream) {
+    // Match the chip implementation: a null stream is not an error, it only
+    // asks for no output. Rejecting it here made the shared dump case pass on
+    // the host and fail on the board.
     if (stream == nullptr) {
-        return ESP_ERR_INVALID_ARG;
+        return ESP_OK;
     }
     std::lock_guard<std::mutex> const lock(g_mutex);
-    (void)fprintf(stream, "Name              | Period      | Alarm\n");
-    (void)fprintf(stream, "------------------|-------------|-------------\n");
+    // Mirror the chip's layout (a stats title, then a header, then one row per
+    // armed timer) so the text the shared case checks is the same on both
+    // targets. The chip does not retain names unless profiling is enabled;
+    // the stub does, and prints them.
+    (void)fprintf(stream, "Timer stats:\n");
+    (void)fprintf(stream, "%-20s  %-10s  %-12s\n", "Name", "Period", "Alarm");
     for (struct esp_timer* const timer : g_timers) {
         if (!timer->armed) {
             continue;
         }
-        (void)fprintf(stream, "%-17s | %-11llu | %llu\n", timer->name.c_str(),
+        (void)fprintf(stream, "%-20.20s  %-10llu  %-12llu\n",
+                      timer->name.c_str(),
                       static_cast<unsigned long long>(
                           timer->periodic ? timer->period.count() : 0),
                       static_cast<unsigned long long>(timer->expiry.count()));

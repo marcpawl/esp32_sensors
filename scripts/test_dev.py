@@ -1407,6 +1407,64 @@ class BuildProjectTests(unittest.TestCase):
                          "-DTHERMO_GCC_ANALYZER=OFF")
 
 
+class OnTargetTimerCommandTests(unittest.TestCase):
+    """`test-esp32-timer` builds the board suite, then runs its driver."""
+
+    def setUp(self):
+        # Record what would run instead of executing it. The driver itself is
+        # just a path here; `test.py` is exercised on the board, not by this
+        # host suite.
+        self.calls = []
+        self.hops = []
+        self._original_run = dev.run
+        self._original_change_to_container = dev.change_to_container
+        self._original_ensure_submodules = dev._ensure_submodules
+
+        def fake_run(cmd, cwd=dev.REPO_ROOT):
+            self.calls.append(list(cmd))
+            return 0
+
+        def fake_change_to_container():
+            self.hops.append(True)
+
+        dev.run = fake_run
+        dev.change_to_container = fake_change_to_container
+        dev._ensure_submodules = lambda: 0
+
+    def tearDown(self):
+        dev.run = self._original_run
+        dev.change_to_container = self._original_change_to_container
+        dev._ensure_submodules = self._original_ensure_submodules
+
+    def test_registered(self):
+        self.assertIn("test-esp32-timer", dev.COMMANDS)
+        self.assertIs(
+            dev.COMMANDS["test-esp32-timer"], dev.cmd_test_esp32_timer
+        )
+
+    def test_builds_the_board_project_then_runs_its_driver(self):
+        self.assertEqual(dev.cmd_test_esp32_timer(), 0)
+        self.assertEqual(len(self.hops), 1)
+        self.assertEqual(
+            self.calls,
+            [
+                dev._idf(
+                    dev.ESP_TIMER_BOARD_PROJECT,
+                    dev.FW_BUILD_DIR,
+                    "-DTHERMO_GCC_ANALYZER=OFF",
+                    "build",
+                ),
+                [
+                    sys.executable,
+                    str(
+                        Path(dev.project_dir(dev.ESP_TIMER_BOARD_PROJECT))
+                        / "test.py"
+                    ),
+                ],
+            ],
+        )
+
+
 class GitHooksInstallationTests(unittest.TestCase):
     """`install-hooks` invariants: the tracked hook is present and active.
 
@@ -2625,12 +2683,13 @@ class PythonSourceDiscoveryTests(unittest.TestCase):
     # -- the real repository ------------------------------------------------
 
     def test_the_repository_enumerates_its_expected_python_sources(self):
-        # Pins the actual set: the two dev.py scripts. A new Python source is
-        # meant to be noticed here, so this list is a deliberate tripwire
-        # rather than an over-broad assertion.
+        # Pins the actual set: the two dev.py scripts and the on-target test
+        # driver. A new Python source is meant to be noticed here, so this list
+        # is a deliberate tripwire rather than an over-broad assertion.
         self.assertEqual(
             dev.python_sources(),
             [
+                "components/hal/tests/esp_timer/board/test.py",
                 "scripts/dev.py",
                 "scripts/test_dev.py",
             ],

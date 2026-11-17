@@ -11,8 +11,8 @@
 # Usage:
 #   scripts/dev.py [pull|image|submodules|build|build-test-espidf-cpp|flash|\
 #                   monitor|menuconfig|test|test-hal-common|test-hal-stub|\
-#                   test-logic|test-espidf-cpp|test-simulator|self-check|\
-#                   format|format-check|\
+#                   test-logic|test-espidf-cpp|test-simulator|\
+#                   test-esp32-timer|self-check|format|format-check|\
 #                   format-check-staged|pycodestyle|clang-tidy|install-hooks|\
 #                   shell]
 #   scripts/dev.py --help        # full help, including per-command details
@@ -920,6 +920,21 @@ def cmd_test_simulator() -> int:
     return _run_host_tests((TEST_SIMULATOR_PROJECT,))
 
 
+def cmd_test_esp32_timer() -> int:
+    """Build, flash, and run the on-target `esp_timer` suite (ESP32-S3)."""
+    change_to_container()
+    rc = _ensure_submodules()
+    if rc != 0:
+        return rc
+    # Building here separates a compile failure from a test failure; the
+    # driver's own `idf.py flash` then finds the tree up to date.
+    rc = _build_project(ESP_TIMER_BOARD_PROJECT)
+    if rc != 0:
+        return rc
+    script = Path(project_dir(ESP_TIMER_BOARD_PROJECT)) / "test.py"
+    return run([sys.executable, str(script)])
+
+
 def cmd_test() -> int:
     """Run every host unit test suite, `test-hal-common` first.
 
@@ -1734,6 +1749,7 @@ COMMANDS = {
     "test-logic": cmd_test_logic,
     "test-espidf-cpp": cmd_test_espidf_cpp,
     "test-simulator": cmd_test_simulator,
+    "test-esp32-timer": cmd_test_esp32_timer,
     "self-check": cmd_self_check,
     "format": cmd_format,
     "format-check": cmd_format_check,

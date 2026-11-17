@@ -28,6 +28,7 @@ invoked from the host.
 | both | `test-logic` | Build and run the `test-logic/` suite |
 | both | `test-espidf-cpp` | Build and run the `test-espidf-cpp/` suite |
 | both | `test-simulator` | Build and run the `test-simulator/` suite |
+| both | `test-esp32-timer` | Build, flash, and run the on-target `esp_timer` suite (120 s limit) |
 | both | `self-check` | Run the host unit tests for `dev.py` itself (host only) |
 | both | `flash` | `idf.py flash monitor` |
 | both | `monitor` | `idf.py monitor` |
