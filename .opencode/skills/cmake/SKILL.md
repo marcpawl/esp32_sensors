@@ -40,6 +40,31 @@ Comments explain *why* the build is configured the way it is:
 
 They never explain what the code does.
 
+## Warning-free configures
+
+Every project must configure without CMake warnings, with one exception. A
+project that links `esp_wifi` — today only `mcgowan` — prints five warnings
+from ESP-IDF's `component_validation.cmake` on every configure. Each names
+`esp_wifi` or `wpa_supplicant` and reports an include directory that "belongs
+to component ... but is being used by component ...". They are not this
+repository's configuration: ESP-IDF registers those two components with each
+other's private include directories (see espressif/esp-idf#17840,
+IDFGH-16756). Espressif's hotfix is on its v6.0 branch only, and the pinned
+`espressif/idf:release-v6.1` base image does not carry it.
+
+- Treat a build as warning-free when those five are the only `CMake Warning`
+  lines; any other warning is ours to fix.
+- Check a project with `idf.py -C <project> -B <build dir> reconfigure` and
+  grep the output for `CMake Warning`. A project that does not link `esp_wifi`
+  must report none.
+- Delete this section once the base image in `docker/Dockerfile` carries the
+  fix.
+
+Keep a project's `COMPONENTS` list as small as its `main` needs. Left
+unrestricted it builds every default IDF component, which is slow and pulls
+in `esp_wifi` even for a test that never touches Wi-Fi — the on-target
+`esp_timer` tests did exactly that.
+
 ## Adding a source
 
 A new `.cpp` file has to be listed wherever its target collects sources —
