@@ -35,3 +35,12 @@ idf_component_register(
 set_source_files_properties(
     "test_http_server.cpp"
     PROPERTIES COMPILE_OPTIONS "-Wno-analyzer-use-of-uninitialized-value")
+
+# GCC's analyzer cannot model how std::optional initialises its payload from
+# Lock's move constructor, and reports a use of an uninitialized value while
+# inlining Lock::try_lock() in test_mutex.cpp. The wrapper's move is correct
+# (it exchanges the mutex pointer and the moved-from Lock is empty), so
+# disable that one category for this file only; it stays fatal everywhere else.
+set_source_files_properties(
+    "test_mutex.cpp"
+    PROPERTIES COMPILE_OPTIONS "-Wno-analyzer-use-of-uninitialized-value")
