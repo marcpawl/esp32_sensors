@@ -50,7 +50,7 @@ constexpr const char* kTag = "run";
 // Builds a fixed-size sample record from a reading set (§4.1); `age_base` and
 // `batt_mv` are the record's first two fields, in layout order.
 SampleRecord make_record(std::uint32_t age_base, std::uint16_t batt_mv,
-                         const std::vector<DS18B20Reading>& readings) {
+                         const ReadingList& readings) {
     SampleRecord rec{};
     rec.age_base = age_base;
     rec.batt_mv = batt_mv;
@@ -97,8 +97,8 @@ std::vector<payload::NamedSample> collect_batch(const RtcState& st) {
 // NOLINTEND
 
 // Friendly names in column order, padded to the sensor count (§5.1.3).
-std::vector<std::string> names_for(
-    const Config& cfg, const std::vector<DS18B20Reading>& readings) {
+std::vector<std::string> names_for(const Config& cfg,
+                                   const ReadingList& readings) {
     std::vector<std::string> names;
     names.reserve(limits::kSensorCount);
     for (std::size_t i = 0; i < limits::kSensorCount && i < readings.size();
@@ -118,8 +118,7 @@ std::vector<std::string> names_for(
 // STUB: §3.5 batch upload. The payload is fully formatted (§9) and logged so
 // the wire format can be reviewed, but no connection is attempted yet. Returns
 // false to represent "not yet implemented", which triggers backoff (§3.7).
-bool stub_upload(const Config& cfg, RtcState& st,
-                 const std::vector<DS18B20Reading>& readings) {
+bool stub_upload(const Config& cfg, RtcState& st, const ReadingList& readings) {
     const auto batch = collect_batch(st);
     const std::string json = payload::build_batch_json(
         cfg.dev_name, names_for(cfg, readings), batch);
@@ -168,8 +167,8 @@ template<hal::BoardLike Board>
 
     // Prefer cached ROM IDs (§3.4: no bus scan on wake). On first boot the
     // cache is empty and SensorManager scans, then we retain the result.
-    std::vector<RomId> cached(st.rom_ids.begin(), st.rom_ids.end());
-    std::vector<RomId> discovered;
+    const RomIdList cached(st.rom_ids.begin(), st.rom_ids.end());
+    RomIdList discovered;
     const auto readings = sensors.read_all(cached, &discovered);
     if (st.rom_ids.empty() && !discovered.empty()) {
         st.rom_ids.clear();

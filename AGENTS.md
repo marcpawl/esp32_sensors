@@ -29,6 +29,7 @@ esp32_sensors/
 ├── CMakeLists.txt       # Root aggregator (plain CMake) — builds all subprojects
 ├── mcgowan/             # Production Firmware app_main
 ├── components/          # Reusable ESP-IDF components 
+│   ├── utility/         #   The lowest layer: fixed-capacity containers (static_vector/string)
 │   ├── hal/             #   The hardware-abstraction layer (see "HAL" section)
 │   ├── espidfcpp/       #   C++ wrappers over ESP-IDF/FreeRTOS (Task, queue, handles, ...)
 │   ├── logic/           #   Board-independent business logic
@@ -191,7 +192,7 @@ symptom, not a fix; `ClionRunConfigurationTests` pins both invariants.
 | Linux app (donny, container CMake) | CMake | Builds the `donny_build` aggregate target via the `Linux app (donny)` profile |
 | Build firmware (container) | `scripts/dev.py build` | `idf.py -C mcgowan -B mcgowan/build_esp32s3 build` (and the other subprojects) |
 | Flash & monitor (container) | `scripts/dev.py flash` | `idf.py -C mcgowan -B mcgowan/build_esp32s3 -p $ESP32_PORT flash monitor` (default `/dev/ttyUSB0`) |
-| Host unit tests (container) | `scripts/dev.py test` | runs all five host test suites (below), `test-hal-common` first and `test-hal-stub` next; each suite also has a command that runs it alone |
+| Host unit tests (container) | `scripts/dev.py test` | runs all six host test suites (below) in layer order; each suite also has a command that runs it alone |
 | clang-format check (container) | `scripts/dev.py format-check` | `clang-format --dry-run --Werror` |
 | menuconfig (container) | `scripts/dev.py menuconfig` | Kconfig UI |
 | Container shell (ESP-IDF) | `scripts/dev.py shell` | login shell with the IDF env sourced (accepts trailing args to run a command) |
@@ -250,8 +251,11 @@ plugged in at any time and it will be accessible by the container.
 There are two kinds of test suite, runnable from the host via `scripts/dev.py`:
 
 - **Host-based unit tests** build for the ESP-IDF `linux` target with Unity —
-  no hardware needed — in five projects:
+  no hardware needed — in six projects:
 
+  - `components/utility/tests/test-utility/` — the shared fixed-capacity
+    containers (`static_vector`, `static_string`); what each test pins is
+    described in `components/utility/AGENTS.md`.
   - `test-hal-stub/` — the pin-free `hal_stub` devices; what each test pins is
     described in `components/hal/AGENTS.md`.
   - `test-hal-common/` — the implementation-free `hal_common` vocabulary; what
@@ -278,13 +282,20 @@ There are two kinds of test suite, runnable from the host via `scripts/dev.py`:
   `mcgowan/main/CMakeLists.txt` and
   `components/logic/tests/test-logic/main/CMakeLists.txt`.
 
-Run the suites with `./scripts/dev.py test` (all five, stopping at the first
-failure), or run one with `test-hal-common`, `test-hal-stub`, `test-logic`,
-`test-espidf-cpp`, or `test-simulator`. The on-target `esp_timer` suite runs
-with `./scripts/dev.py test-esp32-timer`: it builds the ESP32-S3 project,
-flashes it, and waits up to 120 seconds for the suite's sentinel on the serial
-port. See the `quality_checks` skill for the gates and the fixing
-policy.
+Run every suite with `./scripts/dev.py test`, which stops at the first
+failure. Each suite also runs alone:
+
+- `test-utility`
+- `test-hal-common`
+- `test-hal-stub`
+- `test-logic`
+- `test-espidf-cpp`
+- `test-simulator`
+
+The on-target `esp_timer` suite runs with `./scripts/dev.py test-esp32-timer`:
+it builds the ESP32-S3 project, flashes it, and waits up to 120 seconds for
+the suite's sentinel on the serial port. See the `quality_checks` skill for
+the gates and the fixing policy.
 
 ### Quality checks
 

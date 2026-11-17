@@ -37,14 +37,16 @@ ScanSnapshot make_snapshot(Config& cfg, SensorManager& sensors,
 
     // Read every sensor whose ROM ID is known from the mapping table. When the
     // table is empty (fresh device), SensorManager performs a bus scan.
-    std::vector<RomId> roms;
+    hal::RomIdList roms;
     for (const auto& m : cfg.mappings) {
         if (auto rom = rom_id_from_hex(m.rom)) {
-            roms.push_back(*rom);
+            if (!roms.try_push_back(*rom)) {
+                break;  // §2.1: at most kMaxSensors sensors are logged.
+            }
         }
     }
 
-    std::vector<RomId> discovered;
+    hal::RomIdList discovered;
     snap.sensors = sensors.read_all(roms, &discovered);
 
     // Seed the mapping table with any newly discovered ROM IDs so they appear

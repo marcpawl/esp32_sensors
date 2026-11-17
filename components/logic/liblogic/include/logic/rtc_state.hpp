@@ -24,11 +24,11 @@
 #include <cstdint>
 #include <type_traits>
 
-#include "espidf_cpp/static_vector.hpp"  // static_vector
-#include "hal/ds18b20_types.hpp"         // RomId
-#include "logic/led_manager.hpp"         // TxState
-#include "logic/limits.hpp"              // kSensorCount, kMaxBufferRecords
-#include "logic/temp_format.hpp"         // kTempNull
+#include "hal/ds18b20_types.hpp"      // RomId
+#include "logic/led_manager.hpp"      // TxState
+#include "logic/limits.hpp"           // kSensorCount, kMaxBufferRecords
+#include "logic/temp_format.hpp"      // kTempNull
+#include "utility/static_vector.hpp"  // static_vector
 
 namespace thermo {
 
@@ -71,12 +71,18 @@ struct RtcState {
     std::uint32_t boot_count = 0;
     std::uint8_t fail_count = 0;
     std::uint8_t tx_state = static_cast<std::uint8_t>(TxState::kTxOk);
-    espidf_cpp::static_vector<SampleRecord, limits::kMaxBufferRecords> buffer{};
+    utility::static_vector<SampleRecord, limits::kMaxBufferRecords> buffer{};
     std::uint32_t next_sample_at = 0;
-    espidf_cpp::static_vector<RomId, limits::kSensorCount> rom_ids{};
+    utility::static_vector<RomId, limits::kSensorCount> rom_ids{};
     WifiCache wifi = {};
     std::uint8_t last_upload_ok = 0;
 };
+
+// The cached ROM IDs must be able to hold every sensor the bus can report
+// (§2.1). A larger application limit would not fit the bus result, and a
+// smaller one would silently drop a sensor.
+static_assert(limits::kSensorCount == hal::kMaxSensors,
+              "the RTC cache must match the 1-Wire bus capacity");
 
 // RTC memory is restored verbatim from the previous boot, so the block is
 // copied with a byte blit (and lives in a hardware-retained section): it must

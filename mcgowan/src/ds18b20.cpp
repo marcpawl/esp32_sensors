@@ -36,18 +36,11 @@ std::uint8_t crc8(const std::uint8_t* data, std::size_t len) {
 
 }  // namespace
 
-// GCC's analyzer cannot model libstdc++'s std::vector internals and reports
-// the result as uninitialised. The code is correct; keep the diagnostic fatal
-// everywhere else.
-// NOLINTBEGIN
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
-
-std::vector<RomId> Ds18b20::scan() {
+RomIdList Ds18b20::scan() {
     // Full ROM search (binary tree walk) is not implemented; this simple form
     // works only when a single device is present. Run mode avoids scanning
     // entirely by using cached ROM IDs (§3.4).
-    std::vector<RomId> found;
+    RomIdList found;
     if (!bus_.reset()) {
         return found;
     }
@@ -58,14 +51,10 @@ std::vector<RomId> Ds18b20::scan() {
     }
     if (id.bytes[0] == kFamilyDs18b20 &&
         crc8(id.bytes.data(), 7) == id.bytes[7]) {
-        found.push_back(id);
+        found.try_push_back(id);
     }
     return found;
 }
-
-#pragma GCC diagnostic pop
-
-// NOLINTEND
 
 esp_err_t Ds18b20::start_conversion() {
     // GCC's analyzer cannot model the 1-Wire bus calls and reports them as

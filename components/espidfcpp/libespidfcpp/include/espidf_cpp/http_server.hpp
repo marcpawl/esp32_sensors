@@ -66,9 +66,11 @@
 #include <cstdint>
 
 #include "espidf_cpp/http_server_types.hpp"
-#include "espidf_cpp/static_string.hpp"
+#include "utility/static_string.hpp"
 
 namespace thermo::espidf_cpp {
+
+using thermo::utility::static_string;
 
 // The HTTP server.
 //

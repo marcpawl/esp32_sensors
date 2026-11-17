@@ -20,8 +20,6 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
-#include <vector>
-
 #include "hal/onewire_types.hpp"
 
 namespace thermo::hal::stub {
@@ -43,15 +41,7 @@ class OneWire {
     // Builds a stub bus for the given pin. Same signature for the hardware and
     // stub implementations; call init() before discover_sensors()/read().
     [[nodiscard]] static OneWire create(int gpio) noexcept {
-        // GCC's analyzer cannot model libstdc++'s std::vector internals and
-        // reports an uninitialised read while returning the bus by value. The
-        // code is correct; keep the diagnostic fatal everywhere else.
-        // NOLINTBEGIN
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
         return OneWire(gpio);
-#pragma GCC diagnostic pop
-        // NOLINTEND
     }
 
     // No-op for the stub (there is no pin to configure); always succeeds.
@@ -59,18 +49,18 @@ class OneWire {
 
     // Returns the ROM IDs of the sensors previously set with `set_sensors()`,
     // in order (extracted from the readings).
-    [[nodiscard]] std::vector<RomId> discover_sensors() const noexcept;
+    [[nodiscard]] RomIdList discover_sensors() const noexcept;
 
     // Returns the readings previously set with `set_sensors()`, in order.
-    [[nodiscard]] std::vector<DS18B20Reading> read() const noexcept;
+    [[nodiscard]] ReadingList read() const noexcept;
 
     // Sets the sensor readings reported by subsequent `read()` and
     // `discover_sensors()` calls; the ROM IDs are extracted from the readings.
     // Intended for host tests.
-    void set_sensors(std::vector<DS18B20Reading> readings) noexcept;
+    void set_sensors(ReadingList readings) noexcept;
 
   private:
-    std::vector<DS18B20Reading> sensors_;
+    ReadingList sensors_;
 };
 
 static_assert(OneWireLike<OneWire>,

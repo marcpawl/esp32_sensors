@@ -89,8 +89,9 @@ resulting state back as one JSON line on stdout.
   below — `wifi.ap` / `wifi.station` when the interface is down.
 - **Fields.** `button`, `config_button`, `run_button` (`"on"`/`"off"`);
   `leds.{green,red}` (`"on"`/`"off"`, a JSON bool is accepted on input);
-  `chip_temp_c_x100` (int16); `sensors` (an array of `{rom, temp_c_x100}`, a
-  complete replacement of the bus, `null` temperature for a failed reading);
+  `chip_temp_c_x100` (int16); `sensors` (an array of at most three
+  `{rom, temp_c_x100}`, a complete replacement of the bus, `null` temperature
+  for a failed reading; more than three entries is a validation error);
   `wifi.{initialized, ap_running, station_running, ap, station}`;
   `deep_sleep.last_s` (`null` until the board has slept).
 - **WiFi config is start-only.** The HAL can record a configuration *solely* by

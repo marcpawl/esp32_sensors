@@ -11,12 +11,12 @@
 // NOLINTEND
 
 #include <optional>
-#include <vector>
 
 #include <cstddef>
 #include <cstdint>
 
 #include "hal/ds18b20_types.hpp"  // RomId, DS18B20Reading
+#include "hal/onewire_types.hpp"  // RomIdList, ReadingList
 
 namespace thermo {
 
@@ -25,7 +25,9 @@ namespace thermo {
 // the configuration UI, and host tests all agree on one definition. Re-export
 // them into `thermo` for convenience.
 using thermo::hal::DS18B20Reading;
+using thermo::hal::ReadingList;
 using thermo::hal::RomId;
+using thermo::hal::RomIdList;
 
 // Low-level 1-Wire bus operations. Bit-banged on a single GPIO since ESP-IDF
 // v6.1 ships no DS18B20 driver.
@@ -66,7 +68,7 @@ class Ds18b20 {
 
     // Scans the bus for DS18B20 devices (family code 0x28). Used at first boot
     // and in Configure mode; Run mode uses cached ROM IDs instead (§3.4).
-    std::vector<RomId> scan();
+    RomIdList scan();
 
     // Starts a temperature conversion on all devices (SKIP ROM + CONVERT T).
     esp_err_t start_conversion();
@@ -88,8 +90,7 @@ class SensorManager {
 
     // Reads all known sensors. When `roms` is empty, a bus scan is performed
     // and the discovered ROM IDs are returned via `out_roms`.
-    std::vector<DS18B20Reading> read_all(const std::vector<RomId>& roms,
-                                         std::vector<RomId>* out_roms);
+    ReadingList read_all(const RomIdList& roms, RomIdList* out_roms);
 
   private:
     OneWireBus bus_;

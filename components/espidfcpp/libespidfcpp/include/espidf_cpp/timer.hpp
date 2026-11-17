@@ -25,9 +25,11 @@
 #include <cstdint>
 #include <cstdlib>
 
-#include "espidf_cpp/static_string.hpp"
+#include "utility/static_string.hpp"
 
 namespace thermo::espidf_cpp {
+
+using thermo::utility::static_string;
 
 // Maximum stored timer-name length, matching the task-name bound.
 inline constexpr std::size_t kTimerNameCapacity = 32;

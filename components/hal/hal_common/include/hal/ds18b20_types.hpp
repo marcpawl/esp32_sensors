@@ -30,6 +30,11 @@ namespace thermo::hal {
 // A DS18B20 ROM ID is always 8 bytes (family code + serial + CRC).
 inline constexpr std::size_t kRomIdBytes = 8;
 
+// The shared bus carries at most three DS18B20 sensors (§2.1). This is the
+// capacity of the fixed-capacity lists the HAL hands back, so a discovery or a
+// reading never touches the heap.
+inline constexpr std::size_t kMaxSensors = 3;
+
 // 8-byte DS18B20 ROM ID. The raw device identity; see `logic/rom_id.hpp` to
 // render it as the §5.1.3 / §6.1 uppercase hex key or to parse one.
 struct RomId {

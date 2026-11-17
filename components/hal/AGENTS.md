@@ -51,6 +51,22 @@ detection, debouncing, hold timing) is the caller's job. Every device follows
 the same rule: the HAL moves bytes and reports state, it never decides what
 that state means.
 
+## The 1-Wire bus returns fixed-capacity lists
+
+The bus reports its results as two fixed-capacity lists:
+
+- `OneWire::discover_sensors()` returns `hal::RomIdList`;
+- `OneWire::read()` returns `hal::ReadingList`.
+
+Both are `utility::static_vector`s with `hal::kMaxSensors` (§2.1,
+three sensors) slots, so discovery and reading never touch the heap.
+That is also why the firmware and the simulator build under
+`-fanalyzer` without a diagnostic suppression around the bus.
+
+A bus with more devices than the capacity reports the first `kMaxSensors`
+of them. The `hal_stub` mirror stores its collection the same way, and its
+`set_sensors()` takes the same list type.
+
 ## The mode switch is not a HAL device
 
 ESP-IDF has no direct notion of a DPDT switch, so the board models each of its

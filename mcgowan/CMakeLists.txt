@@ -29,6 +29,8 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 # component directory one level deep, so a grouping directory is not descended
 # into.
 list(APPEND EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../components")
+list(APPEND EXTRA_COMPONENT_DIRS
+    "${CMAKE_CURRENT_LIST_DIR}/../components/utility")
 list(APPEND EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/../components/hal")
 list(APPEND EXTRA_COMPONENT_DIRS
     "${CMAKE_CURRENT_LIST_DIR}/../components/espidfcpp")

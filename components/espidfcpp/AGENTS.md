@@ -33,10 +33,12 @@ usage less error prone. The headers are in namespace `thermo::espidf_cpp`
 | `espidf_cpp/task.hpp` | `Task<Runner>` (typed `[[noreturn]]` task body), `TaskParams` |
 | `espidf_cpp/one_message_queue.hpp` | `OneMessageQueue<T>` (single-slot, trivially-copyable messages) |
 | `espidf_cpp/handle.hpp` | `HandleDeleter`, `UniqueTaskHandle`, `UniqueQueueHandle` |
-| `espidf_cpp/static_vector.hpp` | fixed-capacity, inline-storage vector |
-| `espidf_cpp/static_string.hpp` | fixed-capacity, NUL-terminated string (`try_push_back` / `try_append` for the non-aborting path) |
 | `espidf_cpp/http_server_types.hpp` | `HttpServer` vocabulary: `HttpMethod`, `HttpField(s)`, `HttpRequest`, `HttpStatus`, `HttpResponse`, `HttpHandler`, `parse_int`, `normalize_url` (no ESP-IDF dependency) |
 | `espidf_cpp/http_server.hpp` | `HttpServer<BodyCapacity>` — prefix routes over `esp_http_server` with one GET/POST handler each; fixed-size request/response buffers, bad input becomes an HTTP error (never an abort) |
+
+The fixed-capacity containers (`static_vector`, `static_string`) live in
+the lower `libutility` layer, not here; the wrappers use them from
+`utility/`. See `components/utility/AGENTS.md`.
 
 **New `.cpp` files must be added to the `SRCS` list in
 `libespidfcpp/CMakeLists.txt`.** The headers are always included with the
@@ -50,11 +52,6 @@ The test project lives in `tests/test-espidf-cpp/` and covers the wrappers:
 - `test_one_message_queue.cpp` — the single-slot queue: creation, send and
   receive, overwrite semantics, the tick and chrono timeouts, the ISR send,
   and that copies are disabled while moves transfer the handle.
-- `test_static_vector.cpp` — growth, clearing, `try_push_back`, `emplace_back`,
-  `resize`, iterators, and the abort paths when the capacity is exceeded.
-- `test_static_string.cpp` — construction, appending, assignment,
-  `try_push_back` / `try_append`, comparison and ordering, embedded NULs, and
-  the abort paths past capacity.
 - `test_http_server_types.cpp` — the vocabulary header, which has no ESP-IDF
   dependency: method and status text, `normalize_url`, `parse_int`, field
   lookup, and the fixed-capacity request and field types.
@@ -66,15 +63,6 @@ The test project lives in `tests/test-espidf-cpp/` and covers the wrappers:
 
 `task.hpp` needs a real FreeRTOS scheduler, so the host suite does not exercise
 it; it is verified on the target.
-
-The abort paths use standalone programs whose names end in `_assert`
-(`test_static_vector_assert.cpp`, `test_static_string_assert.cpp`), with the
-case tables in the matching `*_assert_cases.hpp` headers. Each program takes a
-test-case name as its only argument and exits 0 when the argument is missing or
-unknown; the Unity test forks and execs it with a case name and confirms the
-child aborted. The forking helpers are in `assert_test_support.hpp` (plain
-program side, no Unity) and `assert_unity_support.hpp` (test side). Keep new
-abort coverage in that shape.
 
 Build and run the suite with `scripts/dev.py test-espidf-cpp`, or directly in
 the container:
