@@ -22,7 +22,6 @@ set(test_srcs
     "test_led_runner.cpp"
     "test_toggle_switch.cpp"
     "test_reboot.cpp"
-    "test_sequence_lock.cpp"
 )
 
 # Production sources under test (paths are relative to this component dir).

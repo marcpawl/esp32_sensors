@@ -6,6 +6,7 @@ set(test_srcs
     "test_main.cpp"
     "test_static_vector.cpp"
     "test_static_string.cpp"
+    "test_sequence_lock.cpp"
 )
 
 idf_component_register(
