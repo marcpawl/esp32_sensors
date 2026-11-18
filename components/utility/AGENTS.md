@@ -101,7 +101,9 @@ child aborted. The forking helpers are in `assert_test_support.hpp` (plain
 program side, no Unity) and `assert_unity_support.hpp` (test side). Keep new
 abort coverage in that shape.
 
-Run the suite with `scripts/dev.py test-utility`, or directly in the container:
+Run the suite with
+`scripts/dev.py test-linux components/utility/tests/test-utility`, or directly
+in the container:
 
 ```bash
 scripts/dev.py shell -C components/utility/tests/test-utility \

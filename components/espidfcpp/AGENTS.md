@@ -80,8 +80,9 @@ The test project lives in `tests/test-espidf-cpp/` and covers the wrappers:
 `task.hpp` needs a real FreeRTOS scheduler, so the host suite does not exercise
 it; it is verified on the target.
 
-Build and run the suite with `scripts/dev.py test-espidf-cpp`, or directly in
-the container:
+Build and run the suite with
+`scripts/dev.py test-linux components/espidfcpp/tests/test-espidf-cpp`, or
+directly in the container:
 
 ```bash
 scripts/dev.py shell -C components/espidfcpp/tests/test-espidf-cpp \

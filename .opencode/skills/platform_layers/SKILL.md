@@ -102,7 +102,7 @@ the lowest layer to the highest.
 1. `mcgowan`
 2. `donny`
 
-`./scripts/dev.py test` runs the suites in this order:
+`./scripts/dev.py test-linux` runs the suites in this order:
 
 1. `test-utility`
 2. `test-hal-common`

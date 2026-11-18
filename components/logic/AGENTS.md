@@ -103,8 +103,9 @@ by `components/hal/tests/test-hal-stub/`.
 **Keep it that way** — put pure logic in these files and hardware/IDF calls
 behind them.
 
-Build and run the suite with `scripts/dev.py test-logic`, or directly in the
-container:
+Build and run the suite with
+`scripts/dev.py test-linux components/logic/tests/test-logic`, or directly in
+the container:
 
 ```bash
 scripts/dev.py shell -C components/logic/tests/test-logic \

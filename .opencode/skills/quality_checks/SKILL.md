@@ -1,7 +1,7 @@
 ---
 name: quality_checks
 description: Run this repository's quality gates (clang-format, pycodestyle,
-  clang-tidy, build, the six host test suites, and the dev.py self-check) and
+  clang-tidy, build, the seven host test suites, and the dev.py self-check) and
   fix what they report. Use before committing, before opening or updating a
   pull request, or whenever asked to verify quality.
 ---
@@ -18,22 +18,18 @@ commands with ad-hoc `docker compose run`.
 | Gate | Command | What it checks |
 |---|---|---|
 | Python style | `./scripts/dev.py pycodestyle` | PEP 8 with pycodestyle's defaults (79 columns). Every `*.py` file **and** every extensionless Python shebang script; `third_party/` is excluded. |
-| Build | `./scripts/dev.py build [SUBPROJECT...]` | All subprojects through the root aggregator, or just the named ones (`mcgowan`, `test-utility`, `test-hal-stub`, `test-hal-common`, `test-logic`, `test-espidf-cpp`, `test-simulator`, `donny`, `test-esp_timer-stub`, `test-esp_timer-board`). Fetches the pinned submodules first. Warnings are errors in this repository's own code (`cmake/compiler-warnings.cmake`); ESP-IDF and `third_party/` keep their upstream defaults. |
-| Static analysis | `./scripts/dev.py clang-tidy [DIRECTORY\|PROJECT...] [--fix]` | The repository's `.clang-tidy` check set plus clang-tidy's defaults (`clang-diagnostic-*`, `clang-analyzer-*`) over every C++ source under a named directory (which may include projects that are not analyzed subprojects), or over an analyzed subproject (`project:NAME` forces the project over a directory of the same name). `--fix` applies the suggested fixes in place (re-run `format` afterwards). **Reads the compile databases; it never builds them**, so `build` must have run first. Vendored code is excluded. |
-| Formatting (apply) | `./scripts/dev.py format` | clang-format over the tracked **and untracked** C/C++ sources under `mcgowan/` and `components/` (which now holds every host suite and the simulator application). |
-| Formatting (check) | `./scripts/dev.py format-check` | Same file set as `format`, fails instead of editing. |
-| Formatting (staged) | `./scripts/dev.py format-check-staged` | clang-format over the **staged** content only, honouring nested `.clang-format` / `.clang-format-ignore` files. This is the hook's variant. |
-| Tests | `./scripts/dev.py test` | Every host suite, in order: `test-utility`, `test-hal-common`, `test-hal-stub`, `test-logic`, `test-espidf-cpp`, `test-simulator`. Stops at the first failure. |
+| Build | `./scripts/dev.py build [DIRECTORY...]` | Every discovered ESP-IDF project in/under the directories (from the repository root, all of them through the root aggregator). Fetches the pinned submodules first. Warnings are errors in this repository's own code (`cmake/compiler-warnings.cmake`); ESP-IDF and `third_party/` keep their upstream defaults. |
+| Static analysis | `./scripts/dev.py clang-tidy [DIRECTORY...] [--fix]` | The repository's `.clang-tidy` check set plus clang-tidy's defaults (`clang-diagnostic-*`, `clang-analyzer-*`) over every C++ source under the directories (default: the current directory); a directory that is itself an ESP-IDF project uses that project's compile database, any other draws from every database below it. `--fix` applies the suggested fixes in place (re-run `format` afterwards). **Reads the compile databases; it never builds them**, so `build` must have run first. Vendored code is excluded. |
+| Formatting (apply) | `./scripts/dev.py format [DIRECTORY...]` | clang-format over the tracked **and untracked** C/C++ sources in or under the directories (default: the current directory; from the repository root that is `mcgowan/` and `components/`). |
+| Formatting (check) | `./scripts/dev.py format-check [DIRECTORY...]` | Same file set as `format`, fails instead of editing. |
+| Formatting (staged) | `./scripts/dev.py format-check-staged [DIRECTORY...]` | clang-format over the **staged** content in or under the directories, honouring nested `.clang-format` / `.clang-format-ignore` files. This is the hook's variant. |
+| Tests | `./scripts/dev.py test-linux [DIRECTORY...]` | Every discovered host (`linux`) suite, in path order (or only those in/under the directories; default: the current directory). Stops at the first failure. |
+| On-target tests | `./scripts/dev.py test-esp32 [DIRECTORY...]` | Every discovered non-`linux` test project under a `tests/` directory is built, flashed, and run through its `test.py` driver. Needs the board and `ESP32_PORT`; not part of the CI gates. |
 | Harness self-check | `./scripts/dev.py self-check` | Stdlib unit tests for `scripts/dev.py` itself. **Host-only**: it refuses to run in the container (the host-side decisions it pins never happen there, and the container has no Docker daemon). It needs Docker and the pulled image, because a few probes run the pinned image's shells; without either, those probes fail and name the pull command. CI runs it on the runner. |
 
-Each host suite is also available on its own:
-
-- `test-utility`
-- `test-hal-common`
-- `test-hal-stub`
-- `test-logic`
-- `test-espidf-cpp`
-- `test-simulator`
+Run one suite with its directory, e.g.
+`./scripts/dev.py test-linux components/utility/tests/test-utility`; there are
+no per-suite commands.
 
 ## Order to run them
 
@@ -44,7 +40,7 @@ Cheapest first:
    tree)
 3. `./scripts/dev.py build`
 4. `./scripts/dev.py clang-tidy`
-5. `./scripts/dev.py test`
+5. `./scripts/dev.py test-linux`
 
 CI (`build-and-test` in `.github/workflows/ci.yml`) adds
 `./scripts/dev.py self-check` before them and runs `format-check` (not the

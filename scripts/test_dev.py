@@ -142,40 +142,29 @@ class ResolveContainerDirectoryTests(unittest.TestCase):
 class SubprojectBuildTests(unittest.TestCase):
     """Subproject layout: `_idf()`, `build` argument parsing, root build."""
 
-    def test_subprojects_are_firmware_host_tests_and_donny(self):
+    def test_every_project_is_discovered_with_its_target(self):
+        # Discovery (not a table) defines the subprojects, for both targets:
+        # the ESP32-S3 firmware and board tests, and every host (`linux`)
+        # project.
         self.assertEqual(
-            dev.SUBPROJECTS,
-            (
-                "mcgowan",
-                "test-utility",
-                "test-hal-stub",
-                "test-hal-common",
-                "test-logic",
-                "test-espidf-cpp",
-                "test-simulator",
-                "donny",
-                "test-esp_timer-stub",
-                "test-esp_timer-board",
-            ),
+            {
+                (project.directory.relative_to(dev.REPO_ROOT).as_posix(),
+                 project.target)
+                for project in dev._discover_projects(dev.REPO_ROOT)
+            },
+            {
+                ("mcgowan", "esp32s3"),
+                ("components/utility/tests/test-utility", "linux"),
+                ("components/hal/tests/test-hal-stub", "linux"),
+                ("components/hal/tests/test-hal-common", "linux"),
+                ("components/logic/tests/test-logic", "linux"),
+                ("components/espidfcpp/tests/test-espidf-cpp", "linux"),
+                ("components/simulator/tests/test-simulator", "linux"),
+                ("components/simulator/exe/donny", "linux"),
+                ("components/hal/tests/esp_timer/stub", "linux"),
+                ("components/hal/tests/esp_timer/board", "esp32s3"),
+            },
         )
-
-    def test_linux_projects_are_the_host_target_subprojects(self):
-        self.assertEqual(
-            dev.LINUX_PROJECTS,
-            (
-                dev.UTILITY_TEST_PROJECT,
-                dev.HAL_STUB_TEST_PROJECT,
-                dev.HAL_COMMON_TEST_PROJECT,
-                dev.TEST_PROJECT,
-                dev.ESPIDF_CPP_TEST_PROJECT,
-                dev.TEST_SIMULATOR_PROJECT,
-                dev.DONNY_PROJECT,
-                dev.ESP_TIMER_STUB_PROJECT,
-            ),
-        )
-        # Every linux project is also a buildable subproject.
-        for project in dev.LINUX_PROJECTS:
-            self.assertIn(project, dev.SUBPROJECTS)
 
     def test_idf_runs_in_subproject_with_build_tree_inside_it(self):
         self.assertEqual(
@@ -194,34 +183,60 @@ class SubprojectBuildTests(unittest.TestCase):
             ["flash", "monitor"],
         )
 
-    def test_no_arguments_selects_every_subproject(self):
-        self.assertEqual(dev._parse_subprojects([]), list(dev.SUBPROJECTS))
+    def test_no_arguments_selects_everything(self):
+        # An empty selection is what `build` and `test` read as "all".
+        self.assertEqual(dev._parse_directories([]), [])
 
-    def test_named_subprojects_are_kept_in_argument_order(self):
+    def test_directories_are_resolved_against_the_caller(self):
         self.assertEqual(
-            dev._parse_subprojects(["test-logic", "mcgowan"]),
-            ["test-logic", "mcgowan"],
+            dev._parse_directories(["components/utility"], cwd=dev.REPO_ROOT),
+            [(dev.REPO_ROOT / "components" / "utility").resolve()],
         )
 
-    def test_unknown_subproject_is_rejected(self):
+    def test_a_host_absolute_path_is_accepted(self):
+        components = dev.REPO_ROOT / "components"
+        self.assertEqual(
+            dev._parse_directories([str(components)]), [components]
+        )
+
+    def test_a_container_path_is_mapped_onto_the_repository(self):
+        self.assertEqual(
+            dev._parse_directories(["/project/components"]),
+            [(dev.REPO_ROOT / "components").resolve()],
+        )
+
+    def test_a_non_directory_argument_is_rejected(self):
         # Fail loudly instead of silently building nothing.
         err = io.StringIO()
         with redirect_stderr(err):
-            self.assertIsNone(dev._parse_subprojects(["mcgowan", "bogus"]))
+            self.assertIsNone(
+                dev._parse_directories(["bogus"], cwd=dev.REPO_ROOT)
+            )
         self.assertIn("bogus", err.getvalue())
 
-    def test_root_build_configures_then_builds_all_subprojects(self):
+    def test_start_directory_is_the_caller_inside_the_repository(self):
+        components = dev.REPO_ROOT / "components"
         self.assertEqual(
-            dev._root_build_commands(list(dev.SUBPROJECTS)),
+            dev._start_directory(cwd=components), components
+        )
+
+    def test_start_directory_outside_the_repository_is_rejected(self):
+        # A caller outside the tree named nothing to operate on, so say so
+        # instead of silently building the whole repository.
+        self.assertIsNone(
+            dev._start_directory(cwd=dev.REPO_ROOT.parent)
+        )
+
+    def test_root_build_configures_then_builds_all_subprojects(self):
+        # The root CMakeLists defaults SUBPROJECTS to every aggregate target,
+        # so dev.py passes no copy of the list.
+        self.assertEqual(
+            dev._root_build_commands(),
             [
                 [
                     "cmake",
                     "-S", ".",
                     "-B", dev.ROOT_BUILD_DIR,
-                    "-DSUBPROJECTS=mcgowan;test-utility;test-hal-stub;"
-                    "test-hal-common;"
-                    "test-logic;test-espidf-cpp;test-simulator;donny;"
-                    "test-esp_timer-stub;test-esp_timer-board",
                     "-DTHERMO_GCC_ANALYZER=OFF",
                 ],
                 ["cmake", "--build", dev.ROOT_BUILD_DIR],
@@ -229,15 +244,13 @@ class SubprojectBuildTests(unittest.TestCase):
         )
 
     def test_root_build_can_enable_the_analyzer(self):
-        commands = dev._root_build_commands(
-            list(dev.SUBPROJECTS), analyzer=True
-        )
+        commands = dev._root_build_commands(analyzer=True)
         self.assertIn("-DTHERMO_GCC_ANALYZER=ON", commands[0])
 
     def test_build_parser_defaults_the_analyzer_off(self):
         args = dev._build_parser().parse_args(["build", "mcgowan"])
         self.assertFalse(args.analyzer)
-        self.assertEqual(args.subprojects, ["mcgowan"])
+        self.assertEqual(args.directories, ["mcgowan"])
 
     def test_build_parser_accepts_analyzer_values(self):
         parser = dev._build_parser()
@@ -251,7 +264,7 @@ class SubprojectBuildTests(unittest.TestCase):
             ["build", "--analyzer=OFF"]
         ).analyzer)
 
-    def test_bare_analyzer_does_not_consume_a_subproject(self):
+    def test_bare_analyzer_does_not_consume_a_directory(self):
         argv = dev._normalize_analyzer_argv(
             ["dev.py", "build", "--analyzer", "mcgowan"]
         )
@@ -260,7 +273,7 @@ class SubprojectBuildTests(unittest.TestCase):
         )
         args = dev._build_parser().parse_args(argv[1:])
         self.assertTrue(args.analyzer)
-        self.assertEqual(args.subprojects, ["mcgowan"])
+        self.assertEqual(args.directories, ["mcgowan"])
 
     def test_last_analyzer_value_wins(self):
         parser = dev._build_parser()
@@ -274,28 +287,318 @@ class SubprojectBuildTests(unittest.TestCase):
     def test_firmware_binary_is_named_after_the_project(self):
         # The ESP-IDF project name (mcgowan/) determines the app binary name.
         self.assertEqual(dev.FW_BINARY, "mcgowan.bin")
-        self.assertEqual(dev.FIRMWARE_PROJECT, "mcgowan")
+        self.assertEqual(dev.FIRMWARE_DIR, "mcgowan")
+        firmware = dev._project_at(dev.REPO_ROOT / dev.FIRMWARE_DIR)
+        self.assertIsNotNone(firmware)
+        self.assertEqual(firmware.name, "mcgowan")
+        self.assertEqual(firmware.target, "esp32s3")
 
-    def test_subproject_directories_have_a_cmakelists(self):
-        for project in dev.SUBPROJECTS:
-            with self.subTest(project=project):
-                cmake = (
-                    dev.REPO_ROOT / dev.project_dir(project)
-                    / "CMakeLists.txt"
+    def test_every_discovered_project_is_an_espidf_project(self):
+        for project in dev._discover_projects(dev.REPO_ROOT):
+            with self.subTest(project=project.directory):
+                cmake = project.directory / "CMakeLists.txt"
+                self.assertIn(
+                    dev.ESPIDF_PROJECT_MARKER, cmake.read_text()
                 )
-                self.assertTrue(cmake.is_file(), f"missing {cmake}")
 
     def test_root_is_not_an_espidf_project(self):
         # The root aggregates subprojects with plain CMake; it must not
         # include ESP-IDF's project.cmake (which would make it a project).
         root_cmake = (dev.REPO_ROOT / "CMakeLists.txt").read_text()
-        self.assertNotIn("tools/cmake/project.cmake", root_cmake)
-        # Every aggregate target is prefixed with its subproject name.
-        for project in dev.SUBPROJECTS:
-            self.assertIn(
-                f"_idf_subproject({project} ", root_cmake,
-                f"no {project}_build target in the root CMakeLists.txt",
+        self.assertNotIn(dev.ESPIDF_PROJECT_MARKER, root_cmake)
+        # Discovery must not report the repository root as a project.
+        directories = {
+            project.directory
+            for project in dev._discover_projects(dev.REPO_ROOT)
+        }
+        self.assertNotIn(dev.REPO_ROOT, directories)
+
+
+class ProjectDiscoveryTests(unittest.TestCase):
+    """Projects and their targets are read from the tree, not a table."""
+
+    # `$ENV{IDF_PATH}` contains braces, so substitute the name rather than
+    # calling `str.format`.
+    PROJECT_CMAKE = (
+        "cmake_minimum_required(VERSION 3.22)\n"
+        "include($ENV{IDF_PATH}/tools/cmake/project.cmake)\n"
+        "project(NAME)\n"
+    )
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name).resolve()
+
+    def _project(self, relative, name, target=None):
+        directory = self.root / relative
+        directory.mkdir(parents=True)
+        (directory / "CMakeLists.txt").write_text(
+            self.PROJECT_CMAKE.replace("NAME", name)
+        )
+        if target is not None:
+            (directory / "sdkconfig.defaults").write_text(
+                f'CONFIG_IDF_TARGET="{target}"\n'
             )
+        return directory
+
+    def _component(self, relative):
+        directory = self.root / relative
+        directory.mkdir(parents=True)
+        (directory / "CMakeLists.txt").write_text(
+            "idf_component_register()\n"
+        )
+        return directory
+
+    def test_a_project_is_recognized_by_its_project_cmake_include(self):
+        directory = self._project("mcgowan", "mcgowan", "esp32s3")
+        component = self._component("mcgowan/main")
+        self.assertEqual(
+            dev._project_at(directory),
+            dev.Project(directory, "mcgowan", "esp32s3"),
+        )
+        self.assertIsNone(dev._project_at(component))
+
+    def test_a_project_without_defaults_builds_for_the_chip(self):
+        directory = self._project("mcgowan", "mcgowan")
+        self.assertEqual(dev._project_target(directory), dev.DEFAULT_TARGET)
+
+    def test_committed_defaults_win_over_a_generated_sdkconfig(self):
+        directory = self._project("tests/x", "x", "linux")
+        (directory / "sdkconfig").write_text(
+            'CONFIG_IDF_TARGET="esp32s3"\n'
+        )
+        self.assertEqual(dev._project_target(directory), "linux")
+
+    def test_a_generated_sdkconfig_is_used_when_defaults_are_absent(self):
+        directory = self._project("tests/x", "x")
+        (directory / "sdkconfig").write_text(
+            'CONFIG_IDF_TARGET="linux"\n'
+        )
+        self.assertEqual(dev._project_target(directory), "linux")
+
+    def test_discovery_finds_nested_projects_and_stops_at_them(self):
+        mcgowan = self._project("mcgowan", "mcgowan", "esp32s3")
+        tests = self._project(
+            "components/hal/tests/test-x", "test-x", "linux"
+        )
+        # This would look like a project, but it is inside one: discovery must
+        # not descend into a project it has already found.
+        (mcgowan / "main").mkdir()
+        (mcgowan / "main" / "CMakeLists.txt").write_text(
+            self.PROJECT_CMAKE.replace("NAME", "nested")
+        )
+        self.assertEqual(
+            [
+                project.directory
+                for project in dev._discover_projects(self.root)
+            ],
+            [tests, mcgowan],
+        )
+
+    def test_build_output_and_vendored_trees_are_not_scanned(self):
+        project = self._project(
+            "components/tests/test-x", "test-x", "linux"
+        )
+        for pruned in (
+            "build_root",
+            "third_party/sml",
+            "cmake-build-debug",
+        ):
+            self._project(pruned, "hidden")
+        self.assertEqual(
+            [
+                found.directory
+                for found in dev._discover_projects(self.root)
+            ],
+            [project],
+        )
+
+    def test_a_host_test_is_a_linux_project_under_tests(self):
+        suite = self._project(
+            "components/hal/tests/test-x", "test-x", "linux"
+        )
+        app = self._project("components/hal/exe/app", "app", "linux")
+        board = self._project(
+            "components/hal/tests/board", "board", "esp32s3"
+        )
+        self.assertEqual(
+            [
+                project.directory
+                for project in dev._host_test_projects_under(
+                    self.root, root=self.root
+                )
+            ],
+            [suite],
+        )
+        for project in (app, board):
+            self.assertFalse(
+                dev._is_host_test_project(
+                    dev._project_at(project), root=self.root
+                )
+            )
+
+    def test_an_on_target_test_is_a_chip_project_under_tests(self):
+        board = self._project(
+            "components/hal/tests/board", "board", "esp32s3"
+        )
+        self._project("components/hal/tests/host", "host", "linux")
+        # The firmware is a chip project but is not a test.
+        self._project("mcgowan", "mcgowan", "esp32s3")
+        self.assertEqual(
+            [
+                project.directory
+                for project in dev._on_target_test_projects_under(
+                    self.root, root=self.root
+                )
+            ],
+            [board],
+        )
+
+    def test_build_selection_is_every_project_under_each_directory(self):
+        app = self._project("components/a/exe/app", "app", "linux")
+        suite = self._project(
+            "components/a/tests/test-a", "test-a", "linux"
+        )
+        other = self._project("mcgowan", "mcgowan", "esp32s3")
+        self.assertEqual(
+            dev._build_directories([self.root / "components"]),
+            [app, suite],
+        )
+        self.assertEqual(
+            dev._build_directories([self.root]),
+            [app, suite, other],
+        )
+
+    def test_test_selection_is_the_host_suites_under_each_directory(self):
+        suite = self._project(
+            "components/a/tests/test-a", "test-a", "linux"
+        )
+        self._project("components/a/exe/app", "app", "linux")
+        self._project("mcgowan", "mcgowan", "esp32s3")
+        projects = dev._test_projects(
+            [self.root / "components"], root=self.root
+        )
+        self.assertEqual([project.directory for project in projects], [suite])
+
+    def test_a_directory_without_projects_is_rejected(self):
+        empty = self.root / "empty"
+        empty.mkdir()
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertIsNone(dev._build_directories([empty]))
+        self.assertIn("No ESP-IDF projects", err.getvalue())
+
+    def test_a_directory_without_host_suites_is_rejected(self):
+        self._project("components/a/exe/app", "app", "linux")
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertIsNone(
+                dev._test_projects(
+                    [self.root / "components"], root=self.root
+                )
+            )
+        self.assertIn("No host (`linux`) test projects", err.getvalue())
+
+
+class OutsideRepositoryTests(unittest.TestCase):
+    """A directory outside the repository is always rejected.
+
+    This covers both an explicit argument (`.` or an absolute path) and the
+    implicit start directory: `cd ~ && dev.py build` must not silently build
+    the repository, just as `cd ~ && dev.py build .` must not try to build
+    the home directory.
+    """
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.outside = Path(tmp.name).resolve()
+
+    def test_a_relative_argument_outside_the_repository_is_rejected(self):
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertIsNone(
+                dev._parse_directories(["."], cwd=self.outside)
+            )
+        self.assertIn("outside", err.getvalue())
+
+    def test_an_absolute_argument_outside_the_repository_is_rejected(self):
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertIsNone(
+                dev._parse_directories([str(self.outside)])
+            )
+        self.assertIn("outside", err.getvalue())
+
+    def test_build_rejects_a_system_directory(self):
+        # The concrete case: `dev.py build /etc` must not build anything.
+        self.assertTrue(Path("/etc").is_dir())
+        with (
+            mock.patch.object(dev, "change_to_container") as hop,
+            mock.patch.object(dev, "run") as run,
+            redirect_stderr(io.StringIO()),
+        ):
+            self.assertEqual(dev.cmd_build(["/etc"]), 1)
+        hop.assert_not_called()
+        run.assert_not_called()
+
+    def test_the_default_start_directory_outside_is_rejected(self):
+        err = io.StringIO()
+        with (
+            mock.patch.object(Path, "cwd", return_value=self.outside),
+            redirect_stderr(err),
+        ):
+            self.assertIsNone(dev._start_directories([]))
+        self.assertIn("outside", err.getvalue())
+
+    def test_commands_fail_before_the_container_hop(self):
+        calls = []
+        hops = []
+        original_run = dev.run
+        original_hop = dev.change_to_container
+        try:
+            dev.run = lambda cmd, cwd=dev.REPO_ROOT: calls.append(cmd) or 0
+            dev.change_to_container = (
+                lambda trailing=None: hops.append(trailing)
+            )
+            for handler in (
+                lambda: dev.cmd_build([]),
+                lambda: dev.cmd_test_linux([]),
+                lambda: dev.cmd_test_esp32([]),
+                lambda: dev.cmd_format([]),
+                lambda: dev.cmd_format_check([]),
+                lambda: dev.cmd_format_check_staged([]),
+            ):
+                with (
+                    self.subTest(handler=handler),
+                    mock.patch.object(
+                        Path, "cwd", return_value=self.outside
+                    ),
+                    redirect_stderr(io.StringIO()),
+                ):
+                    self.assertEqual(handler(), 1)
+        finally:
+            dev.run = original_run
+            dev.change_to_container = original_hop
+        self.assertEqual(calls, [])
+        self.assertEqual(hops, [])
+
+    def test_tidy_rejects_an_outside_start_directory(self):
+        err = io.StringIO()
+        with (
+            mock.patch.object(Path, "cwd", return_value=self.outside),
+            redirect_stderr(err),
+        ):
+            self.assertIsNone(dev._parse_tidy_scopes([]))
+        self.assertIn("outside", err.getvalue())
+
+    def test_tidy_starts_from_a_subdirectory(self):
+        components = dev.REPO_ROOT / "components"
+        with mock.patch.object(
+            dev, "_start_directory", return_value=components
+        ):
+            self.assertEqual(dev._parse_tidy_scopes([]), [components])
 
 
 class SubmoduleTests(unittest.TestCase):
@@ -382,7 +685,7 @@ class SubmoduleTests(unittest.TestCase):
         for name in (
             "cmd_build",
             "cmd_build_test_espidf_cpp",
-            "_run_host_tests",
+            "_run_suites",
             "cmd_clang_tidy",
         ):
             with self.subTest(function=name):
@@ -1212,28 +1515,32 @@ class CommandRegistryTests(unittest.TestCase):
             dev.cmd_build_test_espidf_cpp,
         )
 
-    def test_host_test_projects_cover_every_suite(self):
-        projects = [project for project, _ in dev.HOST_TEST_PROJECTS]
+    def test_discovery_finds_every_host_suite(self):
+        # Discovery, not a table, decides which suites exist; the esp_timer
+        # host suite used to be built but never run by `test`.
+        projects = dev._host_test_projects_under(dev.REPO_ROOT)
         self.assertEqual(
-            projects,
             [
-                dev.UTILITY_TEST_PROJECT,
-                dev.HAL_COMMON_TEST_PROJECT,
-                dev.HAL_STUB_TEST_PROJECT,
-                dev.TEST_PROJECT,
-                dev.ESPIDF_CPP_TEST_PROJECT,
-                dev.TEST_SIMULATOR_PROJECT,
+                project.directory.relative_to(dev.REPO_ROOT).as_posix()
+                for project in projects
+            ],
+            [
+                "components/espidfcpp/tests/test-espidf-cpp",
+                "components/hal/tests/esp_timer/stub",
+                "components/hal/tests/test-hal-common",
+                "components/hal/tests/test-hal-stub",
+                "components/logic/tests/test-logic",
+                "components/simulator/tests/test-simulator",
+                "components/utility/tests/test-utility",
             ],
         )
-        # `test` runs `utility` first: the fixed-capacity containers are
-        # the lowest layer the other suites build on. `hal_common` follows
-        # with the shared vocabulary, and `hal_stub` after it.
-        self.assertEqual(projects[0], dev.UTILITY_TEST_PROJECT)
-        self.assertEqual(projects[1], dev.HAL_COMMON_TEST_PROJECT)
-        self.assertEqual(projects[2], dev.HAL_STUB_TEST_PROJECT)
-        # Every host-test project is also a buildable subproject.
         for project in projects:
-            self.assertIn(project, dev.SUBPROJECTS)
+            with self.subTest(project=project.directory):
+                self.assertEqual(project.target, "linux")
+                self.assertIn(
+                    dev.TEST_PROJECT_DIRECTORY,
+                    project.directory.relative_to(dev.REPO_ROOT).parts,
+                )
 
     def test_complete_skips_itself(self):
         # The internal `complete` helper must not advertise itself.
@@ -1261,15 +1568,11 @@ class CommandRegistryTests(unittest.TestCase):
 
 
 class HostTestCommandTests(unittest.TestCase):
-    """The `test*` commands run the suites they name.
+    """`test-linux` builds and runs every host suite it discovers.
 
-    There are six host test suites (the `libutility` container tests, the
-    `hal_common` vocabulary tests, the `hal_stub` device tests, the `test/`
-    application tests, the `libespidfcpp` wrapper tests, and the simulator
-    tests). `test` is the aggregate the pre-commit hook and CI call, so it
-    must run all six, with `test-utility` first, `test-hal-common` next and
-    `test-hal-stub` after that; each suite also has a command of its own so
-    one can be run alone while working on it.
+    Each suite is a `linux`-target ESP-IDF project under a `tests/` directory;
+    a new suite needs no entry in `dev.py`. A directory argument narrows the
+    run to the suites in or under it.
     """
 
     def setUp(self):
@@ -1283,14 +1586,11 @@ class HostTestCommandTests(unittest.TestCase):
             self.calls.append(list(cmd))
             return 0
 
-        def fake_change_to_container():
+        def fake_change_to_container(trailing=None):
             # The real one re-execs `sys.argv` under `docker compose` and then
             # `sys.exit()`s, so it would never return here. Record the hop
-            # instead and let the command under test run its own body: that is
-            # what makes the suite exercise the command's decisions on the
-            # host (where `self-check` is allowed to run) rather than its
-            # container handoff.
-            self.hops.append(True)
+            # instead and let the command under test run its own body.
+            self.hops.append(trailing)
 
         dev.run = fake_run
         dev.change_to_container = fake_change_to_container
@@ -1299,156 +1599,107 @@ class HostTestCommandTests(unittest.TestCase):
         dev.run = self._original_run
         dev.change_to_container = self._original_change_to_container
 
-    def test_every_suite_command_is_registered(self):
+    def _suite_calls(self, directory, elf):
+        return [
+            dev._idf(directory, dev.TEST_BUILD_DIR, "--preview",
+                     "set-target", "linux"),
+            dev._idf(directory, dev.TEST_BUILD_DIR, "build"),
+            [f"./{directory}/{dev.TEST_BUILD_DIR}/{elf}"],
+        ]
+
+    def test_only_the_aggregate_commands_are_registered(self):
         for name, handler in (
-            ("test-utility", dev.cmd_test_utility),
-            ("test-hal-stub", dev.cmd_test_hal_stub),
-            ("test-hal-common", dev.cmd_test_hal_common),
-            ("test-logic", dev.cmd_test_logic),
-            ("test-espidf-cpp", dev.cmd_test_espidf_cpp),
-            ("test-simulator", dev.cmd_test_simulator),
+            ("test-linux", dev.cmd_test_linux),
+            ("test-esp32", dev.cmd_test_esp32),
         ):
             with self.subTest(command=name):
                 self.assertIn(name, dev.COMMANDS)
                 self.assertIs(dev.COMMANDS[name], handler)
-
-    def test_every_suite_command_hops_into_the_container(self):
-        # `idf.py` only exists inside the dev image, so each command must hand
-        # off to it exactly once (`_run_host_tests` itself never hops).
-        for handler in (
-            dev.cmd_test_utility,
-            dev.cmd_test_hal_stub,
-            dev.cmd_test_hal_common,
-            dev.cmd_test_logic,
-            dev.cmd_test_espidf_cpp,
-            dev.cmd_test_simulator,
-            dev.cmd_test,
+        # The per-suite commands are gone: a directory selects them now.
+        for removed in (
+            "test",
+            "test-utility",
+            "test-hal-common",
+            "test-hal-stub",
+            "test-logic",
+            "test-espidf-cpp",
+            "test-simulator",
+            "test-esp-timer-stub",
+            "test-esp32-timer",
         ):
+            with self.subTest(removed=removed):
+                self.assertNotIn(removed, dev.COMMANDS)
+
+    def test_every_test_command_hops_into_the_container(self):
+        # `idf.py` only exists inside the dev image, so each command must hand
+        # off to it exactly once (`_run_suites` itself never hops).
+        for handler in (dev.cmd_test_linux, dev.cmd_test_esp32):
             with self.subTest(command=handler.__name__):
                 self.hops = []
                 handler()
                 self.assertEqual(len(self.hops), 1)
 
-    def test_test_espidf_cpp_uses_the_build_commands_project(self):
-        # `build-test-espidf-cpp` builds the wrapper suite and
-        # `test-espidf-cpp` builds and runs it: both must resolve to the same
-        # project, or the two commands would drift apart.
-        self.assertEqual(
-            dev._host_test_projects((dev.ESPIDF_CPP_TEST_PROJECT,)),
-            [
-                (
-                    dev.ESPIDF_CPP_TEST_PROJECT,
-                    dict(dev.HOST_TEST_PROJECTS)[dev.ESPIDF_CPP_TEST_PROJECT],
-                )
-            ],
-        )
-
-    def test_test_hal_stub_runs_only_the_hal_stub_suite(self):
-        self.assertEqual(dev.cmd_test_hal_stub(), 0)
-        self.assertEqual(
-            self.calls,
-            [
-                dev._idf(dev.HAL_STUB_TEST_PROJECT, dev.TEST_BUILD_DIR,
-                         "--preview", "set-target", "linux"),
-                dev._idf(dev.HAL_STUB_TEST_PROJECT, dev.TEST_BUILD_DIR,
-                         "build"),
-                [f"./{dev.project_dir(dev.HAL_STUB_TEST_PROJECT)}/"
-                 f"{dev.TEST_BUILD_DIR}/"
-                 "esp32_sensors_hal_stub_tests.elf"],
-            ],
-        )
-
-    def test_test_hal_common_runs_only_the_hal_common_suite(self):
-        self.assertEqual(dev.cmd_test_hal_common(), 0)
-        self.assertEqual(
-            self.calls,
-            [
-                dev._idf(dev.HAL_COMMON_TEST_PROJECT, dev.TEST_BUILD_DIR,
-                         "--preview", "set-target", "linux"),
-                dev._idf(dev.HAL_COMMON_TEST_PROJECT, dev.TEST_BUILD_DIR,
-                         "build"),
-                [f"./{dev.project_dir(dev.HAL_COMMON_TEST_PROJECT)}/"
-                 f"{dev.TEST_BUILD_DIR}/"
-                 "esp32_sensors_hal_common_tests.elf"],
-            ],
-        )
-
-    def test_test_logic_runs_only_the_logic_suite(self):
-        self.assertEqual(dev.cmd_test_logic(), 0)
-        self.assertEqual(
-            self.calls,
-            [
-                dev._idf(dev.TEST_PROJECT, dev.TEST_BUILD_DIR,
-                         "--preview", "set-target", "linux"),
-                dev._idf(dev.TEST_PROJECT, dev.TEST_BUILD_DIR, "build"),
-                [f"./{dev.project_dir(dev.TEST_PROJECT)}/"
-                 f"{dev.TEST_BUILD_DIR}/"
-                 "test-logic.elf"],
-            ],
-        )
-
-    def test_test_espidf_cpp_runs_only_the_wrapper_suite(self):
-        self.assertEqual(dev.cmd_test_espidf_cpp(), 0)
-        self.assertEqual(
-            self.calls,
-            [
-                dev._idf(dev.ESPIDF_CPP_TEST_PROJECT, dev.TEST_BUILD_DIR,
-                         "--preview", "set-target", "linux"),
-                dev._idf(dev.ESPIDF_CPP_TEST_PROJECT, dev.TEST_BUILD_DIR,
-                         "build"),
-                [f"./{dev.project_dir(dev.ESPIDF_CPP_TEST_PROJECT)}/"
-                 f"{dev.TEST_BUILD_DIR}/"
-                 "test-espidf-cpp.elf"],
-            ],
-        )
-
-    def test_test_simulator_runs_only_the_simulator_suite(self):
-        self.assertEqual(dev.cmd_test_simulator(), 0)
-        self.assertEqual(
-            self.calls,
-            [
-                dev._idf(dev.TEST_SIMULATOR_PROJECT, dev.TEST_BUILD_DIR,
-                         "--preview", "set-target", "linux"),
-                dev._idf(dev.TEST_SIMULATOR_PROJECT, dev.TEST_BUILD_DIR,
-                         "build"),
-                [f"./{dev.project_dir(dev.TEST_SIMULATOR_PROJECT)}/"
-                 f"{dev.TEST_BUILD_DIR}/"
-                 "test-simulator.elf"],
-            ],
-        )
-
-    def test_test_runs_every_suite_in_table_order(self):
-        # The regression this pins: `test` used to be an alias of
-        # `test-logic`, so the libespidfcpp suite was never run by the gate.
-        self.assertEqual(dev.cmd_test(), 0)
-        executed = [
-            Path(cmd[-1]).name
-            for cmd in self.calls
-            if cmd[-1].endswith(".elf")
-        ]
-        self.assertEqual(
-            executed,
-            [elf for _, elf in dev.HOST_TEST_PROJECTS],
-        )
+    def test_linux_runs_every_discovered_suite_in_path_order(self):
+        # Discovery, not a table, decides what CI runs: the esp_timer host
+        # suite used to be built but never run by the aggregate.
+        self.assertEqual(dev.cmd_test_linux(), 0)
         expected = [
             cmd
-            for project, elf in dev.HOST_TEST_PROJECTS
-            for cmd in (
-                dev._idf(project, dev.TEST_BUILD_DIR,
-                         "--preview", "set-target", "linux"),
-                dev._idf(project, dev.TEST_BUILD_DIR, "build"),
-                [f"./{dev.project_dir(project)}/{dev.TEST_BUILD_DIR}/{elf}"],
+            for project in dev._host_test_projects_under(dev.REPO_ROOT)
+            for cmd in self._suite_calls(
+                dev._repo_relative(project.directory),
+                f"{project.name}.elf",
             )
         ]
         self.assertEqual(self.calls, expected)
+        executed = [
+            cmd[-1] for cmd in self.calls if cmd[-1].endswith(".elf")
+        ]
+        self.assertIn(
+            f"./{dev.ESP_TIMER_STUB_DIR}/{dev.TEST_BUILD_DIR}/"
+            f"esp32_sensors_esp_timer_stub_tests.elf",
+            executed,
+        )
+
+    def test_linux_with_a_directory_runs_only_that_tree(self):
+        utility = str(dev.REPO_ROOT / "components" / "utility")
+        self.assertEqual(dev.cmd_test_linux([utility]), 0)
+        self.assertEqual(
+            self.calls,
+            self._suite_calls(dev.UTILITY_TEST_DIR, "test-utility.elf"),
+        )
+
+    def test_linux_starts_from_the_caller_directory(self):
+        # The hop runs in /project, so the caller's directory has to be
+        # resolved before it (see `_start_directory`).
+        utility = dev.REPO_ROOT / "components" / "utility"
+        with mock.patch.object(
+            dev, "_start_directory", return_value=utility
+        ):
+            self.assertEqual(dev.cmd_test_linux(), 0)
+        self.assertEqual(
+            self.hops, [["test-linux", "/project/components/utility"]]
+        )
+        self.assertEqual(
+            self.calls,
+            self._suite_calls(dev.UTILITY_TEST_DIR, "test-utility.elf"),
+        )
+
+    def test_linux_with_a_directory_without_suites_fails(self):
+        mcgowan = str(dev.REPO_ROOT / "mcgowan")
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertEqual(dev.cmd_test_linux([mcgowan]), 1)
+        self.assertIn("No host (`linux`) test projects", err.getvalue())
+        self.assertEqual(self.calls, [])
 
     def test_a_failing_suite_stops_the_run_and_fails_the_command(self):
-        # A red suite (here: the first ELF to run) must fail `test`, not be
-        # swallowed while the later suites are run anyway.
-        first_project, first_elf = dev.HOST_TEST_PROJECTS[0]
+        # A red suite (here: the first ELF to run) must fail `test-linux`, not
+        # be swallowed while the later suites are run anyway.
+        first = dev._host_test_projects_under(dev.REPO_ROOT)[0]
         failing = (
-            f"./{dev.project_dir(first_project)}/"
-            f"{dev.TEST_BUILD_DIR}/{first_elf}"
+            f"./{dev._repo_relative(first.directory)}/"
+            f"{dev.TEST_BUILD_DIR}/{first.name}.elf"
         )
 
         def fake_run(cmd, cwd=dev.REPO_ROOT):
@@ -1456,158 +1707,33 @@ class HostTestCommandTests(unittest.TestCase):
             return 3 if list(cmd) == [failing] else 0
 
         dev.run = fake_run
-        self.assertEqual(dev.cmd_test(), 1)
+        self.assertEqual(dev.cmd_test_linux(), 1)
         executed = [cmd[-1] for cmd in self.calls if cmd[-1].endswith(".elf")]
         self.assertEqual(executed, [failing])
 
-    def test_every_host_test_project_has_a_command_that_runs_it(self):
-        # `test` covers the table, but each suite is also runnable alone. This
-        # pins that the per-suite commands between them cover the whole table,
-        # so a suite cannot be reachable only through `test`.
-        covered = {
-            project
-            for handler in (
-                dev.cmd_test_utility,
-                dev.cmd_test_hal_stub,
-                dev.cmd_test_hal_common,
-                dev.cmd_test_logic,
-                dev.cmd_test_espidf_cpp,
-                dev.cmd_test_simulator,
-            )
-            for project, _ in dev._host_test_projects(
-                self._projects_run_by(handler)
-            )
+    def test_a_host_application_is_not_run_as_a_suite(self):
+        # `donny` targets `linux` but is an application (app_main spins
+        # forever), so discovery must exclude it.
+        directories = {
+            project.directory
+            for project in dev._host_test_projects_under(dev.REPO_ROOT)
         }
-        self.assertEqual(covered, {p for p, _ in dev.HOST_TEST_PROJECTS})
+        self.assertNotIn(dev.REPO_ROOT / dev.DONNY_DIR, directories)
 
-    def _projects_run_by(self, handler):
-        """The host-test projects `handler` selects (by intercepting `run`)."""
-        self.calls = []
-        handler()
-        directory_to_project = {
-            directory: project
-            for project, directory in dev.PROJECT_DIRS.items()
-        }
-        return tuple(
-            directory_to_project.get(cmd[2], cmd[2])
-            for cmd in self.calls
-            if cmd[:2] == ["idf.py", "-C"]
-            and cmd[-1] == "build"
-        )
-
-    def test_unknown_project_trips_an_assertion(self):
-        # A stale constant would silently run fewer suites; fail loudly.
-        with self.assertRaises(AssertionError):
-            dev._host_test_projects(("mcgowan",))
-
-    def test_no_project_trips_an_assertion(self):
-        with self.assertRaises(AssertionError):
-            dev._run_host_tests(())
-
-
-class BuildProjectTests(unittest.TestCase):
-    """`_build_project` picks the target-specific build directory."""
-
-    def setUp(self):
-        # Record the commands `run()` would execute instead of executing them.
-        self.calls = []
-        self._original_run = dev.run
-
-        def fake_run(cmd, cwd=dev.REPO_ROOT):
-            self.calls.append(list(cmd))
-            return 0
-
-        dev.run = fake_run
-
-    def tearDown(self):
-        dev.run = self._original_run
-
-    def test_espidf_cpp_test_is_built_for_linux(self):
-        self.assertEqual(dev._build_project(dev.ESPIDF_CPP_TEST_PROJECT), 0)
-        self.assertEqual(
-            self.calls,
-            [
-                dev._idf(
-                    dev.ESPIDF_CPP_TEST_PROJECT,
-                    dev.TEST_BUILD_DIR,
-                    "-DTHERMO_GCC_ANALYZER=OFF",
-                    "--preview",
-                    "set-target",
-                    "linux",
-                ),
-                dev._idf(
-                    dev.ESPIDF_CPP_TEST_PROJECT,
-                    dev.TEST_BUILD_DIR,
-                    "-DTHERMO_GCC_ANALYZER=OFF",
-                    "build",
-                ),
-            ],
-        )
-
-    def test_donny_is_built_for_linux(self):
-        self.assertEqual(dev._build_project(dev.DONNY_PROJECT), 0)
-        self.assertEqual(
-            self.calls,
-            [
-                dev._idf(
-                    dev.DONNY_PROJECT,
-                    dev.TEST_BUILD_DIR,
-                    "-DTHERMO_GCC_ANALYZER=OFF",
-                    "--preview",
-                    "set-target",
-                    "linux",
-                ),
-                dev._idf(
-                    dev.DONNY_PROJECT,
-                    dev.TEST_BUILD_DIR,
-                    "-DTHERMO_GCC_ANALYZER=OFF",
-                    "build",
-                ),
-            ],
-        )
-
-    def test_donny_is_built_but_not_run_as_a_host_test(self):
-        # `donny` is an application (app_main spins forever), so `test-logic`
-        # must build it but never run it.
-        self.assertNotIn(dev.DONNY_PROJECT, dict(dev.HOST_TEST_PROJECTS))
-
-    def test_firmware_is_built_for_the_chip(self):
-        self.assertEqual(dev._build_project(dev.FIRMWARE_PROJECT), 0)
-        self.assertEqual(
-            self.calls,
-            [
-                dev._idf(
-                    dev.FIRMWARE_PROJECT,
-                    dev.FW_BUILD_DIR,
-                    "-DTHERMO_GCC_ANALYZER=OFF",
-                    "build",
+    def test_every_discovered_suite_is_a_linux_project_under_tests(self):
+        for project in dev._host_test_projects_under(dev.REPO_ROOT):
+            with self.subTest(project=project.directory):
+                self.assertEqual(project.target, "linux")
+                self.assertIn(
+                    dev.TEST_PROJECT_DIRECTORY,
+                    project.directory.relative_to(dev.REPO_ROOT).parts,
                 )
-            ],
-        )
-
-    def test_analyzer_switch_can_turn_the_analyzer_on(self):
-        self.assertEqual(
-            dev._build_project(dev.TEST_PROJECT, analyzer=True), 0
-        )
-        for cmd in self.calls:
-            self.assertIn("-DTHERMO_GCC_ANALYZER=ON", cmd)
-
-    def test_analyzer_define_is_always_explicit(self):
-        # Passing OFF as well as ON is what stops a previous --analyzer build
-        # from leaving the analyzer enabled in a cached build tree.
-        self.assertEqual(dev._analyzer_define(True),
-                         "-DTHERMO_GCC_ANALYZER=ON")
-        self.assertEqual(dev._analyzer_define(False),
-                         "-DTHERMO_GCC_ANALYZER=OFF")
 
 
-class OnTargetTimerCommandTests(unittest.TestCase):
-    """`test-esp32-timer` builds the board suite, then runs its driver."""
+class OnTargetTestCommandTests(unittest.TestCase):
+    """`test-esp32` discovers on-target tests and runs their drivers."""
 
     def setUp(self):
-        # Record what would run instead of executing it. The driver itself is
-        # just a path here; `test.py` is exercised on the board, not by this
-        # host suite.
         self.calls = []
         self.hops = []
         self._original_run = dev.run
@@ -1618,8 +1744,8 @@ class OnTargetTimerCommandTests(unittest.TestCase):
             self.calls.append(list(cmd))
             return 0
 
-        def fake_change_to_container():
-            self.hops.append(True)
+        def fake_change_to_container(trailing=None):
+            self.hops.append(trailing)
 
         dev.run = fake_run
         dev.change_to_container = fake_change_to_container
@@ -1631,32 +1757,54 @@ class OnTargetTimerCommandTests(unittest.TestCase):
         dev._ensure_submodules = self._original_ensure_submodules
 
     def test_registered(self):
-        self.assertIn("test-esp32-timer", dev.COMMANDS)
-        self.assertIs(
-            dev.COMMANDS["test-esp32-timer"], dev.cmd_test_esp32_timer
-        )
+        self.assertIn("test-esp32", dev.COMMANDS)
+        self.assertIs(dev.COMMANDS["test-esp32"], dev.cmd_test_esp32)
 
     def test_builds_the_board_project_then_runs_its_driver(self):
-        self.assertEqual(dev.cmd_test_esp32_timer(), 0)
-        self.assertEqual(len(self.hops), 1)
+        self.assertEqual(dev.cmd_test_esp32(), 0)
+        board = dev._on_target_test_projects_under(dev.REPO_ROOT)
+        self.assertEqual(len(board), 1)
+        relative = dev._repo_relative(board[0].directory)
         self.assertEqual(
             self.calls,
             [
                 dev._idf(
-                    dev.ESP_TIMER_BOARD_PROJECT,
+                    relative,
                     dev.FW_BUILD_DIR,
                     "-DTHERMO_GCC_ANALYZER=OFF",
                     "build",
                 ),
-                [
-                    sys.executable,
-                    str(
-                        Path(dev.project_dir(dev.ESP_TIMER_BOARD_PROJECT))
-                        / "test.py"
-                    ),
-                ],
+                [sys.executable, str(board[0].directory / "test.py")],
             ],
         )
+        self.assertEqual(self.hops, [["test-esp32", "/project"]])
+
+    def test_a_directory_without_on_target_tests_fails(self):
+        # `components/utility` holds only a linux suite.
+        utility = str(dev.REPO_ROOT / "components" / "utility")
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertEqual(dev.cmd_test_esp32([utility]), 1)
+        self.assertIn(
+            "No on-target (`esp32`) test projects", err.getvalue()
+        )
+        self.assertEqual(self.calls, [])
+
+    def test_a_project_without_a_driver_fails(self):
+        project = dev.Project(
+            dev.REPO_ROOT / "no-driver", "no-driver", "esp32s3"
+        )
+        with (
+            mock.patch.object(
+                dev, "_on_target_projects", return_value=[project]
+            ),
+            mock.patch.object(dev, "_ensure_submodules", return_value=0),
+        ):
+            err = io.StringIO()
+            with redirect_stderr(err):
+                self.assertEqual(dev.cmd_test_esp32(), 1)
+        self.assertIn("has no test.py driver", err.getvalue())
+        self.assertEqual(self.calls, [])
 
 
 class GitHooksInstallationTests(unittest.TestCase):
@@ -1898,24 +2046,17 @@ class TidyUnitSelectionTests(unittest.TestCase):
 class TidyConfigurationTests(unittest.TestCase):
     """clang-tidy configuration that the CI and commit gates depend on."""
 
-    def test_projects_cover_every_buildable_subproject(self):
-        # Every subproject must be analyzed; a missing one silently weakens
-        # the gate.
+    def test_discovery_covers_every_buildable_project(self):
+        # Every discovered project is analyzable; a project that discovery
+        # misses silently weakens the gate.
         self.assertEqual(
-            [project for project, _ in dev.TIDY_PROJECTS],
-            list(dev.SUBPROJECTS),
+            len(dev._discover_projects(dev.REPO_ROOT)), 10
         )
 
-    def test_every_project_build_dir_is_the_one_dev_py_builds(self):
-        # `clang-tidy` reads the databases `build` writes, so the paths must
-        # agree or the gate would tell the user to build what is already built.
-        for project, build_dir in dev.TIDY_PROJECTS:
-            expected = (
-                dev.TEST_BUILD_DIR
-                if project in dev.LINUX_PROJECTS
-                else dev.FW_BUILD_DIR
-            )
-            self.assertEqual(build_dir, expected, project)
+    def test_every_discovered_project_has_a_target(self):
+        for project in dev._discover_projects(dev.REPO_ROOT):
+            with self.subTest(project=project.directory):
+                self.assertIn(project.target, ("linux", "esp32s3"))
 
     def test_header_filter_covers_our_sources_and_excludes_vendored_code(self):
         # The filter is anchored at the repository root, which is `/project`
@@ -2005,71 +2146,56 @@ class TidyCommandTests(unittest.TestCase):
             ["/project/components/a.cpp", "/project/components/b.cpp"],
         )
 
-    def test_parser_accepts_fix_before_or_after_scopes(self):
+    def test_parser_accepts_fix_before_or_after_directories(self):
         parser = dev._build_parser()
         for argv in (
-            ["clang-tidy", "--fix", "test-hal-stub"],
-            ["clang-tidy", "test-hal-stub", "--fix"],
+            ["clang-tidy", "--fix", "components"],
+            ["clang-tidy", "components", "--fix"],
         ):
             with self.subTest(argv=argv):
                 args = parser.parse_args(argv)
                 self.assertTrue(args.fix)
-                self.assertEqual(args.scopes, ["test-hal-stub"])
+                self.assertEqual(args.directories, ["components"])
 
     def test_parser_defaults_fix_to_false(self):
-        args = dev._build_parser().parse_args(["clang-tidy", "test-hal-stub"])
+        args = dev._build_parser().parse_args(["clang-tidy", "components"])
         self.assertFalse(args.fix)
 
     def test_container_arguments_map_directories_into_the_project_mount(self):
-        scopes = [
-            ("project", "test-hal-stub"),
-            ("directory", dev.REPO_ROOT / "components"),
+        directories = [
+            dev.REPO_ROOT / "components" / "hal",
+            dev.REPO_ROOT / "mcgowan",
         ]
         self.assertEqual(
-            dev._tidy_container_arguments(scopes, fix=True),
+            dev._tidy_container_arguments(directories, fix=True),
             [
                 "clang-tidy",
                 "--fix",
-                "project:test-hal-stub",
-                "/project/components",
+                "/project/components/hal",
+                "/project/mcgowan",
             ],
         )
 
-    def test_resolved_scopes_survive_the_container_hop(self):
-        # The hop re-parses the command in the container, whose working
-        # directory is not the caller's, so the resolved choice must not be
-        # re-derived from a bare name.
-        scopes = [
-            ("project", "test-hal-stub"),
-            ("directory", dev.REPO_ROOT / "components"),
+    def test_resolved_directories_survive_the_container_hop(self):
+        # The hop runs in /project, so the host paths must be container paths.
+        directories = [
+            dev.REPO_ROOT / "components" / "hal",
+            dev.REPO_ROOT / "mcgowan",
         ]
-        arguments = dev._tidy_container_arguments(scopes)
-        self.assertEqual(dev._parse_tidy_scopes(arguments[1:]), scopes)
+        arguments = dev._tidy_container_arguments(directories)
+        self.assertEqual(dev._parse_tidy_scopes(arguments[1:]), directories)
 
     def test_main_forwards_fix_to_the_command(self):
-        # Resolution is covered by TidyScopeTests; this pins the forwarding.
         prog = str(dev.REPO_ROOT / "scripts" / "dev.py")
-        scope = ("project", "test-hal-stub")
-        with mock.patch.object(
-            dev, "_resolve_tidy_scope", return_value=scope
-        ), mock.patch.object(dev, "cmd_clang_tidy", return_value=0) as tidy:
-            rc = dev.main([prog, "clang-tidy", "test-hal-stub", "--fix"])
-        self.assertEqual(rc, 0)
-        tidy.assert_called_once_with([scope], fix=True)
-
-    def test_main_passes_a_directory_through_as_a_directory_scope(self):
-        prog = str(dev.REPO_ROOT / "scripts" / "dev.py")
-        components = str(dev.REPO_ROOT / "components")
+        components = dev.REPO_ROOT / "components"
         with mock.patch.object(dev, "cmd_clang_tidy", return_value=0) as tidy:
-            rc = dev.main([prog, "clang-tidy", components])
+            rc = dev.main([prog, "clang-tidy", str(components), "--fix"])
         self.assertEqual(rc, 0)
-        tidy.assert_called_once_with(
-            [("directory", dev.REPO_ROOT / "components")], fix=False
-        )
+        tidy.assert_called_once_with([components], fix=True)
 
 
-class TidyScopeTests(unittest.TestCase):
-    """`clang-tidy` arguments: subproject names or repository directories."""
+class TidyDirectoryTests(unittest.TestCase):
+    """`clang-tidy` arguments are repository directories."""
 
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -2077,68 +2203,47 @@ class TidyScopeTests(unittest.TestCase):
         self.root = Path(tmp.name).resolve()
         (self.root / "components" / "hal").mkdir(parents=True)
 
-    def test_a_subproject_name_is_a_project_scope(self):
-        self.assertEqual(
-            dev._resolve_tidy_scope(
-                "test-hal-stub", root=self.root, cwd=self.root
-            ),
-            ("project", "test-hal-stub"),
-        )
-
-    def test_a_directory_wins_over_a_subproject_name(self):
-        # Directory first: `clang-tidy mcgowan` names the tree, not the
-        # firmware project.
-        (self.root / "mcgowan").mkdir()
-        self.assertEqual(
-            dev._resolve_tidy_scope("mcgowan", root=self.root, cwd=self.root),
-            ("directory", self.root / "mcgowan"),
-        )
-
-    def test_the_project_prefix_forces_a_subproject(self):
-        (self.root / "test-hal-stub").mkdir()
-        self.assertEqual(
-            dev._resolve_tidy_scope(
-                "project:test-hal-stub", root=self.root, cwd=self.root
-            ),
-            ("project", "test-hal-stub"),
-        )
-
     def test_a_relative_directory_is_resolved_against_the_caller(self):
         self.assertEqual(
-            dev._resolve_tidy_scope(
-                "components/hal", root=self.root, cwd=self.root
+            dev._parse_directories(
+                ["components/hal"], root=self.root, cwd=self.root
             ),
-            ("directory", self.root / "components" / "hal"),
+            [self.root / "components" / "hal"],
         )
 
     def test_a_container_path_works_from_the_host(self):
         # `/project` is the container's name for the repository root.
         self.assertEqual(
-            dev._resolve_tidy_scope("/project/components", root=self.root),
-            ("directory", self.root / "components"),
+            dev._parse_directories(["/project/components"], root=self.root),
+            [self.root / "components"],
         )
 
-    def test_a_file_is_not_a_scope(self):
+    def test_a_file_is_not_a_directory(self):
         source = self.root / "components" / "hal" / "x.cpp"
         source.write_text("")
-        self.assertIsNone(dev._resolve_tidy_scope(str(source), root=self.root))
+        self.assertIsNone(
+            dev._parse_directories([str(source)], root=self.root)
+        )
 
     def test_a_missing_directory_is_rejected(self):
         self.assertIsNone(
-            dev._resolve_tidy_scope(
-                "components/nope", root=self.root, cwd=self.root
+            dev._parse_directories(
+                ["components/nope"], root=self.root, cwd=self.root
             )
         )
 
     def test_a_directory_outside_the_repository_is_rejected(self):
         self.assertIsNone(
-            dev._resolve_tidy_scope(str(self.root.parent), root=self.root)
+            dev._parse_directories([str(self.root.parent)], root=self.root)
         )
 
-    def test_no_arguments_means_every_analyzed_project(self):
+    def test_no_arguments_means_every_discovered_project(self):
         self.assertEqual(
             dev._parse_tidy_scopes([]),
-            [("project", project) for project, _ in dev.TIDY_PROJECTS],
+            [
+                project.directory
+                for project in dev._discover_projects(dev.REPO_ROOT)
+            ],
         )
 
     def test_an_unknown_argument_is_reported_and_rejected(self):
@@ -2155,6 +2260,21 @@ class TidyDatabaseDiscoveryTests(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name).resolve()
+        for relative, name, target in (
+            ("mcgowan", "mcgowan", "esp32s3"),
+            ("components/a", "a", "linux"),
+            ("components/b", "b", "esp32s3"),
+            ("components/c", "c", "linux"),
+        ):
+            directory = self.root / relative
+            directory.mkdir(parents=True)
+            (directory / "CMakeLists.txt").write_text(
+                "include($ENV{IDF_PATH}/tools/cmake/project.cmake)\n"
+                f"project({name})\n"
+            )
+            (directory / "sdkconfig.defaults").write_text(
+                f'CONFIG_IDF_TARGET="{target}"\n'
+            )
         for relative in (
             "components/a/build_linux",
             "mcgowan/build_esp32s3",
@@ -2166,7 +2286,7 @@ class TidyDatabaseDiscoveryTests(unittest.TestCase):
             "third_party/sml/build_linux",
         ):
             directory = self.root / relative
-            directory.mkdir(parents=True)
+            directory.mkdir(parents=True, exist_ok=True)
             (directory / "compile_commands.json").write_text("[]")
 
     def test_only_build_linux_and_build_esp32s3_are_considered(self):
@@ -2458,6 +2578,134 @@ class StagedFormatCheckTests(unittest.TestCase):
             self._format_check_in_tree(repo, ["vendor/x.cpp"]), 0
         )
 
+    # -- directory filtering ------------------------------------------------
+
+    def test_staged_files_can_be_scoped_to_a_directory(self):
+        repo = self._scratch_repo()
+        self._write(repo, "components/a/x.cpp", "int x;\n")
+        self._write(repo, "components/b/y.cpp", "int y;\n")
+        self._write(repo, "components/a/readme.md", "docs\n")
+        self._stage(repo, "components/a", "components/b")
+        self.assertEqual(
+            dev._staged_files([repo / "components" / "a"], root=repo),
+            ["components/a/x.cpp"],
+        )
+
+    def test_staged_files_drop_vendored_and_deleted_files(self):
+        repo = self._scratch_repo()
+        self._write(repo, "third_party/x.cpp", "int x;\n")
+        self._write(repo, "components/keep.cpp", "int y;\n")
+        self._write(repo, "components/gone.cpp", "int z;\n")
+        self._stage(repo, ".")
+        self._commit(repo)
+
+        self._write(repo, "third_party/x.cpp", "int x = 1;\n")
+        self._write(repo, "components/keep.cpp", "int y = 1;\n")
+        (repo / "components/gone.cpp").unlink()
+        self._git(repo, "add", "-A")
+        self.assertEqual(
+            dev._staged_files([repo], root=repo),
+            ["components/keep.cpp"],
+        )
+
+
+class FormatCommandTests(unittest.TestCase):
+    """`format` and its checks operate on the directories they are given."""
+
+    def setUp(self):
+        self.calls = []
+        self.hops = []
+        self._original_run = dev.run
+        self._original_change_to_container = dev.change_to_container
+
+        def fake_run(cmd, cwd=dev.REPO_ROOT):
+            self.calls.append(list(cmd))
+            return 0
+
+        def fake_change_to_container(trailing=None):
+            self.hops.append(trailing)
+
+        dev.run = fake_run
+        dev.change_to_container = fake_change_to_container
+
+    def tearDown(self):
+        dev.run = self._original_run
+        dev.change_to_container = self._original_change_to_container
+
+    def test_format_scopes_to_the_directory(self):
+        utility = dev.REPO_ROOT / "components" / "utility"
+        with mock.patch.object(
+            dev,
+            "source_files",
+            return_value=["components/utility/x.cpp"],
+        ) as files:
+            self.assertEqual(dev.cmd_format([str(utility)]), 0)
+        files.assert_called_once_with([utility])
+        self.assertEqual(
+            self.calls,
+            [["clang-format", "-i", "components/utility/x.cpp"]],
+        )
+        self.assertEqual(
+            self.hops, [["format", "/project/components/utility"]]
+        )
+
+    def test_format_check_scopes_to_the_directory(self):
+        components = dev.REPO_ROOT / "components"
+        with mock.patch.object(
+            dev, "source_files", return_value=["components/x.cpp"]
+        ) as files:
+            self.assertEqual(dev.cmd_format_check([str(components)]), 0)
+        files.assert_called_once_with([components])
+        self.assertEqual(
+            self.calls,
+            [["clang-format", "--dry-run", "--Werror", "components/x.cpp"]],
+        )
+        self.assertEqual(
+            self.hops, [["format-check", "/project/components"]]
+        )
+
+    def test_format_check_starts_from_the_caller_directory(self):
+        utility = dev.REPO_ROOT / "components" / "utility"
+        with (
+            mock.patch.object(
+                dev, "_start_directory", return_value=utility
+            ),
+            mock.patch.object(
+                dev, "source_files", return_value=[]
+            ) as files,
+        ):
+            self.assertEqual(dev.cmd_format_check([]), 0)
+        files.assert_called_once_with([utility])
+        self.assertEqual(
+            self.hops,
+            [["format-check", "/project/components/utility"]],
+        )
+
+    def test_format_check_staged_scopes_to_the_directory(self):
+        utility = dev.REPO_ROOT / "components" / "utility"
+        with mock.patch.object(
+            dev, "_staged_files", return_value=[]
+        ) as staged:
+            self.assertEqual(
+                dev.cmd_format_check_staged([str(utility)]), 0
+            )
+        staged.assert_called_once_with([utility])
+        self.assertEqual(
+            self.hops,
+            [["format-check-staged", "/project/components/utility"]],
+        )
+
+    def test_main_forwards_directories_to_the_command(self):
+        prog = str(dev.REPO_ROOT / "scripts" / "dev.py")
+        components = str(dev.REPO_ROOT / "components")
+        with mock.patch.object(
+            dev, "cmd_format_check", return_value=0
+        ) as command:
+            self.assertEqual(
+                dev.main([prog, "format-check", components]), 0
+            )
+        command.assert_called_once_with([components])
+
 
 class SourceFileDiscoveryTests(unittest.TestCase):
     """`source_files` must see untracked sources, not just the index.
@@ -2534,6 +2782,30 @@ class SourceFileDiscoveryTests(unittest.TestCase):
             ),
             ["a.cpp", "b.hpp", "c.h"],
         )
+
+    def test_selection_drops_vendored_paths(self):
+        # Pointing at the repository root must not format `third_party/`.
+        repo = self._scratch_repo()
+        self._write(repo, "third_party/json/json.hpp", "")
+        self._write(repo, "components/x.cpp", "")
+        self.assertEqual(
+            dev._select_sources(
+                ["third_party/json/json.hpp", "components/x.cpp"], repo
+            ),
+            ["components/x.cpp"],
+        )
+
+    def test_source_files_can_be_scoped_to_a_directory(self):
+        # The `format` commands pass their directory arguments here, so a
+        # subdirectory must not list sources outside it.
+        utility = dev.REPO_ROOT / "components" / "utility"
+        files = dev.source_files([utility])
+        self.assertTrue(files, "expected sources under components/utility")
+        for path in files:
+            self.assertTrue(
+                path.startswith("components/utility/"), path
+            )
+            self.assertFalse(dev._is_vendored_path(path), path)
 
     def test_selection_drops_paths_that_are_not_files(self):
         # A tracked-but-deleted file is still in the index; handing it to
@@ -2973,7 +3245,7 @@ class SelfCheckModuleTests(unittest.TestCase):
         # The message must name the way out: run it on the host, or use the
         # container's own test command instead.
         self.assertIn("./scripts/dev.py self-check", message)
-        self.assertIn("./scripts/dev.py test", message)
+        self.assertIn("./scripts/dev.py test-linux", message)
 
     def test_runs_the_suite_on_the_host(self):
         calls = []

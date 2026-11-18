@@ -84,5 +84,5 @@ jobs:
 
       - name: tests
         run: |
-          python3 ./scripts/dev.py test
+          python3 ./scripts/dev.py test-linux
 
