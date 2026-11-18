@@ -100,6 +100,10 @@ class SequenceLock {
 
     // Multi-writer form. A stale `versioned_model` (another writer got there
     // first) is rejected without changing the cell.
+    //
+    // On rejection, to update the cell, read() must be called to get
+    // a new VersionedModel and the changes applied to the model,
+    // and write() called again.
     [[nodiscard]] WriteResult write(
         VersionedModel const& versioned_model) noexcept
         requires(concurrent_writers == ConcurrentWriters::Enabled)
