@@ -985,15 +985,19 @@ def cmd_test() -> int:
 def cmd_self_check() -> int:
     """Run the host-side unit tests for this script (stdlib `unittest`).
 
-    Exercises `dev.py`'s own pure helpers (e.g. the command line `shell`
-    builds) with the standard-library test runner, so no Docker hop, container,
-    or third-party dependency is needed.
+    Exercises `dev.py`'s own helpers (e.g. the command line `shell` builds)
+    with the standard-library test runner, so no container or third-party
+    dependency is needed. A few probes run the *pinned dev image* in a
+    throwaway container to show that `dev.py` is on its PATH, so this command
+    needs a Docker daemon and the image on the host; those probes skip when
+    either is missing.
 
     Host-only. The suite pins the decisions the *host* side makes — above all
     whether a command re-execs itself under `docker compose` — and inside the
     container none of those decisions happen, so the run would pass vacuously
-    instead of testing anything. The command therefore refuses to run there,
-    the same way `pull` and `image` do.
+    instead of testing anything. The container also has no Docker daemon, so
+    the image probes could not run. The command therefore refuses to run
+    there, the same way `pull` and `image` do.
     """
     if is_in_container():
         print(
