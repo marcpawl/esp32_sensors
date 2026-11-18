@@ -220,10 +220,11 @@ class SubprojectBuildTests(unittest.TestCase):
             dev._start_directory(cwd=components), components
         )
 
-    def test_start_directory_outside_the_repository_is_the_root(self):
-        # `dev.py` is on PATH, so it can be run from anywhere.
-        self.assertEqual(
-            dev._start_directory(cwd=dev.REPO_ROOT.parent), dev.REPO_ROOT
+    def test_start_directory_outside_the_repository_is_rejected(self):
+        # A caller outside the tree named nothing to operate on, so say so
+        # instead of silently building the whole repository.
+        self.assertIsNone(
+            dev._start_directory(cwd=dev.REPO_ROOT.parent)
         )
 
     def test_root_build_configures_then_builds_all_subprojects(self):
@@ -498,6 +499,106 @@ class ProjectDiscoveryTests(unittest.TestCase):
                 )
             )
         self.assertIn("No host (`linux`) test projects", err.getvalue())
+
+
+class OutsideRepositoryTests(unittest.TestCase):
+    """A directory outside the repository is always rejected.
+
+    This covers both an explicit argument (`.` or an absolute path) and the
+    implicit start directory: `cd ~ && dev.py build` must not silently build
+    the repository, just as `cd ~ && dev.py build .` must not try to build
+    the home directory.
+    """
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.outside = Path(tmp.name).resolve()
+
+    def test_a_relative_argument_outside_the_repository_is_rejected(self):
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertIsNone(
+                dev._parse_directories(["."], cwd=self.outside)
+            )
+        self.assertIn("outside", err.getvalue())
+
+    def test_an_absolute_argument_outside_the_repository_is_rejected(self):
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertIsNone(
+                dev._parse_directories([str(self.outside)])
+            )
+        self.assertIn("outside", err.getvalue())
+
+    def test_build_rejects_a_system_directory(self):
+        # The concrete case: `dev.py build /etc` must not build anything.
+        self.assertTrue(Path("/etc").is_dir())
+        with (
+            mock.patch.object(dev, "change_to_container") as hop,
+            mock.patch.object(dev, "run") as run,
+            redirect_stderr(io.StringIO()),
+        ):
+            self.assertEqual(dev.cmd_build(["/etc"]), 1)
+        hop.assert_not_called()
+        run.assert_not_called()
+
+    def test_the_default_start_directory_outside_is_rejected(self):
+        err = io.StringIO()
+        with (
+            mock.patch.object(Path, "cwd", return_value=self.outside),
+            redirect_stderr(err),
+        ):
+            self.assertIsNone(dev._start_directories([]))
+        self.assertIn("outside", err.getvalue())
+
+    def test_commands_fail_before_the_container_hop(self):
+        calls = []
+        hops = []
+        original_run = dev.run
+        original_hop = dev.change_to_container
+        try:
+            dev.run = lambda cmd, cwd=dev.REPO_ROOT: calls.append(cmd) or 0
+            dev.change_to_container = (
+                lambda trailing=None: hops.append(trailing)
+            )
+            for handler in (
+                lambda: dev.cmd_build([]),
+                lambda: dev.cmd_test_linux([]),
+                lambda: dev.cmd_test_esp32([]),
+                lambda: dev.cmd_format([]),
+                lambda: dev.cmd_format_check([]),
+                lambda: dev.cmd_format_check_staged([]),
+            ):
+                with (
+                    self.subTest(handler=handler),
+                    mock.patch.object(
+                        Path, "cwd", return_value=self.outside
+                    ),
+                    redirect_stderr(io.StringIO()),
+                ):
+                    self.assertEqual(handler(), 1)
+        finally:
+            dev.run = original_run
+            dev.change_to_container = original_hop
+        self.assertEqual(calls, [])
+        self.assertEqual(hops, [])
+
+    def test_tidy_rejects_an_outside_start_directory(self):
+        err = io.StringIO()
+        with (
+            mock.patch.object(Path, "cwd", return_value=self.outside),
+            redirect_stderr(err),
+        ):
+            self.assertIsNone(dev._parse_tidy_scopes([]))
+        self.assertIn("outside", err.getvalue())
+
+    def test_tidy_starts_from_a_subdirectory(self):
+        components = dev.REPO_ROOT / "components"
+        with mock.patch.object(
+            dev, "_start_directory", return_value=components
+        ):
+            self.assertEqual(dev._parse_tidy_scopes([]), [components])
 
 
 class SubmoduleTests(unittest.TestCase):

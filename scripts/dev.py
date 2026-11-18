@@ -796,18 +796,45 @@ def _resolve_directory(
     return None
 
 
-def _start_directory(root: Path = REPO_ROOT, cwd: Path | None = None) -> Path:
+def _start_directory(
+    root: Path = REPO_ROOT, cwd: Path | None = None
+) -> Path | None:
     """The directory `build`/`test` start from when given none. Pure.
 
     The caller's current directory, so `cd components/utility && dev.py
-    test-linux` tests that subtree. A caller outside the repository starts
-    from the repository root, which keeps `dev.py build` working from
-    anywhere.
+    test-linux` tests that subtree. None means the caller is outside the
+    repository, which the commands reject rather than silently operating on
+    a tree the caller did not name.
     """
     current = (cwd or Path.cwd()).resolve()
     if current == root or root in current.parents:
         return current
-    return root
+    return None
+
+
+def _start_directories(
+    arguments: list[str], root: Path = REPO_ROOT
+) -> list[Path] | None:
+    """The directories a command operates on, defaulting to the cwd.
+
+    Returns None after printing when an argument is not a directory inside
+    the repository, or when the caller's directory is outside it.
+    """
+    directories = _parse_directories(arguments, root=root)
+    if directories is None:
+        return None
+    if directories:
+        return directories
+    start = _start_directory(root=root)
+    if start is None:
+        print(
+            f"The current directory '{Path.cwd().resolve()}' is outside the "
+            f"repository '{root}'; run from inside it or name a directory "
+            f"under it.",
+            file=sys.stderr,
+        )
+        return None
+    return [start]
 
 
 def _parse_directories(
@@ -826,7 +853,8 @@ def _parse_directories(
         directory = _resolve_directory(argument, root=root, cwd=cwd)
         if directory is None:
             print(
-                f"'{argument}' is not a directory in the repository.",
+                f"'{argument}' is not a directory inside the repository "
+                f"'{root}' (directories outside it are rejected).",
                 file=sys.stderr,
             )
             return None
@@ -971,16 +999,14 @@ def cmd_build(arguments: list[str], analyzer: bool = False) -> int:
     `build --analyzer`         → any of the above, analyzer on
     `build --analyzer=false`   → explicitly off (the default)
 
-    With no directory, the current directory is used (the repository root
-    when run outside it). The projects under a directory are discovered on
+    With no directory, the current directory is used; a caller outside the
+    repository is an error. The projects under a directory are discovered on
     disk (see `_discover_projects`), so a new ESP-IDF project needs no entry
     here.
     """
-    directories = _parse_directories(arguments)
+    directories = _start_directories(arguments)
     if directories is None:
         return 1
-    if not directories:
-        directories = [_start_directory()]
     change_to_container(_project_container_arguments("build", directories,
                                                      analyzer))
     rc = _ensure_submodules()
@@ -1090,16 +1116,14 @@ def cmd_test_linux(arguments: list[str] | None = None) -> int:
     A host test suite is every `linux`-target ESP-IDF project under a `tests/`
     directory (`_host_test_projects_under`), so a new suite is picked up
     without touching this command. With no directory, the current directory
-    is used (the repository root when run outside it) in path order:
+    is used (a caller outside the repository is an error) in path order:
     `cd components/utility && dev.py test-linux` runs the utility suite, and
     `dev.py test-linux .` from the root runs every suite. The aggregate the
     pre-commit hook and CI call.
     """
-    directories = _parse_directories(arguments or [])
+    directories = _start_directories(arguments or [])
     if directories is None:
         return 1
-    if not directories:
-        directories = [_start_directory()]
     change_to_container(
         _project_container_arguments("test-linux", directories)
     )
@@ -1164,14 +1188,13 @@ def cmd_test_esp32(arguments: list[str] | None = None) -> int:
 
     Every non-`linux` ESP-IDF project under a `tests/` directory is built and
     then run through its `test.py` driver, which drives the board (flash,
-    serial log, sentinel). With no directory, the current directory is used
-    (the repository root when run outside it). `ESP32_PORT` selects the board.
+    serial log, sentinel). With no directory, the current directory is used;
+    a caller outside the repository is an error. `ESP32_PORT` selects the
+    board.
     """
-    directories = _parse_directories(arguments or [])
+    directories = _start_directories(arguments or [])
     if directories is None:
         return 1
-    if not directories:
-        directories = [_start_directory()]
     change_to_container(
         _project_container_arguments("test-esp32", directories)
     )
@@ -1241,17 +1264,14 @@ def cmd_self_check() -> int:
 
 def _format_directories(arguments: list[str]) -> list[Path] | None:
     """The directories a format command operates on, cwd by default. Pure."""
-    directories = _parse_directories(arguments)
-    if directories is None:
-        return None
-    return directories or [_start_directory()]
+    return _start_directories(arguments)
 
 
 def cmd_format(arguments: list[str]) -> int:
     """Apply the committed .clang-format (Google base, 4-space, 80 cols).
 
-    With no directory, starts from the current directory (the repository root
-    when run outside it). `third_party/` is never formatted.
+    With no directory, starts from the current directory; a caller outside the
+    repository is an error. `third_party/` is never formatted.
     """
     directories = _format_directories(arguments)
     if directories is None:
@@ -1270,8 +1290,8 @@ def cmd_format(arguments: list[str]) -> int:
 def cmd_format_check(arguments: list[str]) -> int:
     """CI-friendly check; non-zero exit if anything is unformatted.
 
-    With no directory, starts from the current directory (the repository root
-    when run outside it). `third_party/` is never checked.
+    With no directory, starts from the current directory; a caller outside the
+    repository is an error. `third_party/` is never checked.
     """
     directories = _format_directories(arguments)
     if directories is None:
@@ -1483,14 +1503,21 @@ def _tidy_units(directory: Path) -> list[dict] | None:
 
 
 def _parse_tidy_scopes(arguments: list[str]) -> list[Path] | None:
-    """Resolve `clang-tidy`'s directory arguments. No arguments means all.
+    """Resolve `clang-tidy`'s directory arguments, cwd by default.
 
-    Invalid arguments print an error and return None so the caller can exit
-    non-zero.
+    Invalid arguments, and a caller outside the repository, print an error and
+    return None so the caller can exit non-zero. From the repository root the
+    scope is every discovered project, so a missing compile database is named
+    per project; from a subdirectory it is that directory.
     """
-    if not arguments:
+    if arguments:
+        return _parse_directories(arguments)
+    directories = _start_directories([])
+    if directories is None:
+        return None
+    if directories == [REPO_ROOT]:
         return [project.directory for project in _discover_projects(REPO_ROOT)]
-    return _parse_directories(arguments)
+    return directories
 
 
 def _discover_tidy_databases(root: Path = REPO_ROOT) -> list[Path]:
@@ -2101,7 +2128,7 @@ def _build_parser() -> argparse.ArgumentParser:
         nargs="*",
         metavar="DIRECTORY",
         help="directories (every C++ source under one is analyzed); omit for "
-             "every project in the repository",
+             "the current directory",
     )
 
     # The format commands take optional directories, defaulting to the current

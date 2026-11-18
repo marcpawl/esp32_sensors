@@ -32,7 +32,7 @@ invoked from the host.
 | both | `format-check [DIRECTORY...]` | Non-zero exit if any such source is unformatted |
 | both | `format-check-staged [DIRECTORY...]` | Same, for the staged content of those directories only |
 | both | `pycodestyle` | PEP 8 (79 columns) over all Python sources |
-| both | `clang-tidy [DIRECTORY...] [--fix]` | Static analysis over every source under the directories (a project directory uses its own compile database, any other draws from all databases below it); `--fix` applies fixes in place |
+| both | `clang-tidy [DIRECTORY...] [--fix]` | Static analysis over every source under the directories (default: the current directory; a project directory uses its own compile database, any other draws from all databases below it); `--fix` applies fixes in place |
 | both | `shell [CMD...]` | Run a command in the container; no arguments = login shell |
 | both | `complete` | Internal: list subcommands matching a prefix |
 | host | `install-hooks` | Install the git commit hooks |
@@ -42,10 +42,11 @@ Set `ESP32_PORT` (e.g. `/dev/ttyACM0`) to target another serial device.
 `build`, `test-linux`, `test-esp32`, and `clang-tidy` fetch missing submodules
 first.
 
-`format`, `format-check`, `format-check-staged`, `build`, `test-linux`, and
-`test-esp32` all take directory arguments (a host absolute path or
-`/project/...` works too) and start from the current directory when given
-none, so a subset can be worked on from inside it. `third_party/` is never
+`format`, `format-check`, `format-check-staged`, `build`, `test-linux`,
+`test-esp32`, and `clang-tidy` all take directory arguments (a host absolute
+path or `/project/...` works too) and start from the current directory when
+given none, so a subset can be worked on from inside it. A directory outside
+the repository, or a caller outside it, is rejected; `third_party/` is never
 formatted or checked.
 
 `build` and the test commands discover ESP-IDF projects on disk: a project is
