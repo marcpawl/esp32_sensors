@@ -41,7 +41,7 @@
 
 namespace thermo {
 
-enum class ConcurrentWriters { Disable, Enabled };
+enum class ConcurrentWriters : std::uint8_t { Disable, Enabled };
 
 namespace detail {
 
