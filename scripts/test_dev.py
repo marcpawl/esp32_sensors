@@ -600,7 +600,7 @@ class DevImageTests(unittest.TestCase):
     """
 
     def test_dev_image_is_the_pinned_prebuilt_tag(self):
-        self.assertEqual(dev.DEV_IMAGE, "marcpawl/esp-idf:20261118")
+        self.assertEqual(dev.DEV_IMAGE, "marcpawl/esp-idf:20261118b")
 
     def test_compose_pins_the_same_image(self):
         compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
@@ -698,12 +698,18 @@ class DevImageTests(unittest.TestCase):
         self.assertEqual(calls, [], "no image may be built in the container")
 
     def test_image_puts_dev_py_on_the_path(self):
-        # The image adds `dev.py` to PATH so it can be run as `dev.py` from
-        # anywhere in the container. A PATH entry is a *directory*: listing the
-        # file itself (`/project/scripts/dev.py`) never resolves.
+        # `dev.py` is added to PATH so it can be run as `dev.py` from anywhere
+        # in the container. A PATH entry is a *directory*: listing the file
+        # itself (`/project/scripts/dev.py`) never resolves.
         dockerfile = (dev.REPO_ROOT / "docker" / "Dockerfile").read_text()
-        self.assertIn('PATH=/project/scripts:"$PATH"', dockerfile)
+        self.assertIn("/etc/profile.d/dev.py-path.sh", dockerfile)
+        self.assertIn("PATH=/project/scripts:", dockerfile)
         self.assertNotIn("PATH=/project/scripts/dev.py", dockerfile)
+        # One script, sourced by both entry points: `/etc/profile.d` covers
+        # non-interactive login shells (`dev.py shell` runs `bash -l -c`) for
+        # any uid, and `.bashrc` covers a non-login interactive `bash`, which
+        # does not read the profile.
+        self.assertIn("source /etc/profile.d/dev.py-path.sh", dockerfile)
         # `/project` is the compose bind mount of the repo root.
         compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
         self.assertIn("..:/project", compose)
