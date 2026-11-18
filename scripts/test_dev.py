@@ -9,8 +9,8 @@ These exercise dev.py's own pure helpers (no ESP-IDF, no third-party
 dependency): the `shell` command line it builds, and `shell`'s `-C DIR`
 path resolution. A few probes run the pinned dev image in a throwaway
 container, which is why this suite is host-only and needs Docker on the
-host; they skip when the daemon or the image is missing. The
-standard-library `unittest` runner is used throughout, and `dev.py` is
+host; without the daemon or the image they fail and name the pull command.
+The standard-library `unittest` runner is used throughout, and `dev.py` is
 imported in-process, so the tests run against the code being checked
 rather than a copy.
 """
@@ -728,9 +728,9 @@ class DevImageShellTests(unittest.TestCase):
     where `dev.py` is.
 
     This is why `self-check` stays host-only: the host has a Docker daemon,
-    the container does not. When the daemon or the image is missing the probes
-    skip rather than fail, so the rest of the suite still runs; run
-    `./scripts/dev.py pull` to get the image.
+    the container does not. A host that cannot run the image fails the probes
+    with the command that fetches it, rather than skipping: a silent skip
+    would let a renamed tag or an unpulled image pass the gate.
     """
 
     DEV_PY = "/project/scripts/dev.py"
@@ -739,15 +739,31 @@ class DevImageShellTests(unittest.TestCase):
     # chatter an interactive shell prints.
     MARKER = "dev-py-probe:"
 
-    def setUp(self):
+    def _require_image(self) -> None:
+        """Fail, naming the way out, when the probes cannot run.
+
+        Deliberately a failure and not a skip: the probes prove that the
+        *published* image puts `dev.py` on PATH, so being unable to run it is
+        a broken check, not an inapplicable one.
+        """
         if dev.is_in_container():
-            self.skipTest("the dev container has no Docker daemon")
+            self.fail(
+                "no Docker daemon inside the dev container: run "
+                "./scripts/dev.py self-check on the host, which can start "
+                "the image"
+            )
         if shutil.which("docker") is None:
-            self.skipTest("docker is not installed on this host")
+            self.fail(
+                "docker is not installed on this host, so the pinned dev "
+                "image cannot be probed. Install Docker, then run "
+                "./scripts/dev.py pull (or the same pull from compose: "
+                "docker compose -f docker/docker-compose.yml pull)"
+            )
         if not self._image_present():
-            self.skipTest(
-                f"{dev.DEV_IMAGE} is not present; "
-                "run ./scripts/dev.py pull"
+            self.fail(
+                f"the dev image {dev.DEV_IMAGE} is not present. Pull it "
+                "first with ./scripts/dev.py pull (or "
+                "docker compose -f docker/docker-compose.yml pull)"
             )
 
     @staticmethod
@@ -765,6 +781,7 @@ class DevImageShellTests(unittest.TestCase):
 
         `user` is the `--user` value; the default is the image's own user.
         """
+        self._require_image()
         command = [
             "docker", "run", "--rm", "--entrypoint", "bash",
             "-v", f"{dev.REPO_ROOT}:/project",

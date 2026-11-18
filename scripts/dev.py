@@ -989,8 +989,8 @@ def cmd_self_check() -> int:
     with the standard-library test runner, so no container or third-party
     dependency is needed. A few probes run the *pinned dev image* in a
     throwaway container to show that `dev.py` is on its PATH, so this command
-    needs a Docker daemon and the image on the host; those probes skip when
-    either is missing.
+    needs a Docker daemon and the image on the host; without either, those
+    probes fail and name the pull command.
 
     Host-only. The suite pins the decisions the *host* side makes — above all
     whether a command re-execs itself under `docker compose` — and inside the
