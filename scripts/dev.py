@@ -119,6 +119,12 @@ STYLE_FILE_NAMES = (".clang-format", ".clang-format-ignore")
 DEV_IMAGE = "marcpawl/esp-idf:20261114"
 LOCAL_IMAGE = "esp32-sensors-dev:local"
 
+# The image's Dockerfile and its build context. Both live in `docker/`, next to
+# `docker-compose.yml` (whose `build.context` is `.` relative to its own
+# directory), so `image` must not assume the repo root is the context.
+DOCKER_DIR = "docker"
+DOCKERFILE = f"{DOCKER_DIR}/Dockerfile"
+
 # User baked into DEV_IMAGE, and where ccache lives under a writable HOME. A
 # container run as any *other* uid (a host user, or a CI runner whose uid is
 # 1001) has no passwd entry in the image, so `$HOME` would be unusable and
@@ -669,12 +675,23 @@ def cmd_pull() -> int:
     return run(["docker", "pull", DEV_IMAGE])
 
 
+def _image_command() -> list[str]:
+    """`docker build` argv for the dev image. Pure, so it is unit-testable.
+
+    The context is `docker/`, not the repo root: that is where the Dockerfile
+    and docker-compose.yml live, and it is what compose's `build.context: .`
+    resolves to. Using the repo root as the context would find no Dockerfile.
+    """
+    return ["docker", "build", "-t", LOCAL_IMAGE, "-f", DOCKERFILE,
+            DOCKER_DIR]
+
+
 def cmd_image() -> int:
     """Build the dev image locally from the Dockerfile. Not needed normally."""
     if is_in_container():
         print("Image cannot be built while in container", file=sys.stderr)
         return 1
-    return run(["docker", "build", "-t", LOCAL_IMAGE, "."])
+    return run(_image_command())
 
 
 def _idf(project: str, build_dir: str, *args: str) -> list[str]:

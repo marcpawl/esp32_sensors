@@ -193,7 +193,8 @@ RUN if getent passwd "${UID}" >/dev/null 2>&1; then \
     && chown -R "${UID}:${GID}" "/home/${USERNAME}" \
     # Source the IDF environment for every interactive login shell.
     && echo "ESP_IDF_EXPORT_DEBUG=1" >> "/home/${USERNAME}/.bashrc" \
-    && printf 'source %s/export.sh\n' "${IDF_PATH}" >> "/home/${USERNAME}/.bashrc"
+    && printf 'source %s/export.sh\n' "${IDF_PATH}" >> "/home/${USERNAME}/.bashrc" \
+    && echo 'export PATH=/project/scripts:"$PATH"' >> "/home/${USERNAME}/.bashrc"
 
 # ---------------------------------------------------------------------------
 # SSH key and GitHub CLI (`gh`) mount points, shared with the host.

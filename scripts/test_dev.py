@@ -657,6 +657,57 @@ class DevImageTests(unittest.TestCase):
         # would silently swap the toolchain under a developer.
         self.assertNotEqual(dev.LOCAL_IMAGE, dev.DEV_IMAGE)
 
+    def test_image_builds_from_the_docker_directory(self):
+        # Regression: the Dockerfile moved into `docker/`, but `image` still
+        # used the repo root as its build context, so `docker build` found no
+        # Dockerfile and the command failed.
+        self.assertEqual(
+            dev._image_command(),
+            ["docker", "build", "-t", dev.LOCAL_IMAGE, "-f",
+             "docker/Dockerfile", "docker"],
+        )
+        # The named Dockerfile must be the one that exists, and the context
+        # must be its own directory (compose's `build.context: .`).
+        self.assertTrue((dev.REPO_ROOT / "docker" / "Dockerfile").is_file())
+
+    def test_image_runs_the_build_outside_the_container(self):
+        calls = []
+        original_run, original_in_container = dev.run, dev.is_in_container
+        try:
+            dev.run = lambda cmd, cwd=dev.REPO_ROOT: calls.append(cmd) or 0
+            dev.is_in_container = lambda: False
+            self.assertEqual(dev.cmd_image(), 0)
+        finally:
+            dev.run, dev.is_in_container = original_run, original_in_container
+        self.assertEqual(calls, [dev._image_command()])
+
+    def test_image_refuses_to_build_inside_the_container(self):
+        # There is no Docker daemon in the dev container, so the build must be
+        # started from the host.
+        calls = []
+        original_run, original_in_container = dev.run, dev.is_in_container
+        err = io.StringIO()
+        try:
+            dev.run = lambda cmd, cwd=dev.REPO_ROOT: calls.append(cmd) or 0
+            dev.is_in_container = lambda: True
+            with redirect_stderr(err):
+                rc = dev.cmd_image()
+        finally:
+            dev.run, dev.is_in_container = original_run, original_in_container
+        self.assertEqual(rc, 1)
+        self.assertEqual(calls, [], "no image may be built in the container")
+
+    def test_image_puts_dev_py_on_the_path(self):
+        # The image adds `dev.py` to PATH so it can be run as `dev.py` from
+        # anywhere in the container. A PATH entry is a *directory*: listing the
+        # file itself (`/project/scripts/dev.py`) never resolves.
+        dockerfile = (dev.REPO_ROOT / "docker" / "Dockerfile").read_text()
+        self.assertIn('PATH=/project/scripts:"$PATH"', dockerfile)
+        self.assertNotIn("PATH=/project/scripts/dev.py", dockerfile)
+        # `/project` is the compose bind mount of the repo root.
+        compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
+        self.assertIn("..:/project", compose)
+
 
 class DevContainerTests(unittest.TestCase):
     """`.devcontainer/devcontainer.json` matches the prebuilt image.
