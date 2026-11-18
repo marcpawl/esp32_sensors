@@ -3,7 +3,7 @@
 # ESP32 Solar-Powered Thermometer Logger — development container.
 #
 # NOTE: this image is normally NOT built. `docker-compose.yml` pins the
-# prebuilt, published image `marcpawl/esp-idf:20261109b`, and both developers
+# prebuilt, published image `marcpawl/esp-idf:20261118`, and both developers
 # and CI pull it. Build this Dockerfile only when changing it, then publish the
 # result under a NEW date-stamped tag (see Developer.md).
 #
@@ -31,6 +31,7 @@
 #   - PyGithub (`import github`) in the ESP-IDF Python venv.
 #   - esp-clang, providing `clang-format` / `clang-tidy`.
 #   - pycodestyle (pinned) for the Python style check.
+#   - `dev.py` on PATH (`/project/scripts`) for interactive login shells.
 
 FROM espressif/idf:release-v6.1
 
