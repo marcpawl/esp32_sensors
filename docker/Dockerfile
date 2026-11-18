@@ -3,7 +3,7 @@
 # ESP32 Solar-Powered Thermometer Logger — development container.
 #
 # NOTE: this image is normally NOT built. `docker-compose.yml` pins the
-# prebuilt, published image `marcpawl/esp-idf:20261109b`, and both developers
+# prebuilt, published image `marcpawl/esp-idf:20261118b`, and both developers
 # and CI pull it. Build this Dockerfile only when changing it, then publish the
 # result under a NEW date-stamped tag (see Developer.md).
 #
@@ -31,6 +31,7 @@
 #   - PyGithub (`import github`) in the ESP-IDF Python venv.
 #   - esp-clang, providing `clang-format` / `clang-tidy`.
 #   - pycodestyle (pinned) for the Python style check.
+#   - `dev.py` on PATH (`/project/scripts`) for interactive login shells.
 
 FROM espressif/idf:release-v6.1
 
@@ -193,7 +194,22 @@ RUN if getent passwd "${UID}" >/dev/null 2>&1; then \
     && chown -R "${UID}:${GID}" "/home/${USERNAME}" \
     # Source the IDF environment for every interactive login shell.
     && echo "ESP_IDF_EXPORT_DEBUG=1" >> "/home/${USERNAME}/.bashrc" \
-    && printf 'source %s/export.sh\n' "${IDF_PATH}" >> "/home/${USERNAME}/.bashrc"
+    && printf 'source %s/export.sh\n' "${IDF_PATH}" >> "/home/${USERNAME}/.bashrc" \
+    # Put `dev.py` on PATH for every uid and for non-interactive shells too.
+    # A PATH entry names the *directory* holding the script, not the file: it
+    # is searched for a program name, so `/project/scripts/dev.py` would never
+    # resolve. `/etc/profile.d` is read by any login shell (`dev.py shell`
+    # runs `bash -l -c`), `.bashrc` by a non-login interactive `bash`; both
+    # source one script so the entry is not added twice.
+    && printf '%s\n' \
+        'case ":${PATH}:" in' \
+        '    *:/project/scripts:*) ;;' \
+        '    *) export PATH=/project/scripts:"${PATH}" ;;' \
+        'esac' \
+        > /etc/profile.d/dev.py-path.sh \
+    && chmod 0644 /etc/profile.d/dev.py-path.sh \
+    && printf 'source /etc/profile.d/dev.py-path.sh\n' \
+        >> "/home/${USERNAME}/.bashrc"
 
 # ---------------------------------------------------------------------------
 # SSH key and GitHub CLI (`gh`) mount points, shared with the host.

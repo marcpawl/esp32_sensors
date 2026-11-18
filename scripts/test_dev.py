@@ -5,11 +5,14 @@ Run with:
 
     scripts/dev.py self-check
 
-These exercise dev.py's own pure helpers (no Docker hop, no ESP-IDF): the
-`shell` command line it builds, and `shell`'s `-C DIR` path resolution. They
-use the standard-library `unittest` runner so no third-party dependency is
-needed. `dev.py` is imported in-process, so the tests run against the code
-being checked rather than a copy.
+These exercise dev.py's own pure helpers (no ESP-IDF, no third-party
+dependency): the `shell` command line it builds, and `shell`'s `-C DIR`
+path resolution. A few probes run the pinned dev image in a throwaway
+container, which is why this suite is host-only and needs Docker on the
+host; without the daemon or the image they fail and name the pull command.
+The standard-library `unittest` runner is used throughout, and `dev.py` is
+imported in-process, so the tests run against the code being checked
+rather than a copy.
 """
 
 from __future__ import annotations
@@ -600,7 +603,7 @@ class DevImageTests(unittest.TestCase):
     """
 
     def test_dev_image_is_the_pinned_prebuilt_tag(self):
-        self.assertEqual(dev.DEV_IMAGE, "marcpawl/esp-idf:20261114")
+        self.assertEqual(dev.DEV_IMAGE, "marcpawl/esp-idf:20261118b")
 
     def test_compose_pins_the_same_image(self):
         compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
@@ -656,6 +659,187 @@ class DevImageTests(unittest.TestCase):
         # `image` (a local rebuild) must not overwrite the pinned tag, which
         # would silently swap the toolchain under a developer.
         self.assertNotEqual(dev.LOCAL_IMAGE, dev.DEV_IMAGE)
+
+    def test_image_builds_from_the_docker_directory(self):
+        # Regression: the Dockerfile moved into `docker/`, but `image` still
+        # used the repo root as its build context, so `docker build` found no
+        # Dockerfile and the command failed.
+        self.assertEqual(
+            dev._image_command(),
+            ["docker", "build", "-t", dev.LOCAL_IMAGE, "-f",
+             "docker/Dockerfile", "docker"],
+        )
+        # The named Dockerfile must be the one that exists, and the context
+        # must be its own directory (compose's `build.context: .`).
+        self.assertTrue((dev.REPO_ROOT / "docker" / "Dockerfile").is_file())
+
+    def test_image_runs_the_build_outside_the_container(self):
+        calls = []
+        original_run, original_in_container = dev.run, dev.is_in_container
+        try:
+            dev.run = lambda cmd, cwd=dev.REPO_ROOT: calls.append(cmd) or 0
+            dev.is_in_container = lambda: False
+            self.assertEqual(dev.cmd_image(), 0)
+        finally:
+            dev.run, dev.is_in_container = original_run, original_in_container
+        self.assertEqual(calls, [dev._image_command()])
+
+    def test_image_refuses_to_build_inside_the_container(self):
+        # There is no Docker daemon in the dev container, so the build must be
+        # started from the host.
+        calls = []
+        original_run, original_in_container = dev.run, dev.is_in_container
+        err = io.StringIO()
+        try:
+            dev.run = lambda cmd, cwd=dev.REPO_ROOT: calls.append(cmd) or 0
+            dev.is_in_container = lambda: True
+            with redirect_stderr(err):
+                rc = dev.cmd_image()
+        finally:
+            dev.run, dev.is_in_container = original_run, original_in_container
+        self.assertEqual(rc, 1)
+        self.assertEqual(calls, [], "no image may be built in the container")
+
+    def test_image_puts_dev_py_on_the_path(self):
+        # `dev.py` is added to PATH so it can be run as `dev.py` from anywhere
+        # in the container. A PATH entry is a *directory*: listing the file
+        # itself (`/project/scripts/dev.py`) never resolves.
+        dockerfile = (dev.REPO_ROOT / "docker" / "Dockerfile").read_text()
+        self.assertIn("/etc/profile.d/dev.py-path.sh", dockerfile)
+        self.assertIn("PATH=/project/scripts:", dockerfile)
+        self.assertNotIn("PATH=/project/scripts/dev.py", dockerfile)
+        # One script, sourced by both entry points: `/etc/profile.d` covers
+        # non-interactive login shells (`dev.py shell` runs `bash -l -c`) for
+        # any uid, and `.bashrc` covers a non-login interactive `bash`, which
+        # does not read the profile.
+        self.assertIn("source /etc/profile.d/dev.py-path.sh", dockerfile)
+        # `/project` is the compose bind mount of the repo root.
+        compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
+        self.assertIn("..:/project", compose)
+
+
+class DevImageShellTests(unittest.TestCase):
+    """`dev.py` resolves inside the pinned image, for every kind of shell.
+
+    The `DevImageTests` above only read the Dockerfile as text, which cannot
+    show that bash ever sources what the image installs. These probes run the
+    pinned image in a throwaway container with the repository mounted at
+    `/project`, exactly as `docker-compose.yml` mounts it, and ask each shell
+    where `dev.py` is.
+
+    This is why `self-check` stays host-only: the host has a Docker daemon,
+    the container does not. A host that cannot run the image fails the probes
+    with the command that fetches it, rather than skipping: a silent skip
+    would let a renamed tag or an unpulled image pass the gate.
+    """
+
+    DEV_PY = "/project/scripts/dev.py"
+    TIMEOUT_SECONDS = 300
+    # A probe's answer is marked so it can be found among the ESP-IDF startup
+    # chatter an interactive shell prints.
+    MARKER = "dev-py-probe:"
+
+    def _require_image(self) -> None:
+        """Fail, naming the way out, when the probes cannot run.
+
+        Deliberately a failure and not a skip: the probes prove that the
+        *published* image puts `dev.py` on PATH, so being unable to run it is
+        a broken check, not an inapplicable one.
+        """
+        if dev.is_in_container():
+            self.fail(
+                "no Docker daemon inside the dev container: run "
+                "./scripts/dev.py self-check on the host, which can start "
+                "the image"
+            )
+        if shutil.which("docker") is None:
+            self.fail(
+                "docker is not installed on this host, so the pinned dev "
+                "image cannot be probed. Install Docker, then run "
+                "./scripts/dev.py pull (or the same pull from compose: "
+                "docker compose -f docker/docker-compose.yml pull)"
+            )
+        if not self._image_present():
+            self.fail(
+                f"the dev image {dev.DEV_IMAGE} is not present. Pull it "
+                "first with ./scripts/dev.py pull (or "
+                "docker compose -f docker/docker-compose.yml pull)"
+            )
+
+    @staticmethod
+    def _image_present() -> bool:
+        result = subprocess.run(
+            ["docker", "image", "inspect", dev.DEV_IMAGE],
+            capture_output=True,
+            text=True,
+        )
+        return result.returncode == 0
+
+    def _bash(self, options: str, script: str,
+              user: str | None = None) -> list[str]:
+        """Run `script` in the image under `bash <options>`; return its lines.
+
+        `user` is the `--user` value; the default is the image's own user.
+        """
+        self._require_image()
+        command = [
+            "docker", "run", "--rm", "--entrypoint", "bash",
+            "-v", f"{dev.REPO_ROOT}:/project",
+        ]
+        if user is not None:
+            command += ["--user", user]
+        command += [dev.DEV_IMAGE, options, script]
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=self.TIMEOUT_SECONDS,
+        )
+        self.assertEqual(
+            result.returncode,
+            0,
+            f"bash {options} failed ({result.returncode}):\n"
+            f"{result.stdout}\n{result.stderr}",
+        )
+        return result.stdout.splitlines()
+
+    def _probe(self, options: str, user: str | None = None) -> list[str]:
+        """The `command -v dev.py` answer, one path per line."""
+        lines = self._bash(options, "command -v dev.py", user=user)
+        return [line for line in lines if line.startswith("/")]
+
+    def test_non_interactive_login_shell_resolves_dev_py(self):
+        # The shape `./scripts/dev.py shell dev.py build` runs: `bash -l -c`.
+        # A `.bashrc`-only entry is invisible here, which was the bug.
+        self.assertEqual(self._probe("-lc"), [self.DEV_PY])
+
+    def test_interactive_login_shell_resolves_dev_py(self):
+        self.assertIn(self.DEV_PY, self._probe("-lic"))
+
+    def test_non_login_interactive_shell_resolves_dev_py(self):
+        # A bare `bash` (`docker compose run --rm dev bash`) reads only
+        # `.bashrc`, which sources the same `/etc/profile.d` script.
+        self.assertIn(self.DEV_PY, self._probe("-ic"))
+
+    def test_a_calling_uid_without_a_passwd_entry_resolves_dev_py(self):
+        # CI's runner is uid 1001 and has no passwd entry in the image; the
+        # entry must therefore not live in one user's home directory.
+        self.assertEqual(
+            self._probe("-lc", user="1001:1001"), [self.DEV_PY]
+        )
+
+    def test_the_path_entry_is_added_once(self):
+        # `.bashrc` sources the `/etc/profile.d` script that a login shell has
+        # already run, so the directory must not appear twice.
+        lines = self._bash(
+            "-lic", f'echo "{self.MARKER}$PATH"'
+        )
+        answer = [
+            line for line in lines if line.startswith(self.MARKER)
+        ]
+        self.assertTrue(answer, f"no PATH in output: {lines}")
+        path = answer[-1].split(self.MARKER, 1)[1]
+        self.assertEqual(path.split(":").count("/project/scripts"), 1)
 
 
 class DevContainerTests(unittest.TestCase):

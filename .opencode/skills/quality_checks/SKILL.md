@@ -24,7 +24,7 @@ commands with ad-hoc `docker compose run`.
 | Formatting (check) | `./scripts/dev.py format-check` | Same file set as `format`, fails instead of editing. |
 | Formatting (staged) | `./scripts/dev.py format-check-staged` | clang-format over the **staged** content only, honouring nested `.clang-format` / `.clang-format-ignore` files. This is the hook's variant. |
 | Tests | `./scripts/dev.py test` | Every host suite, in order: `test-utility`, `test-hal-common`, `test-hal-stub`, `test-logic`, `test-espidf-cpp`, `test-simulator`. Stops at the first failure. |
-| Harness self-check | `./scripts/dev.py self-check` | Stdlib unit tests for `scripts/dev.py` itself. **Host-only**: it refuses to run in the container (the host-side decisions it pins never happen there). CI runs it on the runner. |
+| Harness self-check | `./scripts/dev.py self-check` | Stdlib unit tests for `scripts/dev.py` itself. **Host-only**: it refuses to run in the container (the host-side decisions it pins never happen there, and the container has no Docker daemon). It needs Docker and the pulled image, because a few probes run the pinned image's shells; without either, those probes fail and name the pull command. CI runs it on the runner. |
 
 Each host suite is also available on its own:
 

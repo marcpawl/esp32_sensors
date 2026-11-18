@@ -30,7 +30,7 @@ invoked from the host.
 | both | `test-espidf-cpp` | Build and run the `test-espidf-cpp/` suite |
 | both | `test-simulator` | Build and run the `test-simulator/` suite |
 | both | `test-esp32-timer` | Build, flash, and run the on-target `esp_timer` suite (120 s limit) |
-| both | `self-check` | Run the host unit tests for `dev.py` itself (host only) |
+| both | `self-check` | Run the host unit tests for `dev.py` itself (host only; its image probes need Docker and the image fetched by `pull`, and fail without them) |
 | both | `flash` | `idf.py flash monitor` |
 | both | `monitor` | `idf.py monitor` |
 | both | `menuconfig` | `idf.py menuconfig` |
@@ -52,8 +52,9 @@ Set `ESP32_PORT` (e.g. `/dev/ttyACM0`) to target another serial device.
 Stdlib-`unittest` tests for `dev.py` itself, run by
 `scripts/dev.py self-check`. It pins the format/pycodestyle source discovery,
 the staged format check, the run-configuration invariants, the host-test
-commands, clang-tidy wiring, the `sml` submodule pin, and that
-`self-check` is host-only. Add coverage there when changing `dev.py`.
+commands, clang-tidy wiring, the `sml` submodule pin, that `dev.py` is on the
+PATH of the pinned image for every kind of shell, and that `self-check` is
+host-only. Add coverage there when changing `dev.py`.
 
 ## Shell completion
 

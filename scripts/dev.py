@@ -116,8 +116,14 @@ STYLE_FILE_NAMES = (".clang-format", ".clang-format-ignore")
 # never moved, so update it in both places (test_dev.py asserts they agree).
 # `LOCAL_IMAGE` is only what `image` (a local rebuild) produces, for trying out
 # Dockerfile changes.
-DEV_IMAGE = "marcpawl/esp-idf:20261114"
+DEV_IMAGE = "marcpawl/esp-idf:20261118b"
 LOCAL_IMAGE = "esp32-sensors-dev:local"
+
+# The image's Dockerfile and its build context. Both live in `docker/`, next to
+# `docker-compose.yml` (whose `build.context` is `.` relative to its own
+# directory), so `image` must not assume the repo root is the context.
+DOCKER_DIR = "docker"
+DOCKERFILE = f"{DOCKER_DIR}/Dockerfile"
 
 # User baked into DEV_IMAGE, and where ccache lives under a writable HOME. A
 # container run as any *other* uid (a host user, or a CI runner whose uid is
@@ -669,12 +675,23 @@ def cmd_pull() -> int:
     return run(["docker", "pull", DEV_IMAGE])
 
 
+def _image_command() -> list[str]:
+    """`docker build` argv for the dev image. Pure, so it is unit-testable.
+
+    The context is `docker/`, not the repo root: that is where the Dockerfile
+    and docker-compose.yml live, and it is what compose's `build.context: .`
+    resolves to. Using the repo root as the context would find no Dockerfile.
+    """
+    return ["docker", "build", "-t", LOCAL_IMAGE, "-f", DOCKERFILE,
+            DOCKER_DIR]
+
+
 def cmd_image() -> int:
     """Build the dev image locally from the Dockerfile. Not needed normally."""
     if is_in_container():
         print("Image cannot be built while in container", file=sys.stderr)
         return 1
-    return run(["docker", "build", "-t", LOCAL_IMAGE, "."])
+    return run(_image_command())
 
 
 def _idf(project: str, build_dir: str, *args: str) -> list[str]:
@@ -968,15 +985,19 @@ def cmd_test() -> int:
 def cmd_self_check() -> int:
     """Run the host-side unit tests for this script (stdlib `unittest`).
 
-    Exercises `dev.py`'s own pure helpers (e.g. the command line `shell`
-    builds) with the standard-library test runner, so no Docker hop, container,
-    or third-party dependency is needed.
+    Exercises `dev.py`'s own helpers (e.g. the command line `shell` builds)
+    with the standard-library test runner, so no container or third-party
+    dependency is needed. A few probes run the *pinned dev image* in a
+    throwaway container to show that `dev.py` is on its PATH, so this command
+    needs a Docker daemon and the image on the host; without either, those
+    probes fail and name the pull command.
 
     Host-only. The suite pins the decisions the *host* side makes — above all
     whether a command re-execs itself under `docker compose` — and inside the
     container none of those decisions happen, so the run would pass vacuously
-    instead of testing anything. The command therefore refuses to run there,
-    the same way `pull` and `image` do.
+    instead of testing anything. The container also has no Docker daemon, so
+    the image probes could not run. The command therefore refuses to run
+    there, the same way `pull` and `image` do.
     """
     if is_in_container():
         print(

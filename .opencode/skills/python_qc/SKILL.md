@@ -31,7 +31,9 @@ options of its own, so a bare `pycodestyle` agrees with it.
 `scripts/dev.py self-check` runs `scripts/test_dev.py` (stdlib `unittest`) on
 the host. It is the test suite for `dev.py` itself and must pass whenever
 `dev.py` changes. Run it after editing `scripts/dev.py` or
-`scripts/test_dev.py`.
+`scripts/test_dev.py`. It needs Docker and the pulled dev image, because a few
+probes run the image's shells to prove `dev.py` is on their PATH; without the
+daemon or the image they fail and name the pull command.
 
 ## Conventions
 
