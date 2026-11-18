@@ -6,9 +6,9 @@
 // has the sequence odd, so a reader never accepts a torn snapshot. The
 // `ConcurrentWriters` parameter selects the writer contract:
 //
-//   - `Disable`: a single writer, no mutex, `write()` returns void;
-//   - `Enabled`: writers are serialised and `write()` returns a `WriteResult`,
-//     so a stale writer is rejected.
+//   - `Disable`: a single writer, `write()` returns void;
+//   - `Enabled`: competing writers are rejected, and `write()` returns a
+//     `WriteResult`.
 //
 // The single-threaded tests pin the round trips, the version progression, the
 // rejection of a stale or invented version, and the two write forms. The
@@ -27,6 +27,7 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 
 #include "unity.h"
 #include "utility/sequence_lock.hpp"
@@ -71,6 +72,12 @@ concept HasResultWrite =
         { lock.write(model) } -> std::same_as<typename Lock::WriteResult>;
     };
 
+// A snapshot's version is const, so it cannot be re-pointed at a newer
+// sequence; the caller must `read()` again instead.
+static_assert(std::is_const_v<decltype(ReadingLock::VersionedModel::version)>);
+static_assert(!std::is_assignable_v<
+              decltype(ReadingLock::VersionedModel::version), std::uint32_t>);
+
 }  // namespace
 
 // --- Single-threaded round trips --------------------------------------------
@@ -111,19 +118,19 @@ TEST_CASE("sequence_lock: each successful write advances the version by two",
           "[sequence_lock]") {
     ReadingLock lock;
 
-    auto snapshot = lock.read();
-    TEST_ASSERT_EQUAL_UINT32(0, snapshot.version);
-    snapshot.model.id = 1;
-    TEST_ASSERT_TRUE(lock.write(snapshot) == kStored);
+    auto first = lock.read();
+    TEST_ASSERT_EQUAL_UINT32(0, first.version);
+    first.model.id = 1;
+    TEST_ASSERT_TRUE(lock.write(first) == kStored);
 
-    snapshot = lock.read();
-    TEST_ASSERT_EQUAL_UINT32(2, snapshot.version);
-    snapshot.model.id = 2;
-    TEST_ASSERT_TRUE(lock.write(snapshot) == kStored);
+    auto second = lock.read();
+    TEST_ASSERT_EQUAL_UINT32(2, second.version);
+    second.model.id = 2;
+    TEST_ASSERT_TRUE(lock.write(second) == kStored);
 
-    snapshot = lock.read();
-    TEST_ASSERT_EQUAL_UINT32(4, snapshot.version);
-    TEST_ASSERT_EQUAL_UINT32(2, snapshot.model.id);
+    const auto after = lock.read();
+    TEST_ASSERT_EQUAL_UINT32(4, after.version);
+    TEST_ASSERT_EQUAL_UINT32(2, after.model.id);
 }
 
 TEST_CASE("sequence_lock: a stale version cannot overwrite a newer model",
@@ -170,9 +177,9 @@ TEST_CASE("sequence_lock: a re-read version can write again",
     TEST_ASSERT_TRUE(lock.write(snapshot) == kRejected);
 
     // The caller that lost the race must read again before its next write.
-    snapshot = lock.read();
-    snapshot.model.id = 3;
-    TEST_ASSERT_TRUE(lock.write(snapshot) == kStored);
+    auto reread = lock.read();
+    reread.model.id = 3;
+    TEST_ASSERT_TRUE(lock.write(reread) == kStored);
 
     const auto actual = lock.read();
     TEST_ASSERT_EQUAL_UINT32(3, actual.model.id);
@@ -208,7 +215,7 @@ TEST_CASE("sequence_lock: works with a scalar model", "[sequence_lock]") {
 
 // --- Single-writer form -----------------------------------------------------
 
-TEST_CASE("sequence_lock: the single-writer form writes without a mutex",
+TEST_CASE("sequence_lock: the single-writer form writes without rejecting",
           "[sequence_lock]") {
     SequenceLock<Reading, ConcurrentWriters::Disable> lock;
     auto snapshot = lock.read();
@@ -297,20 +304,20 @@ struct IncrementContext {
     std::uint32_t iterations = 0;
 };
 
-// Read, increment, and write back. A failed write means another writer
-// published first, so the snapshot must be re-read and the increment re-applied
-// to the newer value.
+// Read, increment, and write back. A rejected write means another writer
+// published first, so the snapshot must be re-read and the increment
+// re-applied to the newer value.
 void increment_task(void* arg) {
     auto& context = *static_cast<IncrementContext*>(arg);
     for (std::uint32_t i = 0; i < context.iterations; ++i) {
-        auto snapshot = context.lock->read();
-        snapshot.model.count += 1;
-        while (
-            context.lock->write(snapshot) ==
-            SequenceLock<Counter,
-                         ConcurrentWriters::Enabled>::WriteResult::kRejected) {
-            snapshot = context.lock->read();
+        for (;;) {
+            auto snapshot = context.lock->read();
             snapshot.model.count += 1;
+            using Result =
+                SequenceLock<Counter, ConcurrentWriters::Enabled>::WriteResult;
+            if (context.lock->write(snapshot) == Result::kStored) {
+                break;
+            }
         }
         taskYIELD();
     }
@@ -339,17 +346,15 @@ void block_writer_task(void* arg) {
     std::uint32_t value = context.pattern;
 
     while (!context.stop->load(std::memory_order_relaxed)) {
-        auto snapshot = context.lock->read();
-        for (std::uint32_t& word : snapshot.model.words) {
-            word = value;
-        }
-        while (
-            context.lock->write(snapshot) ==
-            SequenceLock<Block,
-                         ConcurrentWriters::Enabled>::WriteResult::kRejected) {
-            snapshot = context.lock->read();
+        for (;;) {
+            auto snapshot = context.lock->read();
             for (std::uint32_t& word : snapshot.model.words) {
                 word = value;
+            }
+            using Result =
+                SequenceLock<Block, ConcurrentWriters::Enabled>::WriteResult;
+            if (context.lock->write(snapshot) == Result::kStored) {
+                break;
             }
         }
         ++value;

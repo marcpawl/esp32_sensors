@@ -7,19 +7,23 @@
 // and after copying the model, so it never returns a torn snapshot.
 //
 // `read()` returns a `VersionedModel`: the model plus the sequence number that
-// produced it. A writer modifies `versioned_model.model` and passes it back to
-// `write()`. The write reports `WriteResult::kStored` only when
-// `versioned_model.version` is still the current sequence; a writer working
-// from an older snapshot gets `WriteResult::kRejected` instead of overwriting a
-// newer model with stale data. After a successful write the sequence has
-// advanced, so the caller must `read()` again before its next write.
+// produced it. `version` is const; a writer modifies `versioned_model.model`
+// and passes the snapshot back to `write()`. The write reports
+// `WriteResult::kStored` only when `versioned_model.version` is still the
+// current sequence; a writer working from an older snapshot gets
+// `WriteResult::kRejected` instead of overwriting a newer model with stale
+// data. After a successful write the sequence has advanced, so the caller
+// must `read()` again before its next write.
 //
 // `concurrent_writers` selects the writer contract:
 //   - `ConcurrentWriters::Disable` assumes a single writer. `write()` returns
-//     void, does not take a mutex, and cannot block.
-//   - `ConcurrentWriters::Enabled` serialises writers with a mutex.
-//     `write()` returns a `WriteResult`, so a stale writer is rejected.
-// Reads never take the mutex.
+//     void and cannot fail or block.
+//   - `ConcurrentWriters::Enabled` allows writers to race. `write()` returns a
+//     `WriteResult`, so a stale writer is rejected.
+//
+// The even/odd version handshake is the only writer lock: the successful
+// compare-exchange takes the cell from an even version to an odd one, so at
+// most one writer copies the model at a time. Reads never lock and never wait.
 //
 // `Model` must be trivially copyable so that the snapshot copy cannot invoke a
 // user-defined operation, and default constructible because a default-
@@ -37,24 +41,10 @@
 
 #include <cassert>
 #include <cstdint>
-#include <mutex>
 
 namespace thermo {
 
 enum class ConcurrentWriters : std::uint8_t { Disable, Enabled };
-
-namespace detail {
-
-// Empty stand-ins for the writer mutex and its scope lock when there is only
-// one writer. `NoLock` accepts the `NoMutex` so `do_write()` can construct the
-// same `WriterLock` in both modes.
-struct NoMutex {};
-
-struct NoLock {
-    explicit NoLock(NoMutex& /*mutex*/) noexcept {}
-};
-
-}  // namespace detail
 
 template<typename Model, ConcurrentWriters concurrent_writers>
 class SequenceLock {
@@ -69,9 +59,10 @@ class SequenceLock {
     };
 
     // A consistent model snapshot together with the sequence number it was
-    // read at. Pass it back to `write()` after modifying `model`.
+    // read at. `version` is const, so only `read()` can make a snapshot
+    // current; pass it back to `write()` after modifying `model`.
     struct VersionedModel {
-        std::uint32_t version = 0;
+        std::uint32_t const version = 0;
         Model model{};
     };
 
@@ -79,7 +70,6 @@ class SequenceLock {
 
     // Return a consistent snapshot, retrying while a writer is active.
     [[nodiscard]] VersionedModel read() const noexcept {
-        VersionedModel snapshot;
         for (;;) {
             const std::uint32_t before =
                 cell_.version.load(std::memory_order_acquire);
@@ -87,8 +77,7 @@ class SequenceLock {
                 continue;
             }
 
-            snapshot.version = before;
-            snapshot.model = cell_.model;
+            VersionedModel const snapshot{before, cell_.model};
 
             const std::uint32_t after =
                 cell_.version.load(std::memory_order_acquire);
@@ -99,7 +88,7 @@ class SequenceLock {
     }
 
     // Single-writer form. The caller guarantees that no other task writes, so
-    // there is no mutex and nothing to reject: the write cannot fail or block.
+    // there is nothing to reject: the write cannot fail or block.
     void write(VersionedModel const& versioned_model) noexcept
         requires(concurrent_writers == ConcurrentWriters::Disable)
     {
@@ -119,29 +108,15 @@ class SequenceLock {
     }
 
   private:
-    using WriterMutex =
-        std::conditional_t<concurrent_writers == ConcurrentWriters::Enabled,
-                           std::mutex, detail::NoMutex>;
-    using WriterLock =
-        std::conditional_t<concurrent_writers == ConcurrentWriters::Enabled,
-                           std::lock_guard<std::mutex>, detail::NoLock>;
-
     // Store `versioned_model.model` if `versioned_model.version` is still
-    // current. The lock is a no-op for a single writer.
+    // current. A failed exchange means another writer moved the version first.
     [[nodiscard]] WriteResult do_write(
         VersionedModel const& versioned_model) noexcept {
-        WriterLock writer(writer_mutex_);
-
-        const std::uint32_t current =
-            cell_.version.load(std::memory_order_relaxed);
-        if (versioned_model.version != current) {
-            return WriteResult::kRejected;
-        }
-
-        // Enter the writing state in one atomic step. If another writer moved
-        // the version since the load above, this model is stale.
-        std::uint32_t expected = current;
-        if (!cell_.version.compare_exchange_strong(expected, current + 1,
+        // Take the cell from even to odd in one atomic step. Only the winner
+        // copies the model, so no two writers overlap; the loser's version is
+        // stale and the write is rejected.
+        std::uint32_t expected = versioned_model.version;
+        if (!cell_.version.compare_exchange_strong(expected, expected + 1,
                                                    std::memory_order_release,
                                                    std::memory_order_relaxed)) {
             return WriteResult::kRejected;
@@ -150,7 +125,7 @@ class SequenceLock {
 
         // Publish the completed model by returning the version to even. The
         // next successful write must use this new version.
-        cell_.version.store(current + 2, std::memory_order_release);
+        cell_.version.store(expected + 2, std::memory_order_release);
         return WriteResult::kStored;
     }
 
@@ -166,8 +141,6 @@ class SequenceLock {
     }
 
     Cell cell_;
-    // Empty (and no storage) for a single writer.
-    [[no_unique_address]] WriterMutex writer_mutex_;
 };
 
 }  // namespace thermo
