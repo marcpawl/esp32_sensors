@@ -11,7 +11,7 @@
   hal_board, host include paths, no Xtensa defines).
 
   This configuration *builds* the tests. To actually run them, use "Host unit
-  tests (container)", which calls `scripts/dev.py test` and reports the Unity
+  tests (container)", which calls `scripts/dev.py test-linux` and reports the Unity
   results; this one exists so the test project is buildable from the IDE.
 
   TARGET_NAME must be a target of the CMake project named by PROJECT_NAME -

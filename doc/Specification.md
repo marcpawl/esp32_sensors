@@ -67,7 +67,7 @@ supplies the user mapping and environment flags described below:
 
 # Build the firmware, run the host tests, check formatting
 ./scripts/dev.py build
-./scripts/dev.py test
+./scripts/dev.py test-linux
 ./scripts/dev.py format-check
 ```
 

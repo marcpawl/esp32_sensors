@@ -799,9 +799,10 @@ def _resolve_directory(
 def _start_directory(root: Path = REPO_ROOT, cwd: Path | None = None) -> Path:
     """The directory `build`/`test` start from when given none. Pure.
 
-    The caller's current directory, so `cd components/utility && dev.py test`
-    tests that subtree. A caller outside the repository starts from the
-    repository root, which keeps `dev.py build` working from anywhere.
+    The caller's current directory, so `cd components/utility && dev.py
+    test-linux` tests that subtree. A caller outside the repository starts
+    from the repository root, which keeps `dev.py build` working from
+    anywhere.
     """
     current = (cwd or Path.cwd()).resolve()
     if current == root or root in current.parents:
@@ -1056,72 +1057,6 @@ def _run_suites(suites: list[tuple[Path, str]]) -> int:
     return 0
 
 
-def _run_test_directory(directory: str) -> int:
-    """Build and run the host suites at or under a repo-relative directory."""
-    projects = _host_test_projects_under(REPO_ROOT / directory)
-    assert projects, f"no host test project under {directory}"
-    return _run_suites([
-        (project.directory, f"{project.name}.elf") for project in projects
-    ])
-
-
-def cmd_test_utility() -> int:
-    """Host tests for components/utility/libutility (`linux` target)."""
-    change_to_container()
-    return _run_test_directory(UTILITY_TEST_DIR)
-
-
-def cmd_test_hal_stub() -> int:
-    """Host tests for components/hal/hal_stub (`linux` target)."""
-    change_to_container()
-    return _run_test_directory(HAL_STUB_TEST_DIR)
-
-
-def cmd_test_hal_common() -> int:
-    """Host tests for components/hal/hal_common (`linux` target)."""
-    change_to_container()
-    return _run_test_directory(HAL_COMMON_TEST_DIR)
-
-
-def cmd_test_logic() -> int:
-    """Host-based Unity tests on the ESP-IDF `linux` target (`test-logic/`)."""
-    change_to_container()
-    return _run_test_directory(LOGIC_TEST_DIR)
-
-
-def cmd_test_espidf_cpp() -> int:
-    """Host tests for components/espidfcpp/libespidfcpp (`linux` target)."""
-    change_to_container()
-    return _run_test_directory(ESPIDF_CPP_TEST_DIR)
-
-
-def cmd_test_simulator() -> int:
-    """Host tests for components/simulator/libsimulator (`linux` target)."""
-    change_to_container()
-    return _run_test_directory(TEST_SIMULATOR_DIR)
-
-
-def cmd_test_esp_timer_stub() -> int:
-    """Host tests for components/hal/tests/esp_timer/stub (`linux` target)."""
-    change_to_container()
-    return _run_test_directory(ESP_TIMER_STUB_DIR)
-
-
-def cmd_test_esp32_timer() -> int:
-    """Build, flash, and run the on-target `esp_timer` suite (ESP32-S3)."""
-    change_to_container()
-    rc = _ensure_submodules()
-    if rc != 0:
-        return rc
-    # Building here separates a compile failure from a test failure; the
-    # driver's own `idf.py flash` then finds the tree up to date.
-    rc = _build_project(ESP_TIMER_BOARD_DIR)
-    if rc != 0:
-        return rc
-    script = Path(ESP_TIMER_BOARD_DIR) / "test.py"
-    return run([sys.executable, str(script)])
-
-
 def _test_projects(
     directories: list[Path], root: Path = REPO_ROOT
 ) -> list[Project] | None:
@@ -1149,15 +1084,15 @@ def _test_projects(
     return projects
 
 
-def cmd_test(arguments: list[str] | None = None) -> int:
-    """Run the host unit test suites from the current directory.
+def cmd_test_linux(arguments: list[str] | None = None) -> int:
+    """Run the host (`linux`) test suites from the current directory.
 
     A host test suite is every `linux`-target ESP-IDF project under a `tests/`
     directory (`_host_test_projects_under`), so a new suite is picked up
     without touching this command. With no directory, the current directory
     is used (the repository root when run outside it) in path order:
-    `cd components/utility && dev.py test` runs `test-utility`, and
-    `dev.py test .` from the root runs every suite. The aggregate the
+    `cd components/utility && dev.py test-linux` runs the utility suite, and
+    `dev.py test-linux .` from the root runs every suite. The aggregate the
     pre-commit hook and CI call.
     """
     directories = _parse_directories(arguments or [])
@@ -1165,13 +1100,105 @@ def cmd_test(arguments: list[str] | None = None) -> int:
         return 1
     if not directories:
         directories = [_start_directory()]
-    change_to_container(_project_container_arguments("test", directories))
+    change_to_container(
+        _project_container_arguments("test-linux", directories)
+    )
     projects = _test_projects(directories)
     if projects is None:
         return 1
     return _run_suites([
         (project.directory, f"{project.name}.elf") for project in projects
     ])
+
+
+def _on_target_test_projects_under(
+    directory: Path, root: Path = REPO_ROOT
+) -> list[Project]:
+    """Non-`linux` test projects at or under `directory`, in path order.
+
+    An on-target test is an ESP-IDF project that targets a chip and lives under
+    a `tests/` directory, so host applications such as `donny` and the
+    firmware are excluded just as they are for `test-linux`.
+    """
+    projects: list[Project] = []
+    for project in _discover_projects(directory):
+        if project.target == "linux":
+            continue
+        try:
+            relative = project.directory.resolve().relative_to(root.resolve())
+        except ValueError:
+            continue
+        if TEST_PROJECT_DIRECTORY in relative.parts:
+            projects.append(project)
+    return projects
+
+
+def _on_target_projects(
+    directories: list[Path], root: Path = REPO_ROOT
+) -> list[Project] | None:
+    """The on-target test projects a `test-esp32` selection names, or None.
+
+    No directories means the repository root. A directory that contributes no
+    on-target test prints an error and returns None.
+    """
+    if not directories:
+        return _on_target_test_projects_under(root, root)
+    projects: list[Project] = []
+    for directory in directories:
+        found = _on_target_test_projects_under(directory, root)
+        if not found:
+            print(
+                f"No on-target (`esp32`) test projects in or under "
+                f"'{_repo_relative(directory)}'.",
+                file=sys.stderr,
+            )
+            return None
+        for project in found:
+            if project not in projects:
+                projects.append(project)
+    return projects
+
+
+def cmd_test_esp32(arguments: list[str] | None = None) -> int:
+    """Build, flash, and run the on-target tests from the current directory.
+
+    Every non-`linux` ESP-IDF project under a `tests/` directory is built and
+    then run through its `test.py` driver, which drives the board (flash,
+    serial log, sentinel). With no directory, the current directory is used
+    (the repository root when run outside it). `ESP32_PORT` selects the board.
+    """
+    directories = _parse_directories(arguments or [])
+    if directories is None:
+        return 1
+    if not directories:
+        directories = [_start_directory()]
+    change_to_container(
+        _project_container_arguments("test-esp32", directories)
+    )
+    projects = _on_target_projects(directories)
+    if projects is None:
+        return 1
+    rc = _ensure_submodules()
+    if rc != 0:
+        return rc
+    for project in projects:
+        relative = _repo_relative(project.directory)
+        script = project.directory / "test.py"
+        if not script.is_file():
+            print(
+                f"test-esp32: '{relative}' has no test.py driver.",
+                file=sys.stderr,
+            )
+            return 1
+        # Building first separates a compile failure from a test failure; the
+        # driver's own `idf.py flash` then finds the tree up to date.
+        rc = _build_project_directory(project.directory)
+        if rc != 0:
+            return rc
+        rc = run([sys.executable, str(script)])
+        if rc != 0:
+            return rc
+    return 0
 
 
 def cmd_self_check() -> int:
@@ -1204,8 +1231,8 @@ def cmd_self_check() -> int:
             "\n"
             "    ./scripts/dev.py self-check\n"
             "\n"
-            "Inside the container use `./scripts/dev.py test`, which builds\n"
-            "and runs every discovered ESP-IDF `linux`-target test suite.",
+            "Inside the container use `./scripts/dev.py test-linux`, which\n"
+            "builds and runs every discovered ESP-IDF `linux` test suite.",
             file=sys.stderr,
         )
         return 1
@@ -1978,15 +2005,8 @@ COMMANDS = {
     "flash": cmd_flash,
     "monitor": cmd_monitor,
     "menuconfig": cmd_menuconfig,
-    "test": cmd_test,
-    "test-hal-common": cmd_test_hal_common,
-    "test-utility": cmd_test_utility,
-    "test-hal-stub": cmd_test_hal_stub,
-    "test-logic": cmd_test_logic,
-    "test-espidf-cpp": cmd_test_espidf_cpp,
-    "test-simulator": cmd_test_simulator,
-    "test-esp-timer-stub": cmd_test_esp_timer_stub,
-    "test-esp32-timer": cmd_test_esp32_timer,
+    "test-linux": cmd_test_linux,
+    "test-esp32": cmd_test_esp32,
     "self-check": cmd_self_check,
     "format": cmd_format,
     "format-check": cmd_format_check,
@@ -2045,15 +2065,24 @@ def _build_parser() -> argparse.ArgumentParser:
              "omit for the current directory",
     )
 
-    # `test` runs the host suites it discovers, or those in or under the named
-    # directories.
-    test_parser = subparsers.choices["test"]
-    test_parser.add_argument(
+    # `test-linux` runs the host suites it discovers; `test-esp32` builds and
+    # runs the on-target ones. Both take optional directories.
+    test_linux_parser = subparsers.choices["test-linux"]
+    test_linux_parser.add_argument(
         "directories",
         nargs="*",
         metavar="DIRECTORY",
-        help="directories (every host test project in or under one is built "
-             "and run); omit for the current directory",
+        help="directories (every host (`linux`) test project in or under one "
+             "is built and run); omit for the current directory",
+    )
+    test_esp32_parser = subparsers.choices["test-esp32"]
+    test_esp32_parser.add_argument(
+        "directories",
+        nargs="*",
+        metavar="DIRECTORY",
+        help="directories (every on-target ESP-IDF test project in or under "
+             "one is built and run on the board); omit for the current "
+             "directory",
     )
 
     # `clang-tidy` analyzes every project by default; naming directories
@@ -2124,8 +2153,10 @@ def main(argv: list[str]) -> int:
         return cmd_shell(args.args, args.directory)
     if args.command == "build":
         return cmd_build(args.directories, analyzer=args.analyzer)
-    if args.command == "test":
-        return cmd_test(args.directories)
+    if args.command == "test-linux":
+        return cmd_test_linux(args.directories)
+    if args.command == "test-esp32":
+        return cmd_test_esp32(args.directories)
     if args.command == "clang-tidy":
         directories = _parse_tidy_scopes(args.directories)
         if directories is None:

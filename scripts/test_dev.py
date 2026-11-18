@@ -437,6 +437,23 @@ class ProjectDiscoveryTests(unittest.TestCase):
                 )
             )
 
+    def test_an_on_target_test_is_a_chip_project_under_tests(self):
+        board = self._project(
+            "components/hal/tests/board", "board", "esp32s3"
+        )
+        self._project("components/hal/tests/host", "host", "linux")
+        # The firmware is a chip project but is not a test.
+        self._project("mcgowan", "mcgowan", "esp32s3")
+        self.assertEqual(
+            [
+                project.directory
+                for project in dev._on_target_test_projects_under(
+                    self.root, root=self.root
+                )
+            ],
+            [board],
+        )
+
     def test_build_selection_is_every_project_under_each_directory(self):
         app = self._project("components/a/exe/app", "app", "linux")
         suite = self._project(
@@ -1450,11 +1467,11 @@ class CommandRegistryTests(unittest.TestCase):
 
 
 class HostTestCommandTests(unittest.TestCase):
-    """The `test*` commands build and run the host suites they discover.
+    """`test-linux` builds and runs every host suite it discovers.
 
-    A host suite is a `linux`-target ESP-IDF project under a `tests/`
-    directory; `test` discovers them all, so a new suite needs no entry in
-    `dev.py`. Each suite also has a command of its own so it can be run alone.
+    Each suite is a `linux`-target ESP-IDF project under a `tests/` directory;
+    a new suite needs no entry in `dev.py`. A directory argument narrows the
+    run to the suites in or under it.
     """
 
     def setUp(self):
@@ -1471,10 +1488,7 @@ class HostTestCommandTests(unittest.TestCase):
         def fake_change_to_container(trailing=None):
             # The real one re-execs `sys.argv` under `docker compose` and then
             # `sys.exit()`s, so it would never return here. Record the hop
-            # instead and let the command under test run its own body: that is
-            # what makes the suite exercise the command's decisions on the
-            # host (where `self-check` is allowed to run) rather than its
-            # container handoff.
+            # instead and let the command under test run its own body.
             self.hops.append(trailing)
 
         dev.run = fake_run
@@ -1492,104 +1506,42 @@ class HostTestCommandTests(unittest.TestCase):
             [f"./{directory}/{dev.TEST_BUILD_DIR}/{elf}"],
         ]
 
-    def test_every_suite_command_is_registered(self):
+    def test_only_the_aggregate_commands_are_registered(self):
         for name, handler in (
-            ("test-utility", dev.cmd_test_utility),
-            ("test-hal-stub", dev.cmd_test_hal_stub),
-            ("test-hal-common", dev.cmd_test_hal_common),
-            ("test-esp-timer-stub", dev.cmd_test_esp_timer_stub),
-            ("test-logic", dev.cmd_test_logic),
-            ("test-espidf-cpp", dev.cmd_test_espidf_cpp),
-            ("test-simulator", dev.cmd_test_simulator),
+            ("test-linux", dev.cmd_test_linux),
+            ("test-esp32", dev.cmd_test_esp32),
         ):
             with self.subTest(command=name):
                 self.assertIn(name, dev.COMMANDS)
                 self.assertIs(dev.COMMANDS[name], handler)
+        # The per-suite commands are gone: a directory selects them now.
+        for removed in (
+            "test",
+            "test-utility",
+            "test-hal-common",
+            "test-hal-stub",
+            "test-logic",
+            "test-espidf-cpp",
+            "test-simulator",
+            "test-esp-timer-stub",
+            "test-esp32-timer",
+        ):
+            with self.subTest(removed=removed):
+                self.assertNotIn(removed, dev.COMMANDS)
 
-    def test_every_suite_command_hops_into_the_container(self):
+    def test_every_test_command_hops_into_the_container(self):
         # `idf.py` only exists inside the dev image, so each command must hand
         # off to it exactly once (`_run_suites` itself never hops).
-        for handler in (
-            dev.cmd_test_utility,
-            dev.cmd_test_hal_stub,
-            dev.cmd_test_hal_common,
-            dev.cmd_test_esp_timer_stub,
-            dev.cmd_test_logic,
-            dev.cmd_test_espidf_cpp,
-            dev.cmd_test_simulator,
-            dev.cmd_test,
-        ):
+        for handler in (dev.cmd_test_linux, dev.cmd_test_esp32):
             with self.subTest(command=handler.__name__):
                 self.hops = []
                 handler()
                 self.assertEqual(len(self.hops), 1)
 
-    def test_test_utility_runs_only_the_utility_suite(self):
-        self.assertEqual(dev.cmd_test_utility(), 0)
-        self.assertEqual(
-            self.calls,
-            self._suite_calls(dev.UTILITY_TEST_DIR, "test-utility.elf"),
-        )
-
-    def test_test_hal_stub_runs_only_the_hal_stub_suite(self):
-        self.assertEqual(dev.cmd_test_hal_stub(), 0)
-        self.assertEqual(
-            self.calls,
-            self._suite_calls(
-                dev.HAL_STUB_TEST_DIR,
-                "esp32_sensors_hal_stub_tests.elf",
-            ),
-        )
-
-    def test_test_hal_common_runs_only_the_hal_common_suite(self):
-        self.assertEqual(dev.cmd_test_hal_common(), 0)
-        self.assertEqual(
-            self.calls,
-            self._suite_calls(
-                dev.HAL_COMMON_TEST_DIR,
-                "esp32_sensors_hal_common_tests.elf",
-            ),
-        )
-
-    def test_test_esp_timer_stub_runs_only_the_host_timer_suite(self):
-        self.assertEqual(dev.cmd_test_esp_timer_stub(), 0)
-        self.assertEqual(
-            self.calls,
-            self._suite_calls(
-                dev.ESP_TIMER_STUB_DIR,
-                "esp32_sensors_esp_timer_stub_tests.elf",
-            ),
-        )
-
-    def test_test_logic_runs_only_the_logic_suite(self):
-        self.assertEqual(dev.cmd_test_logic(), 0)
-        self.assertEqual(
-            self.calls,
-            self._suite_calls(dev.LOGIC_TEST_DIR, "test-logic.elf"),
-        )
-
-    def test_test_espidf_cpp_runs_only_the_wrapper_suite(self):
-        self.assertEqual(dev.cmd_test_espidf_cpp(), 0)
-        self.assertEqual(
-            self.calls,
-            self._suite_calls(
-                dev.ESPIDF_CPP_TEST_DIR, "test-espidf-cpp.elf"
-            ),
-        )
-
-    def test_test_simulator_runs_only_the_simulator_suite(self):
-        self.assertEqual(dev.cmd_test_simulator(), 0)
-        self.assertEqual(
-            self.calls,
-            self._suite_calls(
-                dev.TEST_SIMULATOR_DIR, "test-simulator.elf"
-            ),
-        )
-
-    def test_test_runs_every_discovered_suite_in_path_order(self):
+    def test_linux_runs_every_discovered_suite_in_path_order(self):
         # Discovery, not a table, decides what CI runs: the esp_timer host
-        # suite used to be built but never run by `test`.
-        self.assertEqual(dev.cmd_test(), 0)
+        # suite used to be built but never run by the aggregate.
+        self.assertEqual(dev.cmd_test_linux(), 0)
         expected = [
             cmd
             for project in dev._host_test_projects_under(dev.REPO_ROOT)
@@ -1608,39 +1560,41 @@ class HostTestCommandTests(unittest.TestCase):
             executed,
         )
 
-    def test_test_with_a_directory_runs_only_that_tree(self):
+    def test_linux_with_a_directory_runs_only_that_tree(self):
         utility = str(dev.REPO_ROOT / "components" / "utility")
-        self.assertEqual(dev.cmd_test([utility]), 0)
+        self.assertEqual(dev.cmd_test_linux([utility]), 0)
         self.assertEqual(
             self.calls,
             self._suite_calls(dev.UTILITY_TEST_DIR, "test-utility.elf"),
         )
 
-    def test_test_starts_from_the_caller_directory(self):
+    def test_linux_starts_from_the_caller_directory(self):
         # The hop runs in /project, so the caller's directory has to be
         # resolved before it (see `_start_directory`).
         utility = dev.REPO_ROOT / "components" / "utility"
         with mock.patch.object(
             dev, "_start_directory", return_value=utility
         ):
-            self.assertEqual(dev.cmd_test(), 0)
-        self.assertEqual(self.hops, [["test", "/project/components/utility"]])
+            self.assertEqual(dev.cmd_test_linux(), 0)
+        self.assertEqual(
+            self.hops, [["test-linux", "/project/components/utility"]]
+        )
         self.assertEqual(
             self.calls,
             self._suite_calls(dev.UTILITY_TEST_DIR, "test-utility.elf"),
         )
 
-    def test_test_with_a_directory_without_suites_fails(self):
+    def test_linux_with_a_directory_without_suites_fails(self):
         mcgowan = str(dev.REPO_ROOT / "mcgowan")
         err = io.StringIO()
         with redirect_stderr(err):
-            self.assertEqual(dev.cmd_test([mcgowan]), 1)
+            self.assertEqual(dev.cmd_test_linux([mcgowan]), 1)
         self.assertIn("No host (`linux`) test projects", err.getvalue())
         self.assertEqual(self.calls, [])
 
     def test_a_failing_suite_stops_the_run_and_fails_the_command(self):
-        # A red suite (here: the first ELF to run) must fail `test`, not be
-        # swallowed while the later suites are run anyway.
+        # A red suite (here: the first ELF to run) must fail `test-linux`, not
+        # be swallowed while the later suites are run anyway.
         first = dev._host_test_projects_under(dev.REPO_ROOT)[0]
         failing = (
             f"./{dev._repo_relative(first.directory)}/"
@@ -1652,7 +1606,7 @@ class HostTestCommandTests(unittest.TestCase):
             return 3 if list(cmd) == [failing] else 0
 
         dev.run = fake_run
-        self.assertEqual(dev.cmd_test(), 1)
+        self.assertEqual(dev.cmd_test_linux(), 1)
         executed = [cmd[-1] for cmd in self.calls if cmd[-1].endswith(".elf")]
         self.assertEqual(executed, [failing])
 
@@ -1675,151 +1629,10 @@ class HostTestCommandTests(unittest.TestCase):
                 )
 
 
-class BuildProjectTests(unittest.TestCase):
-    """`_build_project` picks the target-specific build directory."""
+class OnTargetTestCommandTests(unittest.TestCase):
+    """`test-esp32` discovers on-target tests and runs their drivers."""
 
     def setUp(self):
-        # Record the commands `run()` would execute instead of executing them.
-        self.calls = []
-        self._original_run = dev.run
-
-        def fake_run(cmd, cwd=dev.REPO_ROOT):
-            self.calls.append(list(cmd))
-            return 0
-
-        dev.run = fake_run
-
-    def tearDown(self):
-        dev.run = self._original_run
-
-    def test_espidf_cpp_test_is_built_for_linux(self):
-        self.assertEqual(dev._build_project(dev.ESPIDF_CPP_TEST_DIR), 0)
-        self.assertEqual(
-            self.calls,
-            [
-                dev._idf(
-                    dev.ESPIDF_CPP_TEST_DIR,
-                    dev.TEST_BUILD_DIR,
-                    "-DTHERMO_GCC_ANALYZER=OFF",
-                    "--preview",
-                    "set-target",
-                    "linux",
-                ),
-                dev._idf(
-                    dev.ESPIDF_CPP_TEST_DIR,
-                    dev.TEST_BUILD_DIR,
-                    "-DTHERMO_GCC_ANALYZER=OFF",
-                    "build",
-                ),
-            ],
-        )
-
-    def test_donny_is_built_for_linux(self):
-        self.assertEqual(dev._build_project(dev.DONNY_DIR), 0)
-        self.assertEqual(
-            self.calls,
-            [
-                dev._idf(
-                    dev.DONNY_DIR,
-                    dev.TEST_BUILD_DIR,
-                    "-DTHERMO_GCC_ANALYZER=OFF",
-                    "--preview",
-                    "set-target",
-                    "linux",
-                ),
-                dev._idf(
-                    dev.DONNY_DIR,
-                    dev.TEST_BUILD_DIR,
-                    "-DTHERMO_GCC_ANALYZER=OFF",
-                    "build",
-                ),
-            ],
-        )
-
-    def test_donny_is_built_but_not_run_as_a_host_test(self):
-        # `donny` is an application (app_main spins forever), so `test` must
-        # build it but never run it.
-        self.assertNotIn(
-            dev.REPO_ROOT / dev.DONNY_DIR,
-            {
-                project.directory
-                for project in dev._host_test_projects_under(dev.REPO_ROOT)
-            },
-        )
-
-    def test_firmware_is_built_for_the_chip(self):
-        self.assertEqual(dev._build_project(dev.FIRMWARE_DIR), 0)
-        self.assertEqual(
-            self.calls,
-            [
-                dev._idf(
-                    dev.FIRMWARE_DIR,
-                    dev.FW_BUILD_DIR,
-                    "-DTHERMO_GCC_ANALYZER=OFF",
-                    "build",
-                )
-            ],
-        )
-
-    def test_build_starts_from_the_caller_directory(self):
-        utility = dev.REPO_ROOT / "components" / "utility"
-        with (
-            mock.patch.object(dev, "_start_directory", return_value=utility),
-            mock.patch.object(dev, "change_to_container"),
-            mock.patch.object(dev, "_ensure_submodules", return_value=0),
-        ):
-            self.assertEqual(dev.cmd_build([]), 0)
-        self.assertEqual(
-            self.calls,
-            [
-                dev._idf(
-                    dev.UTILITY_TEST_DIR,
-                    dev.TEST_BUILD_DIR,
-                    "-DTHERMO_GCC_ANALYZER=OFF",
-                    "--preview",
-                    "set-target",
-                    "linux",
-                ),
-                dev._idf(
-                    dev.UTILITY_TEST_DIR,
-                    dev.TEST_BUILD_DIR,
-                    "-DTHERMO_GCC_ANALYZER=OFF",
-                    "build",
-                ),
-            ],
-        )
-
-    def test_build_from_the_root_uses_the_aggregator(self):
-        with (
-            mock.patch.object(dev, "change_to_container"),
-            mock.patch.object(dev, "_ensure_submodules", return_value=0),
-        ):
-            self.assertEqual(dev.cmd_build([]), 0)
-        self.assertEqual(self.calls, dev._root_build_commands())
-
-    def test_analyzer_switch_can_turn_the_analyzer_on(self):
-        self.assertEqual(
-            dev._build_project(dev.LOGIC_TEST_DIR, analyzer=True), 0
-        )
-        for cmd in self.calls:
-            self.assertIn("-DTHERMO_GCC_ANALYZER=ON", cmd)
-
-    def test_analyzer_define_is_always_explicit(self):
-        # Passing OFF as well as ON is what stops a previous --analyzer build
-        # from leaving the analyzer enabled in a cached build tree.
-        self.assertEqual(dev._analyzer_define(True),
-                         "-DTHERMO_GCC_ANALYZER=ON")
-        self.assertEqual(dev._analyzer_define(False),
-                         "-DTHERMO_GCC_ANALYZER=OFF")
-
-
-class OnTargetTimerCommandTests(unittest.TestCase):
-    """`test-esp32-timer` builds the board suite, then runs its driver."""
-
-    def setUp(self):
-        # Record what would run instead of executing it. The driver itself is
-        # just a path here; `test.py` is exercised on the board, not by this
-        # host suite.
         self.calls = []
         self.hops = []
         self._original_run = dev.run
@@ -1843,29 +1656,54 @@ class OnTargetTimerCommandTests(unittest.TestCase):
         dev._ensure_submodules = self._original_ensure_submodules
 
     def test_registered(self):
-        self.assertIn("test-esp32-timer", dev.COMMANDS)
-        self.assertIs(
-            dev.COMMANDS["test-esp32-timer"], dev.cmd_test_esp32_timer
-        )
+        self.assertIn("test-esp32", dev.COMMANDS)
+        self.assertIs(dev.COMMANDS["test-esp32"], dev.cmd_test_esp32)
 
     def test_builds_the_board_project_then_runs_its_driver(self):
-        self.assertEqual(dev.cmd_test_esp32_timer(), 0)
-        self.assertEqual(len(self.hops), 1)
+        self.assertEqual(dev.cmd_test_esp32(), 0)
+        board = dev._on_target_test_projects_under(dev.REPO_ROOT)
+        self.assertEqual(len(board), 1)
+        relative = dev._repo_relative(board[0].directory)
         self.assertEqual(
             self.calls,
             [
                 dev._idf(
-                    dev.ESP_TIMER_BOARD_DIR,
+                    relative,
                     dev.FW_BUILD_DIR,
                     "-DTHERMO_GCC_ANALYZER=OFF",
                     "build",
                 ),
-                [
-                    sys.executable,
-                    str(Path(dev.ESP_TIMER_BOARD_DIR) / "test.py"),
-                ],
+                [sys.executable, str(board[0].directory / "test.py")],
             ],
         )
+        self.assertEqual(self.hops, [["test-esp32", "/project"]])
+
+    def test_a_directory_without_on_target_tests_fails(self):
+        # `components/utility` holds only a linux suite.
+        utility = str(dev.REPO_ROOT / "components" / "utility")
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertEqual(dev.cmd_test_esp32([utility]), 1)
+        self.assertIn(
+            "No on-target (`esp32`) test projects", err.getvalue()
+        )
+        self.assertEqual(self.calls, [])
+
+    def test_a_project_without_a_driver_fails(self):
+        project = dev.Project(
+            dev.REPO_ROOT / "no-driver", "no-driver", "esp32s3"
+        )
+        with (
+            mock.patch.object(
+                dev, "_on_target_projects", return_value=[project]
+            ),
+            mock.patch.object(dev, "_ensure_submodules", return_value=0),
+        ):
+            err = io.StringIO()
+            with redirect_stderr(err):
+                self.assertEqual(dev.cmd_test_esp32(), 1)
+        self.assertIn("has no test.py driver", err.getvalue())
+        self.assertEqual(self.calls, [])
 
 
 class GitHooksInstallationTests(unittest.TestCase):
@@ -3306,7 +3144,7 @@ class SelfCheckModuleTests(unittest.TestCase):
         # The message must name the way out: run it on the host, or use the
         # container's own test command instead.
         self.assertIn("./scripts/dev.py self-check", message)
-        self.assertIn("./scripts/dev.py test", message)
+        self.assertIn("./scripts/dev.py test-linux", message)
 
     def test_runs_the_suite_on_the_host(self):
         calls = []

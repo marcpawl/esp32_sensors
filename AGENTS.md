@@ -192,7 +192,7 @@ symptom, not a fix; `ClionRunConfigurationTests` pins both invariants.
 | Linux app (donny, container CMake) | CMake | Builds the `donny_build` aggregate target via the `Linux app (donny)` profile |
 | Build firmware (container) | `scripts/dev.py build` | `idf.py -C mcgowan -B mcgowan/build_esp32s3 build` (and the other subprojects) |
 | Flash & monitor (container) | `scripts/dev.py flash` | `idf.py -C mcgowan -B mcgowan/build_esp32s3 -p $ESP32_PORT flash monitor` (default `/dev/ttyUSB0`) |
-| Host unit tests (container) | `scripts/dev.py test` | runs every discovered host test suite (below) in path order, or those in/under a directory argument; each suite also has a command that runs it alone |
+| Host unit tests (container) | `scripts/dev.py test-linux` | runs every discovered host test suite (below) in path order, or those in/under a directory argument |
 | clang-format check (container) | `scripts/dev.py format-check` | `clang-format --dry-run --Werror` |
 | menuconfig (container) | `scripts/dev.py menuconfig` | Kconfig UI |
 | Container shell (ESP-IDF) | `scripts/dev.py shell` | login shell with the IDF env sourced (accepts trailing args to run a command) |
@@ -285,22 +285,16 @@ There are two kinds of test suite, runnable from the host via `scripts/dev.py`:
   `mcgowan/main/CMakeLists.txt` and
   `components/logic/tests/test-logic/main/CMakeLists.txt`.
 
-Run every suite with `./scripts/dev.py test`, which stops at the first
-failure; `./scripts/dev.py test <directory>` runs only the suites in or under
-that directory. Each suite also runs alone:
+Run every host suite with `./scripts/dev.py test-linux`, which stops at the
+first failure; `./scripts/dev.py test-linux <directory>` runs only the suites
+in or under that directory, so one suite is
+`./scripts/dev.py test-linux components/utility/tests/test-utility`.
 
-- `test-utility`
-- `test-hal-common`
-- `test-hal-stub`
-- `test-esp-timer-stub`
-- `test-logic`
-- `test-espidf-cpp`
-- `test-simulator`
-
-The on-target `esp_timer` suite runs with `./scripts/dev.py test-esp32-timer`:
-it builds the ESP32-S3 project, flashes it, and waits up to 120 seconds for
-the suite's sentinel on the serial port. See the `quality_checks` skill for
-the gates and the fixing policy.
+The on-target `esp_timer` suite runs with `./scripts/dev.py test-esp32` (or
+`./scripts/dev.py test-esp32 components/hal/tests/esp_timer/board`): it builds
+the ESP32-S3 project, flashes it, and waits up to 120 seconds for the suite's
+sentinel on the serial port. See the `quality_checks` skill for the gates and
+the fixing policy.
 
 ### Quality checks
 

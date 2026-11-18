@@ -11,7 +11,7 @@
   one - which is what its tests and the linux app assume.
 
   This configuration *builds* the tests. To run them use "Host unit tests
-  (container)" (`scripts/dev.py test`), which also covers this suite.
+  (container)" (`scripts/dev.py test-linux`), which also covers this suite.
 
   TARGET_NAME must be a target of the CMake project named by PROJECT_NAME -
   that is, of the ROOT aggregator, not of `espidf-cpp-test/`. The root only

@@ -144,8 +144,9 @@ set and the suite passes. Add `TEST_CASE`s in new `main/*.cpp` sources and list
 them in `main/CMakeLists.txt`; `WHOLE_ARCHIVE` keeps their registrations linked
 into the ELF.
 
-Build and run the suite with `scripts/dev.py test-simulator`, or directly in
-the container:
+Build and run the suite with
+`scripts/dev.py test-linux components/simulator/tests/test-simulator`, or
+directly in the container:
 
 ```bash
 scripts/dev.py shell -C components/simulator/tests/test-simulator \

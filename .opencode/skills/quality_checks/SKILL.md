@@ -23,18 +23,13 @@ commands with ad-hoc `docker compose run`.
 | Formatting (apply) | `./scripts/dev.py format [DIRECTORY...]` | clang-format over the tracked **and untracked** C/C++ sources in or under the directories (default: the current directory; from the repository root that is `mcgowan/` and `components/`). |
 | Formatting (check) | `./scripts/dev.py format-check [DIRECTORY...]` | Same file set as `format`, fails instead of editing. |
 | Formatting (staged) | `./scripts/dev.py format-check-staged [DIRECTORY...]` | clang-format over the **staged** content in or under the directories, honouring nested `.clang-format` / `.clang-format-ignore` files. This is the hook's variant. |
-| Tests | `./scripts/dev.py test [DIRECTORY...]` | Every discovered host suite, in path order (or only those in/under the directories; default: the current directory). Stops at the first failure. |
+| Tests | `./scripts/dev.py test-linux [DIRECTORY...]` | Every discovered host (`linux`) suite, in path order (or only those in/under the directories; default: the current directory). Stops at the first failure. |
+| On-target tests | `./scripts/dev.py test-esp32 [DIRECTORY...]` | Every discovered non-`linux` test project under a `tests/` directory is built, flashed, and run through its `test.py` driver. Needs the board and `ESP32_PORT`; not part of the CI gates. |
 | Harness self-check | `./scripts/dev.py self-check` | Stdlib unit tests for `scripts/dev.py` itself. **Host-only**: it refuses to run in the container (the host-side decisions it pins never happen there, and the container has no Docker daemon). It needs Docker and the pulled image, because a few probes run the pinned image's shells; without either, those probes fail and name the pull command. CI runs it on the runner. |
 
-Each host suite is also available on its own:
-
-- `test-utility`
-- `test-hal-common`
-- `test-hal-stub`
-- `test-esp-timer-stub`
-- `test-logic`
-- `test-espidf-cpp`
-- `test-simulator`
+Run one suite with its directory, e.g.
+`./scripts/dev.py test-linux components/utility/tests/test-utility`; there are
+no per-suite commands.
 
 ## Order to run them
 
@@ -45,7 +40,7 @@ Cheapest first:
    tree)
 3. `./scripts/dev.py build`
 4. `./scripts/dev.py clang-tidy`
-5. `./scripts/dev.py test`
+5. `./scripts/dev.py test-linux`
 
 CI (`build-and-test` in `.github/workflows/ci.yml`) adds
 `./scripts/dev.py self-check` before them and runs `format-check` (not the
