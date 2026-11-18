@@ -41,9 +41,15 @@ import shlex
 import subprocess
 import sys
 import tempfile
+from typing import NamedTuple
 
 # Always operate from the repository root, regardless of the caller's cwd.
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# Root under which the project is mounted inside the dev container. Paths in
+# arguments addressed to the container (`build /project/components`) are mapped
+# onto `REPO_ROOT`, and paths handed to a container re-exec are mapped back.
+CONTAINER_PROJECT_ROOT = "/project"
 
 # Directories whose C/C++ sources are checked/formatted by clang-format. The
 # file list is discovered via git (`source_files`), and deliberately covers
@@ -163,113 +169,174 @@ FORMAT_ARGS = ("--dry-run", "--Werror")
 #
 # Build directories are named after the ESP-IDF target so the esp32s3 and
 # linux builds stay separate.
-FIRMWARE_PROJECT = "mcgowan"
-UTILITY_TEST_PROJECT = "test-utility"
-TEST_PROJECT = "test-logic"
-HAL_STUB_TEST_PROJECT = "test-hal-stub"
-HAL_COMMON_TEST_PROJECT = "test-hal-common"
-ESPIDF_CPP_TEST_PROJECT = "test-espidf-cpp"
-TEST_SIMULATOR_PROJECT = "test-simulator"
-DONNY_PROJECT = "donny"
-ESP_TIMER_STUB_PROJECT = "test-esp_timer-stub"
-ESP_TIMER_BOARD_PROJECT = "test-esp_timer-board"
-
-# Directory (repo-relative) where each subproject lives. Only the firmware
-# sits at the repository root; the test projects live under
-# `components/<layer>/tests/` and the simulator application under
-# `components/simulator/exe/`. The subproject *identifier* (and the aggregate
-# target name) stays short, because CMake target names may not contain a
-# slash.
-PROJECT_DIRS = {
-    FIRMWARE_PROJECT: FIRMWARE_PROJECT,
-    UTILITY_TEST_PROJECT:
-        "components/utility/tests/test-utility",
-    HAL_STUB_TEST_PROJECT: "components/hal/tests/test-hal-stub",
-    HAL_COMMON_TEST_PROJECT: "components/hal/tests/test-hal-common",
-    TEST_PROJECT: "components/logic/tests/test-logic",
-    ESPIDF_CPP_TEST_PROJECT:
-        "components/espidfcpp/tests/test-espidf-cpp",
-    TEST_SIMULATOR_PROJECT:
-        "components/simulator/tests/test-simulator",
-    DONNY_PROJECT: "components/simulator/exe/donny",
-    ESP_TIMER_STUB_PROJECT: "components/hal/tests/esp_timer/stub",
-    ESP_TIMER_BOARD_PROJECT: "components/hal/tests/esp_timer/board",
-}
+# Directory (repo-relative) where each project the firmware and test commands
+# operate on directly lives. Only the firmware sits at the repository root; the
+# test projects live under `components/<layer>/tests/` and the simulator
+# application under `components/simulator/exe/`. The set of subprojects is not
+# this list: it is discovered on disk (see `_discover_projects`).
+FIRMWARE_DIR = "mcgowan"
+UTILITY_TEST_DIR = "components/utility/tests/test-utility"
+LOGIC_TEST_DIR = "components/logic/tests/test-logic"
+HAL_STUB_TEST_DIR = "components/hal/tests/test-hal-stub"
+HAL_COMMON_TEST_DIR = "components/hal/tests/test-hal-common"
+ESPIDF_CPP_TEST_DIR = "components/espidfcpp/tests/test-espidf-cpp"
+TEST_SIMULATOR_DIR = "components/simulator/tests/test-simulator"
+DONNY_DIR = "components/simulator/exe/donny"
+ESP_TIMER_STUB_DIR = "components/hal/tests/esp_timer/stub"
+ESP_TIMER_BOARD_DIR = "components/hal/tests/esp_timer/board"
 
 
-def project_dir(project: str) -> str:
-    """Repo-relative directory of a subproject. Pure (testable)."""
-    return PROJECT_DIRS.get(project, project)
+class Project(NamedTuple):
+    """An ESP-IDF project found on disk.
+
+    `name` is the CMake `project()` name, which also names the application
+    binary; `target` is the ESP-IDF target selected by the project's committed
+    `sdkconfig.defaults`.
+    """
+
+    directory: Path
+    name: str
+    target: str
+
+
+# A directory is an ESP-IDF project when its top-level CMakeLists.txt includes
+# ESP-IDF's project.cmake. Components and the root aggregator do not, so this
+# tells the projects apart from the component libraries they build.
+ESPIDF_PROJECT_MARKER = "tools/cmake/project.cmake"
+
+# A discovered `linux` project is a host test suite only when it sits under a
+# directory with this name. That excludes host *applications* such as `donny`,
+# which target `linux` but are not tests, and the on-target test projects,
+# which target the chip.
+TEST_PROJECT_DIRECTORY = "tests"
+
+# Target assumed for a project whose committed defaults do not name one.
+DEFAULT_TARGET = "esp32s3"
 
 
 FW_BUILD_DIR = "build_esp32s3"
 TEST_BUILD_DIR = "build_linux"
 ROOT_BUILD_DIR = "build_root"
 
+# Directories never descended into while discovering projects. Build output
+# holds no sources, `.git` is not a tree of either, and the vendored trees are
+# not ours to build. CLion's per-subproject build trees (`cmake-build-*`) are
+# pruned by prefix.
+DISCOVERY_PRUNE_DIRS = frozenset({
+    ".git",
+    *VENDORED_DIRS,
+    FW_BUILD_DIR,
+    TEST_BUILD_DIR,
+    ROOT_BUILD_DIR,
+})
+DISCOVERY_PRUNE_PREFIXES = ("cmake-build-",)
+
+# The CMake `project()` call (its name is the app binary's name) and the
+# target line in `sdkconfig.defaults`.
+_CMAKE_PROJECT_CALL = re.compile(
+    r"^\s*project\s*\(\s*([^\s)#]+)", re.MULTILINE
+)
+_CMAKE_TARGET = re.compile(r'^\s*CONFIG_IDF_TARGET="([^"]+)"', re.MULTILINE)
+
+
+def _read_text(path: Path) -> str | None:
+    """The file's text, or None when it cannot be read. Pure."""
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def _project_target(directory: Path) -> str:
+    """The ESP-IDF target a project builds for. Pure apart from reads.
+
+    `sdkconfig.defaults` is what `idf.py` reads on a fresh clone, so it is
+    authoritative; an existing `sdkconfig` is consulted only when the defaults
+    name no target, so a stale generated file cannot override them. A project
+    that names neither builds for the chip, like the firmware.
+    """
+    for name in ("sdkconfig.defaults", "sdkconfig"):
+        text = _read_text(directory / name)
+        if text is not None:
+            match = _CMAKE_TARGET.search(text)
+            if match:
+                return match.group(1)
+    return DEFAULT_TARGET
+
+
+def _project_at(directory: Path) -> Project | None:
+    """The ESP-IDF project rooted at `directory`, or None. Pure."""
+    text = _read_text(directory / "CMakeLists.txt")
+    if text is None or ESPIDF_PROJECT_MARKER not in text:
+        return None
+    match = _CMAKE_PROJECT_CALL.search(text)
+    if match is None:
+        return None
+    return Project(directory, match.group(1), _project_target(directory))
+
+
+def _discover_projects(directory: Path) -> list[Project]:
+    """Every ESP-IDF project at or under `directory`, in path order. Pure.
+
+    A project is a directory whose top-level CMakeLists.txt includes ESP-IDF's
+    project.cmake (see `ESPIDF_PROJECT_MARKER`). Discovery stops at a project:
+    its `main/` and `components/` directories belong to it rather than being
+    projects of their own. Build output, `.git`, and the vendored third-party
+    trees are never descended into.
+    """
+    directory = directory.resolve()
+    projects: list[Project] = []
+    for dirpath, dirnames, _ in os.walk(directory):
+        path = Path(dirpath)
+        dirnames[:] = sorted(
+            name
+            for name in dirnames
+            if name not in DISCOVERY_PRUNE_DIRS
+            and not name.startswith(DISCOVERY_PRUNE_PREFIXES)
+        )
+        project = _project_at(path)
+        if project is not None:
+            projects.append(project)
+            dirnames[:] = []
+    return projects
+
+
+def _is_host_test_project(project: Project, root: Path = REPO_ROOT) -> bool:
+    """Whether `project` is a host test suite rather than an application."""
+    if project.target != "linux":
+        return False
+    try:
+        relative = project.directory.resolve().relative_to(root.resolve())
+    except ValueError:
+        return False
+    return TEST_PROJECT_DIRECTORY in relative.parts
+
+
+def _host_test_projects_under(
+    directory: Path, root: Path = REPO_ROOT
+) -> list[Project]:
+    """Linux test projects at or under `directory`, in path order."""
+    return [
+        project
+        for project in _discover_projects(directory)
+        if _is_host_test_project(project, root)
+    ]
+
+
+def _repo_relative(path: Path, root: Path = REPO_ROOT) -> str:
+    """`path` relative to the repository root, POSIX-style. Pure."""
+    try:
+        return path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return path.resolve().as_posix()
+
+
 # The firmware app binary (named after the mcgowan project).
 FW_BINARY = "mcgowan.bin"
-
-# The host-test projects (linux target) and the ELF each one produces (named
-# after its ESP-IDF project). Each is pinned to `linux`, built, then run.
-#
-# `test` runs every entry (CI calls it), so a suite added here is run by both
-# without further wiring. `test-hal-common` is first
-# because it covers the shared vocabulary every other suite builds on;
-# `test-hal-stub` follows with the pin-free devices those suites link against
-# (`test/` drives `BoardStub`). Each suite also has its own command
-# (`test-hal-common`, `test-hal-stub`, `test-logic`, `test-espidf-cpp`,
-# `test-simulator`) so it can be run alone; `self-check` pins that those
-# commands between them cover this table, so no suite is reachable only through
-# the aggregate `test`.
-HOST_TEST_PROJECTS = (
-    (UTILITY_TEST_PROJECT, "test-utility.elf"),
-    (HAL_COMMON_TEST_PROJECT, "esp32_sensors_hal_common_tests.elf"),
-    (HAL_STUB_TEST_PROJECT, "esp32_sensors_hal_stub_tests.elf"),
-    (TEST_PROJECT, "test-logic.elf"),
-    (ESPIDF_CPP_TEST_PROJECT, "test-espidf-cpp.elf"),
-    (TEST_SIMULATOR_PROJECT, "test-simulator.elf"),
-)
-
-# Subprojects that build for the ESP-IDF `linux` target (into build_linux).
-# `donny` is an application rather than a test suite, so it is built but is not
-# run by `test` (see HOST_TEST_PROJECTS).
-LINUX_PROJECTS = (
-    UTILITY_TEST_PROJECT,
-    HAL_STUB_TEST_PROJECT,
-    HAL_COMMON_TEST_PROJECT,
-    TEST_PROJECT,
-    ESPIDF_CPP_TEST_PROJECT,
-    TEST_SIMULATOR_PROJECT,
-    DONNY_PROJECT,
-    ESP_TIMER_STUB_PROJECT,
-)
-
-SUBPROJECTS = (
-    FIRMWARE_PROJECT,
-    UTILITY_TEST_PROJECT,
-    HAL_STUB_TEST_PROJECT,
-    HAL_COMMON_TEST_PROJECT,
-    TEST_PROJECT,
-    ESPIDF_CPP_TEST_PROJECT,
-    TEST_SIMULATOR_PROJECT,
-    DONNY_PROJECT,
-    ESP_TIMER_STUB_PROJECT,
-    ESP_TIMER_BOARD_PROJECT,
-)
 
 # Host-side unit tests for this script itself (stdlib `unittest`), run by
 # `scripts/dev.py self-check`.
 SELF_CHECK_MODULE = "scripts.test_dev"
-
-# clang-tidy: the ESP-IDF projects whose compile databases seed the analysis.
-# Every buildable subproject is analyzed, and each maps to the build directory
-# `build` writes for it (`build_linux` for the `linux` target, `build_esp32s3`
-# otherwise), so the two can never disagree. Deriving the table keeps that
-# true when a subproject is added.
-TIDY_PROJECTS = tuple(
-    (project, TEST_BUILD_DIR if project in LINUX_PROJECTS else FW_BUILD_DIR)
-    for project in SUBPROJECTS
-)
 
 # Source extensions clang-tidy analyzes. The compile database lists every
 # translation unit, including the generated C/assembly ESP-IDF compiles; only
@@ -281,17 +348,6 @@ TIDY_EXTENSIONS = (".cpp", ".cc", ".cxx")
 # under these names only, so CLion's `cmake-build-*` trees and stale copies of
 # an old build are never consulted.
 TIDY_BUILD_DIRS = (FW_BUILD_DIR, TEST_BUILD_DIR)
-
-# One `clang-tidy` scope: a named subproject, or a directory inside the
-# repository whose C++ sources are all analyzed.
-TidyScope = tuple[str, str | Path]
-
-# Internal prefix that carries an already-resolved project scope across the
-# container hop. Resolution is directory-first, and the hop re-parses the
-# command inside the container, whose working directory is not the caller's;
-# without this a project name could resolve to a directory of the same name.
-# It is also the way to force the project when such a directory exists.
-TIDY_PROJECT_PREFIX = "project:"
 
 # GCC driver flags clang's driver rejects outright, or accepts only to warn
 # "argument unused" (which `--warnings-as-errors` would turn into a failure).
@@ -351,8 +407,10 @@ def _source_file_command(roots: tuple[str, ...] = ROOTS) -> list[str]:
     `--exclude-standard` applies `.gitignore`, so build trees and other
     generated output are still never formatted even though they are untracked.
 
-    The pathspec is scoped to `ROOTS` rather than the whole repository, so
-    `third_party/` (vendored, must stay byte-identical) is never picked up.
+    The pathspec is scoped to `roots` rather than the whole repository, so the
+    caller controls the tree; `_select_sources` additionally drops
+    `third_party/` (vendored, must stay byte-identical) even when a pathspec
+    such as `.` covers it.
     """
     return [
         "git", "ls-files",
@@ -373,21 +431,30 @@ def _select_sources(paths: list[str], root: Path = REPO_ROOT) -> list[str]:
     return sorted({
         path
         for path in paths
-        if path.endswith(EXTENSIONS) and (root / path).is_file()
+        if path.endswith(EXTENSIONS)
+        and not _is_vendored_path(path)
+        and (root / path).is_file()
     })
 
 
-def source_files() -> list[str]:
-    """Every C/C++ source under `ROOTS` that exists, tracked or untracked.
+def source_files(directories: list[Path] | None = None) -> list[str]:
+    """Every C/C++ source under `directories`, tracked or untracked.
 
-    This is the file list `format` and `format-check` operate on. It includes
-    files that have not been `git add`ed yet, so formatting a new source does
-    not depend on staging it first; ignored files (build output) are still
-    excluded by `--exclude-standard`.
+    This is the file list `format` and `format-check` operate on. With no
+    `directories` the historical `ROOTS` trees are scanned; otherwise each
+    directory is a `git ls-files` pathspec (repo-relative), so a subdirectory
+    restricts the run and the repository root covers everything. Vendored trees
+    are always filtered out. It includes files that have not been `git add`ed
+    yet, so formatting a new source does not depend on staging it first;
+    ignored files (build output) are still excluded by `--exclude-standard`.
     """
+    roots = (
+        tuple(_repo_relative(directory) for directory in directories)
+        if directories else ROOTS
+    )
     try:
         result = subprocess.run(
-            _source_file_command(),
+            _source_file_command(roots),
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,
@@ -694,33 +761,76 @@ def cmd_image() -> int:
     return run(_image_command())
 
 
-def _idf(project: str, build_dir: str, *args: str) -> list[str]:
-    """`idf.py` argv for a subproject: run in its directory with its own build.
+def _idf(directory: str, build_dir: str, *args: str) -> list[str]:
+    """`idf.py` argv for a project directory relative to the repo root. Pure.
 
-    Pure (no I/O), so it is unit-testable. `project` is a subproject directory
-    relative to the repo root; the build directory lives inside it.
+    The build directory lives inside the project directory.
     """
-    directory = project_dir(project)
-    return ["idf.py", "-C", directory, "-B", f"{directory}/{build_dir}", *args]
+    return ["idf.py", "-C", directory, "-B", f"{directory}/{build_dir}",
+            *args]
 
 
-def _parse_subprojects(args: list[str]) -> list[str] | None:
-    """Parse `build`'s optional subproject arguments.
+def _resolve_directory(
+    argument: str, root: Path = REPO_ROOT, cwd: Path | None = None
+) -> Path | None:
+    """Resolve one `build`/`test`/`clang-tidy` argument to a directory.
 
-    No arguments means every subproject. Unknown names print an error and
-    return None so the caller can exit non-zero.
+    A relative path is resolved against `cwd` (the caller's working
+    directory). An absolute path under the repository is taken as given, and
+    `/project/...` is mapped onto `root`, so a command written for the
+    container also works from the host. Returns None for anything that is not
+    a directory inside the repository. Pure apart from `stat()`.
     """
-    if not args:
-        return list(SUBPROJECTS)
-    unknown = [arg for arg in args if arg not in SUBPROJECTS]
-    if unknown:
-        print(
-            f"Unknown subproject(s): {' '.join(unknown)}. "
-            f"Known: {' '.join(SUBPROJECTS)}",
-            file=sys.stderr,
-        )
-        return None
-    return args
+    path = Path(argument)
+    if path.is_absolute():
+        try:
+            path = root / path.relative_to(CONTAINER_PROJECT_ROOT)
+        except ValueError:
+            pass
+    else:
+        path = (cwd or Path.cwd()) / path
+
+    path = path.resolve()
+    if path.is_dir() and (path == root or root in path.parents):
+        return path
+    return None
+
+
+def _start_directory(root: Path = REPO_ROOT, cwd: Path | None = None) -> Path:
+    """The directory `build`/`test` start from when given none. Pure.
+
+    The caller's current directory, so `cd components/utility && dev.py test`
+    tests that subtree. A caller outside the repository starts from the
+    repository root, which keeps `dev.py build` working from anywhere.
+    """
+    current = (cwd or Path.cwd()).resolve()
+    if current == root or root in current.parents:
+        return current
+    return root
+
+
+def _parse_directories(
+    arguments: list[str], root: Path = REPO_ROOT, cwd: Path | None = None
+) -> list[Path] | None:
+    """Resolve `build`/`test`/`clang-tidy` arguments to repository directories.
+
+    No arguments means an empty list; `build` and `test` then use
+    `_start_directory`. A path that is not a directory inside the repository
+    prints an error and returns None so the caller can exit non-zero.
+    """
+    if not arguments:
+        return []
+    directories: list[Path] = []
+    for argument in arguments:
+        directory = _resolve_directory(argument, root=root, cwd=cwd)
+        if directory is None:
+            print(
+                f"'{argument}' is not a directory in the repository.",
+                file=sys.stderr,
+            )
+            return None
+        directories.append(directory)
+    return directories
 
 
 _ANALYZER_FLAG = "--analyzer"
@@ -744,7 +854,7 @@ def _normalize_analyzer_argv(argv: list[str]) -> list[str]:
     """Turn a bare `--analyzer` into `--analyzer=true`.
 
     The value must be attached with `=`, so a bare `--analyzer` cannot consume
-    the next token (a subproject name) as its value. Pure (testable).
+    the next token (a directory) as its value. Pure (testable).
     """
     return [
         f"{_ANALYZER_FLAG}=true" if token == _ANALYZER_FLAG else token
@@ -761,81 +871,128 @@ def _analyzer_define(analyzer: bool) -> str:
     return f"-DTHERMO_GCC_ANALYZER={'ON' if analyzer else 'OFF'}"
 
 
-def _root_build_commands(subprojects: list[str],
-                         analyzer: bool = False) -> list[list[str]]:
+def _root_build_commands(analyzer: bool = False) -> list[list[str]]:
     """Configure and build the root aggregator project. Pure (testable).
 
-    The root project is plain CMake (not ESP-IDF); ``SUBPROJECTS`` selects
-    which of its ``<subproject>_build`` targets are built. It is passed on the
-    configure command line rather than cached so the selection never goes
-    stale. ``THERMO_GCC_ANALYZER`` is passed the same way and forwarded to each
-    subproject's `idf.py`. Returns the configure command followed by the build
-    command.
+    The root project is plain CMake (not ESP-IDF); its `SUBPROJECTS` cache
+    variable defaults to every aggregate target, so `dev.py` passes no list
+    and keeps no copy of one. `THERMO_GCC_ANALYZER` is passed on the configure
+    command line and forwarded to each subproject's `idf.py`. Returns the
+    configure command followed by the build command.
     """
     return [
         [
             "cmake",
             "-S", ".",
             "-B", ROOT_BUILD_DIR,
-            f"-DSUBPROJECTS={';'.join(subprojects)}",
             _analyzer_define(analyzer),
         ],
         ["cmake", "--build", ROOT_BUILD_DIR],
     ]
 
 
-def _build_subprojects(subprojects: list[str], analyzer: bool = False) -> int:
-    """Build the named subprojects in order. No container hop."""
-    if subprojects == list(SUBPROJECTS):
-        # The whole tree: let the root aggregator project drive every
-        # subproject (one CMake build over all of them).
-        for cmd in _root_build_commands(subprojects, analyzer):
-            rc = run(cmd)
-            if rc != 0:
-                return rc
-        return 0
-    for project in subprojects:
-        rc = _build_project(project, analyzer)
+def _build_all(analyzer: bool = False) -> int:
+    """Build every subproject through the root aggregator. No container hop."""
+    for cmd in _root_build_commands(analyzer):
+        rc = run(cmd)
         if rc != 0:
             return rc
     return 0
 
 
-def _build_project(project: str, analyzer: bool = False) -> int:
-    """Build one subproject with its own target and build directory.
+def _build_project_directory(directory: Path, analyzer: bool = False) -> int:
+    """Build one project directory, pinning the target its defaults select.
 
-    A project in `LINUX_PROJECTS` is pinned to the `linux` target and builds
-    into `build_linux`; everything else builds for ESP32-S3 into
-    `build_esp32s3`. The analyzer define is passed explicitly so a previous
-    `--analyzer=false` cannot stick in the CMake cache.
+    A `linux` project is pinned to the `linux` target and builds into
+    `build_linux`; everything else builds into `build_esp32s3`. The analyzer
+    define is passed explicitly so a previous `--analyzer=false` cannot stick
+    in the CMake cache.
     """
     define = _analyzer_define(analyzer)
-    if project in LINUX_PROJECTS:
-        rc = run(_idf(project, TEST_BUILD_DIR, define, "--preview",
+    target = _project_target(directory)
+    relative = _repo_relative(directory)
+    build_dir = TEST_BUILD_DIR if target == "linux" else FW_BUILD_DIR
+    if target == "linux":
+        rc = run(_idf(relative, build_dir, define, "--preview",
                       "set-target", "linux"))
         if rc != 0:
             return rc
-        return run(_idf(project, TEST_BUILD_DIR, define, "build"))
-    return run(_idf(project, FW_BUILD_DIR, define, "build"))
+    return run(_idf(relative, build_dir, define, "build"))
 
 
-def cmd_build(args: list[str], analyzer: bool = False) -> int:
-    """Build the firmware; with no argument also the other subprojects.
+def _build_project(directory: str, analyzer: bool = False) -> int:
+    """Build the project at a repo-relative `directory`. No container hop."""
+    return _build_project_directory(REPO_ROOT / directory, analyzer)
 
-    `build`                    → every subproject, analyzer off
+
+def _build_project_directories(
+    directories: list[Path], analyzer: bool = False
+) -> int:
+    """Build the project directories in order. No container hop."""
+    for directory in directories:
+        rc = _build_project_directory(directory, analyzer)
+        if rc != 0:
+            return rc
+    return 0
+
+
+def _build_directories(directories: list[Path]) -> list[Path] | None:
+    """The project directories a `build` selection names. Pure.
+
+    Every ESP-IDF project discovered at or under each argument is selected. An
+    argument that contains none prints an error and returns None.
+    """
+    projects: list[Path] = []
+    for directory in directories:
+        found = [
+            project.directory for project in _discover_projects(directory)
+        ]
+        if not found:
+            print(
+                f"No ESP-IDF projects in or under "
+                f"'{_repo_relative(directory)}'.",
+                file=sys.stderr,
+            )
+            return None
+        for project in found:
+            if project not in projects:
+                projects.append(project)
+    return projects
+
+
+def cmd_build(arguments: list[str], analyzer: bool = False) -> int:
+    """Build every ESP-IDF project in a directory, starting from the cwd.
+
+    `build`                    → every project from the current directory
+    `build .`                  → the same, spelled explicitly
     `build mcgowan`            → just the ESP32-S3 firmware, analyzer off
-    `build <subproject>`       → one subproject; any name in `SUBPROJECTS`
+    `build components/utility` → every project in or under that directory
     `build --analyzer`         → any of the above, analyzer on
     `build --analyzer=false`   → explicitly off (the default)
+
+    With no directory, the current directory is used (the repository root
+    when run outside it). The projects under a directory are discovered on
+    disk (see `_discover_projects`), so a new ESP-IDF project needs no entry
+    here.
     """
-    change_to_container()
+    directories = _parse_directories(arguments)
+    if directories is None:
+        return 1
+    if not directories:
+        directories = [_start_directory()]
+    change_to_container(_project_container_arguments("build", directories,
+                                                     analyzer))
     rc = _ensure_submodules()
     if rc != 0:
         return rc
-    subprojects = _parse_subprojects(args)
-    if subprojects is None:
+    if directories == [REPO_ROOT]:
+        # The whole tree, however it was reached: one CMake build over the
+        # root aggregator.
+        return _build_all(analyzer)
+    projects = _build_directories(directories)
+    if projects is None:
         return 1
-    return _build_subprojects(subprojects, analyzer)
+    return _build_project_directories(projects, analyzer)
 
 
 def cmd_build_test_espidf_cpp() -> int:
@@ -844,7 +1001,7 @@ def cmd_build_test_espidf_cpp() -> int:
     rc = _ensure_submodules()
     if rc != 0:
         return rc
-    return _build_project(ESPIDF_CPP_TEST_PROJECT)
+    return _build_project(ESPIDF_CPP_TEST_DIR)
 
 
 def cmd_flash() -> int:
@@ -853,105 +1010,101 @@ def cmd_flash() -> int:
     # No need to pass in the port since it is either in the
     # container environment of idf.py will hunt for the board
     # across all the tty devices.
-    return run(_idf(FIRMWARE_PROJECT, FW_BUILD_DIR, "flash", "monitor"))
+    return run(_idf(FIRMWARE_DIR, FW_BUILD_DIR, "flash", "monitor"))
 
 
 def cmd_monitor() -> int:
     """Attach the serial monitor; exit it with Ctrl+]."""
     change_to_container()
-    return run(_idf(FIRMWARE_PROJECT, FW_BUILD_DIR, "monitor"))
+    return run(_idf(FIRMWARE_DIR, FW_BUILD_DIR, "monitor"))
 
 
 def cmd_menuconfig() -> int:
     """Interactive Kconfig UI; edits sdkconfig (generated from defaults)."""
     change_to_container()
-    return run(_idf(FIRMWARE_PROJECT, FW_BUILD_DIR, "menuconfig"))
+    return run(_idf(FIRMWARE_DIR, FW_BUILD_DIR, "menuconfig"))
 
 
-def _host_test_projects(projects: tuple[str, ...]) -> list[tuple[str, str]]:
-    """The `HOST_TEST_PROJECTS` entries for `projects`, in table order. Pure.
-
-    Keeping the table as the single source of truth means a suite cannot be
-    added to one command and forgotten in another: `test` asks for every entry
-    (`HOST_TEST_PROJECTS`), while `test-utility` / `test-hal-stub` /
-    `test-hal-common` / `test-logic` / `test-espidf-cpp` /
-    `test-simulator` ask for the one project
-    they name. An
-    unknown project means a stale constant, so it trips an assertion rather
-    than silently running fewer suites.
-    """
-    known = dict(HOST_TEST_PROJECTS)
-    unknown = [project for project in projects if project not in known]
-    assert not unknown, f"not a host test project: {unknown}"
-    wanted = set(projects)
-    return [
-        (project, elf)
-        for project, elf in HOST_TEST_PROJECTS
-        if project in wanted
-    ]
-
-
-def _run_host_tests(projects: tuple[str, ...]) -> int:
-    """Build and run the host test suites named by `projects`.
+def _run_suites(suites: list[tuple[Path, str]]) -> int:
+    """Build and run the host test suites named by `(directory, elf)` pairs.
 
     No container hop; assumes it is already running inside the dev container.
-    Each project is pinned to `linux`, built, and its ELF run; the first
-    failing suite stops the run with a non-zero status.
+    Each suite is pinned to `linux`, built, and its ELF run; the first failing
+    suite stops the run with a non-zero status.
     """
     rc = _ensure_submodules()
     if rc != 0:
         return rc
-    suites = _host_test_projects(projects)
-    assert suites, f"no host test suites selected from {projects}"
-    for project, elf in suites:
+    assert suites, "no host test suites selected"
+    for directory, elf in suites:
+        relative = _repo_relative(directory)
         for cmd in (
-            _idf(project, TEST_BUILD_DIR, "--preview", "set-target", "linux"),
-            _idf(project, TEST_BUILD_DIR, "build"),
-            [f"./{project_dir(project)}/{TEST_BUILD_DIR}/{elf}"],
+            _idf(relative, TEST_BUILD_DIR, "--preview",
+                 "set-target", "linux"),
+            _idf(relative, TEST_BUILD_DIR, "build"),
+            [f"./{relative}/{TEST_BUILD_DIR}/{elf}"],
         ):
             rc = run(cmd)
             if rc != 0:
-                print(f"FAILED: host tests '{project}'", file=sys.stderr)
+                print(f"FAILED: host tests '{relative}'", file=sys.stderr)
                 return 1
 
-    print(f"SUCCESS: host tests passed ({', '.join(projects)})")
+    print(
+        "SUCCESS: host tests passed "
+        f"({', '.join(_repo_relative(d) for d, _ in suites)})"
+    )
     return 0
+
+
+def _run_test_directory(directory: str) -> int:
+    """Build and run the host suites at or under a repo-relative directory."""
+    projects = _host_test_projects_under(REPO_ROOT / directory)
+    assert projects, f"no host test project under {directory}"
+    return _run_suites([
+        (project.directory, f"{project.name}.elf") for project in projects
+    ])
 
 
 def cmd_test_utility() -> int:
     """Host tests for components/utility/libutility (`linux` target)."""
     change_to_container()
-    return _run_host_tests((UTILITY_TEST_PROJECT,))
+    return _run_test_directory(UTILITY_TEST_DIR)
 
 
 def cmd_test_hal_stub() -> int:
     """Host tests for components/hal/hal_stub (`linux` target)."""
     change_to_container()
-    return _run_host_tests((HAL_STUB_TEST_PROJECT,))
+    return _run_test_directory(HAL_STUB_TEST_DIR)
 
 
 def cmd_test_hal_common() -> int:
     """Host tests for components/hal/hal_common (`linux` target)."""
     change_to_container()
-    return _run_host_tests((HAL_COMMON_TEST_PROJECT,))
+    return _run_test_directory(HAL_COMMON_TEST_DIR)
 
 
 def cmd_test_logic() -> int:
     """Host-based Unity tests on the ESP-IDF `linux` target (`test-logic/`)."""
     change_to_container()
-    return _run_host_tests((TEST_PROJECT,))
+    return _run_test_directory(LOGIC_TEST_DIR)
 
 
 def cmd_test_espidf_cpp() -> int:
     """Host tests for components/espidfcpp/libespidfcpp (`linux` target)."""
     change_to_container()
-    return _run_host_tests((ESPIDF_CPP_TEST_PROJECT,))
+    return _run_test_directory(ESPIDF_CPP_TEST_DIR)
 
 
 def cmd_test_simulator() -> int:
     """Host tests for components/simulator/libsimulator (`linux` target)."""
     change_to_container()
-    return _run_host_tests((TEST_SIMULATOR_PROJECT,))
+    return _run_test_directory(TEST_SIMULATOR_DIR)
+
+
+def cmd_test_esp_timer_stub() -> int:
+    """Host tests for components/hal/tests/esp_timer/stub (`linux` target)."""
+    change_to_container()
+    return _run_test_directory(ESP_TIMER_STUB_DIR)
 
 
 def cmd_test_esp32_timer() -> int:
@@ -962,24 +1115,63 @@ def cmd_test_esp32_timer() -> int:
         return rc
     # Building here separates a compile failure from a test failure; the
     # driver's own `idf.py flash` then finds the tree up to date.
-    rc = _build_project(ESP_TIMER_BOARD_PROJECT)
+    rc = _build_project(ESP_TIMER_BOARD_DIR)
     if rc != 0:
         return rc
-    script = Path(project_dir(ESP_TIMER_BOARD_PROJECT)) / "test.py"
+    script = Path(ESP_TIMER_BOARD_DIR) / "test.py"
     return run([sys.executable, str(script)])
 
 
-def cmd_test() -> int:
-    """Run every host unit test suite, `test-utility` first.
+def _test_projects(
+    directories: list[Path], root: Path = REPO_ROOT
+) -> list[Project] | None:
+    """The host test projects a `test` selection names, in path order. Pure.
 
-    Then `test-hal-common`, `test-hal-stub`, `test-logic`,
-    `test-espidf-cpp`, and `test-simulator`, in `HOST_TEST_PROJECTS`
-    order. The aggregate the
-    pre-commit hook and CI call, so a suite added to `HOST_TEST_PROJECTS` is
-    picked up here without touching either.
+    No directories means every suite in the repository. Each directory
+    contributes every host test project at or under it. A directory that
+    contributes no suite prints an error and returns None.
     """
-    change_to_container()
-    return _run_host_tests(tuple(project for project, _ in HOST_TEST_PROJECTS))
+    if not directories:
+        return _host_test_projects_under(root, root)
+    projects: list[Project] = []
+    for directory in directories:
+        found = _host_test_projects_under(directory, root)
+        if not found:
+            print(
+                f"No host (`linux`) test projects in or under "
+                f"'{_repo_relative(directory)}'.",
+                file=sys.stderr,
+            )
+            return None
+        for project in found:
+            if project not in projects:
+                projects.append(project)
+    return projects
+
+
+def cmd_test(arguments: list[str] | None = None) -> int:
+    """Run the host unit test suites from the current directory.
+
+    A host test suite is every `linux`-target ESP-IDF project under a `tests/`
+    directory (`_host_test_projects_under`), so a new suite is picked up
+    without touching this command. With no directory, the current directory
+    is used (the repository root when run outside it) in path order:
+    `cd components/utility && dev.py test` runs `test-utility`, and
+    `dev.py test .` from the root runs every suite. The aggregate the
+    pre-commit hook and CI call.
+    """
+    directories = _parse_directories(arguments or [])
+    if directories is None:
+        return 1
+    if not directories:
+        directories = [_start_directory()]
+    change_to_container(_project_container_arguments("test", directories))
+    projects = _test_projects(directories)
+    if projects is None:
+        return 1
+    return _run_suites([
+        (project.directory, f"{project.name}.elf") for project in projects
+    ])
 
 
 def cmd_self_check() -> int:
@@ -1013,20 +1205,33 @@ def cmd_self_check() -> int:
             "    ./scripts/dev.py self-check\n"
             "\n"
             "Inside the container use `./scripts/dev.py test`, which builds\n"
-            "and runs the ESP-IDF `linux`-target suites (`test-utility/`,\n"
-            "`test-hal-stub/`, `test-hal-common/`, `test-logic/`,\n"
-            "`test-espidf-cpp/`, and `test-simulator/`).",
+            "and runs every discovered ESP-IDF `linux`-target test suite.",
             file=sys.stderr,
         )
         return 1
     return run(["python3", "-m", "unittest", "-v", SELF_CHECK_MODULE])
 
 
-def cmd_format() -> int:
-    """Apply the committed .clang-format (Google base, 4-space, 80 cols)."""
-    change_to_container()
+def _format_directories(arguments: list[str]) -> list[Path] | None:
+    """The directories a format command operates on, cwd by default. Pure."""
+    directories = _parse_directories(arguments)
+    if directories is None:
+        return None
+    return directories or [_start_directory()]
 
-    for file in source_files():
+
+def cmd_format(arguments: list[str]) -> int:
+    """Apply the committed .clang-format (Google base, 4-space, 80 cols).
+
+    With no directory, starts from the current directory (the repository root
+    when run outside it). `third_party/` is never formatted.
+    """
+    directories = _format_directories(arguments)
+    if directories is None:
+        return 1
+    change_to_container(_project_container_arguments("format", directories))
+
+    for file in source_files(directories):
         cmd = ["clang-format", "-i", file]
         rc = run(cmd)
         if rc != 0:
@@ -1035,11 +1240,19 @@ def cmd_format() -> int:
     return 0
 
 
-def cmd_format_check() -> int:
-    """CI-friendly check; non-zero exit if anything is unformatted."""
-    change_to_container()
+def cmd_format_check(arguments: list[str]) -> int:
+    """CI-friendly check; non-zero exit if anything is unformatted.
 
-    for file in source_files():
+    With no directory, starts from the current directory (the repository root
+    when run outside it). `third_party/` is never checked.
+    """
+    directories = _format_directories(arguments)
+    if directories is None:
+        return 1
+    change_to_container(_project_container_arguments("format-check",
+                                                     directories))
+
+    for file in source_files(directories):
         cmd = ["clang-format", "--dry-run", "--Werror", file]
         rc = run(cmd)
         if rc != 0:
@@ -1221,97 +1434,36 @@ def _tidy_database(units: list[dict], destination: Path) -> None:
     destination.write_text(json.dumps(entries, indent=2))
 
 
-def _tidy_units(projects: list[str]) -> list[dict] | None:
-    """The C++ translation units of `projects`, or None if a build is missing.
+def _tidy_units(directory: Path) -> list[dict] | None:
+    """The C++ units of one project directory, or None if its build is missing.
 
-    Seeds the analysis from each project's compile database, then reduces the
-    union to one entry per source file (see `_unique_tidy_units`).
+    Seeds the analysis from the project's compile database, then reduces it to
+    one entry per source file (see `_unique_tidy_units`).
     """
-    compilations: list[dict] = []
-    for project in projects:
-        build_dir = dict(TIDY_PROJECTS)[project]
-        database = (
-            REPO_ROOT / project_dir(project) / build_dir
-            / "compile_commands.json"
+    target = _project_target(directory)
+    build_dir = TEST_BUILD_DIR if target == "linux" else FW_BUILD_DIR
+    database = directory / build_dir / "compile_commands.json"
+    if not database.is_file():
+        relative = _repo_relative(directory)
+        print(
+            f"clang-tidy: '{relative}' has no "
+            f"{_repo_relative(database)}; "
+            f"run `scripts/dev.py build {relative}` first.",
+            file=sys.stderr,
         )
-        if not database.is_file():
-            print(
-                f"clang-tidy: '{project}' has no "
-                f"{database.relative_to(REPO_ROOT)}; "
-                f"run `scripts/dev.py build {project}` first.",
-                file=sys.stderr,
-            )
-            return None
-        compilations.extend(json.loads(database.read_text()))
-    return _unique_tidy_units(compilations)
+        return None
+    return _unique_tidy_units(json.loads(database.read_text()))
 
 
-def _resolve_tidy_scope(
-    argument: str, root: Path = REPO_ROOT, cwd: Path | None = None
-) -> TidyScope | None:
-    """Resolve one `clang-tidy` argument to a project or directory scope.
+def _parse_tidy_scopes(arguments: list[str]) -> list[Path] | None:
+    """Resolve `clang-tidy`'s directory arguments. No arguments means all.
 
-    A directory inside the repository wins over a subproject name of the same
-    spelling: `clang-tidy mcgowan` names the `mcgowan/` tree, not the firmware
-    project (write `clang-tidy mcgowan/src` or the project name from another
-    directory to get the project). A directory covers every C++ source below
-    it, including sources that belong to no analyzed subproject, such as
-    `components/hal/tests/esp_timer/board/`.
-
-    An absolute path is taken as given, except that `/project/...` is mapped
-    onto `root`, so a command written for the container
-    (`clang-tidy /project/components/`) also works from the host. A relative
-    path is resolved against `cwd` (the caller's working directory).
-
-    `project:NAME` names a subproject explicitly, which is how the container
-    hop preserves the choice when a directory of the same name exists.
-
-    Returns None when the argument names neither a directory in the repository
-    nor a subproject. Pure apart from `stat()`.
-    """
-    if argument.startswith(TIDY_PROJECT_PREFIX):
-        name = argument[len(TIDY_PROJECT_PREFIX):]
-        return ("project", name) if name in SUBPROJECTS else None
-
-    path = Path(argument)
-    if path.is_absolute():
-        try:
-            path = root / path.relative_to(CONTAINER_PROJECT_ROOT)
-        except ValueError:
-            pass
-    else:
-        path = (cwd or Path.cwd()) / path
-
-    path = path.resolve()
-    if path.is_dir() and (path == root or root in path.parents):
-        return ("directory", path)
-
-    if argument in SUBPROJECTS:
-        return ("project", argument)
-    return None
-
-
-def _parse_tidy_scopes(arguments: list[str]) -> list[TidyScope] | None:
-    """Resolve `clang-tidy`'s arguments to scopes. No arguments means all.
-
-    Unknown arguments print an error and return None so the caller can exit
+    Invalid arguments print an error and return None so the caller can exit
     non-zero.
     """
     if not arguments:
-        return [("project", project) for project, _ in TIDY_PROJECTS]
-
-    scopes: list[TidyScope] = []
-    for argument in arguments:
-        scope = _resolve_tidy_scope(argument)
-        if scope is None:
-            print(
-                f"'{argument}' is neither a subproject nor a directory in "
-                f"the repository. Subprojects: {' '.join(SUBPROJECTS)}",
-                file=sys.stderr,
-            )
-            return None
-        scopes.append(scope)
-    return scopes
+        return [project.directory for project in _discover_projects(REPO_ROOT)]
+    return _parse_directories(arguments)
 
 
 def _discover_tidy_databases(root: Path = REPO_ROOT) -> list[Path]:
@@ -1327,11 +1479,20 @@ def _discover_tidy_databases(root: Path = REPO_ROOT) -> list[Path]:
     file can produce spurious analyzer results). Vendored submodule trees are
     skipped, and build trees are not descended into.
     """
+    projects = sorted(
+        _discover_projects(root),
+        key=lambda project: (
+            project.directory != root / FIRMWARE_DIR,
+            project.target != "linux",
+            project.directory.as_posix(),
+        ),
+    )
     known = []
-    for project, build_dir in TIDY_PROJECTS:
-        database = (
-            root / project_dir(project) / build_dir / "compile_commands.json"
+    for project in projects:
+        build_dir = (
+            TEST_BUILD_DIR if project.target == "linux" else FW_BUILD_DIR
         )
+        database = project.directory / build_dir / "compile_commands.json"
         if database.is_file():
             known.append(database)
 
@@ -1384,22 +1545,33 @@ def _container_path(path: Path, root: Path = REPO_ROOT) -> str:
     return (Path(CONTAINER_PROJECT_ROOT) / relative).as_posix()
 
 
+def _project_container_arguments(
+    command: str, directories: list[Path], analyzer: bool = False
+) -> list[str]:
+    """The `dev.py COMMAND` arguments to re-run inside the container. Pure.
+
+    Every directory becomes its container path, so a host path such as
+    `/home/me/esp32_sensors/components` re-executes as `/project/components`
+    whatever the caller's host working directory was.
+    """
+    arguments = [command]
+    if analyzer:
+        arguments.append(f"{_ANALYZER_FLAG}=true")
+    arguments.extend(_container_path(directory) for directory in directories)
+    return arguments
+
+
 def _tidy_container_arguments(
-    scopes: list[TidyScope], fix: bool = False
+    directories: list[Path], fix: bool = False
 ) -> list[str]:
     """The `dev.py clang-tidy` arguments to re-run inside the container.
 
-    Directory scopes become container paths, so the re-executed command names
-    the same trees whatever the caller's host working directory was. Pure.
+    Directories become container paths (see `_project_container_arguments`).
+    Pure.
     """
-    arguments = ["clang-tidy"]
+    arguments = _project_container_arguments("clang-tidy", directories)
     if fix:
-        arguments.append("--fix")
-    for kind, value in scopes:
-        if kind == "project":
-            arguments.append(f"{TIDY_PROJECT_PREFIX}{value}")
-        else:
-            arguments.append(_container_path(value))
+        arguments.insert(1, "--fix")
     return arguments
 
 
@@ -1430,14 +1602,15 @@ def _tidy_command(
     return command
 
 
-def cmd_clang_tidy(scopes: list[TidyScope], fix: bool = False) -> int:
-    """Static analysis (clang-tidy) over the C/C++ sources.
+def cmd_clang_tidy(directories: list[Path], fix: bool = False) -> int:
+    """Static analysis (clang-tidy) over the C/C++ sources in directories.
 
-    A scope is either a subproject name (`test-hal-stub`) or a directory
-    inside the repository (`components/hal/`). The directory form covers every
-    C++ source below it, including sources that belong to no analyzed
-    subproject (e.g. `components/hal/tests/esp_timer/board/`), and draws them
-    from every compile database under `TIDY_BUILD_DIRS`.
+    Every argument is a directory inside the repository
+    (`components/hal/`). A directory that is itself an ESP-IDF project is
+    analyzed from that project's compile database; any other covers every C++
+    source below it, including sources that belong to no analyzed project
+    (e.g. `components/hal/tests/esp_timer/board/`), and draws them from every
+    compile database under `TIDY_BUILD_DIRS`.
 
     Imports the ESP-IDF compile databases so clang-tidy sees the exact flags,
     defines, and include paths each file is really built with, including the
@@ -1456,7 +1629,7 @@ def cmd_clang_tidy(scopes: list[TidyScope], fix: bool = False) -> int:
     applied in place. Findings that cannot be fixed still fail the run, and
     the rewritten code should be re-formatted (`scripts/dev.py format`).
     """
-    change_to_container(_tidy_container_arguments(scopes, fix))
+    change_to_container(_tidy_container_arguments(directories, fix))
 
     rc = _ensure_submodules()
     if rc != 0:
@@ -1464,16 +1637,16 @@ def cmd_clang_tidy(scopes: list[TidyScope], fix: bool = False) -> int:
 
     units: list[dict] = []
     databases: list[Path] | None = None
-    for kind, value in scopes:
-        if kind == "project":
-            batch = _tidy_units([value])
+    for directory in directories:
+        if _project_at(directory) is not None:
+            batch = _tidy_units(directory)
             if batch is None:
                 return 1
             units.extend(batch)
             continue
         if databases is None:
             databases = _discover_tidy_databases()
-        units.extend(_tidy_units_under(value, databases))
+        units.extend(_tidy_units_under(directory, databases))
     units = _unique_tidy_units(units)
 
     if not units:
@@ -1623,17 +1796,34 @@ def cmd_complete() -> int:
     return 0
 
 
-def _staged_files() -> list[str]:
-    """Staged, added/copied/modified C/C++ files (deleted files skipped)."""
-    out = git(
-        "diff",
-        "--cached",
-        "--name-only",
-        "--diff-filter=ACMR",
-        "--",
-        *ROOTS,
+def _staged_files(
+    directories: list[Path] | None = None, root: Path = REPO_ROOT
+) -> list[str]:
+    """Staged, added/copied/modified C/C++ files under `directories`.
+
+    With no `directories` the historical `ROOTS` trees are scanned. Deleted
+    files are skipped (`--diff-filter=ACMR`) and vendored paths are dropped.
+    `root` is a parameter so the directory filter can be unit-tested against a
+    scratch repository.
+    """
+    pathspecs = (
+        tuple(_repo_relative(directory, root) for directory in directories)
+        if directories else ROOTS
+    )
+    out = subprocess.run(
+        (
+            "git", "diff", "--cached", "--name-only", "--diff-filter=ACMR",
+            "--", *pathspecs,
+        ),
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout
-    return [line for line in out.splitlines() if line.endswith(EXTENSIONS)]
+    return [
+        line for line in out.splitlines()
+        if line.endswith(EXTENSIONS) and not _is_vendored_path(line)
+    ]
 
 
 def _staged_blob(path: str, repo: Path = REPO_ROOT) -> bytes:
@@ -1737,16 +1927,22 @@ def _run_staged_format_check(tmp_dir: Path, files: list[str]) -> int:
     return run(("clang-format", *FORMAT_ARGS, *files), cwd=tmp_dir)
 
 
-def cmd_format_check_staged() -> int:
+def cmd_format_check_staged(arguments: list[str]) -> int:
     """Check only the staged C/C++ content (used by the pre-commit hook).
 
     Unlike `format-check`, this inspects the *index* version of the staged
     files, so it never complains about unrelated working-tree edits and always
-    validates exactly what is about to be committed.
+    validates exactly what is about to be committed. A directory argument
+    narrows the check to the staged files under it; with none it starts from
+    the current directory (the repository root for the git hook).
     """
-    change_to_container()
+    directories = _format_directories(arguments)
+    if directories is None:
+        return 1
+    change_to_container(_project_container_arguments(
+        "format-check-staged", directories))
 
-    files = _staged_files()
+    files = _staged_files(directories)
     if not files:
         return 0
 
@@ -1789,6 +1985,7 @@ COMMANDS = {
     "test-logic": cmd_test_logic,
     "test-espidf-cpp": cmd_test_espidf_cpp,
     "test-simulator": cmd_test_simulator,
+    "test-esp-timer-stub": cmd_test_esp_timer_stub,
     "test-esp32-timer": cmd_test_esp32_timer,
     "self-check": cmd_self_check,
     "format": cmd_format,
@@ -1828,7 +2025,7 @@ def _build_parser() -> argparse.ArgumentParser:
     # metacharacters) so `shell ls -1d /` and `shell "echo hi | wc -l"` work.
     # The `-C/--directory` option must appear before the command (options are
     # parsed up to the first positional token, which starts the REMAINDER).
-    # `build` takes optional subproject names (default: all of them).
+    # `build` takes optional directories (default: every project).
     build_parser = subparsers.choices["build"]
     build_parser.add_argument(
         "--analyzer",
@@ -1837,21 +2034,32 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="BOOL",
         help="enable GCC's static analyzer (-fanalyzer); off by default. Use "
              "`--analyzer` for on, or `--analyzer=false` for off (the value "
-             "must be attached with `=`, so a following subproject name is "
-             "not consumed)",
+             "must be attached with `=`, so a following directory is not "
+             "consumed)",
     )
     build_parser.add_argument(
-        "subprojects",
+        "directories",
         nargs="*",
-        metavar="SUBPROJECT",
-        help=f"subprojects to build (any of: {' '.join(SUBPROJECTS)}); "
-             "omit for all of them",
+        metavar="DIRECTORY",
+        help="directories (every ESP-IDF project in or under one is built); "
+             "omit for the current directory",
     )
 
-    # `clang-tidy` analyzes all analyzed projects by default; naming some
-    # restricts the run (handy while working on one subproject). A directory
-    # argument instead covers every C++ source below it. `--fix` forwards to
-    # clang-tidy, which then rewrites the sources in place.
+    # `test` runs the host suites it discovers, or those in or under the named
+    # directories.
+    test_parser = subparsers.choices["test"]
+    test_parser.add_argument(
+        "directories",
+        nargs="*",
+        metavar="DIRECTORY",
+        help="directories (every host test project in or under one is built "
+             "and run); omit for the current directory",
+    )
+
+    # `clang-tidy` analyzes every project by default; naming directories
+    # restricts the run (handy while working on one area). A directory covers
+    # every C++ source below it. `--fix` forwards to clang-tidy, which then
+    # rewrites the sources in place.
     tidy_parser = subparsers.choices["clang-tidy"]
     tidy_parser.add_argument(
         "--fix",
@@ -1860,15 +2068,23 @@ def _build_parser() -> argparse.ArgumentParser:
              "`format` afterwards",
     )
     tidy_parser.add_argument(
-        "scopes",
+        "directories",
         nargs="*",
-        metavar="DIRECTORY|PROJECT",
-        help=f"directories (every C++ source under one is analyzed; a "
-             f"directory wins over a subproject of the same name, prefix a "
-             f"subproject with `project:` to force it) or subprojects "
-             f"(any of: {' '.join(SUBPROJECTS)}); omit for all analyzed "
-             f"subprojects",
+        metavar="DIRECTORY",
+        help="directories (every C++ source under one is analyzed); omit for "
+             "every project in the repository",
     )
+
+    # The format commands take optional directories, defaulting to the current
+    # directory (see `_format_directories`).
+    for name in ("format", "format-check", "format-check-staged"):
+        subparsers.choices[name].add_argument(
+            "directories",
+            nargs="*",
+            metavar="DIRECTORY",
+            help="directories (every C/C++ source under one is used); omit "
+                 "for the current directory",
+        )
 
     shell_parser = subparsers.choices["shell"]
     shell_parser.add_argument(
@@ -1907,12 +2123,20 @@ def main(argv: list[str]) -> int:
     if args.command == "shell":
         return cmd_shell(args.args, args.directory)
     if args.command == "build":
-        return cmd_build(args.subprojects, analyzer=args.analyzer)
+        return cmd_build(args.directories, analyzer=args.analyzer)
+    if args.command == "test":
+        return cmd_test(args.directories)
     if args.command == "clang-tidy":
-        scopes = _parse_tidy_scopes(args.scopes)
-        if scopes is None:
+        directories = _parse_tidy_scopes(args.directories)
+        if directories is None:
             return 1
-        return cmd_clang_tidy(scopes, fix=args.fix)
+        return cmd_clang_tidy(directories, fix=args.fix)
+    if args.command == "format":
+        return cmd_format(args.directories)
+    if args.command == "format-check":
+        return cmd_format_check(args.directories)
+    if args.command == "format-check-staged":
+        return cmd_format_check_staged(args.directories)
     return args.handler()
 
 
