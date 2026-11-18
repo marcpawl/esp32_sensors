@@ -38,7 +38,7 @@ type allocates:
 |---|---|
 | `utility/static_vector.hpp` | `static_vector<T, N>`: fixed-capacity, inline-storage sequence; `try_push_back` reports overflow instead of aborting |
 | `utility/static_string.hpp` | `static_string<N>`: fixed-capacity, NUL-terminated string (`try_push_back` / `try_append` for the non-aborting path) |
-| `utility/sequence_lock.hpp` | `SequenceLock<Model>`: versioned model with lock-free reads and serialized writers (see below) |
+| `utility/sequence_lock.hpp` | `SequenceLock<Model, concurrent_writers>`: versioned model with lock-free reads and either a single-writer or a serialized multi-writer form (see below) |
 | `utility/isr_safe.hpp` | documents `[[thermo::isr_safe]]`; see below |
 
 Neither depends on ESP-IDF or FreeRTOS, so both build for the chip and the
@@ -51,8 +51,13 @@ is known (see the `cpp-coding-standards` skill, "ESP guidelines").
 
 ## The sequence lock
 
-`SequenceLock<Model>` publishes a versioned model: writers serialize through a
-`std::mutex`, while readers retry a sequence counter and never take the lock.
+`SequenceLock<Model, concurrent_writers>` publishes a versioned model.
+`ConcurrentWriters::Enabled` serialises writers through a `std::mutex` and
+`write()` returns a `WriteResult`, so a stale writer is rejected.
+`ConcurrentWriters::Disable` assumes a single writer: the mutex is omitted and
+`write()` returns void, so it cannot fail or block. Readers retry a sequence
+counter and never take the lock.
+
 `Model` must be default constructible and trivially copyable, so a read cannot
 invoke a user-defined copy. It has no ESP-IDF dependency, which is why it lives
 here rather than in `liblogic`.

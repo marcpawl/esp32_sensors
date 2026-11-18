@@ -1,5 +1,5 @@
-// `SequenceLock<Model>`: a sequence lock that hands a versioned model between
-// writers and readers.
+// `SequenceLock<Model, concurrent_writers>`: a sequence lock that hands a
+// versioned model between writers and readers.
 //
 // The lock stores the model together with a sequence number. A writer marks the
 // sequence odd while it replaces the model and even again once the copy is
@@ -14,8 +14,12 @@
 // newer model with stale data. After a successful write the sequence has
 // advanced, so the caller must `read()` again before its next write.
 //
-// Writers are serialized with a mutex, so two writers never interleave their
-// sequence updates. Reads never take that mutex.
+// `concurrent_writers` selects the writer contract:
+//   - `ConcurrentWriters::Disable` assumes a single writer. `write()` returns
+//     void, does not take a mutex, and cannot block.
+//   - `ConcurrentWriters::Enabled` serialises writers with a mutex.
+//     `write()` returns a `WriteResult`, so a stale writer is rejected.
+// Reads never take the mutex.
 //
 // `Model` must be trivially copyable so that the snapshot copy cannot invoke a
 // user-defined operation, and default constructible because a default-
@@ -28,13 +32,31 @@
 // NOLINTEND
 
 #include <atomic>
+#include <type_traits>
+#include <utility>
+
+#include <cassert>
 #include <cstdint>
 #include <mutex>
-#include <type_traits>
 
 namespace thermo {
 
-template<typename Model>
+enum class ConcurrentWriters { Disable, Enabled };
+
+namespace detail {
+
+// Empty stand-ins for the writer mutex and its scope lock when there is only
+// one writer. `NoLock` accepts the `NoMutex` so `do_write()` can construct the
+// same `WriterLock` in both modes.
+struct NoMutex {};
+
+struct NoLock {
+    explicit NoLock(NoMutex& /*mutex*/) noexcept {}
+};
+
+}  // namespace detail
+
+template<typename Model, ConcurrentWriters concurrent_writers>
 class SequenceLock {
     static_assert(std::is_default_constructible_v<Model>,
                   "SequenceLock<Model> requires a default-constructible Model");
@@ -76,12 +98,39 @@ class SequenceLock {
         }
     }
 
-    // Store `versioned_model.model` if `versioned_model.version` is still
-    // current. A stale model (another writer got there first) is rejected
-    // without changing the cell and reported as `kRejected`.
+    // Single-writer form. The caller guarantees that no other task writes, so
+    // there is no mutex and nothing to reject: the write cannot fail or block.
+    void write(VersionedModel const& versioned_model) noexcept
+        requires(concurrent_writers == ConcurrentWriters::Disable)
+    {
+        const WriteResult result = do_write(versioned_model);
+        assert(result == WriteResult::kStored &&
+               "single-writer SequenceLock rejected a write");
+        (void)result;
+    }
+
+    // Multi-writer form. A stale `versioned_model` (another writer got there
+    // first) is rejected without changing the cell.
     [[nodiscard]] WriteResult write(
+        VersionedModel const& versioned_model) noexcept
+        requires(concurrent_writers == ConcurrentWriters::Enabled)
+    {
+        return do_write(versioned_model);
+    }
+
+  private:
+    using WriterMutex =
+        std::conditional_t<concurrent_writers == ConcurrentWriters::Enabled,
+                           std::mutex, detail::NoMutex>;
+    using WriterLock =
+        std::conditional_t<concurrent_writers == ConcurrentWriters::Enabled,
+                           std::lock_guard<std::mutex>, detail::NoLock>;
+
+    // Store `versioned_model.model` if `versioned_model.version` is still
+    // current. The lock is a no-op for a single writer.
+    [[nodiscard]] WriteResult do_write(
         VersionedModel const& versioned_model) noexcept {
-        std::lock_guard<std::mutex> writer(writer_mutex_);
+        WriterLock writer(writer_mutex_);
 
         const std::uint32_t current =
             cell_.version.load(std::memory_order_relaxed);
@@ -105,7 +154,6 @@ class SequenceLock {
         return WriteResult::kStored;
     }
 
-  private:
     // The guarded cell: the model together with the sequence number that marks
     // whether it is stable (even) or being replaced (odd).
     struct Cell {
@@ -118,7 +166,8 @@ class SequenceLock {
     }
 
     Cell cell_;
-    std::mutex writer_mutex_;
+    // Empty (and no storage) for a single writer.
+    [[no_unique_address]] WriterMutex writer_mutex_;
 };
 
 }  // namespace thermo
