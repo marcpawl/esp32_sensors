@@ -132,22 +132,34 @@ class SshCommandTests(unittest.TestCase):
                 "-o", "LogLevel=ERROR",
                 "-t",
                 "dev@127.0.0.1",
-                "bash -l -c 'cd /project && exec bash -l'",
+                "bash -l -c 'export IDF_TOOLS_PATH=\"${IDF_TOOLS_PATH:-"
+                "/opt/esp}\" && export IDF_PATH=\"${IDF_PATH:-/opt/esp/idf}\""
+                " && cd /project && exec bash -l'",
             ],
         )
 
     def test_command_ssh_runs_in_project_through_a_login_shell(self):
         # A non-interactive command gets no TTY (so it can be piped), and the
-        # login shell is what sources the ESP-IDF environment.
+        # ESP-IDF script is sourced explicitly because no interactive shell
+        # reads ~/.bashrc; its banner goes to stderr.
         command = dev._ssh_command(2222, ["ls", "-l"])
         self.assertNotIn("-t", command)
-        self.assertEqual(command[-1], "bash -l -c 'cd /project && ls -l'")
+        self.assertEqual(
+            command[-1],
+            "bash -l -c 'export IDF_TOOLS_PATH=\"${IDF_TOOLS_PATH:-"
+            "/opt/esp}\" && export IDF_PATH=\"${IDF_PATH:-/opt/esp/idf}\""
+            " && { . \"$IDF_PATH/export.sh\"; } >&2"
+            " && cd /project && ls -l'",
+        )
 
     def test_ssh_quotes_a_shell_command_string(self):
         command = dev._ssh_command(2222, ["echo hi | wc -l"])
         self.assertEqual(
             command[-1],
-            "bash -l -c 'cd /project && echo hi | wc -l'",
+            "bash -l -c 'export IDF_TOOLS_PATH=\"${IDF_TOOLS_PATH:-"
+            "/opt/esp}\" && export IDF_PATH=\"${IDF_PATH:-/opt/esp/idf}\""
+            " && { . \"$IDF_PATH/export.sh\"; } >&2"
+            " && cd /project && echo hi | wc -l'",
         )
 
     def test_compose_port_output_yields_the_host_port(self):
@@ -1126,7 +1138,7 @@ class DevImageTests(unittest.TestCase):
     """
 
     def test_dev_image_is_the_pinned_prebuilt_tag(self):
-        self.assertEqual(dev.DEV_IMAGE, "marcpawl/esp-idf:20261119")
+        self.assertEqual(dev.DEV_IMAGE, "marcpawl/esp-idf:20261119b")
 
     def test_compose_pins_the_same_image(self):
         compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
@@ -1463,11 +1475,57 @@ class SshContainerSetupTests(unittest.TestCase):
         self.assertIn("127.0.0.1:${DEV_SSH_PORT:-2222}:2222", compose)
         self.assertNotIn("0.0.0.0:2222:2222", compose)
 
+    def test_compose_gives_the_container_a_stable_hostname(self):
+        compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
+        self.assertIn("hostname: esp32dev", compose)
+
+    def test_compose_bootstraps_idf_for_plain_ssh(self):
+        # sshd clears IDF_PATH/IDF_TOOLS_PATH, so a login shell needs them
+        # from /etc/profile.d before ~/.bashrc sources export.sh.
+        compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
+        self.assertIn(
+            "./esp-idf-profile.sh:/etc/profile.d/esp-idf.sh:ro", compose
+        )
+        profile = (
+            dev.REPO_ROOT / "docker" / "esp-idf-profile.sh"
+        ).read_text()
+        self.assertIn(
+            'IDF_TOOLS_PATH="${IDF_TOOLS_PATH:-/opt/esp}"', profile
+        )
+        self.assertIn('IDF_PATH="${IDF_PATH:-/opt/esp/idf}"', profile)
+
     def test_devcontainer_forwards_the_ssh_port(self):
         text = (
             dev.REPO_ROOT / ".devcontainer" / "devcontainer.json"
         ).read_text()
         self.assertIn('"forwardPorts": [443, 2222]', text)
+
+
+class ContainerMarkerTests(unittest.TestCase):
+    """The container is detected by a marker file, not the environment.
+
+    sshd starts sessions without the container's environment, so an
+    environment variable made a build over SSH look like a host build.
+    """
+
+    def test_marker_names_the_guards_path(self):
+        self.assertEqual(
+            dev.DEV_CONTAINER_MARKER, "/etc/esp32-sensors-dev-container"
+        )
+
+    def test_image_creates_the_marker(self):
+        dockerfile = (dev.REPO_ROOT / "docker" / "Dockerfile").read_text()
+        self.assertIn(
+            "touch /etc/esp32-sensors-dev-container", dockerfile
+        )
+
+    def test_build_guards_check_the_marker(self):
+        for name in ("CMakeLists.txt", "mcgowan/CMakeLists.txt"):
+            text = (dev.REPO_ROOT / name).read_text()
+            self.assertIn(
+                'if(NOT EXISTS "/etc/esp32-sensors-dev-container")', text
+            )
+            self.assertNotIn("DOCKER_IMAGE", text)
 
 
 class ContainerUserTests(unittest.TestCase):

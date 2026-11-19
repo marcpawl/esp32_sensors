@@ -48,7 +48,7 @@ $ esptool --port /dev/ttyACM0
 ## Setup the Docker Environment
 
 The development container uses the **prebuilt** image
-`marcpawl/esp-idf:20261119` (ESP-IDF v6.1 plus the project tooling: gh,
+`marcpawl/esp-idf:20261119b` (ESP-IDF v6.1 plus the project tooling: gh,
 PyGithub, esp-clang, and `pycodestyle`). The
 tag is pinned in `docker-compose.yml`, is never moved, and is the same image CI
 pulls, so there is nothing to build on a fresh machine — just pull it.
@@ -302,7 +302,7 @@ officially supported. Configure it under **Settings | Build, Execution,
 Deployment | Toolchains → Add → Docker**.
 
 - Point CLion at the standard Docker socket (`unix:///var/run/docker.sock`).
-- Select the pinned dev image `marcpawl/esp-idf:20261119` (the one
+- Select the pinned dev image `marcpawl/esp-idf:20261119b` (the one
   `docker-compose.yml` uses; pull it first with `./scripts/dev.py pull`).
 - CLion will build and run commands inside the container transparently.
 

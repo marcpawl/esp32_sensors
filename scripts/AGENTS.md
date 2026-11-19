@@ -40,6 +40,20 @@ invoked from the host.
 
 Set `ESP32_PORT` (e.g. `/dev/ttyACM0`) to target another serial device.
 
+### Quoting arguments to `shell`
+
+`dev.py shell` joins its arguments with spaces and runs the result through
+`bash -c`; it does not quote them. An argument containing spaces therefore
+splits into several words, which a command such as `gh pr create --title`
+reports as `unknown arguments`. Quote the whole command as one argument:
+
+```bash
+./scripts/dev.py shell "gh pr create --title 'A multi-word title' --body-file .git/pr.md"
+```
+
+Prefer a `--body-file`/`-F` flag over inline text for anything long, and put
+the file inside the repository: the container cannot see the host's `/tmp`.
+
 `ssh` is host-only: it starts (or reuses) the long-running compose container
 with `docker compose up -d dev` and connects over the loopback-published sshd.
 It authenticates with the host's `~/.ssh` keys, which the container already

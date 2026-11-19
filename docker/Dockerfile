@@ -3,7 +3,7 @@
 # ESP32 Solar-Powered Thermometer Logger — development container.
 #
 # NOTE: this image is normally NOT built. `docker-compose.yml` pins the
-# prebuilt, published image `marcpawl/esp-idf:20261119`, and both developers
+# prebuilt, published image `marcpawl/esp-idf:20261119b`, and both developers
 # and CI pull it. Build this Dockerfile only when changing it, then publish the
 # result under a NEW date-stamped tag (see Developer.md).
 #
@@ -330,10 +330,15 @@ RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/home/${USERN
 
 RUN mkdir -p /tmp/esp_idf_activate_dev && chmod 777 /tmp/esp_idf_activate_dev
 
+# Marker for the build guards (each CMakeLists.txt) and `dev.py`'s
+# `is_in_container()`. A file, rather than the former
+# `ENV DOCKER_IMAGE=esp32_sensors`, because sshd starts sessions without the
+# container's environment.
+RUN touch /etc/esp32-sensors-dev-container
+
 USER ${USERNAME}
 
 WORKDIR /project
-ENV DOCKER_IMAGE=esp32_sensors
 
 # Start the SSH server before handing control to the ESP-IDF entrypoint (see
 # the SSH section above). An explicit `--entrypoint` still overrides this.

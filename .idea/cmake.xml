@@ -4,8 +4,8 @@
 
   IMPORTANT: building on the host is NOT supported. All builds run inside the
   ESP-IDF dev container (ESP-IDF v6.1). Each subproject's CMakeLists.txt
-  enforces this by requiring DOCKER_IMAGE=esp32_sensors, which is set by the
-  Dockerfile.
+  enforces this by requiring the /etc/esp32-sensors-dev-container marker,
+  which the Dockerfile creates and docker-compose.yml mounts.
 
   CLion reaches the container through the Dev Container defined in
   .devcontainer/devcontainer.json, which reuses the `dev` service from

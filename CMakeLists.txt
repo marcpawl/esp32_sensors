@@ -57,10 +57,10 @@ cmake_minimum_required(VERSION 3.22)
 # with names CMake / ESP-IDF define for themselves (test, build_test, ...), or
 # with a subproject directory name.
 
-if(NOT "$ENV{DOCKER_IMAGE}" STREQUAL "esp32_sensors")
+if(NOT EXISTS "/etc/esp32-sensors-dev-container")
     message(FATAL_ERROR
         "This project must be built inside the ESP-IDF dev container.\n"
-        "DOCKER_IMAGE is not 'esp32_sensors', so this looks like a host "
+        "The dev-container marker is missing, so this looks like a host "
         "invocation.\n"
         "Use:  scripts/dev.py build\n"
         "or:   docker compose run --rm dev cmake -B build_root")

@@ -20,6 +20,11 @@ The examples in this skill show the command itself; run it through
 ./scripts/dev.py shell gh pr view N
 ```
 
+`dev.py shell` joins its arguments with spaces and does not quote them, so
+an argument containing spaces splits into several words. Quote the whole
+command as one argument when any value has spaces, and prefer a
+`--body-file`/`-F` flag for long text. See `scripts/AGENTS.md`.
+
 The host `gh` is 2.45.0, the Ubuntu package. That release asks for
 `projectCards` when it loads a pull request, GitHub now rejects the whole
 query because Projects (classic) is sunset, and `gh pr edit` fails on every
