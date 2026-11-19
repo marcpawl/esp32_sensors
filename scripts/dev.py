@@ -15,13 +15,15 @@
 #                   test-simulator|\
 #                   test-esp32-timer|self-check|format|format-check|\
 #                   format-check-staged|pycodestyle|clang-tidy|install-hooks|\
-#                   shell]
+#                   shell|ssh]
 #   scripts/dev.py --help        # full help, including per-command details
 #
 # Environment:
 #   ESP32_PORT   Serial device for flash/monitor (optional)
 #                docker-compose.yml will pass into the container the value
 #                on the host.
+#   DEV_SSH_PORT Host port for `ssh` (optional; default 2222). Set it when
+#                2222 is taken or several checkouts run at once.
 #   GH_TOKEN     GitHub token for `gh` inside the container (optional;
 #                GITHUB_TOKEN is accepted too). docker-compose.yml passes
 #                whichever is set on the host, and `gh` prefers it over any
@@ -38,9 +40,11 @@ import os
 from pathlib import Path
 import re
 import shlex
+import socket
 import subprocess
 import sys
 import tempfile
+import time
 from typing import Callable, NamedTuple
 
 # Always operate from the repository root, regardless of the caller's cwd.
@@ -122,7 +126,7 @@ STYLE_FILE_NAMES = (".clang-format", ".clang-format-ignore")
 # never moved, so update it in both places (test_dev.py asserts they agree).
 # `LOCAL_IMAGE` is only what `image` (a local rebuild) produces, for trying out
 # Dockerfile changes.
-DEV_IMAGE = "marcpawl/esp-idf:20261118b"
+DEV_IMAGE = "marcpawl/esp-idf:20261119"
 LOCAL_IMAGE = "esp32-sensors-dev:local"
 
 # The image's Dockerfile and its build context. Both live in `docker/`, next to
@@ -138,6 +142,24 @@ DOCKERFILE = f"{DOCKER_DIR}/Dockerfile"
 # therefore pins HOME (and CCACHE_DIR) explicitly.
 CONTAINER_UID = 1000
 HOME_CACHE_DIR = ".cache/ccache"
+
+# SSH into the long-running dev container (`ssh`). The image's entrypoint
+# starts sshd as the container user on this unprivileged port (see
+# docker/Dockerfile), and docker-compose.yml publishes it on the host's
+# loopback interface. sshd accepts the host's own public keys, which reach the
+# container through the existing read-only `~/.ssh` bind mount, so no key is
+# generated or copied.
+DEV_SSH_SERVICE = "dev"
+DEV_SSH_CONTAINER_PORT = 2222
+DEV_SSH_HOST = "127.0.0.1"
+DEV_SSH_USER = "dev"
+DEV_SSH_PUBLIC_KEYS = (
+    "authorized_keys",
+    "id_ed25519.pub",
+    "id_ecdsa.pub",
+    "id_rsa.pub",
+)
+DEV_SSH_START_TIMEOUT_SECONDS = 30.0
 
 FORMAT_ARGS = ("--dry-run", "--Werror")
 
@@ -1976,6 +1998,174 @@ def cmd_shell(extra: list[str], directory: str | None = None) -> int:
     return run(_build_shell_command(extra, directory))
 
 
+def _compose_command(*args: str) -> list[str]:
+    """The `docker compose` argv for this repository. Pure (testable)."""
+    return ["docker", "compose", "-f", "docker/docker-compose.yml", *args]
+
+
+def _host_ssh_public_keys(home: Path | None = None) -> list[Path]:
+    """The host files whose public keys the container's sshd accepts. Pure.
+
+    `docker/Dockerfile` lists these same names in `AuthorizedKeysFile`, and
+    `docker-compose.yml` mounts the host's `~/.ssh` read-only at the
+    container's home, so an existing key needs no copying or generation.
+    `authorized_keys` covers keys supplied by an agent or a non-standard file
+    name; the `id_*.pub` files are the default keys `ssh` itself offers.
+    """
+    ssh_dir = (home or Path.home()) / ".ssh"
+    return [
+        ssh_dir / name
+        for name in DEV_SSH_PUBLIC_KEYS
+        if (ssh_dir / name).is_file()
+    ]
+
+
+def _ssh_remote_command(extra: list[str]) -> str:
+    """The single command string `ssh` runs inside the container. Pure.
+
+    It is the same login shell `shell` uses (so PATH and the ESP-IDF
+    environment are sourced) starting in `/project`. SSH joins its command
+    arguments with spaces, so the argv is quoted into one string here rather
+    than passed as separate elements.
+    """
+    return shlex.join(
+        _build_shell_command(extra, directory=CONTAINER_PROJECT_ROOT)
+    )
+
+
+def _ssh_command(port: int, extra: list[str]) -> list[str]:
+    """The `ssh` argv `cmd_ssh` runs. Pure (testable).
+
+    Host-key checking is disabled deliberately: the listener is on the host's
+    loopback interface and the image bakes a fixed host key, so there is no
+    remote party to verify; authentication is the developer's key. No `-i` is
+    passed, so `ssh` uses the host's normal keys, config, and agent — the very
+    keys the container's sshd was given through the `~/.ssh` mount.
+
+    An interactive session (`extra` empty) allocates a TTY; a command runs
+    without one, so `dev.py ssh ls -l` can be used in a pipeline.
+    """
+    command = [
+        "ssh",
+        "-p", str(port),
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "UserKnownHostsFile=/dev/null",
+        "-o", "LogLevel=ERROR",
+    ]
+    if not extra:
+        command.append("-t")
+    command.append(f"{DEV_SSH_USER}@{DEV_SSH_HOST}")
+    command.append(_ssh_remote_command(extra))
+    return command
+
+
+def _compose_ssh_port(output: str) -> int | None:
+    """The host port in `docker compose port` output, or None. Pure.
+
+    The output is one `host:port` line (e.g. `127.0.0.1:2222`). Returning the
+    published port rather than assuming `DEV_SSH_PORT` means a moved or
+    explicitly chosen port still works.
+    """
+    for line in output.splitlines():
+        _, _, port = line.strip().rpartition(":")
+        if port.isdigit():
+            return int(port)
+    return None
+
+
+def _published_ssh_port() -> int | None:
+    """Ask compose which host port is published for the container's sshd."""
+    result = subprocess.run(
+        _compose_command(
+            "port", DEV_SSH_SERVICE, str(DEV_SSH_CONTAINER_PORT)
+        ),
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    return _compose_ssh_port(result.stdout)
+
+
+def _wait_for_ssh(port: int, seconds: float | None = None) -> bool:
+    """Wait until `port` accepts a TCP connection on the host. Pure I/O."""
+    deadline = time.monotonic() + (
+        DEV_SSH_START_TIMEOUT_SECONDS if seconds is None else seconds
+    )
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection((DEV_SSH_HOST, port), timeout=1):
+                return True
+        except OSError:
+            time.sleep(0.2)
+    return False
+
+
+def cmd_ssh(extra: list[str]) -> int:
+    """SSH into the running dev container from the host.
+
+    With no arguments this opens an interactive login shell; with arguments it
+    runs them as a command, as the container user, from `/project`:
+
+        scripts/dev.py ssh
+        scripts/dev.py ssh ls -l
+
+    The container is started (or reused) with `docker compose up -d dev`, and
+    the command runs through a login shell, so the ESP-IDF environment is
+    sourced exactly as it is for `shell`. The host's `~/.ssh` keys authenticate
+    the connection; there is no separate key to manage.
+
+    Host-only: inside the container there is nothing to connect to, so use
+    `shell` there.
+    """
+    if is_in_container():
+        print(
+            "ssh: run this on the host. Inside the container use `shell`.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if not _host_ssh_public_keys():
+        print(
+            "ssh: no public key found in ~/.ssh "
+            f"({', '.join(DEV_SSH_PUBLIC_KEYS)}).\n"
+            "Create one with: ssh-keygen -t ed25519",
+            file=sys.stderr,
+        )
+        return 1
+
+    rc = run(_compose_command("up", "-d", DEV_SSH_SERVICE))
+    if rc != 0:
+        return rc
+
+    port = _published_ssh_port()
+    if port is None:
+        print(
+            "ssh: `docker compose port dev 2222` reported no published port; "
+            "check docker/docker-compose.yml.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if not _wait_for_ssh(port):
+        # A container created before the SSH entrypoint existed does not run
+        # sshd yet; ask it to start the server explicitly.
+        run(_compose_command(
+            "exec", "-d", DEV_SSH_SERVICE, "/usr/local/bin/dev-ssh-server"
+        ))
+        if not _wait_for_ssh(port):
+            print(
+                "ssh: the dev container is not serving SSH on port "
+                f"{port}. The pinned image may predate the sshd setup; "
+                "rebuild and publish a new image tag (see docker/AGENTS.md).",
+                file=sys.stderr,
+            )
+            return 1
+
+    return run(_ssh_command(port, extra))
+
+
 def cmd_complete() -> int:
     """Print the command names matching a prefix (used by shell completion).
 
@@ -2185,6 +2375,7 @@ COMMANDS = {
     "clang-tidy": cmd_clang_tidy,
     "install-hooks": cmd_install_hooks,
     "shell": cmd_shell,
+    "ssh": cmd_ssh,
     "complete": cmd_complete,
 }
 
@@ -2301,6 +2492,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="command (and arguments) to run in the container shell",
     )
 
+    ssh_parser = subparsers.choices["ssh"]
+    ssh_parser.add_argument(
+        "args",
+        nargs=argparse.REMAINDER,
+        metavar="ARG",
+        help="command (and arguments) to run over SSH; omit for an "
+             "interactive login shell",
+    )
+
     return parser
 
 
@@ -2321,6 +2521,8 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(_normalize_analyzer_argv(argv[1:]))
     if args.command == "shell":
         return cmd_shell(args.args, args.directory)
+    if args.command == "ssh":
+        return cmd_ssh(args.args)
     if args.command == "build":
         return cmd_build(args.directories, analyzer=args.analyzer)
     if args.command == "test-linux":

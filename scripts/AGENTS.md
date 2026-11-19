@@ -34,10 +34,17 @@ invoked from the host.
 | both | `pycodestyle` | PEP 8 (79 columns) over all Python sources |
 | both | `clang-tidy [DIRECTORY...] [--fix]` | Static analysis over every source under the directories (default: the current directory; a project directory uses its own compile database, any other draws from all databases below it); `--fix` applies fixes in place |
 | both | `shell [CMD...]` | Run a command in the container; no arguments = login shell |
+| host | `ssh [CMD...]` | SSH into the running dev container; no arguments = interactive login shell |
 | both | `complete` | Internal: list subcommands matching a prefix |
 | host | `install-hooks` | Install the git commit hooks |
 
 Set `ESP32_PORT` (e.g. `/dev/ttyACM0`) to target another serial device.
+
+`ssh` is host-only: it starts (or reuses) the long-running compose container
+with `docker compose up -d dev` and connects over the loopback-published sshd.
+It authenticates with the host's `~/.ssh` keys, which the container already
+mounts read-only, and runs the command through a login shell in `/project`.
+`DEV_SSH_PORT` moves the host-side port (default 2222).
 
 `build`, `test-linux`, `test-esp32`, and `clang-tidy` fetch missing submodules
 first.

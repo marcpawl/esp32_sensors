@@ -7,7 +7,7 @@
 // same serial (/dev) passthrough. Do NOT add a duplicate service here — edit
 // docker-compose.yml instead.
 //
-// The service pins the PREBUILT image `marcpawl/esp-idf:20261118b` (see
+// The service pins the PREBUILT image `marcpawl/esp-idf:20261119` (see
 // `image:`/`pull_policy:` in docker-compose.yml), so nothing is built locally.
 //
 // Volumes are inherited from the compose service, so the IDE gets everything
@@ -27,6 +27,11 @@
 //     container (see customizations / AGENTS.md).
 //   * CMake is configured over SSH through the Dev Container so the compiler,
 //     headers, and build directory live in the container, not on the host.
+//   * The service's entrypoint starts sshd as the container user on port 2222,
+//     so `scripts/dev.py ssh` (or a plain `ssh -p 2222 dev@127.0.0.1`) can
+//     enter the *same* running container the IDE is attached to. The port is
+//     published on loopback by docker-compose.yml and forwarded below; no
+//     extra configuration is needed here.
 {
   "name": "ESP32 Sensors Dev (ESP-IDF v6.1)",
 
@@ -53,7 +58,7 @@
   // entrypoint, so the toolchain directories must be exposed here explicitly.
   //
   // NOTE: this PATH mirrors what `$IDF_PATH/export.sh` produces for the
-  // PINNED image (marcpawl/esp-idf:20261118b, which is built on
+  // PINNED image (marcpawl/esp-idf:20261119, which is built on
   // espressif/idf:release-v6.1 with the tool versions below). It therefore
   // only needs updating when the pinned tag is bumped — if `cmake` or
   // `xtensa-esp-elf-gcc` cannot be found in the IDE after such a bump,
@@ -95,10 +100,14 @@
   // (Group membership is granted via `group_add` in docker-compose.yml.)
   "runArgs": ["--init"],
 
-  "forwardPorts": [443],
+  "forwardPorts": [443, 2222],
   "portsAttributes": {
     "443": {
       "label": "Configure-mode HTTPS server (device SoftAP)",
+      "onAutoForward": "silent"
+    },
+    "2222": {
+      "label": "SSH into the dev container (scripts/dev.py ssh)",
       "onAutoForward": "silent"
     }
   }

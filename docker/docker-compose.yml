@@ -4,9 +4,10 @@
 #   docker compose pull                         # fetch the prebuilt dev image
 #   docker compose run --rm dev                 # interactive shell
 #   docker compose run --rm dev idf.py build    # run a single command
+#   scripts/dev.py ssh                          # SSH into a running container
 #
 # --- Which image? ---------------------------------------------------------
-# `dev` uses the PREBUILT image `marcpawl/esp-idf:20261118b`, which is the
+# `dev` uses the PREBUILT image `marcpawl/esp-idf:20261119`, which is the
 # official ESP-IDF v6.1 image plus this project's tooling (gh, PyGithub,
 # esp-clang, pycodestyle). Pull it once with
 # `docker compose pull`; do not rebuild it.
@@ -44,7 +45,7 @@ services:
     # falls back to that build if the pull itself fails (bad tag, registry
     # outage), which is why CI runs `scripts/dev.py pull` as its own step
     # first: that step fails loudly instead of quietly rebuilding a toolchain.
-    image: marcpawl/esp-idf:20261118b
+    image: marcpawl/esp-idf:20261119
     pull_policy: missing
 
     # Kept so the image can be rebuilt from the committed Dockerfile (then
@@ -149,6 +150,17 @@ services:
       # Do NOT put a token in this file: it is committed.
       GH_TOKEN:
       GITHUB_TOKEN:
+
+    # SSH from the host (`scripts/dev.py ssh`). The image's entrypoint starts
+    # sshd as the container user on the unprivileged port 2222, and this
+    # publishes it on the host's LOOPBACK interface only: the server is for
+    # this machine's developer, never for the network. `DEV_SSH_PORT` moves the
+    # host side when 2222 is taken or when several checkouts run at once.
+    #
+    # `docker compose run` does not publish ports, so build/test containers are
+    # unaffected; only the long-running `up -d dev` container is reachable.
+    ports:
+      - "127.0.0.1:${DEV_SSH_PORT:-2222}:2222"
 
     # Optional: expose the device's HTTPS config server for host-side testing
     # once Configure mode is implemented (adjust the container-side port).
