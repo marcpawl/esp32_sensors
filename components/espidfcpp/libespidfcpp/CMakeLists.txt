@@ -8,6 +8,9 @@
 #
 # `libutility` is public because `task.hpp`, `timer.hpp` and the HTTP
 # vocabulary use `static_string` / `static_vector` from it.
+#
+# `esp_ringbuf` is public because `handle.hpp` and `ring_buffer.hpp` include
+# `freertos/ringbuf.h`; the component is available for the `linux` target too.
 
 idf_component_register(
     SRCS
@@ -18,6 +21,7 @@ idf_component_register(
     REQUIRES
         libutility
         esp_http_server
+        esp_ringbuf
         esp_timer
         esp_hw_support
 )

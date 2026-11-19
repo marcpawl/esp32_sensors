@@ -33,6 +33,7 @@ compiled sources are listed in the component's `SRCS`:
 | `espidf_cpp/task.hpp` | `Task<Runner>` (typed `[[noreturn]]` task body), `TaskParams` |
 | `espidf_cpp/mutex.hpp` | `Mutex` (owned normal or recursive FreeRTOS mutex; acquired only through `Lock`) and `Lock` (scope lock, with static `try_lock` / `try_lock_for` factories returning `std::optional<Lock>`) |
 | `espidf_cpp/one_message_queue.hpp` | `OneMessageQueue<T>` (single-slot, trivially-copyable messages) |
+| `espidf_cpp/ring_buffer.hpp` | `RingBuffer<T>` (no-split, trivially-copyable items, configurable item count; blocking `send`/`receive` plus ISR-only `sendFromIsr`/`receiveFromIsr`) |
 | `espidf_cpp/timer.hpp` | `Timer` (RAII `esp_timer` owner: `start_once()`, `start_periodic()`, `restart()`, `stop()`; `restart()` is `[[thermo::isr_safe]]` and does not query the timer) |
 | `espidf_cpp/handle.hpp` | `HandleDeleter`, `UniqueTaskHandle`, `UniqueQueueHandle`, `UniqueSemaphoreHandle` |
 | `espidf_cpp/http_server_types.hpp` | `HttpServer` vocabulary: `HttpMethod`, `HttpField(s)`, `HttpRequest`, `HttpStatus`, `HttpResponse`, `HttpHandler`, `parse_int`, `normalize_url` (no ESP-IDF dependency) |
@@ -54,6 +55,11 @@ The test project lives in `tests/test-espidf-cpp/` and covers the wrappers:
 - `test_one_message_queue.cpp` — the single-slot queue: creation, send and
   receive, overwrite semantics, the tick and chrono timeouts, the ISR send,
   and that copies are disabled while moves transfer the handle.
+- `test_ring_buffer.cpp` — the typed no-split ring buffer: creation, FIFO
+  order, fullness (a send is refused when every configured slot is taken, and
+  succeeds again after a receive), the tick and chrono timeout overloads, the
+  ISR-only `sendFromIsr`/`receiveFromIsr` entry points, and that copies are
+  disabled while moves transfer the handle.
 - `test_timer.cpp` — `Timer`: construction, the start/stop/query
   delegations, move-only ownership, and the restart path. The restart tests
   use the fake's `is_active_calls` / `get_period_calls` counters to prove that
