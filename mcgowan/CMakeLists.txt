@@ -6,13 +6,14 @@ cmake_minimum_required(VERSION 3.22)
 #   scripts/dev.py shell -C mcgowan idf.py -B build_esp32s3 build
 
 # Fail fast when building on the host instead of inside the dev container.
-# The Dockerfile exports DOCKER_IMAGE=esp32_sensors (see the ENV at its end);
-# requiring it keeps the toolchain reproducible and boxes the build/format/
-# test workflow into the container documented in AGENTS.md.
-if(NOT "$ENV{DOCKER_IMAGE}" STREQUAL "esp32_sensors")
+# The dev image creates /etc/esp32-sensors-dev-container, and
+# docker-compose.yml mounts it for the pinned image; requiring it keeps
+# the toolchain reproducible and boxes the build/format/test workflow
+# into the container documented in AGENTS.md.
+if(NOT EXISTS "/etc/esp32-sensors-dev-container")
     message(FATAL_ERROR
         "This project must be built inside the ESP-IDF dev container.\n"
-        "DOCKER_IMAGE is not 'esp32_sensors', so this looks like a host "
+        "The dev-container marker is missing, so this looks like a host "
         "invocation.\n"
         "Use:  scripts/dev.py build\n"
         "or:   docker compose run --rm dev idf.py -C mcgowan "

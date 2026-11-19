@@ -126,7 +126,7 @@ STYLE_FILE_NAMES = (".clang-format", ".clang-format-ignore")
 # never moved, so update it in both places (test_dev.py asserts they agree).
 # `LOCAL_IMAGE` is only what `image` (a local rebuild) produces, for trying out
 # Dockerfile changes.
-DEV_IMAGE = "marcpawl/esp-idf:20261119"
+DEV_IMAGE = "marcpawl/esp-idf:20261119b"
 LOCAL_IMAGE = "esp32-sensors-dev:local"
 
 # The image's Dockerfile and its build context. Both live in `docker/`, next to
@@ -160,6 +160,16 @@ DEV_SSH_PUBLIC_KEYS = (
     "id_rsa.pub",
 )
 DEV_SSH_START_TIMEOUT_SECONDS = 30.0
+
+# ESP-IDF's locations in the dev image: `IDF_PATH` is a Docker ENV in the
+# official base image, and `/opt/esp/entrypoint.sh` exports `IDF_TOOLS_PATH`
+# before the container's command starts. sshd starts listening with a cleared
+# environment (see docker/Dockerfile), so an SSH session inherits neither and
+# `export.sh` would look for the toolchain under the user's home and fail. The
+# remote command restores them as defaults, so the session uses the baked
+# toolchain.
+DEV_IDF_PATH = "/opt/esp/idf"
+DEV_IDF_TOOLS_PATH = "/opt/esp"
 
 FORMAT_ARGS = ("--dry-run", "--Werror")
 
@@ -418,8 +428,16 @@ TIDY_DROP_FLAG_PREFIXES = (
 )
 
 
+# The image (and, for the pinned image, docker-compose.yml) provides this
+# marker file. A file rather than an environment variable, because sshd
+# starts a session without the container's environment, which made a build
+# over SSH look like a host build.
+DEV_CONTAINER_MARKER = "/etc/esp32-sensors-dev-container"
+
+
 def is_in_container():
-    return os.environ.get("DOCKER_IMAGE") == "esp32_sensors"
+    """True when this process runs inside the dev container."""
+    return Path(DEV_CONTAINER_MARKER).exists()
 
 
 def split_list(items, max_size):
@@ -2023,14 +2041,30 @@ def _host_ssh_public_keys(home: Path | None = None) -> list[Path]:
 def _ssh_remote_command(extra: list[str]) -> str:
     """The single command string `ssh` runs inside the container. Pure.
 
-    It is the same login shell `shell` uses (so PATH and the ESP-IDF
-    environment are sourced) starting in `/project`. SSH joins its command
-    arguments with spaces, so the argv is quoted into one string here rather
-    than passed as separate elements.
+    sshd starts a session with an almost empty environment (`PATH`, `HOME`,
+    `USER`, ...) rather than the container's, so the ESP-IDF locations are
+    restored here before the shell runs: without `IDF_TOOLS_PATH`,
+    `export.sh` looks for a virtualenv under `$HOME/.espressif` and fails.
+
+    An interactive session then relies on the login shell's `~/.bashrc` to
+    source `export.sh`, exactly as `shell` does. A command has no interactive
+    shell to do that, so the script is sourced here as well, with its banner
+    on stderr so the command's stdout stays clean for pipelines.
+
+    It is the same login shell `shell` uses, starting in `/project`. SSH joins
+    its command arguments with spaces, so the argv is quoted into one string
+    here rather than passed as separate elements.
     """
-    return shlex.join(
-        _build_shell_command(extra, directory=CONTAINER_PROJECT_ROOT)
-    )
+    setup = [
+        f'export IDF_TOOLS_PATH="${{IDF_TOOLS_PATH:-{DEV_IDF_TOOLS_PATH}}}"',
+        f'export IDF_PATH="${{IDF_PATH:-{DEV_IDF_PATH}}}"',
+    ]
+    if extra:
+        setup.append('{ . "$IDF_PATH/export.sh"; } >&2')
+
+    command = _build_shell_command(extra, directory=CONTAINER_PROJECT_ROOT)
+    command[-1] = " && ".join([*setup, command[-1]])
+    return shlex.join(command)
 
 
 def _ssh_command(port: int, extra: list[str]) -> list[str]:

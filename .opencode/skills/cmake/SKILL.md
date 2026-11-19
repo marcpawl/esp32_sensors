@@ -35,7 +35,8 @@ Comments explain *why* the build is configured the way it is:
 - a `REQUIRES` / `PRIV_REQUIRES` entry that is not self-evident;
 - a deliberate exclusion (`EXCLUDE_COMPONENTS`), an ordering constraint
   (`must be set before project()`), or a `WHOLE_ARCHIVE` need;
-- a failure guard, such as the `DOCKER_IMAGE` check that refuses a host build;
+- a failure guard, such as the container-marker check that refuses a host
+  build;
 - how to build or run the project.
 
 They never explain what the code does.

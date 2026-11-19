@@ -2,7 +2,7 @@
 
 The dev container is defined by the committed `docker/Dockerfile` +
 `docker/docker-compose.yml`; the image itself is prebuilt and pulled
-(`marcpawl/esp-idf:20261119`). Repository-wide guidance is in the root
+(`marcpawl/esp-idf:20261119b`). Repository-wide guidance is in the root
 `AGENTS.md`.
 
 ## Image
@@ -46,6 +46,18 @@ sourced exactly as for `shell`.
   generated or copied; a host with no key needs one (`ssh-keygen -t ed25519`).
 - The Dev Container reuses the same service and therefore the same sshd, so
   `scripts/dev.py ssh` can enter the container CLion is attached to.
+- `sshd` clears its environment when it starts listening, so a session does
+  not inherit `IDF_PATH` or `IDF_TOOLS_PATH` from the entrypoint.
+  `scripts/dev.py ssh` restores both in the remote command; without
+  `IDF_TOOLS_PATH`, `export.sh` looks for a virtualenv under
+  `$HOME/.espressif` and fails.
+- A plain `ssh -p 2222 dev@localhost` gets the same environment:
+  `docker-compose.yml` mounts `docker/esp-idf-profile.sh` at
+  `/etc/profile.d/esp-idf.sh`, and `/etc/profile` sources it before
+  `~/.bashrc` runs `export.sh`. The user is `dev`; the container has no
+  account for the host user.
+- The container's hostname is `esp32dev`, so prompts, `hostname`, and logs
+  identify it regardless of the container id.
 
 ## ccache and non-1000 uids
 
@@ -61,8 +73,8 @@ the image, so `$HOME` resolves to `/` and ccache fails with
 ## Container-only builds
 
 The root `CMakeLists.txt` and every subproject refuse to configure unless
-`DOCKER_IMAGE=esp32_sensors` (set by the `docker/Dockerfile`), so a host invocation
-fails fast. `sdkconfig` is generated and git-ignored — edit
+the container marker `/etc/esp32-sensors-dev-container` exists. The image
+creates it, so a host invocation fails fast and an SSH session does not. `sdkconfig` is generated and git-ignored — edit
 `sdkconfig.defaults` instead.
 
 ## Editing the image

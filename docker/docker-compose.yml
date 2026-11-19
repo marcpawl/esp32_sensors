@@ -7,7 +7,7 @@
 #   scripts/dev.py ssh                          # SSH into a running container
 #
 # --- Which image? ---------------------------------------------------------
-# `dev` uses the PREBUILT image `marcpawl/esp-idf:20261119`, which is the
+# `dev` uses the PREBUILT image `marcpawl/esp-idf:20261119b`, which is the
 # official ESP-IDF v6.1 image plus this project's tooling (gh, PyGithub,
 # esp-clang, pycodestyle). Pull it once with
 # `docker compose pull`; do not rebuild it.
@@ -45,8 +45,13 @@ services:
     # falls back to that build if the pull itself fails (bad tag, registry
     # outage), which is why CI runs `scripts/dev.py pull` as its own step
     # first: that step fails loudly instead of quietly rebuilding a toolchain.
-    image: marcpawl/esp-idf:20261119
+    image: marcpawl/esp-idf:20261119b
     pull_policy: missing
+
+    # Stable name for the dev container, so a prompt, `hostname`, and logs are
+    # recognisable and do not change with every recreated container. It is
+    # inside the container only: host-side SSH still targets 127.0.0.1.
+    hostname: esp32dev
 
     # Kept so the image can be rebuilt from the committed Dockerfile (then
     # tagged as `image:` above, i.e. `docker compose build`). NOT part of the
@@ -131,6 +136,11 @@ services:
       # either way, and the whole point is to share one login.
       - ${HOME:?HOME must be set to share the GitHub CLI login}/.config/gh:/home/dev/.config/gh
       - ${HOME:?HOME must be set to share the GitHub CLI login}/.config/gh:/tmp/.config/gh
+      # Restore the ESP-IDF locations for login shells. sshd clears its
+      # environment, so a plain `ssh -p 2222 localhost` would otherwise look
+      # for the toolchain under $HOME/.espressif; `/etc/profile` sources this
+      # before `~/.bashrc` runs `export.sh`. Read-only: repository content.
+      - ./esp-idf-profile.sh:/etc/profile.d/esp-idf.sh:ro
 
     working_dir: /project
     environment:

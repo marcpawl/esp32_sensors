@@ -12,10 +12,10 @@ cmake_minimum_required(VERSION 3.22)
 #   ./components/hal/tests/esp_timer/stub/build_linux/\
 #       esp32_sensors_esp_timer_stub_tests.elf
 
-if(NOT "$ENV{DOCKER_IMAGE}" STREQUAL "esp32_sensors")
+if(NOT EXISTS "/etc/esp32-sensors-dev-container")
     message(FATAL_ERROR
         "The esp_timer host tests must be built inside the ESP-IDF dev "
-        "container.\nDOCKER_IMAGE is not 'esp32_sensors', so this looks like "
+        "container.\nThe dev-container marker is missing, so this looks like "
         "a host invocation.")
 endif()
 
