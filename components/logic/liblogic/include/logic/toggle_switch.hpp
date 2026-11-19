@@ -1,80 +1,77 @@
 #pragma once
 
-#include <functional>
 #include <cassert>
+#include <functional>
 
 #include "../../../../espidfcpp/libespidfcpp/include/espidf_cpp/handle.hpp"
 #include "boost/sml.hpp"
 
-#include "hal/switch_types.hpp"
 #include "espidf_cpp/timer.hpp"
+#include "hal/switch_types.hpp"
 #include "logic/reboot.hpp"
 
 namespace thermo {
-
-
 
 struct ToggleSwitchSm {
     // 1. Context storing Switch reference, last reading, and callbacks
     struct Context {
         hal::SwitchState last_reading_;
-        std::function<[[thermo::isr_safe]] void(hal::SwitchState)> const stable_callback_;
+        std::function<[[thermo::isr_safe]] void(hal::SwitchState)> const
+            stable_callback_;
         std::function<[[thermo::isr_safe]] void()> const bouncing_callback_;
-        std::function<[[thermo::isr_safe]] hal::SwitchState()> const read_switch_;
+        std::function<[[thermo::isr_safe]] hal::SwitchState()> const
+            read_switch_;
 
-	// @param stable_cb Callback used to indicate that the
-	//   switch has not changed in a while.
-	// @param bouncing_cm Callback used to indicate that the
-	//   switch is rapidly changing.
-	// @param read_switch Function to call to get the current
-	//   switch state.
+        // @param stable_cb Callback used to indicate that the
+        //   switch has not changed in a while.
+        // @param bouncing_cm Callback used to indicate that the
+        //   switch is rapidly changing.
+        // @param read_switch Function to call to get the current
+        //   switch state.
         Context(
-                std::function<[[thermo::isr_safe]] void(hal::SwitchState)> stable_cb,
-                std::function<[[thermo::isr_safe]] void()> bouncing_cb,
-		std::function<[[thermo::isr_safe]] hal::SwitchState()> read_switch)
-            : 
-              stable_callback_(std::move(stable_cb))
-           ,  bouncing_callback_(std::move(bouncing_cb)) 
-	      , read_switch_(read_switch)
-	    {}
+            std::function<[[thermo::isr_safe]] void(hal::SwitchState)>
+                stable_cb,
+            std::function<[[thermo::isr_safe]] void()> bouncing_cb,
+            std::function<[[thermo::isr_safe]] hal::SwitchState()> read_switch)
+            : stable_callback_(std::move(stable_cb)),
+              bouncing_callback_(std::move(bouncing_cb)),
+              read_switch_(read_switch) {}
     };
 
     // 2. Events
-    struct SwitchChangedEvent { 
-	    hal::SwitchState state_; 
+    struct SwitchChangedEvent {
+        hal::SwitchState state_;
     };
-    struct DebouncedEvent { 
-	    hal::SwitchState state_; 
+
+    struct DebouncedEvent {
+        hal::SwitchState state_;
     };
+
     struct UnstableEvent {};
+
     struct DebounceTimerExpiredEvent {};
+
     struct UnstableTimerExpiredEvent {
-	    hal::SwitchState state_;
+        hal::SwitchState state_;
     };
 
     // 3. States
     struct initializing {
         auto on_entry() {
-            return [](Context& ctx) {
-                ctx.last_reading_ = ctx.read_switch_();
-            };
+            return [](Context& ctx) { ctx.last_reading_ = ctx.read_switch_(); };
         }
     };
 
-    // Composite State 'debouncing' containing timers, constructor, nested sub-states, on_entry, and on_exit
+    // Composite State 'debouncing' containing timers, constructor, nested
+    // sub-states, on_entry, and on_exit
     struct debouncing {
-
-
-        thermo::espidf_cpp::Timer debouncing_timer_ ;
+        thermo::espidf_cpp::Timer debouncing_timer_;
 #if 0
         thermo::espidf_cpp::Timer unstable_timer_;
 #endif
 
         // Constructor for debouncing composite state
-        debouncing()
-            : debouncing_timer_(  [this]()->void {
-            })
-        {}
+        debouncing() : debouncing_timer_([this]() -> void {}) {}
 
         // Nested sub-state 'entry'
         struct entry {
@@ -98,7 +95,8 @@ struct ToggleSwitchSm {
             }
         };
 
-        // Nested sub-state 'changed' with on_entry calling debouncing_timer_.restart()
+        // Nested sub-state 'changed' with on_entry calling
+        // debouncing_timer_.restart()
         struct changed {
 #if 0
             [[thermo::isr_safe]] auto on_entry() {
@@ -138,14 +136,16 @@ struct ToggleSwitchSm {
                 // Immediate / anonymous transition from entry to changed
                 *state<entry> = state<changed>,
 
-                // Self-transition on changed state: exit and re-enter state<changed> on SwitchChangedEvent
-                state<changed> + event<SwitchChangedEvent> / [](const SwitchChangedEvent& event, Context& ctx, debouncing& self) {
-                    ctx.last_reading_ = event.state_;
-                } = state<changed>
-            );
+                // Self-transition on changed state: exit and re-enter
+                // state<changed> on SwitchChangedEvent
+                state<changed> + event<SwitchChangedEvent> /
+                                     [](const SwitchChangedEvent& event,
+                                        Context& ctx, debouncing& self) {
+                                         ctx.last_reading_ = event.state_;
+                                     } = state<changed>);
         }
     };
-    
+
     struct stable {
         [[thermo::isr_safe]] auto on_entry() {
             return [](Context& ctx) {
@@ -155,12 +155,10 @@ struct ToggleSwitchSm {
             };
         }
     };
-    
+
     struct unstable {
         [[thermo::isr_safe]] auto on_entry() {
-            return []() {
-                reboot();
-            };
+            return []() { reboot(); };
         }
     };
 
@@ -171,12 +169,13 @@ struct ToggleSwitchSm {
         return make_transition_table(
             *state<initializing> = state<debouncing>,
 
-            state<debouncing> + event<DebouncedEvent> / [](const DebouncedEvent& event, Context& ctx) {
-                ctx.last_reading_ = event.state_;
-            } = state<stable>,
+            state<debouncing> +
+                event<DebouncedEvent> /
+                    [](const DebouncedEvent& event, Context& ctx) {
+                        ctx.last_reading_ = event.state_;
+                    } = state<stable>,
 
-            state<debouncing> + event<UnstableEvent> = state<unstable>
-        );
+            state<debouncing> + event<UnstableEvent> = state<unstable>);
     }
 };
 
@@ -203,4 +202,4 @@ int main() {
 }
 #endif
 
-} // namespace thermo
+}  // namespace thermo
