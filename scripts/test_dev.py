@@ -183,6 +183,45 @@ class SubprojectBuildTests(unittest.TestCase):
             ["flash", "monitor"],
         )
 
+    def test_build_climbs_from_a_component_directory(self):
+        # The reported case: `dev.py build .` inside a component directory.
+        # The component is not an ESP-IDF project, so it cannot run the
+        # command; the nearest parent that can (`components/logic`, through
+        # its test project) builds instead.
+        component = dev.REPO_ROOT / "components" / "logic" / "liblogic"
+        self.assertTrue(component.is_dir())
+        calls = []
+
+        def fake_run(cmd, cwd=dev.REPO_ROOT):
+            calls.append(list(cmd))
+            return 0
+
+        err = io.StringIO()
+        with (
+            mock.patch.object(dev, "change_to_container"),
+            mock.patch.object(dev, "_ensure_submodules", return_value=0),
+            mock.patch.object(dev, "run", fake_run),
+            redirect_stderr(err),
+        ):
+            self.assertEqual(dev.cmd_build([str(component)]), 0)
+        self.assertIn("No ESP-IDF projects", err.getvalue())
+        self.assertIn("using its parent", err.getvalue())
+        suite = "components/logic/tests/test-logic"
+        self.assertEqual(
+            calls,
+            [
+                dev._idf(
+                    suite, dev.TEST_BUILD_DIR,
+                    "-DTHERMO_GCC_ANALYZER=OFF", "--preview",
+                    "set-target", "linux",
+                ),
+                dev._idf(
+                    suite, dev.TEST_BUILD_DIR,
+                    "-DTHERMO_GCC_ANALYZER=OFF", "build",
+                ),
+            ],
+        )
+
     def test_no_arguments_selects_everything(self):
         # An empty selection is what `build` and `test` read as "all".
         self.assertEqual(dev._parse_directories([]), [])
@@ -499,6 +538,80 @@ class ProjectDiscoveryTests(unittest.TestCase):
                 )
             )
         self.assertIn("No host (`linux`) test projects", err.getvalue())
+
+    def _escalate(self, directories):
+        """The selection `build` starts from: any ESP-IDF project."""
+        return dev._escalated_directories(
+            directories, dev._espidf_projects_under, "ESP-IDF projects",
+            root=self.root,
+        )
+
+    def test_a_directory_without_projects_climbs_to_its_parent(self):
+        # The reported case: `build .` inside a component directory. The
+        # component is not a project, so its parent (which holds one) runs.
+        self._project(
+            "components/logic/tests/test-logic", "test-logic", "linux"
+        )
+        component = self._component("components/logic/liblogic")
+        err = io.StringIO()
+        with redirect_stderr(err):
+            selected = self._escalate([component])
+        parent = self.root / "components" / "logic"
+        self.assertEqual(selected, [parent])
+        relative = dev._repo_relative(component, root=self.root)
+        parent_relative = dev._repo_relative(parent, root=self.root)
+        self.assertIn(
+            f"No ESP-IDF projects in '{relative}'", err.getvalue()
+        )
+        self.assertIn(
+            f"using its parent '{parent_relative}'", err.getvalue()
+        )
+
+    def test_the_climb_repeats_until_a_directory_has_projects(self):
+        self._project("a", "a", "linux")
+        deep = self.root / "a" / "b" / "c"
+        deep.mkdir(parents=True)
+        err = io.StringIO()
+        with redirect_stderr(err):
+            selected = self._escalate([deep])
+        self.assertEqual(selected, [self.root / "a"])
+        self.assertEqual(err.getvalue().count("using its parent"), 2)
+
+    def test_a_directory_with_projects_is_used_as_given(self):
+        project = self._project(
+            "components/a/tests/test-a", "test-a", "linux"
+        )
+        err = io.StringIO()
+        with redirect_stderr(err):
+            selected = self._escalate([project])
+        self.assertEqual(selected, [project])
+        self.assertEqual(err.getvalue(), "")
+
+    def test_the_climb_ends_at_the_repository_root(self):
+        self._project("mcgowan", "mcgowan")
+        deep = self.root / "components" / "logic" / "liblogic"
+        deep.mkdir(parents=True)
+        err = io.StringIO()
+        with redirect_stderr(err):
+            selected = self._escalate([deep])
+        self.assertEqual(selected, [self.root])
+        self.assertNotIn("bug in dev.py", err.getvalue())
+
+    def test_a_root_without_the_projects_is_a_dev_py_bug(self):
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertIsNone(self._escalate([self.root]))
+        self.assertIn("bug in dev.py", err.getvalue())
+
+    def test_directories_climbing_to_the_same_parent_run_once(self):
+        self._project(
+            "components/a/tests/test-a", "test-a", "linux"
+        )
+        first = self._component("components/a/libone")
+        second = self._component("components/a/libtwo")
+        with redirect_stderr(io.StringIO()):
+            selected = self._escalate([first, second])
+        self.assertEqual(selected, [self.root / "components" / "a"])
 
 
 class OutsideRepositoryTests(unittest.TestCase):
@@ -1685,13 +1798,27 @@ class HostTestCommandTests(unittest.TestCase):
             self._suite_calls(dev.UTILITY_TEST_DIR, "test-utility.elf"),
         )
 
-    def test_linux_with_a_directory_without_suites_fails(self):
+    def test_linux_climbs_from_a_directory_without_suites(self):
+        # The firmware holds no host suite, so the command cannot run there:
+        # it reports that and runs the suites of the parent (the root), which
+        # finds every suite -- the same set the no-argument form runs.
         mcgowan = str(dev.REPO_ROOT / "mcgowan")
         err = io.StringIO()
         with redirect_stderr(err):
-            self.assertEqual(dev.cmd_test_linux([mcgowan]), 1)
+            self.assertEqual(dev.cmd_test_linux([mcgowan]), 0)
         self.assertIn("No host (`linux`) test projects", err.getvalue())
-        self.assertEqual(self.calls, [])
+        self.assertIn("using its parent", err.getvalue())
+        executed = [
+            cmd[-1] for cmd in self.calls if cmd[-1].endswith(".elf")
+        ]
+        self.assertEqual(
+            executed,
+            [
+                f"./{dev._repo_relative(project.directory)}/"
+                f"{dev.TEST_BUILD_DIR}/{project.name}.elf"
+                for project in dev._host_test_projects_under(dev.REPO_ROOT)
+            ],
+        )
 
     def test_a_failing_suite_stops_the_run_and_fails_the_command(self):
         # A red suite (here: the first ELF to run) must fail `test-linux`, not
@@ -1779,16 +1906,22 @@ class OnTargetTestCommandTests(unittest.TestCase):
         )
         self.assertEqual(self.hops, [["test-esp32", "/project"]])
 
-    def test_a_directory_without_on_target_tests_fails(self):
-        # `components/utility` holds only a linux suite.
+    def test_esp32_climbs_from_a_directory_without_on_target_tests(self):
+        # `components/utility` holds only a linux suite, so the command
+        # cannot run there and climbs to `components`, which does hold the
+        # on-target board suite.
         utility = str(dev.REPO_ROOT / "components" / "utility")
         err = io.StringIO()
         with redirect_stderr(err):
-            self.assertEqual(dev.cmd_test_esp32([utility]), 1)
+            self.assertEqual(dev.cmd_test_esp32([utility]), 0)
         self.assertIn(
             "No on-target (`esp32`) test projects", err.getvalue()
         )
-        self.assertEqual(self.calls, [])
+        self.assertIn("using its parent", err.getvalue())
+        board = dev._on_target_test_projects_under(
+            dev.REPO_ROOT / "components"
+        )
+        self.assertEqual(len(self.calls), len(board) * 2)
 
     def test_a_project_without_a_driver_fails(self):
         project = dev.Project(
@@ -2640,7 +2773,7 @@ class FormatCommandTests(unittest.TestCase):
             return_value=["components/utility/x.cpp"],
         ) as files:
             self.assertEqual(dev.cmd_format([str(utility)]), 0)
-        files.assert_called_once_with([utility])
+        files.assert_any_call([utility])
         self.assertEqual(
             self.calls,
             [["clang-format", "-i", "components/utility/x.cpp"]],
@@ -2655,7 +2788,7 @@ class FormatCommandTests(unittest.TestCase):
             dev, "source_files", return_value=["components/x.cpp"]
         ) as files:
             self.assertEqual(dev.cmd_format_check([str(components)]), 0)
-        files.assert_called_once_with([components])
+        files.assert_any_call([components])
         self.assertEqual(
             self.calls,
             [["clang-format", "--dry-run", "--Werror", "components/x.cpp"]],
@@ -2671,14 +2804,34 @@ class FormatCommandTests(unittest.TestCase):
                 dev, "_start_directory", return_value=utility
             ),
             mock.patch.object(
-                dev, "source_files", return_value=[]
+                dev,
+                "source_files",
+                return_value=["components/utility/x.cpp"],
             ) as files,
         ):
             self.assertEqual(dev.cmd_format_check([]), 0)
-        files.assert_called_once_with([utility])
+        files.assert_any_call([utility])
         self.assertEqual(
             self.hops,
             [["format-check", "/project/components/utility"]],
+        )
+
+    def test_format_climbs_from_a_directory_without_sources(self):
+        # `docker/` holds no C/C++ source, so `format` cannot run there and
+        # climbs to the nearest parent that has some (the repository root).
+        empty = dev.REPO_ROOT / "docker"
+
+        def fake_sources(directories):
+            return {
+                (empty,): [],
+                (dev.REPO_ROOT,): ["mcgowan/src/x.cpp"],
+            }[tuple(directories)]
+
+        with mock.patch.object(dev, "source_files", fake_sources):
+            self.assertEqual(dev.cmd_format([str(empty)]), 0)
+        self.assertEqual(
+            self.calls,
+            [["clang-format", "-i", "mcgowan/src/x.cpp"]],
         )
 
     def test_format_check_staged_scopes_to_the_directory(self):
