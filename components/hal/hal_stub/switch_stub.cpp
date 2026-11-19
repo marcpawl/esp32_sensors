@@ -15,7 +15,7 @@
 
 namespace thermo::hal::stub {
 
-Switch::Switch(int gpio) noexcept : gpio_(gpio) {}
+Switch::Switch(Gpio gpio) noexcept : gpio_(gpio) {}
 
 Switch::~Switch() noexcept {
     remove_interrupt();

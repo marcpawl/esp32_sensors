@@ -31,7 +31,7 @@ namespace thermo::hal::board {
 class Switch {
   public:
     // `gpio` is the input pin.
-    explicit Switch(int gpio) noexcept;
+    explicit Switch(Gpio gpio) noexcept;
 
     Switch(Switch const&) = delete;
     // Movable so `create()` (and containers/factories) can hand a Switch
@@ -46,7 +46,7 @@ class Switch {
 
     // Builds a switch for the given input pin. Same signature for the hardware
     // and stub implementations; call init() before read().
-    [[nodiscard]] static Switch create(int gpio) noexcept {
+    [[nodiscard]] static Switch create(Gpio gpio) noexcept {
         return Switch(gpio);
     }
 
@@ -58,7 +58,7 @@ class Switch {
     [[nodiscard]] SwitchState read() const noexcept;
 
     // The input pin this switch was built for, as passed to `create()`.
-    [[nodiscard]] int gpio() const noexcept { return gpio_; }
+    [[nodiscard]] Gpio gpio() const noexcept { return gpio_; }
 
     // Registers the callback invoked from the GPIO interrupt whenever the
     // switch's state changes. The callback takes no argument: it reads the
@@ -80,7 +80,7 @@ class Switch {
     void remove_interrupt() noexcept;
 
   private:
-    int const gpio_;
+    Gpio const gpio_;
     // Owns the ISR registration, so the destructor cannot forget to remove it.
     // Moving transfers it and leaves the source idle.
     InterruptHandle interrupt_handle_;

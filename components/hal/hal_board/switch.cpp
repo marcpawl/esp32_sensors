@@ -46,7 +46,7 @@ enum class HandlerState : std::uint32_t {
 // own state without converting an integer to a pointer (which pessimizes the
 // optimizer).
 struct IsrSlot {
-    int gpio = 0;
+    Gpio gpio{};
     SwitchState last_state = SwitchState::kOff;
     // Read by the task that destroys the switch after it has removed the ISR.
     std::atomic<HandlerState> handler_state{HandlerState::kIdle};
@@ -58,9 +58,9 @@ static_assert(std::atomic<HandlerState>::is_always_lock_free,
 
 std::array<IsrSlot, static_cast<std::size_t>(GPIO_NUM_MAX)> g_slots{};
 
-gpio_config_t input_config(int gpio) {
+gpio_config_t input_config(Gpio gpio) {
     gpio_config_t cfg = {};
-    cfg.pin_bit_mask = 1ULL << gpio;
+    cfg.pin_bit_mask = 1ULL << gpio.as_int();
     cfg.mode = GPIO_MODE_INPUT;
     // The switch is expected to short the pin to ground when closed, so the
     // internal pull-up keeps the open reading a defined high.
@@ -79,8 +79,8 @@ IRAM_ATTR SwitchState state_from_level(int level) noexcept {
 // invoke the registered callback. The callback reads the new state itself.
 void IRAM_ATTR switch_isr(void* arg) noexcept {
     auto& slot = *static_cast<IsrSlot*>(arg);
-    const SwitchState state =
-        state_from_level(gpio_get_level(static_cast<gpio_num_t>(slot.gpio)));
+    const SwitchState state = state_from_level(
+        gpio_get_level(static_cast<gpio_num_t>(slot.gpio.as_int())));
     if (state == slot.last_state) {
         return;
     }
@@ -99,7 +99,7 @@ void IRAM_ATTR switch_isr(void* arg) noexcept {
 
 }  // namespace
 
-Switch::Switch(int gpio) noexcept : gpio_(gpio) {}
+Switch::Switch(Gpio gpio) noexcept : gpio_(gpio) {}
 
 Switch::Switch(Switch&& other) noexcept
     : gpio_(other.gpio_),
@@ -117,11 +117,12 @@ esp_err_t Switch::init() noexcept {
 SwitchState Switch::read() const noexcept {
     // Active-low wiring: the pin reads low while the switch is closed, so map
     // that to `kOn` (closed) and the open high to `kOff`.
-    return state_from_level(gpio_get_level(static_cast<gpio_num_t>(gpio_)));
+    return state_from_level(
+        gpio_get_level(static_cast<gpio_num_t>(gpio_.as_int())));
 }
 
 void Switch::set_interrupt(SwitchCallback handler) noexcept {
-    assert(gpio_ >= 0 && gpio_ < GPIO_NUM_MAX);
+    assert(gpio_.as_int() >= 0 && gpio_.as_int() < GPIO_NUM_MAX);
 
     if (!handler) {
         // An empty callback is the same request as remove_interrupt().
@@ -129,7 +130,7 @@ void Switch::set_interrupt(SwitchCallback handler) noexcept {
         return;
     }
 
-    auto& slot = g_slots[static_cast<std::size_t>(gpio_)];
+    auto& slot = g_slots[static_cast<std::size_t>(gpio_.as_int())];
     slot.gpio = gpio_;
     slot.handler = std::move(handler);
     slot.last_state = read();
@@ -142,7 +143,7 @@ void Switch::set_interrupt(SwitchCallback handler) noexcept {
 
     // Report both edges so the first close and the first open after
     // registration are both delivered.
-    auto gpio = static_cast<gpio_num_t>(gpio_);
+    auto gpio = static_cast<gpio_num_t>(gpio_.as_int());
     gpio_set_intr_type(gpio, GPIO_INTR_ANYEDGE);
     ESP_ERROR_CHECK(gpio_isr_handler_add(gpio, switch_isr, &slot));
     interrupt_handle_ = InterruptHandle{gpio_};
@@ -156,14 +157,14 @@ void Switch::remove_interrupt() noexcept {
     }
 
     // Stop new invocations before checking for one already in progress.
-    auto gpio = static_cast<gpio_num_t>(gpio_);
+    auto gpio = static_cast<gpio_num_t>(gpio_.as_int());
     gpio_set_intr_type(gpio, GPIO_INTR_DISABLE);
     interrupt_handle_.release();
 
     // A handler entered just before the removal can still be running on
     // either core, and this switch's state is about to be destroyed. That
     // must never happen, so fail loudly before releasing the callback.
-    auto& slot = g_slots[static_cast<std::size_t>(gpio_)];
+    auto& slot = g_slots[static_cast<std::size_t>(gpio_.as_int())];
     assert(slot.handler_state.load(std::memory_order_acquire) ==
            HandlerState::kIdle);
 

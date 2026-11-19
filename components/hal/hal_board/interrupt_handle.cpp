@@ -16,7 +16,7 @@
 
 namespace thermo::hal::board {
 
-InterruptHandle::InterruptHandle(int gpio) noexcept : gpio_(gpio) {}
+InterruptHandle::InterruptHandle(Gpio gpio) noexcept : gpio_(gpio) {}
 
 InterruptHandle::InterruptHandle(InterruptHandle&& other) noexcept
     : gpio_(std::exchange(other.gpio_, std::nullopt)) {}
@@ -43,7 +43,8 @@ void InterruptHandle::release() noexcept {
     if (!gpio_.has_value()) {
         return;
     }
-    ESP_ERROR_CHECK(gpio_isr_handler_remove(static_cast<gpio_num_t>(*gpio_)));
+    ESP_ERROR_CHECK(
+        gpio_isr_handler_remove(static_cast<gpio_num_t>(gpio_->as_int())));
     gpio_.reset();
 }
 

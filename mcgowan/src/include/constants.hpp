@@ -3,8 +3,10 @@
 //
 // The GPIO assignment (§2.4) lives in `hal_common` (`hal/pin_map.hpp`,
 // namespace `thermo::pins`) so the firmware and the HAL `BoardPins` defaults
-// share one definition. It is re-exported here because several firmware
-// sources (`battery_monitor.cpp`, `configure_mode.cpp`, `run_mode.cpp`) reach
+// share one definition. Its constants carry the strong `hal::Gpio` type; the
+// legacy firmware drivers take a raw pin number, so those call sites ask for
+// `as_int()`. It is re-exported here because several firmware sources
+// (`battery_monitor.cpp`, `configure_mode.cpp`, `run_mode.cpp`) reach
 // `thermo::pins::` through this header.
 //
 // The fixed capacities (`thermo::limits::kSensorCount`,

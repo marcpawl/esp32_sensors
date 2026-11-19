@@ -30,7 +30,7 @@ class Led {
     // `gpio` is ignored by the stub. `name` is a human-readable label used for
     // logging; it must point to storage that outlives this object (typically a
     // string literal).
-    Led(int gpio, const char* name) noexcept;
+    Led(Gpio gpio, const char* name) noexcept;
 
     Led(Led const&) = delete;
     // Movable so `create()` (and containers/factories) can hand an Led back by
@@ -42,7 +42,7 @@ class Led {
 
     // Builds a stub LED for the given pin and label. Same signature for the
     // hardware and stub implementations; call init() before write().
-    [[nodiscard]] static Led create(int gpio, const char* name) noexcept {
+    [[nodiscard]] static Led create(Gpio gpio, const char* name) noexcept {
         return Led(gpio, name);
     }
 

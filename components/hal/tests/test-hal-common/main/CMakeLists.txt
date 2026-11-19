@@ -7,6 +7,7 @@
 
 set(test_srcs
     "test_main.cpp"
+    "test_hal_gpio.cpp"
     "test_hal_board_types.cpp"
     "test_hal_sleep_types.cpp"
 )

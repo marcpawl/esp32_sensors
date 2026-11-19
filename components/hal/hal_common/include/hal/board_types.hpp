@@ -57,22 +57,22 @@ namespace thermo::hal {
 // represented here.
 struct BoardPins {
     // 1-Wire data pin for the DS18B20 bus.
-    int one_wire = pins::kWireBus;
+    Gpio one_wire = pins::kWireBus;
     // LED output pins and labels.
-    int green_led = pins::kGreenLed;
-    int red_led = pins::kRedLed;
+    Gpio green_led = pins::kGreenLed;
+    Gpio red_led = pins::kRedLed;
     const char* green_name = "Green";
     const char* red_name = "Red";
     // Plain (user) switch input pin. The reference board has no dedicated
-    // switch, so this defaults to 0 and callers should set it explicitly if
-    // wired.
-    int user_switch = 0;
+    // switch, so this defaults to GPIO 0 and callers should set it explicitly
+    // if wired.
+    Gpio user_switch{};
     // Mode-selection switch pins, one per mode-sense pole. ESP-IDF has no
     // direct notion of the 3-position (DPDT) switch, so the board reports each
     // sense pole as an independent switch; mapping the pair to a mode is logic
     // (§3.1).
-    int config_switch = pins::kConfig;
-    int run_switch = pins::kRun;
+    Gpio config_switch = pins::kConfig;
+    Gpio run_switch = pins::kRun;
 };
 
 // Concept: a board type that owns one of each HAL device and exposes them

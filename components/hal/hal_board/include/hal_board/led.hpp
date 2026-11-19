@@ -24,7 +24,7 @@ class Led {
     // `gpio` is the output pin. `name` is a human-readable label; the hardware
     // implementation does not use it (it exists for parity with the stub,
     // which logs it).
-    Led(int gpio, const char* name) noexcept;
+    Led(Gpio gpio, const char* name) noexcept;
 
     Led(Led const&) = delete;
     // Movable so `create()` (and containers/factories) can hand an Led back by
@@ -36,7 +36,7 @@ class Led {
 
     // Builds an LED for the given output pin. Same signature for the hardware
     // and stub implementations; call init() before write().
-    [[nodiscard]] static Led create(int gpio, const char* name) noexcept {
+    [[nodiscard]] static Led create(Gpio gpio, const char* name) noexcept {
         return Led(gpio, name);
     }
 
@@ -48,7 +48,7 @@ class Led {
     void write(LedState state) noexcept;
 
   private:
-    int const gpio_;
+    Gpio const gpio_;
 };
 
 static_assert(LedLike<Led>, "Led must satisfy the LedLike concept");

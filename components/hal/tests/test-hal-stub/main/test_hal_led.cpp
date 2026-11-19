@@ -23,12 +23,13 @@
 namespace {
 
 // Convenience aliases for the shared HAL vocabulary.
+using thermo::hal::Gpio;
 using thermo::hal::LedState;
 using thermo::hal::stub::Led;
 
 // Pin numbers are irrelevant to the stub, but the factory takes them for
 // interface parity with the GPIO-backed implementation.
-constexpr int kGreenGpio = 17;
+constexpr Gpio kGreenGpio{17};
 
 // The label is used only for the stub's log output; a string literal outlives
 // the object.
@@ -119,6 +120,6 @@ TEST_CASE("hal led: the name is accepted and usable for logging", "[hal_led]") {
 TEST_CASE("hal led: stub Led models LedLike", "[hal_led]") {
     static_assert(thermo::hal::LedLike<Led>);
     // create() must return the same concrete type (part of the concept).
-    static_assert(std::same_as<decltype(Led::create(1, "x")), Led>);
+    static_assert(std::same_as<decltype(Led::create(Gpio{1}, "x")), Led>);
     TEST_ASSERT_EQUAL(ESP_OK, make_led().init());
 }

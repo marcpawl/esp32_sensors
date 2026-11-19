@@ -161,7 +161,7 @@ template<hal::BoardLike Board>
     // --- Sample (§3.4) ---
     led_task.set_state(LedState::kRun);
 
-    SensorManager sensors(pins::kWireBus);
+    SensorManager sensors(pins::kWireBus.as_int());
     sensors.init();
 
     // Prefer cached ROM IDs (§3.4: no bus scan on wake). On first boot the
