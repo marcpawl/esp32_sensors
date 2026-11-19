@@ -1138,7 +1138,7 @@ class DevImageTests(unittest.TestCase):
     """
 
     def test_dev_image_is_the_pinned_prebuilt_tag(self):
-        self.assertEqual(dev.DEV_IMAGE, "marcpawl/esp-idf:20261119b")
+        self.assertEqual(dev.DEV_IMAGE, "marcpawl/esp-idf:20261119c")
 
     def test_compose_pins_the_same_image(self):
         compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
@@ -1813,6 +1813,33 @@ class GhCliMountTests(unittest.TestCase):
         for name in ("GH_TOKEN", "GITHUB_TOKEN"):
             self.assertIn(name, service, service)
             self.assertIsNone(service[name], f"{name} must not be hardcoded")
+
+
+class HomeConfigDirectoryTests(unittest.TestCase):
+    """`$HOME/.config` is writable by the user the container runs as.
+
+    CLion's remote backend is installed by the Toolbox agent as the container
+    user, and the agent creates `$HOME/.config/JetBrains`. `install -d` applies
+    `-o`/`-g`/`-m` to its last argument only, so creating `.../.config/gh`
+    left `.config` owned by root and the backend install failed with
+    "failed to create directory: /home/dev/.config/JetBrains".
+    """
+
+    def _dockerfile(self) -> str:
+        return (dev.REPO_ROOT / "docker" / "Dockerfile").read_text()
+
+    def test_image_creates_home_config_for_the_container_user(self):
+        dockerfile = self._dockerfile()
+        self.assertIn('-m 755 -o "${UID}" -g "${GID}"', dockerfile)
+        self.assertIn('"/home/${USERNAME}/.config"', dockerfile)
+
+    def test_tmp_config_is_writable_by_other_uids(self):
+        # `dev.py` gives every uid but the image's 1000 HOME=/tmp, and CLion's
+        # backend must be installable under that HOME too.
+        self.assertIn(
+            "install -d -m 1777 /tmp/.config",
+            self._dockerfile(),
+        )
 
 
 class CommandRegistryTests(unittest.TestCase):

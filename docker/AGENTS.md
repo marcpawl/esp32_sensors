@@ -2,7 +2,7 @@
 
 The dev container is defined by the committed `docker/Dockerfile` +
 `docker/docker-compose.yml`; the image itself is prebuilt and pulled
-(`marcpawl/esp-idf:20261119b`). Repository-wide guidance is in the root
+(`marcpawl/esp-idf:20261119c`). Repository-wide guidance is in the root
 `AGENTS.md`.
 
 ## Image
