@@ -15,7 +15,7 @@
 #                   test-simulator|\
 #                   test-esp32-timer|self-check|format|format-check|\
 #                   format-check-staged|pycodestyle|clang-tidy|install-hooks|\
-#                   shell|ssh]
+#                   shell|ssh|clion-archive]
 #   scripts/dev.py --help        # full help, including per-command details
 #
 # Environment:
@@ -35,6 +35,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -126,7 +127,7 @@ STYLE_FILE_NAMES = (".clang-format", ".clang-format-ignore")
 # never moved, so update it in both places (test_dev.py asserts they agree).
 # `LOCAL_IMAGE` is only what `image` (a local rebuild) produces, for trying out
 # Dockerfile changes.
-DEV_IMAGE = "marcpawl/esp-idf:20261119b"
+DEV_IMAGE = "marcpawl/esp-idf:20261119c"
 LOCAL_IMAGE = "esp32-sensors-dev:local"
 
 # The image's Dockerfile and its build context. Both live in `docker/`, next to
@@ -160,6 +161,17 @@ DEV_SSH_PUBLIC_KEYS = (
     "id_rsa.pub",
 )
 DEV_SSH_START_TIMEOUT_SECONDS = 30.0
+
+# `clion-archive` seeds the remote backend archive that the Toolbox agent
+# downloads into the container, so CLion can install the backend without
+# fetching ~1.9 GB from the network. Toolbox names a downloaded archive
+# `<first 9 hex of sha256>-<filename from the download URL>`, and its
+# downloader treats an existing file at that path as a cached download.
+TOOLBOX_DOWNLOAD_DIR = "/home/dev/.cache/JetBrains/Toolbox/download"
+# A character class keeps `pkill -f` from matching the shell that runs it,
+# whose command line also contains this text (the `ps | grep [p]attern` trick).
+TOOLBOX_AGENT_REGEX = "com.jetbrains.toolbox.[M]ainKt"
+CLION_ARCHIVE_PATTERN = "CLion-*.tar.gz"
 
 # ESP-IDF's locations in the dev image: `IDF_PATH` is a Docker ENV in the
 # official base image, and `/opt/esp/entrypoint.sh` exports `IDF_TOOLS_PATH`
@@ -2093,6 +2105,54 @@ def _ssh_command(port: int, extra: list[str]) -> list[str]:
     return command
 
 
+def _clion_archive_candidates(home: Path | None = None) -> list[Path]:
+    """CLion backend archives in the host's Downloads directory. Pure."""
+    downloads = (home or Path.home()) / "Downloads"
+    return sorted(downloads.glob(CLION_ARCHIVE_PATTERN))
+
+
+def _sha256_file(path: Path) -> str:
+    """The hex SHA-256 of a file, read in bounded chunks. Pure I/O."""
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _clion_archive_name(archive: Path, digest: str) -> str:
+    """The Toolbox cache name for an archive. Pure.
+
+    Toolbox names a downloaded archive `<first 9 sha256 hex>-<filename from
+    the download URL>`; the prefix is what lets it find a cached download by
+    content instead of fetching the URL again.
+    """
+    return f"{digest[:9]}-{archive.name}"
+
+
+def _clion_archive_destination(name: str) -> str:
+    """Where Toolbox looks for a downloaded archive in the container. Pure."""
+    return f"{TOOLBOX_DOWNLOAD_DIR}/{name}"
+
+
+def _scp_command(port: int, source: Path, destination: str) -> list[str]:
+    """The `scp` argv that copies a host archive into the container. Pure.
+
+    The flags mirror `_ssh_command`: the listener is on the host's loopback
+    interface with a fixed image host key, and authentication is the host's
+    own key.
+    """
+    return [
+        "scp",
+        "-P", str(port),
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "UserKnownHostsFile=/dev/null",
+        "-o", "LogLevel=ERROR",
+        str(source),
+        f"{DEV_SSH_USER}@{DEV_SSH_HOST}:{destination}",
+    ]
+
+
 def _compose_ssh_port(output: str) -> int | None:
     """The host port in `docker compose port` output, or None. Pure.
 
@@ -2136,6 +2196,77 @@ def _wait_for_ssh(port: int, seconds: float | None = None) -> bool:
     return False
 
 
+def _ensure_ssh_service() -> tuple[int, int | None]:
+    """Start (or reuse) the dev container and return `(up_rc, ssh_port)`.
+
+    Shared by `ssh` and `clion-archive`. A non-zero `up_rc` is the `docker
+    compose up` return code and is returned to the caller unchanged;
+    `ssh_port` is None when compose published no port or the container never
+    started serving SSH, after printing the reason.
+    """
+    rc = run(_compose_command("up", "-d", DEV_SSH_SERVICE))
+    if rc != 0:
+        return rc, None
+
+    port = _published_ssh_port()
+    if port is None:
+        print(
+            "ssh: `docker compose port dev 2222` reported no published port; "
+            "check docker/docker-compose.yml.",
+            file=sys.stderr,
+        )
+        return 0, None
+
+    if not _wait_for_ssh(port):
+        # A container created before the SSH entrypoint existed does not run
+        # sshd yet; ask it to start the server explicitly.
+        run(_compose_command(
+            "exec", "-d", DEV_SSH_SERVICE, "/usr/local/bin/dev-ssh-server"
+        ))
+        if not _wait_for_ssh(port):
+            print(
+                "ssh: the dev container is not serving SSH on port "
+                f"{port}. The pinned image may predate the sshd setup; "
+                "rebuild and publish a new image tag (see docker/AGENTS.md).",
+                file=sys.stderr,
+            )
+            return 0, None
+    return 0, port
+
+
+def _stop_toolbox_agent(port: int) -> None:
+    """Stop the Toolbox agent so it cannot overwrite a seeded archive.
+
+    `pkill` exits 1 when nothing matched, which is not an error here. The
+    agent gets a few seconds to finish a write, then SIGKILL if still alive.
+    """
+    pattern = shlex.quote(TOOLBOX_AGENT_REGEX)
+    script = (
+        f"pkill -TERM -f {pattern} || true; "
+        "i=0; "
+        f"while pgrep -f {pattern} >/dev/null; do "
+        "i=$((i + 1)); "
+        '[ "$i" -ge 20 ] && break; '
+        "sleep 0.25; "
+        "done; "
+        f"pkill -KILL -f {pattern} || true"
+    )
+    run(_ssh_command(port, ["sh", "-c", script]))
+
+
+def _remote_sha256(port: int, path: str) -> str | None:
+    """The SHA-256 of `path` inside the container, or None on failure."""
+    command = _ssh_command(port, ["sha256sum", path])
+    print(command)
+    result = subprocess.run(
+        command, cwd=REPO_ROOT, capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        return None
+    fields = result.stdout.split()
+    return fields[0] if fields else None
+
+
 def cmd_ssh(extra: list[str]) -> int:
     """SSH into the running dev container from the host.
 
@@ -2169,35 +2300,122 @@ def cmd_ssh(extra: list[str]) -> int:
         )
         return 1
 
-    rc = run(_compose_command("up", "-d", DEV_SSH_SERVICE))
+    rc, port = _ensure_ssh_service()
     if rc != 0:
         return rc
-
-    port = _published_ssh_port()
     if port is None:
+        return 1
+    return run(_ssh_command(port, extra))
+
+
+def cmd_clion_archive(archive: str | None) -> int:
+    """Seed the container's Toolbox cache with a local CLion backend archive.
+
+    CLion's Remote Connections flow installs the backend through the Toolbox
+    agent, which downloads a ~1.9 GB `CLion-*.tar.gz` into the container. This
+    command copies an archive from the host into the exact cache path the
+    agent looks for, so it installs from the local file instead of the
+    network:
+
+        scripts/dev.py clion-archive
+        scripts/dev.py clion-archive ~/Downloads/CLion-2026.3.0.1.tar.gz
+
+    With no argument it uses the only `~/Downloads/CLion-*.tar.gz`; with
+    several it stops and asks for one. The Toolbox cache name is
+    `<first 9 hex of sha256>-<filename>`.
+
+    A running Toolbox agent is stopped first (an in-flight download would
+    otherwise overwrite the seeded file), together with the interrupted
+    download's `.tmp`/`journal` state. The copy is made as a `.part` file and
+    renamed only after its remote SHA-256 matches the local one.
+
+    Host-only, like `ssh`: it needs the host's archive, keys and scp.
+    """
+    if is_in_container():
         print(
-            "ssh: `docker compose port dev 2222` reported no published port; "
-            "check docker/docker-compose.yml.",
+            "clion-archive: run this on the host. Inside the container use "
+            "`shell`.",
             file=sys.stderr,
         )
         return 1
 
-    if not _wait_for_ssh(port):
-        # A container created before the SSH entrypoint existed does not run
-        # sshd yet; ask it to start the server explicitly.
-        run(_compose_command(
-            "exec", "-d", DEV_SSH_SERVICE, "/usr/local/bin/dev-ssh-server"
-        ))
-        if not _wait_for_ssh(port):
+    if not _host_ssh_public_keys():
+        print(
+            "clion-archive: no public key found in ~/.ssh "
+            f"({', '.join(DEV_SSH_PUBLIC_KEYS)}).\n"
+            "Create one with: ssh-keygen -t ed25519",
+            file=sys.stderr,
+        )
+        return 1
+
+    if archive is None:
+        candidates = _clion_archive_candidates()
+        if not candidates:
             print(
-                "ssh: the dev container is not serving SSH on port "
-                f"{port}. The pinned image may predate the sshd setup; "
-                "rebuild and publish a new image tag (see docker/AGENTS.md).",
+                "clion-archive: no ~/Downloads/"
+                f"{CLION_ARCHIVE_PATTERN}; pass the archive path explicitly.",
                 file=sys.stderr,
             )
             return 1
+        if len(candidates) > 1:
+            print(
+                "clion-archive: several CLion archives found; pass one "
+                "explicitly:",
+                file=sys.stderr,
+            )
+            for candidate in candidates:
+                print(f"  {candidate}", file=sys.stderr)
+            return 1
+        source = candidates[0]
+    else:
+        source = Path(archive).expanduser()
 
-    return run(_ssh_command(port, extra))
+    if not source.is_file():
+        print(f"clion-archive: {source} is not a file", file=sys.stderr)
+        return 1
+
+    print(f"clion-archive: hashing {source}")
+    digest = _sha256_file(source)
+    name = _clion_archive_name(source, digest)
+    destination = _clion_archive_destination(name)
+    part = f"{destination}.part"
+
+    rc, port = _ensure_ssh_service()
+    if rc != 0:
+        return rc
+    if port is None:
+        return 1
+
+    print("clion-archive: stopping the Toolbox agent")
+    _stop_toolbox_agent(port)
+    # An interrupted download leaves a DIRTY DiskLruCache entry; without
+    # this it resumes and can replace the archive seeded below.
+    run(_ssh_command(port, [
+        "rm", "-f",
+        f"{TOOLBOX_DOWNLOAD_DIR}/*.tmp",
+        f"{TOOLBOX_DOWNLOAD_DIR}/journal",
+    ]))
+    run(_ssh_command(port, ["mkdir", "-p", TOOLBOX_DOWNLOAD_DIR]))
+
+    if run(_scp_command(port, source, part)) != 0:
+        return 1
+
+    if _remote_sha256(port, part) != digest:
+        run(_ssh_command(port, ["rm", "-f", part]))
+        print(
+            "clion-archive: the copied archive failed its SHA-256 check",
+            file=sys.stderr,
+        )
+        return 1
+
+    if run(_ssh_command(port, ["mv", "-f", part, destination])) != 0:
+        return 1
+
+    print(f"clion-archive: seeded {destination}")
+    print(
+        "Reconnect CLion; it will reuse this archive instead of downloading."
+    )
+    return 0
 
 
 def cmd_complete() -> int:
@@ -2410,6 +2628,7 @@ COMMANDS = {
     "install-hooks": cmd_install_hooks,
     "shell": cmd_shell,
     "ssh": cmd_ssh,
+    "clion-archive": cmd_clion_archive,
     "complete": cmd_complete,
 }
 
@@ -2535,6 +2754,15 @@ def _build_parser() -> argparse.ArgumentParser:
              "interactive login shell",
     )
 
+    clion_parser = subparsers.choices["clion-archive"]
+    clion_parser.add_argument(
+        "archive",
+        nargs="?",
+        default=None,
+        metavar="ARCHIVE",
+        help="CLion-*.tar.gz to copy; omit to use the only one in ~/Downloads",
+    )
+
     return parser
 
 
@@ -2557,6 +2785,8 @@ def main(argv: list[str]) -> int:
         return cmd_shell(args.args, args.directory)
     if args.command == "ssh":
         return cmd_ssh(args.args)
+    if args.command == "clion-archive":
+        return cmd_clion_archive(args.archive)
     if args.command == "build":
         return cmd_build(args.directories, analyzer=args.analyzer)
     if args.command == "test-linux":

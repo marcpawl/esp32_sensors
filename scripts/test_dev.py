@@ -233,6 +233,214 @@ class SshCommandTests(unittest.TestCase):
         self.assertEqual(calls[-1], dev._ssh_command(2222, ["ls", "-l"]))
 
 
+class ClionArchiveTests(unittest.TestCase):
+    """`dev.py clion-archive` — seeding the Toolbox download cache."""
+
+    def test_clion_archive_is_registered(self):
+        self.assertIn("clion-archive", dev.COMMANDS)
+        self.assertIs(dev.COMMANDS["clion-archive"], dev.cmd_clion_archive)
+
+    def test_cache_name_is_the_digest_prefix_and_filename(self):
+        self.assertEqual(
+            dev._clion_archive_name(
+                Path("/x/CLion-2026.3.0.1.tar.gz"), "72610a58b9526dd8"
+            ),
+            "72610a58b-CLion-2026.3.0.1.tar.gz",
+        )
+
+    def test_destination_is_the_toolbox_download_directory(self):
+        self.assertEqual(
+            dev._clion_archive_destination(
+                "72610a58b-CLion-2026.3.0.1.tar.gz"
+            ),
+            "/home/dev/.cache/JetBrains/Toolbox/download/"
+            "72610a58b-CLion-2026.3.0.1.tar.gz",
+        )
+
+    def test_scp_targets_the_container_port_and_the_part_file(self):
+        self.assertEqual(
+            dev._scp_command(
+                2222, Path("/host/CLion.tar.gz"), "/d/CLion.tar.gz.part"
+            ),
+            [
+                "scp",
+                "-P", "2222",
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "UserKnownHostsFile=/dev/null",
+                "-o", "LogLevel=ERROR",
+                "/host/CLion.tar.gz",
+                "dev@127.0.0.1:/d/CLion.tar.gz.part",
+            ],
+        )
+
+    def test_auto_discovery_finds_the_only_download(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            downloads = Path(tmp) / "Downloads"
+            downloads.mkdir()
+            archive = downloads / "CLion-2026.3.0.1.tar.gz"
+            archive.write_bytes(b"archive")
+            self.assertEqual(
+                dev._clion_archive_candidates(Path(tmp)), [archive]
+            )
+
+    def test_auto_discovery_returns_every_match_for_the_caller(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            downloads = Path(tmp) / "Downloads"
+            downloads.mkdir()
+            (downloads / "CLion-2026.2.tar.gz").write_bytes(b"a")
+            (downloads / "CLion-2026.3.tar.gz").write_bytes(b"b")
+            self.assertEqual(
+                len(dev._clion_archive_candidates(Path(tmp))), 2
+            )
+
+    def test_stop_agent_uses_a_self_safe_pattern(self):
+        calls = []
+        original_run = dev.run
+        try:
+            dev.run = (
+                lambda cmd, cwd=dev.REPO_ROOT:
+                calls.append(list(cmd)) or 0
+            )
+            dev._stop_toolbox_agent(2222)
+        finally:
+            dev.run = original_run
+        script = calls[0][-1]
+        self.assertIn("pkill -TERM -f", script)
+        self.assertIn("pkill -KILL -f", script)
+        self.assertIn(dev.TOOLBOX_AGENT_REGEX, script)
+        self.assertIn("[M]ainKt", script)
+
+    def _run_seeding(self, remote_digest: str | None):
+        """Run `cmd_clion_archive` against a temporary archive.
+
+        Returns `(rc, calls, source, digest)` with the container commands
+        recorded instead of executed. `remote_digest` is what the container's
+        `sha256sum` reports; None means "match the local archive".
+        """
+        calls = []
+        originals = (
+            dev.run,
+            dev._host_ssh_public_keys,
+            dev._ensure_ssh_service,
+            dev._stop_toolbox_agent,
+            dev._remote_sha256,
+        )
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                source = Path(tmp) / "CLion-2026.3.0.1.tar.gz"
+                source.write_bytes(b"archive")
+                digest = dev._sha256_file(source)
+                dev.run = (
+                    lambda cmd, cwd=dev.REPO_ROOT:
+                    calls.append(list(cmd)) or 0
+                )
+                dev._host_ssh_public_keys = lambda home=None: [Path("/k")]
+                dev._ensure_ssh_service = lambda: (0, 2222)
+                dev._stop_toolbox_agent = lambda port: calls.append(
+                    ["stop-agent"]
+                )
+                dev._remote_sha256 = lambda port, path: (
+                    digest if remote_digest is None else remote_digest
+                )
+                rc = dev.cmd_clion_archive(str(source))
+        finally:
+            (
+                dev.run,
+                dev._host_ssh_public_keys,
+                dev._ensure_ssh_service,
+                dev._stop_toolbox_agent,
+                dev._remote_sha256,
+            ) = originals
+        return rc, calls, source, digest
+
+    def test_copies_and_renames_after_stopping_the_agent(self):
+        rc, calls, source, digest = self._run_seeding(None)
+        self.assertEqual(rc, 0)
+        self.assertEqual(calls[0], ["stop-agent"])
+        self.assertIn(
+            dev._ssh_command(2222, [
+                "rm", "-f",
+                f"{dev.TOOLBOX_DOWNLOAD_DIR}/*.tmp",
+                f"{dev.TOOLBOX_DOWNLOAD_DIR}/journal",
+            ]),
+            calls,
+        )
+        self.assertIn(
+            dev._ssh_command(
+                2222, ["mkdir", "-p", dev.TOOLBOX_DOWNLOAD_DIR]
+            ),
+            calls,
+        )
+        scp = next(command for command in calls if command[0] == "scp")
+        part = scp[-1].split(":", 1)[1]
+        name = dev._clion_archive_name(source, digest)
+        destination = dev._clion_archive_destination(name)
+        self.assertEqual(part, f"{destination}.part")
+        self.assertIn(
+            dev._ssh_command(2222, ["mv", "-f", part, destination]), calls
+        )
+
+    def test_a_failed_hash_check_removes_the_part_file(self):
+        rc, calls, source, digest = self._run_seeding("0" * 64)
+        self.assertEqual(rc, 1)
+        name = dev._clion_archive_name(source, digest)
+        part = f"{dev._clion_archive_destination(name)}.part"
+        self.assertEqual(
+            calls[-1], dev._ssh_command(2222, ["rm", "-f", part])
+        )
+
+    def test_no_archive_is_a_clear_error(self):
+        calls = []
+        originals = (
+            dev.run,
+            dev._host_ssh_public_keys,
+            dev._clion_archive_candidates,
+        )
+        err = io.StringIO()
+        try:
+            dev.run = lambda cmd, cwd=dev.REPO_ROOT: calls.append(cmd) or 0
+            dev._host_ssh_public_keys = lambda home=None: [Path("/k")]
+            dev._clion_archive_candidates = lambda home=None: []
+            with redirect_stderr(err):
+                rc = dev.cmd_clion_archive(None)
+        finally:
+            (
+                dev.run,
+                dev._host_ssh_public_keys,
+                dev._clion_archive_candidates,
+            ) = originals
+        self.assertEqual(rc, 1)
+        self.assertEqual(calls, [])
+        self.assertIn("no ~/Downloads/", err.getvalue())
+
+    def test_several_archives_must_be_chosen_explicitly(self):
+        calls = []
+        originals = (
+            dev.run,
+            dev._host_ssh_public_keys,
+            dev._clion_archive_candidates,
+        )
+        err = io.StringIO()
+        try:
+            dev.run = lambda cmd, cwd=dev.REPO_ROOT: calls.append(cmd) or 0
+            dev._host_ssh_public_keys = lambda home=None: [Path("/k")]
+            dev._clion_archive_candidates = lambda home=None: [
+                Path("/a/CLion-2026.2.tar.gz"),
+                Path("/a/CLion-2026.3.tar.gz"),
+            ]
+            with redirect_stderr(err):
+                rc = dev.cmd_clion_archive(None)
+        finally:
+            (
+                dev.run,
+                dev._host_ssh_public_keys,
+                dev._clion_archive_candidates,
+            ) = originals
+        self.assertEqual(rc, 1)
+        self.assertEqual(calls, [])
+        self.assertIn("several CLion archives", err.getvalue())
+
+
 class ResolveContainerDirectoryTests(unittest.TestCase):
     """`_resolve_container_directory` — `shell -C DIR` path handling."""
 
@@ -1138,7 +1346,7 @@ class DevImageTests(unittest.TestCase):
     """
 
     def test_dev_image_is_the_pinned_prebuilt_tag(self):
-        self.assertEqual(dev.DEV_IMAGE, "marcpawl/esp-idf:20261119b")
+        self.assertEqual(dev.DEV_IMAGE, "marcpawl/esp-idf:20261119c")
 
     def test_compose_pins_the_same_image(self):
         compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
@@ -1813,6 +2021,33 @@ class GhCliMountTests(unittest.TestCase):
         for name in ("GH_TOKEN", "GITHUB_TOKEN"):
             self.assertIn(name, service, service)
             self.assertIsNone(service[name], f"{name} must not be hardcoded")
+
+
+class HomeConfigDirectoryTests(unittest.TestCase):
+    """`$HOME/.config` is writable by the user the container runs as.
+
+    CLion's remote backend is installed by the Toolbox agent as the container
+    user, and the agent creates `$HOME/.config/JetBrains`. `install -d` applies
+    `-o`/`-g`/`-m` to its last argument only, so creating `.../.config/gh`
+    left `.config` owned by root and the backend install failed with
+    "failed to create directory: /home/dev/.config/JetBrains".
+    """
+
+    def _dockerfile(self) -> str:
+        return (dev.REPO_ROOT / "docker" / "Dockerfile").read_text()
+
+    def test_image_creates_home_config_for_the_container_user(self):
+        dockerfile = self._dockerfile()
+        self.assertIn('-m 755 -o "${UID}" -g "${GID}"', dockerfile)
+        self.assertIn('"/home/${USERNAME}/.config"', dockerfile)
+
+    def test_tmp_config_is_writable_by_other_uids(self):
+        # `dev.py` gives every uid but the image's 1000 HOME=/tmp, and CLion's
+        # backend must be installable under that HOME too.
+        self.assertIn(
+            "install -d -m 1777 /tmp/.config",
+            self._dockerfile(),
+        )
 
 
 class CommandRegistryTests(unittest.TestCase):

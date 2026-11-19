@@ -3,7 +3,7 @@
 # ESP32 Solar-Powered Thermometer Logger — development container.
 #
 # NOTE: this image is normally NOT built. `docker-compose.yml` pins the
-# prebuilt, published image `marcpawl/esp-idf:20261119b`, and both developers
+# prebuilt, published image `marcpawl/esp-idf:20261119c`, and both developers
 # and CI pull it. Build this Dockerfile only when changing it, then publish the
 # result under a NEW date-stamped tag (see Developer.md).
 #
@@ -314,10 +314,24 @@ RUN mkdir -p /tmp/.config/gh \
     # runs that have no `gh` login to share (CI, a bare `docker run`, a host
     # that never logged in).
     && chmod 1777 /tmp/.config/gh \
+    # `$HOME/.config` itself must belong to the container user. CLion's remote
+    # backend is installed by the Toolbox agent as that user, and the agent
+    # creates `$HOME/.config/JetBrains`; a root-owned parent fails the install
+    # with "failed to create directory: /home/dev/.config/JetBrains".
+    # `install -d` applies `-o`/`-g`/`-m` to the final directory only, so it
+    # creates `.../.config` as root when asked for `.../.config/gh` — create
+    # the parent explicitly instead.
+    #
+    # `/tmp/.config` is that same directory for any uid but the image's 1000
+    # (`scripts/dev.py` pins HOME=/tmp for those), so it is world-writable +
+    # sticky like /tmp itself and each uid can create its own `JetBrains` state.
+    #
     # The remaining mount points belong to the container user. `install -d`
     # creates them with SSH's required 0700 (a loose mode or a foreign owner
-    # makes ssh refuse the key), for both possible HOMEs. `-m 700` applies to
-    # the leaf only, so each `.config` parent stays traversable at 755.
+    # makes ssh refuse the key), for both possible HOMEs.
+    && install -d -m 755 -o "${UID}" -g "${GID}" \
+        "/home/${USERNAME}/.config" \
+    && install -d -m 1777 /tmp/.config \
     && install -d -m 700 -o "${UID}" -g "${GID}" \
         "/home/${USERNAME}/.ssh" /tmp/.ssh \
         "/home/${USERNAME}/.config/gh"
