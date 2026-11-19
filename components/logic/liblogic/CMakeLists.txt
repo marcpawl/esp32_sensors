@@ -33,3 +33,21 @@ idf_component_register(
         # `sml` themselves.
         sml
 )
+
+# Headers are target sources so a CMake file-API client (CLion) attaches them
+# to this target; CMake adds no compile step for a header.
+target_sources(${COMPONENT_LIB} PRIVATE
+    "include/logic/application.hpp"
+    "include/logic/led_manager.hpp"
+    "include/logic/led_task.hpp"
+    "include/logic/limits.hpp"
+    "include/logic/mode.hpp"
+    "include/logic/mode_selection.hpp"
+    "include/logic/payload.hpp"
+    "include/logic/reboot.hpp"
+    "include/logic/rom_id.hpp"
+    "include/logic/rtc_state.hpp"
+    "include/logic/self_signed_cert.hpp"
+    "include/logic/temp_format.hpp"
+    "include/logic/toggle_switch.hpp"
+)

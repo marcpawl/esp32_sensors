@@ -29,3 +29,15 @@ idf_component_register(
         esp_netif
         esp_event
 )
+
+# Headers are target sources so a CMake file-API client (CLion) attaches them
+# to this target; CMake adds no compile step for a header.
+target_sources(${COMPONENT_LIB} PRIVATE
+    "include/hal_board/board.hpp"
+    "include/hal_board/chip_temperature.hpp"
+    "include/hal_board/interrupt_handle.hpp"
+    "include/hal_board/led.hpp"
+    "include/hal_board/onewire.hpp"
+    "include/hal_board/switch.hpp"
+    "include/hal_board/wifi.hpp"
+)

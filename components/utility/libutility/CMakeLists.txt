@@ -10,3 +10,12 @@ idf_component_register(
     INCLUDE_DIRS
         "include"
 )
+
+# Headers are target sources so a CMake file-API client (CLion) attaches them
+# to this target; CMake adds no compile step for a header.
+target_sources(${COMPONENT_LIB} PRIVATE
+    "include/utility/isr_safe.hpp"
+    "include/utility/sequence_lock.hpp"
+    "include/utility/static_string.hpp"
+    "include/utility/static_vector.hpp"
+)

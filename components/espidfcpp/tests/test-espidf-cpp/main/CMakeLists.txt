@@ -29,6 +29,10 @@ idf_component_register(
     WHOLE_ARCHIVE
 )
 
+# Headers are target sources so a CMake file-API client (CLion) attaches them
+# to this target; CMake adds no compile step for a header.
+target_sources(${COMPONENT_LIB} PRIVATE "fake_esp_timer.hpp")
+
 # GCC's analyzer emits a locationless uninitialized-value diagnostic from the
 # std::string concatenations in test_http_server.cpp. A diagnostic pragma
 # cannot scope a locationless diagnostic, so disable that one category for
