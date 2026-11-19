@@ -1351,6 +1351,45 @@ class ClionRunConfigurationTests(unittest.TestCase):
             )
         }
 
+    def test_every_linux_executable_has_a_run_configuration(self):
+        # Each linux subproject builds one ELF. A run configuration names it
+        # through RUN_PATH (CLion's executable field) because the root CMake
+        # project has no executable targets - only `*_build` UTILITY wrappers
+        # that call idf.py. Require one config and a real binary per project.
+        elf_configs = [
+            (name, config)
+            for name, config in self._cmake_run_configurations()
+            if (config.get("RUN_PATH") or "").endswith(".elf")
+        ]
+        projects = [
+            project
+            for project in dev._discover_projects(dev.REPO_ROOT)
+            if project.target == "linux"
+        ]
+        self.assertTrue(projects, "no linux projects discovered")
+        self.assertEqual(len(elf_configs), len(projects))
+        configured = set()
+        for name, config in elf_configs:
+            with self.subTest(configuration=name):
+                run_path = config.get("RUN_PATH")
+                self.assertTrue(run_path.startswith("$PROJECT_DIR$/"))
+                relative = run_path[len("$PROJECT_DIR$/"):]
+                directory, executable = relative.rsplit("/", 1)
+                self.assertTrue(executable.endswith(".elf"))
+                self.assertTrue(directory.endswith("/build_linux"))
+                project_dir = directory.rsplit("/build_linux", 1)[0]
+                configured.add(project_dir)
+                build = config.find(
+                    "./method/option[@name='com.jetbrains.cidr.execution."
+                    "CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask']"
+                )
+                self.assertIsNotNone(build, f"{name}: no before-launch build")
+                self.assertEqual(build.get("enabled"), "true")
+        expected = {
+            dev._repo_relative(project.directory) for project in projects
+        }
+        self.assertEqual(configured, expected)
+
     def test_cmake_run_configurations_name_an_existing_root_target(self):
         # Regression: the configurations used to name the subprojects' ESP-IDF
         # ELF targets (mcgowan.elf, donny.elf, ...). Those belong to the
