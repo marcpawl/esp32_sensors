@@ -281,6 +281,8 @@ _CMAKE_PROJECT_CALL = re.compile(
     r"^\s*project\s*\(\s*([^\s)#]+)", re.MULTILINE
 )
 _CMAKE_TARGET = re.compile(r'^\s*CONFIG_IDF_TARGET="([^"]+)"', re.MULTILINE)
+# The target ESP-IDF records in the build tree's generated CMake cache.
+_CMAKE_CACHE_TARGET = re.compile(r"^IDF_TARGET:[^=\n]*=(\S+)", re.MULTILINE)
 
 
 def _read_text(path: Path) -> str | None:
@@ -306,6 +308,29 @@ def _project_target(directory: Path) -> str:
             if match:
                 return match.group(1)
     return DEFAULT_TARGET
+
+
+def _configured_target(build_dir: Path) -> str | None:
+    """The target an existing build tree is configured for, or None. Pure.
+
+    ESP-IDF writes the selected target into the build tree's `CMakeCache.txt`.
+    A missing file or line means there is no usable configuration yet.
+    """
+    text = _read_text(build_dir / "CMakeCache.txt")
+    if text is None:
+        return None
+    match = _CMAKE_CACHE_TARGET.search(text)
+    return match.group(1) if match else None
+
+
+def _needs_set_target(build_dir: Path, target: str) -> bool:
+    """Whether `set-target` must run before building. Pure apart from reads.
+
+    `set-target` deletes the build tree's ninja dependency log, so running it
+    before every build recompiles every translation unit. A tree already
+    configured for `target` needs only `build`.
+    """
+    return _configured_target(build_dir) != target
 
 
 def _project_at(directory: Path) -> Project | None:
@@ -1083,7 +1108,7 @@ def _build_project_directory(directory: Path, analyzer: bool = False) -> int:
     target = _project_target(directory)
     relative = _repo_relative(directory)
     build_dir = TEST_BUILD_DIR if target == "linux" else FW_BUILD_DIR
-    if target == "linux":
+    if target == "linux" and _needs_set_target(directory / build_dir, target):
         rc = run(_idf(relative, build_dir, define, "--preview",
                       "set-target", "linux"))
         if rc != 0:
@@ -1212,7 +1237,9 @@ def _run_suites(suites: list[tuple[Path, str]]) -> int:
 
     No container hop; assumes it is already running inside the dev container.
     Each suite is pinned to `linux`, built, and its ELF run; the first failing
-    suite stops the run with a non-zero status.
+    suite stops the run with a non-zero status. `set-target` runs only for a
+    tree that is not configured for `linux` yet, so a repeat run does not
+    discard ninja's dependency log and recompile every source.
     """
     rc = _ensure_submodules()
     if rc != 0:
@@ -1220,12 +1247,17 @@ def _run_suites(suites: list[tuple[Path, str]]) -> int:
     assert suites, "no host test suites selected"
     for directory, elf in suites:
         relative = _repo_relative(directory)
-        for cmd in (
-            _idf(relative, TEST_BUILD_DIR, "--preview",
-                 "set-target", "linux"),
+        commands = []
+        if _needs_set_target(directory / TEST_BUILD_DIR, "linux"):
+            commands.append(
+                _idf(relative, TEST_BUILD_DIR, "--preview",
+                     "set-target", "linux")
+            )
+        commands.extend((
             _idf(relative, TEST_BUILD_DIR, "build"),
             [f"./{relative}/{TEST_BUILD_DIR}/{elf}"],
-        ):
+        ))
+        for cmd in commands:
             rc = run(cmd)
             if rc != 0:
                 print(f"FAILED: host tests '{relative}'", file=sys.stderr)

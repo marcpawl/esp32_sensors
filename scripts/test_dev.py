@@ -510,6 +510,28 @@ class SubprojectBuildTests(unittest.TestCase):
             ["flash", "monitor"],
         )
 
+    def test_configured_target_comes_from_the_build_cache(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            build_dir = Path(temporary)
+            self.assertIsNone(dev._configured_target(build_dir))
+            (build_dir / "CMakeCache.txt").write_text(
+                "# generated\nIDF_TARGET:STRING=linux\n", encoding="utf-8"
+            )
+            self.assertEqual(dev._configured_target(build_dir), "linux")
+
+    def test_set_target_is_needed_only_for_a_new_or_mismatched_tree(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            build_dir = Path(temporary)
+            self.assertTrue(dev._needs_set_target(build_dir, "linux"))
+            (build_dir / "CMakeCache.txt").write_text(
+                "IDF_TARGET:STRING=esp32s3\n", encoding="utf-8"
+            )
+            self.assertTrue(dev._needs_set_target(build_dir, "linux"))
+            (build_dir / "CMakeCache.txt").write_text(
+                "IDF_TARGET:STRING=linux\n", encoding="utf-8"
+            )
+            self.assertFalse(dev._needs_set_target(build_dir, "linux"))
+
     def test_build_climbs_from_a_component_directory(self):
         # The reported case: `dev.py build .` inside a component directory.
         # The component is not an ESP-IDF project, so it cannot run the
@@ -527,6 +549,7 @@ class SubprojectBuildTests(unittest.TestCase):
         with (
             mock.patch.object(dev, "change_to_container"),
             mock.patch.object(dev, "_ensure_submodules", return_value=0),
+            mock.patch.object(dev, "_needs_set_target", return_value=True),
             mock.patch.object(dev, "run", fake_run),
             redirect_stderr(err),
         ):
@@ -1237,6 +1260,17 @@ class IdfRunnerTests(unittest.TestCase):
         # accidentally bypass it.
         helper = root_cmake.split("function(_idf_subproject", 1)[1]
         self.assertIn('"${IDF_RUNNER}"', helper.split("endfunction()", 1)[0])
+
+    def test_set_target_is_skipped_for_a_configured_tree(self):
+        # The helper reads the tree's cache and drops any `set-target` step
+        # that asks for the target it already records, so a repeat build does
+        # not wipe ninja's dependency log.
+        root_cmake = (dev.REPO_ROOT / "CMakeLists.txt").read_text()
+        helper = root_cmake.split("function(_idf_subproject", 1)[1]
+        helper = helper.split("endfunction()", 1)[0]
+        self.assertIn('REGEX "^IDF_TARGET:"', helper)
+        self.assertIn("requested_target STREQUAL configured_target", helper)
+        self.assertIn("continue()", helper)
 
 
 class ClionRunConfigurationTests(unittest.TestCase):
@@ -2126,6 +2160,13 @@ class HostTestCommandTests(unittest.TestCase):
 
     def setUp(self):
         # Record the commands `run()` would execute instead of executing them.
+        # The suites below are treated as fresh trees unless a test says
+        # otherwise; a real checked-out build tree may already be configured.
+        patcher = mock.patch.object(
+            dev, "_needs_set_target", return_value=True
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.calls = []
         self._original_run = dev.run
         self._original_change_to_container = dev.change_to_container
@@ -2208,6 +2249,21 @@ class HostTestCommandTests(unittest.TestCase):
             f"./{dev.ESP_TIMER_STUB_DIR}/{dev.TEST_BUILD_DIR}/"
             f"esp32_sensors_esp_timer_stub_tests.elf",
             executed,
+        )
+
+    def test_a_configured_suite_is_built_without_set_target(self):
+        # `set-target` wipes ninja's dependency log; on a repeat run it must
+        # not appear in the command sequence at all.
+        dev._needs_set_target.return_value = False
+        utility = str(dev.REPO_ROOT / "components" / "utility")
+        self.assertEqual(dev.cmd_test_linux([utility]), 0)
+        self.assertEqual(
+            self.calls,
+            [
+                dev._idf(dev.UTILITY_TEST_DIR, dev.TEST_BUILD_DIR, "build"),
+                [f"./{dev.UTILITY_TEST_DIR}/{dev.TEST_BUILD_DIR}/"
+                 "test-utility.elf"],
+            ],
         )
 
     def test_linux_with_a_directory_runs_only_that_tree(self):
