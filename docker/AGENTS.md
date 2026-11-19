@@ -28,6 +28,25 @@ ESP32-S3's built-in USB-serial/JTAG node is often owned by that group instead.
 `$HOME` is a directory that uid can actually write (see below), so ccache
 works.
 
+## SSH into the container
+
+`./scripts/dev.py ssh` (or `./scripts/dev.py ssh ls -l`) connects from the host
+into the long-running container, as the container user, from `/project`. With
+no arguments it opens an interactive login shell; the ESP-IDF environment is
+sourced exactly as for `shell`.
+
+- The image's entrypoint starts `sshd` as the container user on the
+  unprivileged port 2222; the command in the foreground is unchanged, so
+  `docker compose run` behaves as before.
+- `docker-compose.yml` publishes that port on `127.0.0.1` only. Set
+  `DEV_SSH_PORT` when 2222 is taken or several checkouts run at once.
+- Authentication is public-key only. The host's `~/.ssh` is already mounted
+  read-only, so sshd reads the same `authorized_keys`/`id_*.pub` files and
+  `scripts/dev.py ssh` uses the host's normal keys and agent. Nothing is
+  generated or copied; a host with no key needs one (`ssh-keygen -t ed25519`).
+- The Dev Container reuses the same service and therefore the same sshd, so
+  `scripts/dev.py ssh` can enter the container CLion is attached to.
+
 ## ccache and non-1000 uids
 
 A bind mount does not translate uids, so the container runs as the calling

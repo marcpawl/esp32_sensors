@@ -67,6 +67,8 @@ RUN apt-get update \
         libbsd-dev \
         # System python3 is also usable inside the container.
         python3-pip \
+        # SSH server for `scripts/dev.py ssh` (see the SSH section below).
+        openssh-server \
     && rm -rf /var/lib/apt/lists/*
 
 # ---------------------------------------------------------------------------
@@ -212,6 +214,64 @@ RUN if getent passwd "${UID}" >/dev/null 2>&1; then \
         >> "/home/${USERNAME}/.bashrc"
 
 # ---------------------------------------------------------------------------
+# SSH server: lets `scripts/dev.py ssh` connect from the host into a running
+# dev container.
+#
+# `sshd` runs as the container user (never root) on the unprivileged port 2222,
+# and authenticates with public keys only. Those are the host's own keys: the
+# existing read-only `~/.ssh` bind mount (see docker-compose.yml) already puts
+# `authorized_keys` and the `id_*.pub` files where sshd reads them, so nothing
+# is copied into the image and there is no separate key to manage.
+#
+# The host key is generated here, so it is identical for every container from
+# this image and `known_hosts` entries stay stable across restarts. It is not a
+# secret: clients authenticate with the developer's key, and compose publishes
+# the listener on the host's loopback interface only.
+#
+# The entrypoint starts sshd in the background and then runs the image's
+# original entrypoint, so `docker compose run` keeps sourcing the ESP-IDF
+# environment exactly as before.
+# ---------------------------------------------------------------------------
+RUN ssh-keygen -q -t ed25519 -N "" -f /etc/ssh/dev_host_ed25519_key \
+    && chown "${UID}:${GID}" /etc/ssh/dev_host_ed25519_key \
+    && chmod 0600 /etc/ssh/dev_host_ed25519_key \
+    && printf '%s\n' \
+        'Port 2222' \
+        'ListenAddress 0.0.0.0' \
+        'HostKey /etc/ssh/dev_host_ed25519_key' \
+        'PidFile /tmp/dev-sshd.pid' \
+        'AuthorizedKeysFile /home/dev/.ssh/authorized_keys /home/dev/.ssh/id_ed25519.pub /home/dev/.ssh/id_ecdsa.pub /home/dev/.ssh/id_rsa.pub' \
+        'PubkeyAuthentication yes' \
+        'PasswordAuthentication no' \
+        'KbdInteractiveAuthentication no' \
+        'PermitEmptyPasswords no' \
+        'PermitRootLogin no' \
+        'UsePAM no' \
+        'StrictModes no' \
+        'PrintMotd no' \
+        'Subsystem sftp internal-sftp' \
+        > /etc/ssh/dev_sshd_config \
+    && printf '%s\n' \
+        '#!/bin/sh' \
+        'set -eu' \
+        'exec /usr/sbin/sshd -D -e -f /etc/ssh/dev_sshd_config' \
+        > /usr/local/bin/dev-ssh-server \
+    && chmod 0755 /usr/local/bin/dev-ssh-server \
+    && printf '%s\n' \
+        '#!/bin/sh' \
+        'set -eu' \
+        '# Start sshd in the background when this user can read its host key.' \
+        '# The foreground command is unchanged, so the container behaves' \
+        '# exactly as it did before (and ephemeral `run --rm` containers simply' \
+        '# carry an unused server).' \
+        'if [ -r /etc/ssh/dev_host_ed25519_key ]; then' \
+        '    /usr/local/bin/dev-ssh-server >/tmp/dev-sshd.log 2>&1 &' \
+        'fi' \
+        'exec /opt/esp/entrypoint.sh "$@"' \
+        > /usr/local/bin/dev-container-entrypoint \
+    && chmod 0755 /usr/local/bin/dev-container-entrypoint
+
+# ---------------------------------------------------------------------------
 # SSH key and GitHub CLI (`gh`) mount points, shared with the host.
 #
 # `docker-compose.yml` bind-mounts the host's `~/.ssh` and `~/.config/gh` here
@@ -274,3 +334,7 @@ USER ${USERNAME}
 
 WORKDIR /project
 ENV DOCKER_IMAGE=esp32_sensors
+
+# Start the SSH server before handing control to the ESP-IDF entrypoint (see
+# the SSH section above). An explicit `--entrypoint` still overrides this.
+ENTRYPOINT ["/usr/local/bin/dev-container-entrypoint"]

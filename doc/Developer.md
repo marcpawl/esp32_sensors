@@ -177,6 +177,38 @@ which is why the container must run as your uid — see "How the container user
 is handled" below. Like `~/.ssh`, the mount is declared twice in
 `docker-compose.yml`, once per possible container `HOME`.
 
+### SSH into the dev container
+
+`scripts/dev.py ssh` connects from the host into the running dev container:
+
+```console
+$ ./scripts/dev.py ssh           # interactive login shell in /project
+$ ./scripts/dev.py ssh ls -l     # run one command, as the container user
+```
+
+The command starts (or reuses) the long-running container with
+`docker compose up -d dev`, connects to the sshd the image's entrypoint starts
+on port 2222, and runs the command through a login shell, so the ESP-IDF
+environment is sourced exactly as with `shell`.
+
+Authentication uses the host's own keys: sshd reads `~/.ssh/authorized_keys`
+and the `id_*.pub` files through the existing read-only `~/.ssh` mount, and
+`dev.py ssh` uses the host's normal `ssh` configuration, keys, and agent.
+Nothing is generated or copied. A host with no key needs one first:
+
+```console
+$ ssh-keygen -t ed25519
+```
+
+`docker-compose.yml` publishes the port on **loopback only**
+(`127.0.0.1:${DEV_SSH_PORT:-2222}:2222`); set `DEV_SSH_PORT` when 2222 is taken
+or when several checkouts run at once. The Dev Container reuses the same
+service, so the same command enters the container CLion is attached to.
+
+These settings live in the image, so a container from an image published before
+the sshd setup cannot serve SSH. Rebuild and publish a new image tag as
+described below.
+
 ### How the container user is handled
 
 The container is run as **your own** UID/GID (`scripts/dev.py` passes

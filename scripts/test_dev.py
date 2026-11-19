@@ -114,6 +114,113 @@ class BuildShellCommandTests(unittest.TestCase):
         )
 
 
+class SshCommandTests(unittest.TestCase):
+    """`dev.py ssh` — the connection it makes to the running container."""
+
+    def test_ssh_is_registered(self):
+        self.assertIn("ssh", dev.COMMANDS)
+        self.assertIs(dev.COMMANDS["ssh"], dev.cmd_ssh)
+
+    def test_interactive_ssh_allocates_a_tty_and_a_login_shell(self):
+        self.assertEqual(
+            dev._ssh_command(2222, []),
+            [
+                "ssh",
+                "-p", "2222",
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "UserKnownHostsFile=/dev/null",
+                "-o", "LogLevel=ERROR",
+                "-t",
+                "dev@127.0.0.1",
+                "bash -l -c 'cd /project && exec bash -l'",
+            ],
+        )
+
+    def test_command_ssh_runs_in_project_through_a_login_shell(self):
+        # A non-interactive command gets no TTY (so it can be piped), and the
+        # login shell is what sources the ESP-IDF environment.
+        command = dev._ssh_command(2222, ["ls", "-l"])
+        self.assertNotIn("-t", command)
+        self.assertEqual(command[-1], "bash -l -c 'cd /project && ls -l'")
+
+    def test_ssh_quotes_a_shell_command_string(self):
+        command = dev._ssh_command(2222, ["echo hi | wc -l"])
+        self.assertEqual(
+            command[-1],
+            "bash -l -c 'cd /project && echo hi | wc -l'",
+        )
+
+    def test_compose_port_output_yields_the_host_port(self):
+        self.assertEqual(dev._compose_ssh_port("127.0.0.1:2222\n"), 2222)
+        self.assertIsNone(dev._compose_ssh_port(""))
+
+    def test_public_keys_are_the_files_the_container_authorizes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ssh_dir = Path(tmp) / ".ssh"
+            ssh_dir.mkdir()
+            (ssh_dir / "id_ed25519.pub").write_text("key")
+            self.assertEqual(
+                dev._host_ssh_public_keys(Path(tmp)),
+                [ssh_dir / "id_ed25519.pub"],
+            )
+            self.assertEqual(dev._host_ssh_public_keys(Path(tmp) / "nope"), [])
+
+    def test_ssh_refuses_to_run_inside_the_container(self):
+        calls = []
+        original_in_container, original_run = dev.is_in_container, dev.run
+        err = io.StringIO()
+        try:
+            dev.is_in_container = lambda: True
+            dev.run = lambda cmd, cwd=dev.REPO_ROOT: calls.append(cmd) or 0
+            with redirect_stderr(err):
+                rc = dev.cmd_ssh([])
+        finally:
+            dev.is_in_container, dev.run = original_in_container, original_run
+        self.assertEqual(rc, 1)
+        self.assertEqual(calls, [])
+        self.assertIn("run this on the host", err.getvalue())
+
+    def test_ssh_refuses_without_a_host_key(self):
+        calls = []
+        original_run, original_keys = dev.run, dev._host_ssh_public_keys
+        err = io.StringIO()
+        try:
+            dev.run = lambda cmd, cwd=dev.REPO_ROOT: calls.append(cmd) or 0
+            dev._host_ssh_public_keys = lambda home=None: []
+            with redirect_stderr(err):
+                rc = dev.cmd_ssh([])
+        finally:
+            dev.run, dev._host_ssh_public_keys = original_run, original_keys
+        self.assertEqual(rc, 1)
+        self.assertEqual(calls, [])
+        self.assertIn("ssh-keygen", err.getvalue())
+
+    def test_ssh_starts_the_container_then_connects(self):
+        calls = []
+        original_run, original_keys = dev.run, dev._host_ssh_public_keys
+        original_port, original_wait = (
+            dev._published_ssh_port, dev._wait_for_ssh
+        )
+        try:
+            dev.run = (
+                lambda cmd, cwd=dev.REPO_ROOT:
+                calls.append(list(cmd)) or 0
+            )
+            dev._host_ssh_public_keys = lambda home=None: [Path("/k")]
+            dev._published_ssh_port = lambda: 2222
+            dev._wait_for_ssh = lambda port: True
+            self.assertEqual(dev.cmd_ssh(["ls", "-l"]), 0)
+        finally:
+            dev.run = original_run
+            dev._host_ssh_public_keys = original_keys
+            dev._published_ssh_port = original_port
+            dev._wait_for_ssh = original_wait
+        self.assertEqual(
+            calls[0], dev._compose_command("up", "-d", dev.DEV_SSH_SERVICE)
+        )
+        self.assertEqual(calls[-1], dev._ssh_command(2222, ["ls", "-l"]))
+
+
 class ResolveContainerDirectoryTests(unittest.TestCase):
     """`_resolve_container_directory` — `shell -C DIR` path handling."""
 
@@ -1325,6 +1432,42 @@ class DevContainerTests(unittest.TestCase):
             dev.REPO_ROOT / ".devcontainer" / "devcontainer.json"
         ).read_text()
         self.assertNotIn('"mounts"', text)
+
+
+class SshContainerSetupTests(unittest.TestCase):
+    """The image and compose expose sshd the way `dev.py ssh` expects."""
+
+    def _dockerfile(self) -> str:
+        return (dev.REPO_ROOT / "docker" / "Dockerfile").read_text()
+
+    def test_image_installs_the_ssh_server(self):
+        self.assertIn("openssh-server", self._dockerfile())
+
+    def test_image_configures_key_only_ssh(self):
+        dockerfile = self._dockerfile()
+        self.assertIn("/etc/ssh/dev_sshd_config", dockerfile)
+        self.assertIn("PasswordAuthentication no", dockerfile)
+        self.assertIn("PermitRootLogin no", dockerfile)
+        # The host's own keys reach the container through the read-only
+        # `~/.ssh` mount, so sshd must read them from there.
+        self.assertIn("/home/dev/.ssh/authorized_keys", dockerfile)
+        self.assertIn("/home/dev/.ssh/id_ed25519.pub", dockerfile)
+
+    def test_image_starts_sshd_and_keeps_the_original_entrypoint(self):
+        dockerfile = self._dockerfile()
+        self.assertIn("/usr/local/bin/dev-ssh-server", dockerfile)
+        self.assertIn('exec /opt/esp/entrypoint.sh "$@"', dockerfile)
+
+    def test_compose_publishes_ssh_on_loopback_only(self):
+        compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
+        self.assertIn("127.0.0.1:${DEV_SSH_PORT:-2222}:2222", compose)
+        self.assertNotIn("0.0.0.0:2222:2222", compose)
+
+    def test_devcontainer_forwards_the_ssh_port(self):
+        text = (
+            dev.REPO_ROOT / ".devcontainer" / "devcontainer.json"
+        ).read_text()
+        self.assertIn('"forwardPorts": [443, 2222]', text)
 
 
 class ContainerUserTests(unittest.TestCase):
