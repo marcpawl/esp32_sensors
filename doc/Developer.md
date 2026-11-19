@@ -270,52 +270,38 @@ of the pinned tag, so `docker compose pull` afterwards to restore it.)
 
 ## CLion
 
-Version: CLion 2026.2
+Version: CLion 2026.3
 
 ### CLion IDE Usage
+
+On host:
+```
+cd docker
+docker compose up -d
+```
 
 Change the CLion registry as described in
 [SUPPORT-A-258](https://youtrack.jetbrains.com/articles/SUPPORT-A-258) to not
 download the IDE when connecting to dev containers.
 
-Open a CLion project at the root of this project.
+1. start CLion
+2. Close any opened projects.
+3.  At the welcome to CLion screen
+3.1  select "Remote Connections", "ssh"
+3.1.1   use "ssh -p 2222 dev@localhost" and connect
+3.1.2   use project directory /project
+3.1.3   Open Project
+3.2  Wait for "Downloading IDE backend..." to complete.
 
-Then use **File | Remote Development...**:
-
-1. Select **Dev Containers** in the left bar.
-2. Select the existing container if it exists. Otherwise:
-   - Select **New Dev Container**.
-   - Select the **From Local Project** tab.
-     - Select **Docker** in the pull-down.
-     - Select the devcontainer file for **Path to devcontainer.json**.
-     - Select the **Build container and continue** button.
-       - In **Building Dev Container**, select the **Continue** button.
-   - Select the **Start IDE and Connect** button.
-
-A new CLion window will appear using the container as the development
-environment.
 
 ### CLion Configuration Notes
 
-**Docker toolchain:** CLion's Docker toolchain integration is first-class and
-officially supported. Configure it under **Settings | Build, Execution,
-Deployment | Toolchains → Add → Docker**.
-
-- Point CLion at the standard Docker socket (`unix:///var/run/docker.sock`).
-- Select the pinned dev image `marcpawl/esp-idf:20261119b` (the one
-  `docker-compose.yml` uses; pull it first with `./scripts/dev.py pull`).
-- CLion will build and run commands inside the container transparently.
 
 **ESP-IDF environment in CLion:** Inside the Docker container, ESP-IDF's
 environment is already sourced by the image entrypoint, so the environment-file
 mechanism is typically unnecessary. If CLion complains about missing `idf.py`,
 point its **Environment file** setting at `/opt/esp/idf/export.sh` (path inside
 the image) or leave it blank and rely on the container's entrypoint.
-
-**Serial monitor in CLion:** Pass the serial device through to the container
-with `--device=/dev/ttyUSB0` (add this to the CLion Docker toolchain's
-container options). Alternatively, use CLion's built-in terminal to run
-`idf.py monitor`.
 
 **Recommended workflow:** Use CLion for editing, code navigation, and CMake
 configuration; use CLion's built-in terminal (`Alt+F12`) for `idf.py`
