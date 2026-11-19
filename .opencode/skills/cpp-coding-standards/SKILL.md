@@ -7,11 +7,25 @@ metadata:
 
 # C++ Coding Standards (C++ Core Guidelines)
 
-Comprehensive coding standards for modern C++ (C++17/20/23) derived from the
-[C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines).
-Enforces type safety, resource safety, immutability, and clarity.
+Coding standards for this repository's C++ (the firmware targets C++26): a
+summary of the
+[C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines)
+plus this repository's own rules, which take precedence.
 
-## When to Use
+## Precedence
+
+This file has two parts:
+
+- **Repository conventions** — mandatory here, and they override the upstream
+  guidelines wherever the two disagree.
+- **Core Guidelines reference** — the upstream summary (C++17/20/23), used only
+  where the repository conventions are silent.
+
+Read the repository conventions first. The most important difference is that
+this firmware is built **without exceptions or RTTI**, so the `E.*` guidance
+and the `try`/`catch` examples do not apply.
+
+## When to use this skill
 
 - Writing new C++ code (classes, functions, templates)
 - Reviewing or refactoring existing C++ code
@@ -20,14 +34,234 @@ Enforces type safety, resource safety, immutability, and clarity.
 - Choosing between language features (e.g., `enum` vs `enum class`, raw pointer
   vs smart pointer)
 
-### When NOT to Use
+### When not to use
 
 - Non-C++ projects
 - Legacy C codebases that cannot adopt modern C++ features
 - Embedded/bare-metal contexts where specific guidelines conflict with hardware
   constraints (adapt selectively)
 
-## Cross-Cutting Principles
+## Repository conventions
+
+These rules are this repository's additions to, and overrides of, the upstream
+guidelines in the
+[Core Guidelines reference](#core-guidelines-reference). Where the two
+disagree, this section wins.
+
+### Language and target
+
+- Target **ESP-IDF v6.1** APIs only.
+- Use **C++26** with GNU extensions (`-std=gnu++26`, the ESP-IDF v6.1 default
+  for chip targets).
+- Declare `app_main` with `extern "C"` linkage.
+
+### Error handling: no exceptions
+
+The firmware builds with `CONFIG_COMPILER_CXX_EXCEPTIONS=n` and
+`CONFIG_COMPILER_CXX_RTTI=n` (`mcgowan/sdkconfig.defaults`). There is nothing
+to throw or catch and no `dynamic_cast`; failures take the `assert()`/`abort()`
+path described in [Fail loudly](#fail-loudly). Treat the upstream `E.*` rules
+and the `try`/`catch` examples as reference only.
+
+### Product contracts
+
+- Treat RTC-memory structures carefully: they must be **trivially copyable /
+  POD-like** with stable layout and `RTC_DATA_ATTR` placement, and must survive
+  both deep sleep and reboots.
+- Conform payload format, LED semantics, and RTC memory layout exactly to
+  `Specification.md`.
+- Keep power draw within the hourly budget defined in the spec (batch uploads,
+  deep sleep between samples).
+
+### Fail loudly
+
+When a precondition or capacity limit is violated, `assert()` (or `abort()`)
+instead of silently truncating, clamping, or dropping data. Silent fallbacks
+hide bugs; `assert()` in this firmware is fatal and makes the contract
+explicit. Use a bounded/tolerant path (a `try_*` API, or an explicit early
+`return`) only when the recovery is deliberate and the caller is expected to
+handle it.
+
+### Assert tests
+
+A class tested on linux that asserts must have a test that the assert fires:
+
+- The test is a stand-alone program whose name ends with `_assert`.
+- It takes the test case name as its only command-line argument.
+- With no argument, or an unknown name, it exits with status 0.
+- The test case forks and execs that program with the case name, waits for the
+  child, and confirms that it was aborted.
+
+### Include blocks
+
+Every C++ source (`.cpp`) and header (`.hpp`) file's include block follows this
+order, separated into the groups below:
+
+1. **The file's own header**, outside the wrapper (a `.cpp`'s own header, or a
+   `.hpp` that includes itself by name) — parsed before the suppression scope
+   so its diagnostics are never masked. Test sources, whose first include is
+   `unity.h`, have no own header and start at step 2.
+2. **Turn off clang-tidy** for the block (`// NOLINTBEGIN`).
+3. **`#pragma GCC diagnostic push`**, then (only if needed) disable the
+   warnings that come from FreeRTOS/ESP-IDF headers, so third-party warnings
+   never leak into our build. Name the exact warning the compiler prints; see
+   "Compiler, ESP-IDF and third-party diagnostics" below. The list is
+   deliberately empty today: the third-party headers in use are warning-clean
+   at the build's warning level, and inventing flags for warnings that do not
+   fire only adds noise. Add an ignore here when a new ESP-IDF header actually
+   trips a diagnostic.
+4. **`#include` the FreeRTOS headers.**
+5. **`#include` the ESP-IDF headers.**
+6. **`#pragma GCC diagnostic pop`** — restore warnings.
+7. **Turn clang-tidy back on** (`// NOLINTEND`).
+8. **`#include`s for C++ libraries.**
+9. **`#include`s for C libraries.**
+10. **`#include`s for system headers.**
+11. **All other project `#include`s.**
+
+Keep each group separated by a blank line. `clang-format` (`SortIncludes:
+CaseSensitive`, `IncludeBlocks: Preserve`) sorts each group but does not
+reorder across the blank lines, so the groups must be laid out by hand. Write
+includes fully qualified (`"esp_log.h"`, `"freertos/FreeRTOS.h"`,
+`"hal_board/switch.hpp"`) so the group is unambiguous:
+
+```cpp
+#include "sensor.hpp"
+
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+
+#include <cstdint>
+#include <cstring>
+#include <sys/types.h>
+
+#include "hal_board/switch.hpp"
+```
+
+clang-format inserts the blank line after `#pragma GCC diagnostic pop` unless
+another pragma follows it; run `scripts/dev.py format` after editing an include
+block.
+
+### clang-tidy NOLINT
+
+Suppress a finding only when the analyzer is right but the code must stay as it
+is. Then follow these three rules:
+
+- **Name the check**, so the suppression cannot hide a different finding on the
+  same line: `// NOLINTNEXTLINE(performance-no-int-to-ptr)`.
+- **Explain why**, in a comment next to the suppression: what makes the
+  alternative worse (an API contract, a hardware requirement, a test fixture).
+  A later reader must be able to re-check the judgement.
+- **Pick the smallest scope.** `NOLINTNEXTLINE` suppresses the next line, a
+  trailing `NOLINT` the same line, and `NOLINTBEGIN` … `NOLINTEND` a range. A
+  wrapped function signature usually needs the range form: clang-tidy reports
+  the parameter line, not the line carrying the function name, so a
+  `NOLINTNEXTLINE` above the signature misses.
+
+**Wrapper exception.** An `#include` block of ESP-IDF or `third_party/` headers
+is turned off wholesale, without per-check names, because those diagnostics are
+not ours to fix:
+
+```cpp
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#pragma GCC diagnostic pop
+// NOLINTEND
+```
+
+### Compiler, ESP-IDF and third-party diagnostics
+
+A compiler diagnostic (including `-fanalyzer`) can point into code we do not
+own:
+
+- the compiler's standard library (`libstdc++`, `libc`);
+- ESP-IDF headers;
+- `third_party/` (for example `nlohmann/json`).
+
+There is nothing to fix in those files, but the warning must not be turned off
+for the whole translation unit either: our code must stay under analysis. Wrap
+the **point in our source that reveals the diagnostic** — usually the
+`#include` that pulls the header in, sometimes the statement the analyzer names
+— in a diagnostic pragma that names the exact warning the compiler printed:
+
+```cpp
+// NOLINTBEGIN
+#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
+#pragma GCC diagnostic ignored "-Wanalyzer-malloc-leak"
+#include <string>
+#pragma GCC diagnostic pop
+// NOLINTEND
+```
+
+A diagnostic revealed at a call site is wrapped there instead:
+
+```cpp
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wanalyzer-null-dereference"
+read();
+#pragma GCC diagnostic pop
+```
+
+- Name the exact warning. GCC has no wildcard form, and a bare `-Wno-...`
+  would also hide findings in our own code.
+- Keep the scope as small as possible: `pop` before our own code resumes, so a
+  real finding still fails the build.
+- Add a comment naming the responsible library and saying why the code is
+  correct.
+- Prefer this local pragma to a global flag in `CMakeLists.txt`; a global flag
+  cannot tell our code from the library's.
+
+`// NOLINTBEGIN` and `// NOLINTEND` around the block keep clang-tidy quiet
+about the pragma itself, as in the wrapper exception above.
+
+### Inline function bodies
+
+Define a member function outside its class when the body exceeds five lines.
+For non-template classes and functions, put functions longer than five lines in
+a `.cpp` file.
+
+### Booleans in interfaces
+
+New code must not use `bool` as a member variable, a parameter, or a return
+type. Use a named enumeration instead, with the negative value first and
+assigned `0`.
+
+DON'T:
+
+```cpp
+struct A {
+    bool blamo(bool do_it);
+    bool doing_it_;
+};
+```
+
+DO:
+
+```cpp
+struct A {
+    enum class Active : std::uint8_t { inactive = 0, active };
+
+    Active blamo(Active do_it);
+    Active doing_it_;
+};
+```
+
+### ESP guidelines
+
+- Avoid the heap.
+  - Use `static_vector` instead of `std::vector`.
+  - Use `static_string` instead of `std::string`.
+
+## Core Guidelines reference
+
+### Cross-Cutting Principles
 
 These themes recur across the entire guidelines and form the foundation:
 
@@ -43,9 +277,9 @@ These themes recur across the entire guidelines and form the foundation:
 6. **Value semantics over pointer semantics** (C.10, R.3-5, F.20, CP.31):
    Prefer returning by value and scoped objects
 
-## Philosophy & Interfaces (P.*, I.*)
+### Philosophy & Interfaces (P.*, I.*)
 
-### Key Rules
+#### Key Rules
 
 | Rule | Summary |
 |------|---------|
@@ -61,7 +295,7 @@ These themes recur across the entire guidelines and form the foundation:
 | **I.11** | Never transfer ownership by a raw pointer or reference |
 | **I.23** | Keep the number of function arguments low |
 
-### DO
+#### DO
 
 ```cpp
 // P.10 + I.4: Immutable, strongly typed interface
@@ -72,7 +306,7 @@ struct Temperature {
 Temperature boil(const Temperature& water);
 ```
 
-### DON'T
+#### DON'T
 
 ```cpp
 // Weak interface: unclear ownership, unclear units
@@ -82,9 +316,9 @@ double boil(double* temp);
 int g_counter = 0;  // I.2 violation
 ```
 
-## Functions (F.*)
+### Functions (F.*)
 
-### Key Rules
+#### Key Rules
 
 | Rule | Summary |
 |------|---------|
@@ -99,7 +333,7 @@ int g_counter = 0;  // I.2 violation
 | **F.21** | To return multiple "out" values, prefer returning a struct |
 | **F.43** | Never return a pointer or reference to a local object |
 
-### Parameter Passing
+#### Parameter Passing
 
 ```cpp
 // F.16: Cheap types by value, others by const&
@@ -120,7 +354,7 @@ void parse(std::string_view input,
            std::string& token, int& pos);    // avoid this
 ```
 
-### Pure Functions and constexpr
+#### Pure Functions and constexpr
 
 ```cpp
 // F.4 + F.8: Pure, constexpr where possible
@@ -131,16 +365,16 @@ constexpr int factorial(int n) noexcept {
 static_assert(factorial(5) == 120);
 ```
 
-### Anti-Patterns
+#### Anti-Patterns
 
 - Returning `T&&` from functions (F.45)
 - Using `va_arg` / C-style variadics (F.55)
 - Capturing by reference in lambdas passed to other threads (F.53)
 - Returning `const T` which inhibits move semantics (F.49)
 
-## Classes & Class Hierarchies (C.*)
+### Classes & Class Hierarchies (C.*)
 
-### Key Rules
+#### Key Rules
 
 | Rule | Summary |
 |------|---------|
@@ -154,7 +388,7 @@ static_assert(factorial(5) == 120);
 | **C.67** | A polymorphic class should suppress public copy/move |
 | **C.128** | Virtual functions: specify exactly one of `virtual`, `override`, or `final` |
 
-### Rule of Zero
+#### Rule of Zero
 
 ```cpp
 // C.20: Let the compiler generate special members
@@ -166,7 +400,7 @@ struct Employee {
 };
 ```
 
-### Rule of Five
+#### Rule of Five
 
 ```cpp
 // C.21: If you must manage a resource, define all five
@@ -201,7 +435,7 @@ private:
 };
 ```
 
-### Class Hierarchy
+#### Class Hierarchy
 
 ```cpp
 // C.35 + C.128: Virtual destructor, use override
@@ -221,7 +455,7 @@ private:
 };
 ```
 
-### Anti-Patterns
+#### Anti-Patterns
 
 - Calling virtual functions in constructors/destructors (C.82)
 - Using `memset`/`memcpy` on non-trivial types (C.90)
@@ -229,9 +463,9 @@ private:
   (C.140)
 - Making data members `const` or references, which suppresses move/copy (C.12)
 
-## Resource Management (R.*)
+### Resource Management (R.*)
 
-### Key Rules
+#### Key Rules
 
 | Rule | Summary |
 |------|---------|
@@ -244,7 +478,7 @@ private:
 | **R.21** | Prefer `unique_ptr` over `shared_ptr` unless sharing ownership |
 | **R.22** | Use `make_shared()` to make `shared_ptr`s |
 
-### Smart Pointer Usage
+#### Smart Pointer Usage
 
 ```cpp
 // R.11 + R.20 + R.21: RAII with smart pointers
@@ -259,7 +493,7 @@ void render(const Widget* w) {  // does NOT own w
 render(widget.get());
 ```
 
-### RAII Pattern
+#### RAII Pattern
 
 ```cpp
 // R.1: Resource acquisition is initialization
@@ -291,7 +525,7 @@ private:
 };
 ```
 
-### Anti-Patterns
+#### Anti-Patterns
 
 - Naked `new`/`delete` (R.11)
 - `malloc()`/`free()` in C++ code (R.10)
@@ -299,9 +533,9 @@ private:
   safety hazard)
 - `shared_ptr` where `unique_ptr` suffices (R.21)
 
-## Expressions & Statements (ES.*)
+### Expressions & Statements (ES.*)
 
-### Key Rules
+#### Key Rules
 
 | Rule | Summary |
 |------|---------|
@@ -316,7 +550,7 @@ private:
 | **ES.48** | Avoid casts |
 | **ES.50** | Don't cast away `const` |
 
-### Initialization
+#### Initialization
 
 ```cpp
 // ES.20 + ES.23 + ES.25: Always initialize, prefer {}, default to const
@@ -334,7 +568,7 @@ const auto config = [&] {
 }();
 ```
 
-### Anti-Patterns
+#### Anti-Patterns
 
 - Uninitialized variables (ES.20)
 - Using `0` or `NULL` as pointer (ES.47 -- use `nullptr`)
@@ -344,9 +578,12 @@ const auto config = [&] {
 - Mixing signed and unsigned arithmetic (ES.100)
 - Reusing names in nested scopes (ES.12)
 
-## Error Handling (E.*)
+### Error Handling (E.*)
 
-### Key Rules
+> Not used in this firmware: exceptions and RTTI are disabled — see
+> [Error handling: no exceptions](#error-handling-no-exceptions).
+
+#### Key Rules
 
 | Rule | Summary |
 |------|---------|
@@ -359,7 +596,7 @@ const auto config = [&] {
 | **E.16** | Destructors, deallocation, and swap must never fail |
 | **E.17** | Don't try to catch every exception in every function |
 
-### Exception Hierarchy
+#### Exception Hierarchy
 
 ```cpp
 // E.14 + E.15: Custom exception types, throw by value, catch by reference
@@ -392,7 +629,7 @@ void run() {
 }
 ```
 
-### Anti-Patterns
+#### Anti-Patterns
 
 - Throwing built-in types like `int` or string literals (E.14)
 - Catching by value (slicing risk) (E.15)
@@ -400,9 +637,9 @@ void run() {
 - Using exceptions for flow control (E.3)
 - Error handling based on global state like `errno` (E.28)
 
-## Constants & Immutability (Con.*)
+### Constants & Immutability (Con.*)
 
-### All Rules
+#### All Rules
 
 | Rule | Summary |
 |------|---------|
@@ -440,9 +677,9 @@ constexpr double PI = 3.14159265358979;
 constexpr int MAX_SENSORS = 256;
 ```
 
-## Concurrency & Parallelism (CP.*)
+### Concurrency & Parallelism (CP.*)
 
-### Key Rules
+#### Key Rules
 
 | Rule | Summary |
 |------|---------|
@@ -457,7 +694,7 @@ constexpr int MAX_SENSORS = 256;
 | **CP.44** | Remember to name your `lock_guard`s and `unique_lock`s |
 | **CP.100** | Don't use lock-free programming unless you absolutely have to |
 
-### Safe Locking
+#### Safe Locking
 
 ```cpp
 // CP.20 + CP.44: RAII locks, always named
@@ -485,7 +722,7 @@ private:
 };
 ```
 
-### Multiple Mutexes
+#### Multiple Mutexes
 
 ```cpp
 // CP.21: std::scoped_lock for multiple mutexes (deadlock-free)
@@ -496,7 +733,7 @@ void transfer(Account& from, Account& to, double amount) {
 }
 ```
 
-### Anti-Patterns
+#### Anti-Patterns
 
 - `volatile` for synchronization (CP.8 -- it's for hardware I/O only)
 - Detaching threads (CP.26 -- lifetime management becomes nearly impossible)
@@ -505,9 +742,9 @@ void transfer(Account& from, Account& to, double amount) {
 - Holding locks while calling callbacks (CP.22 -- deadlock risk)
 - Lock-free programming without deep expertise (CP.100)
 
-## Templates & Generic Programming (T.*)
+### Templates & Generic Programming (T.*)
 
-### Key Rules
+#### Key Rules
 
 | Rule | Summary |
 |------|---------|
@@ -520,7 +757,7 @@ void transfer(Account& from, Account& to, double amount) {
 | **T.120** | Use template metaprogramming only when you really need to |
 | **T.144** | Don't specialize function templates (overload instead) |
 
-### Concepts (C++20)
+#### Concepts (C++20)
 
 ```cpp
 #include <concepts>
@@ -549,16 +786,16 @@ template<Serializable T>
 void save(const T& obj, const std::string& path);
 ```
 
-### Anti-Patterns
+#### Anti-Patterns
 
 - Unconstrained templates in visible namespaces (T.47)
 - Specializing function templates instead of overloading (T.144)
 - Template metaprogramming where `constexpr` suffices (T.120)
 - `typedef` instead of `using` (T.43)
 
-## Standard Library (SL.*)
+### Standard Library (SL.*)
 
-### Key Rules
+#### Key Rules
 
 | Rule | Summary |
 |------|---------|
@@ -584,9 +821,9 @@ std::string build_greeting(std::string_view name) {
 std::cout << "result: " << value << '\n';
 ```
 
-## Enumerations (Enum.*)
+### Enumerations (Enum.*)
 
-### Key Rules
+#### Key Rules
 
 | Rule | Summary |
 |------|---------|
@@ -605,9 +842,9 @@ enum { RED, GREEN, BLUE };           // Enum.3 + Enum.5 + Enum.6 violation
 #define MAX_SIZE 100                  // Enum.1 violation -- use constexpr
 ```
 
-## Source Files & Naming (SF.*, NL.*)
+### Source Files & Naming (SF.*, NL.*)
 
-### Key Rules
+#### Key Rules
 
 | Rule | Summary |
 |------|---------|
@@ -623,7 +860,7 @@ enum { RED, GREEN, BLUE };           // Enum.3 + Enum.5 + Enum.6 violation
 > files; this repository uses `.hpp` for every C++ header so a header is never
 > mistaken for a C header. Wherever the upstream rules say `.h`, read `.hpp`.
 
-### Header Guard
+#### Header Guard
 
 This repository does not use `#ifndef` include guards, so upstream SF.8 is
 dropped: a header starts with `#pragma once` instead.
@@ -649,7 +886,7 @@ private:
 }  // namespace project::module
 ```
 
-### Naming Conventions
+#### Naming Conventions
 
 ```cpp
 // NL.8 + NL.10: Consistent underscore_style
@@ -670,16 +907,16 @@ private:
 }  // namespace my_project
 ```
 
-### Anti-Patterns
+#### Anti-Patterns
 
 - `using namespace std;` in a header at global scope (SF.7)
 - Headers that depend on inclusion order (SF.10, SF.11)
 - Hungarian notation like `strName`, `iCount` (NL.5)
 - ALL_CAPS for anything other than macros (NL.9)
 
-## Performance (Per.*)
+### Performance (Per.*)
 
-### Key Rules
+#### Key Rules
 
 | Rule | Summary |
 |------|---------|
@@ -691,7 +928,7 @@ private:
 | **Per.11** | Move computation from run time to compile time |
 | **Per.19** | Access memory predictably |
 
-### Guidelines
+#### Guidelines
 
 ```cpp
 // Per.11: Compile-time computation where possible
@@ -708,13 +945,13 @@ std::vector<Point> points;           // GOOD: contiguous
 std::vector<std::unique_ptr<Point>> indirect_points; // BAD: pointer chasing
 ```
 
-### Anti-Patterns
+#### Anti-Patterns
 
 - Optimizing without profiling data (Per.1, Per.6)
 - Choosing "clever" low-level code over clear abstractions (Per.4, Per.5)
 - Ignoring data layout and cache behavior (Per.19)
 
-## Quick Reference Checklist
+### Quick Reference Checklist
 
 Before marking C++ work complete:
 
@@ -734,191 +971,8 @@ Before marking C++ work complete:
 - [ ] Headers start with `#pragma once` and are self-contained (SF.11)
 - [ ] Locks use RAII (`scoped_lock`/`lock_guard`) (CP.20)
 - [ ] Exceptions are custom types, thrown by value, caught by reference (E.14,
-  E.15)
+  E.15) — reference only, this firmware disables exceptions
 - [ ] `'\n'` instead of `std::endl` (SL.io.50)
 - [ ] No magic numbers (ES.45)
-
-## Exceptions
-
-The skill's `try`/`catch` guidance does not apply here either. The firmware
-builds with `CONFIG_COMPILER_CXX_EXCEPTIONS=n` and `CONFIG_COMPILER_CXX_RTTI=n`
-(`mcgowan/sdkconfig.defaults`), so there is nothing to throw or catch and no
-`dynamic_cast`; failures take the `assert()`/`abort()` path described under
-"Fail loudly" below.
-
-### Conventions to follow
-
-The bullets below are this repository's additions to, and overrides of, the
-`cpp-coding-standards` skill; anything the skill already states is not repeated
-here.
-
-- Target **ESP-IDF v6.1** APIs only.
-- Use **C++26** with GNU extensions (`-std=gnu++26`, the ESP-IDF v6.1 default
-  for chip targets).
-- Declare `app_main` with `extern "C"` linkage.
-- Treat RTC-memory structures carefully: they must be **trivially copyable /
-  `POD`-like** with stable layout and `RTC_DATA_ATTR` placement, and must
-  survive both deep sleep and reboots.
-- Conform payload format, LED semantics, and RTC memory layout exactly to
-  `Specification.md`.
-- Keep power draw within the hourly budget defined in the spec (batch uploads,
-  deep sleep between samples).
-- **Fail loudly, not silently.** When a precondition or capacity limit is
-  violated, `assert()` (or `abort()`) instead of silently truncating, clamping,
-  or dropping data. Silent fallbacks hide bugs; `assert()` in this firmware is
-  fatal and makes the contract explicit. Only use a bounded/tolerant path (e.g.
-  a `try_*` API or an explicit early `return`) when the recovery is deliberate
-  and the caller is expected to handle it.
-- ** asserts can be tested.** For classes that are being tested on linux that
-  have an assert test the the assert is triggered. Assert tests should be in a
-  stand alone program whose name ends with "_assert". The assert program should
-  take as a command line parameter the name of the test case to execute, if
-  there is no name, or if the name is invalid the program should exit with 0.
-
-The test case should fork and exec the "_assert" program with the name of the
-test case, wait for the child, and confirm that it was aborted.
-
-- **C++ header blocks are ordered and warning-scoped.** Every C++ source
-  (`.cpp`) and header (`.hpp`) file's include block follows this order,
-  separated into the groups below:
-
-  1. **The file's own header**, outside the wrapper (a `.cpp`'s own header, or
-     a `.hpp` that includes itself by name) — parsed before the suppression
-     scope so its diagnostics are never masked. Test sources, whose first
-     include is `unity.h`, have no own header and start at step 2.
-  2. **Turn off clang-tidy** for the block (`// NOLINTBEGIN`).
-  3. **`#pragma GCC diagnostic push`**, then (only if needed) disable the
-     warnings that come from FreeRTOS/ESP-IDF headers, so third-party warnings
-     never leak into our build. Name the exact warning the compiler prints; see
-     "Compiler, ESP-IDF and third-party diagnostics" below. The list is
-     deliberately empty today: the third-party headers in use are
-     warning-clean at the build's warning level, and inventing flags for
-     warnings that do not fire only adds noise. Add an ignore here when a new
-     ESP-IDF header actually trips a diagnostic.
-  4. **`#include` the FreeRTOS headers.**
-  5. **`#include` the ESP-IDF headers.**
-  6. **`#pragma GCC diagnostic pop`** — restore warnings.
-  7. **Turn clang-tidy back on** (`// NOLINTEND`).
-  8. **`#include`s for C++ libraries.**
-  9. **`#include`s for C libraries.**
-  10. **`#include`s for system headers.**
-  11. **All other project `#include`s.**
-
-Keep each group separated by a blank line. `clang-format`
-(`SortIncludes: CaseSensitive`, `IncludeBlocks: Preserve`) sorts each group but
-does not reorder across the blank lines, so the groups must be laid out by
-hand. Write includes fully qualified (`"esp_log.h"`, `"freertos/FreeRTOS.h"`,
-`"hal_board/switch.hpp"`) so the group is unambiguous:
-
-  ```cpp
-  #include "sensor.hpp"
-
-  // NOLINTBEGIN
-  #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
-  #include "esp_log.h"
-  #include "freertos/FreeRTOS.h"
-  #include "freertos/task.h"
-  #pragma GCC diagnostic pop
-
-  // NOLINTEND
-
-  #include <cstdint>
-  #include <cstring>
-  #include <sys/types.h>
-
-  #include "hal_board/switch.hpp"
-  ```
-
-clang-format inserts the blank line after `#pragma GCC diagnostic pop` unless
-another pragma follows it; run `scripts/dev.py format` after editing an include
-block.
-
-### clang-tidy NOLINT
-
-Suppress a finding only when the analyzer is right but the code must stay
-as it is. Then follow these three rules:
-
-- **Name the check**, so the suppression cannot hide a different finding
-  on the same line:
-  `// NOLINTNEXTLINE(performance-no-int-to-ptr)`.
-- **Explain why**, in a comment next to the suppression: what makes the
-  alternative worse (an API contract, a hardware requirement, a test
-  fixture). A later reader must be able to re-check the judgement.
-- **Pick the smallest scope.** `NOLINTNEXTLINE` suppresses the next line,
-  a trailing `NOLINT` the same line, and `NOLINTBEGIN` … `NOLINTEND` a
-  range. A wrapped function signature usually needs the range form:
-  clang-tidy reports the parameter line, not the line carrying the
-  function name, so a `NOLINTNEXTLINE` above the signature misses.
-
-**Wrapper exception.** An `#include` block of ESP-IDF or `third_party/`
-headers is turned off wholesale, without per-check names, because those
-diagnostics are not ours to fix:
-
-```cpp
-// NOLINTBEGIN
-#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
-#include "esp_log.h"
-#include "freertos/FreeRTOS.h"
-#pragma GCC diagnostic pop
-// NOLINTEND
-```
-
-### Compiler, ESP-IDF and third-party diagnostics
-
-A compiler diagnostic (including `-fanalyzer`) can point into code we do not
-own:
-
-- the compiler's standard library (`libstdc++`, `libc`);
-- ESP-IDF headers;
-- `third_party/` (for example `nlohmann/json`).
-
-There is nothing to fix in those files, but the warning must not be turned off
-for the whole translation unit either: our code must stay under analysis. Wrap
-the **point in our source that reveals the diagnostic** — usually the
-`#include` that pulls the header in, sometimes the statement the analyzer
-names — in a diagnostic pragma that names the exact warning the compiler
-printed:
-
-```cpp
-// NOLINTBEGIN
-#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
-#pragma GCC diagnostic ignored "-Wanalyzer-malloc-leak"
-#include <string>
-#pragma GCC diagnostic pop
-// NOLINTEND
-```
-
-A diagnostic revealed at a call site is wrapped there instead:
-
-```cpp
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wanalyzer-null-dereference"
-read();
-#pragma GCC diagnostic pop
-```
-
-- Name the exact warning. GCC has no wildcard form, and a bare `-Wno-...`
-  would also hide findings in our own code.
-- Keep the scope as small as possible: `pop` before our own code resumes, so
-  a real finding still fails the build.
-- Add a comment naming the responsible library and saying why the code is
-  correct.
-- Prefer this local pragma to a global flag in `CMakeLists.txt`; a global flag
-  cannot tell our code from the library's.
-
-`// NOLINTBEGIN` and `// NOLINTEND` around the block keep clang-tidy quiet
-about the pragma itself, as in the wrapper exception above.
-
-### inline function bodies
-
-Declare member function bodies outside of the class
-definition when the body exceeds 5 lines.
-
-For non-templated classes or functions use .cpp files for functions
-that are longer than five lines.
-
-## ESP guidelines
-- Avoid using the heap
-  - Try to used static_vector instead of std::vector
-  - Try to used static_string instead of std::string
-
+- [ ] No `bool` in an interface or as a member (use a named
+  `enum class`) — repository rule
