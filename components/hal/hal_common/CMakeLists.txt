@@ -17,3 +17,18 @@ idf_component_register(
         libutility
         esp_common
 )
+
+# Headers are target sources so a CMake file-API client (CLion) attaches them
+# to this target; CMake adds no compile step for a header.
+target_sources(${COMPONENT_LIB} PRIVATE
+    "include/hal/board_types.hpp"
+    "include/hal/chip_temperature_types.hpp"
+    "include/hal/ds18b20_types.hpp"
+    "include/hal/gpio.hpp"
+    "include/hal/led_types.hpp"
+    "include/hal/onewire_types.hpp"
+    "include/hal/pin_map.hpp"
+    "include/hal/sleep_types.hpp"
+    "include/hal/switch_types.hpp"
+    "include/hal/wifi_types.hpp"
+)

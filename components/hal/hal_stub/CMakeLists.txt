@@ -34,3 +34,14 @@ idf_component_register(
         esp_hw_support
         freertos
 )
+
+# Headers are target sources so a CMake file-API client (CLion) attaches them
+# to this target; CMake adds no compile step for a header.
+target_sources(${COMPONENT_LIB} PRIVATE
+    "include/hal_stub/board_stub.hpp"
+    "include/hal_stub/chip_temperature.hpp"
+    "include/hal_stub/led.hpp"
+    "include/hal_stub/onewire.hpp"
+    "include/hal_stub/switch.hpp"
+    "include/hal_stub/wifi.hpp"
+)

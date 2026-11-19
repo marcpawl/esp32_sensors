@@ -25,3 +25,16 @@ idf_component_register(
         esp_timer
         esp_hw_support
 )
+
+# Headers are target sources so a CMake file-API client (CLion) attaches them
+# to this target; CMake adds no compile step for a header.
+target_sources(${COMPONENT_LIB} PRIVATE
+    "include/espidf_cpp/handle.hpp"
+    "include/espidf_cpp/http_server.hpp"
+    "include/espidf_cpp/http_server_types.hpp"
+    "include/espidf_cpp/mutex.hpp"
+    "include/espidf_cpp/one_message_queue.hpp"
+    "include/espidf_cpp/ring_buffer.hpp"
+    "include/espidf_cpp/task.hpp"
+    "include/espidf_cpp/timer.hpp"
+)
