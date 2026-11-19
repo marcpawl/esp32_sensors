@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Run/debug the test-logic Linux ELF inside the dev container.
+
+  The before-launch step builds it with the root aggregator's
+  `test-logic_build` target (`idf.py build` in
+  components/logic/tests/test-logic). RUN_PATH names the ELF explicitly:
+  the root CMake project is `project(... NONE)` and exposes only UTILITY
+  targets, so no executable can be selected as TARGET_NAME. Selecting this
+  configuration also activates the matching .idea/cmake.xml profile.
+
+  Host tests compile with -gdwarf-4 -ggdb -Og and the CLion backend runs in
+  the same container as the ELF, so Debug works with breakpoints.
+-->
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="test-logic (linux ELF, container)" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="esp32_sensors_subprojects" TARGET_NAME="test-logic_build" CONFIG_NAME="Host tests (test-logic)" RUN_PATH="$PROJECT_DIR$/components/logic/tests/test-logic/build_linux/test-logic.elf">
+    <method v="2">
+      <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+    </method>
+  </configuration>
+</component>

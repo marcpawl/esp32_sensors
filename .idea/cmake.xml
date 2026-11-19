@@ -35,49 +35,50 @@
   profiles are meant to be one per subproject, but today every one of them
   configures the repo root instead.
 
-  ONE PROFILE PER SUBPROJECT (code model / refactoring)
-  ======================================================
+  ONE PROFILE PER EXECUTABLE
+  ==========================
   The repo root is NOT an ESP-IDF project: its CMakeLists.txt is a plain
   aggregator, `project(... NONE)`, that only defines custom targets which
-  shell out to `idf.py`. A profile aimed at the root therefore enables no
-  C/C++ languages, produces no compile_commands.json and gives CLion nothing
-  to index - no navigation, no refactorings.
+  shell out to `idf.py`. Each subproject, on the other hand, is a standalone
+  ESP-IDF project and ESP-IDF turns on CMAKE_EXPORT_COMPILE_COMMANDS by
+  default, so configuring it emits a compile_commands.json that CLion turns
+  into a full resolve configuration. Hence one profile per subproject, keyed
+  by profile name to its ELF run configuration in .idea/runConfigurations/:
 
-  Each subproject, on the other hand, is a standalone ESP-IDF project and
-  ESP-IDF turns on CMAKE_EXPORT_COMPILE_COMMANDS by default
-  (esp-idf/tools/cmake/project.cmake), so configuring any of them emits a
-  compile_commands.json that CLion turns into a full resolve configuration.
-  Hence four profiles, keyed by profile name to the matching CMake run
-  configuration in .idea/runConfigurations/:
+      profile                       subproject
+      Espressif ESP32-S3            mcgowan/
+      Host tests (test-utility)     components/utility/tests/test-utility/
+      Host tests (test-hal-stub)    components/hal/tests/test-hal-stub/
+      Host tests (test-hal-common)  components/hal/tests/test-hal-common/
+      Host tests (test-logic)       components/logic/tests/test-logic/
+      Host tests (test-espidf-cpp)  components/espidfcpp/tests/test-espidf-cpp/
+      Host tests (test-simulator)   components/simulator/tests/test-simulator/
+      Host tests (esp_timer stub)   components/hal/tests/esp_timer/stub/
+      Linux app (donny)             components/simulator/exe/donny/
 
-      profile                       subproject          CLion build dir
-      Espressif ESP32-S3            mcgowan/            cmake-build-esp32s3
-      Host tests (test)             test/               cmake-build-linux-test
-      Host tests (espidf-cpp-test)  espidf-cpp-test/    cmake-build-linux-espidf-cpp-test
-      Linux app (donny)             donny/              cmake-build-linux-donny
-
-  The root aggregator (`scripts/dev.py build`, or the "esp32_sensors
-  (container CMake)" run configuration) remains the way to build *everything*
-  in one shot; the per-subproject profiles exist for the IDE's code model.
+  The `<name> (linux ELF, container)` configurations build through the
+  matching `<sub>_build` root target and run the generated ELF. Debug works
+  because the host tests are compiled with `-gdwarf-4 -ggdb -Og`, and the
+  CLion backend runs inside the same container as the ELF.
 
   BUILD DIRECTORIES
   =================
   Each profile keeps its OWN build tree, named cmake-build-*, so CLion never
   shares a CMake cache with the canonical `idf.py` trees that
-  `scripts/dev.py` writes (mcgowan/build_esp32s3, test/build_linux,
-  espidf-cpp-test/build_linux, donny/build_linux). Sharing a directory does
+  `scripts/dev.py` writes (e.g. mcgowan/build_esp32s3,
+  components/logic/tests/test-logic/build_linux). Sharing a directory does
   not work: idf.py and CLion overwrite each other's CMake cache and Ninja
   state. All cmake-build-* directories are git-ignored (`.gitignore`).
 
   COEXISTING RESOLVE CONFIGURATIONS
   =================================
-  The four projects share sources - mcgowan/src is compiled by both mcgowan
-  and test, and components/* by three or four of them - and mcgowan (Xtensa,
-  esp32s3) and the others (host, linux) genuinely need different defines and
-  include paths, notably which of hal_board / hal_stub is in view. CLion
-  keeps each profile's resolve configuration separate and switches with the
-  active profile (the run configuration's CONFIG_NAME), which is why every
-  profile must be kept, not merged.
+  The projects share sources - mcgowan/src is compiled by several linux
+  suites, and components/* by all of them - and mcgowan (Xtensa, esp32s3)
+  and the others (host, linux) genuinely need different defines and include
+  paths, notably which of hal_board / hal_stub is in view. CLion keeps each
+  profile's resolve configuration separate and switches with the active
+  profile (the run configuration's CONFIG_NAME), which is why every profile
+  must be kept, not merged.
 
   TOOLCHAIN_NAME is the Dev Container toolchain ("Default", the system
   toolset inside the container); the generator is left unspecified so CLion
@@ -90,25 +91,29 @@
   exist. GENERATION_DIR is only the *build* directory; the *source* directory
   comes from the single CMake workspace, .idea/misc.xml
   (CMakeWorkspace PROJECT_DIR="$PROJECT_DIR$"), which is the repo root for
-  every profile. Observed after a clean CLion rebuild: all four
-  cmake-build-* trees record CMAKE_HOME_DIRECTORY=/project, none contains a
+  every profile. Observed after a clean CLion rebuild: all cmake-build-*
+  trees record CMAKE_HOME_DIRECTORY=/project, none contains a
   compile_commands.json, each one's codemodel names project
-  `esp32_sensors_subprojects`, and the only targets are the four aggregate
-  custom targets (donny_build, espidf-cpp-test_build, mcgowan_build,
-  test_build) - all of type UTILITY, i.e. no compilable translation units. A
-  profile has no per-profile source directory, so fixing this means opening
+  `esp32_sensors_subprojects`, and the only targets are the aggregate
+  custom targets - all of type UTILITY, i.e. no compilable translation units.
+  A profile has no per-profile source directory, so fixing this means opening
   the subprojects as separate CLion projects, or giving CLion a merged
   compile_commands.json for the root. Until then, navigation and refactorings
-  are not driven by these profiles; `scripts/dev.py build` remains the way to
-  build everything.
+  are not driven by these profiles; the ELF run configurations still work
+  because their executable path is given explicitly.
 -->
 <project version="4">
   <component name="CMakeSharedSettings">
     <configurations>
       <configuration PROFILE_NAME="Espressif ESP32-S3" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/mcgowan/cmake-build-esp32s3" GENERATION_OPTIONS="-DIDF_TARGET=esp32s3 -DCMAKE_BUILD_TYPE=Debug" />
-      <configuration PROFILE_NAME="Host tests (test)" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/test/cmake-build-linux-test" GENERATION_OPTIONS="-DIDF_TARGET=linux -DCMAKE_BUILD_TYPE=Debug" />
-      <configuration PROFILE_NAME="Host tests (espidf-cpp-test)" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/espidf-cpp-test/cmake-build-linux-espidf-cpp-test" GENERATION_OPTIONS="-DIDF_TARGET=linux -DCMAKE_BUILD_TYPE=Debug" />
-      <configuration PROFILE_NAME="Linux app (donny)" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/donny/cmake-build-linux-donny" GENERATION_OPTIONS="-DIDF_TARGET=linux -DCMAKE_BUILD_TYPE=Debug" />
+      <configuration PROFILE_NAME="Host tests (test-utility)" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/components/utility/tests/test-utility/cmake-build-linux-test-utility" GENERATION_OPTIONS="-DIDF_TARGET=linux -DCMAKE_BUILD_TYPE=Debug" />
+      <configuration PROFILE_NAME="Host tests (test-hal-stub)" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/components/hal/tests/test-hal-stub/cmake-build-linux-test-hal-stub" GENERATION_OPTIONS="-DIDF_TARGET=linux -DCMAKE_BUILD_TYPE=Debug" />
+      <configuration PROFILE_NAME="Host tests (test-hal-common)" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/components/hal/tests/test-hal-common/cmake-build-linux-test-hal-common" GENERATION_OPTIONS="-DIDF_TARGET=linux -DCMAKE_BUILD_TYPE=Debug" />
+      <configuration PROFILE_NAME="Host tests (test-logic)" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/components/logic/tests/test-logic/cmake-build-linux-test-logic" GENERATION_OPTIONS="-DIDF_TARGET=linux -DCMAKE_BUILD_TYPE=Debug" />
+      <configuration PROFILE_NAME="Host tests (test-espidf-cpp)" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/components/espidfcpp/tests/test-espidf-cpp/cmake-build-linux-test-espidf-cpp" GENERATION_OPTIONS="-DIDF_TARGET=linux -DCMAKE_BUILD_TYPE=Debug" />
+      <configuration PROFILE_NAME="Host tests (test-simulator)" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/components/simulator/tests/test-simulator/cmake-build-linux-test-simulator" GENERATION_OPTIONS="-DIDF_TARGET=linux -DCMAKE_BUILD_TYPE=Debug" />
+      <configuration PROFILE_NAME="Host tests (esp_timer stub)" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/components/hal/tests/esp_timer/stub/cmake-build-linux-esp-timer-stub" GENERATION_OPTIONS="-DIDF_TARGET=linux -DCMAKE_BUILD_TYPE=Debug" />
+      <configuration PROFILE_NAME="Linux app (donny)" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/components/simulator/exe/donny/cmake-build-linux-donny" GENERATION_OPTIONS="-DIDF_TARGET=linux -DCMAKE_BUILD_TYPE=Debug" />
     </configurations>
   </component>
 </project>
