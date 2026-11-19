@@ -29,6 +29,7 @@
 #include <concepts>
 #include <functional>
 #include <type_traits>
+#include <utility>
 
 #include <cstdint>
 
@@ -50,16 +51,21 @@ enum class SwitchState : std::uint8_t {
 // no heap, no mutex. `set_interrupt()` annotates its parameter
 // `[[thermo::isr_safe]]` to make that requirement explicit.
 //
-// An empty `std::function` means "no handler"; passing one to
-// `set_interrupt()` unregisters the callback, so nothing is invoked on a
-// state change.
-using SwitchCallback = std::function<void()>;
+// The `noexcept` in the function type is part of the ISR contract, not
+// decoration: a callback that might throw cannot be stored, so a lambda
+// without `noexcept` refuses to convert. The wrapper is move-only because a
+// registration has exactly one owner and is only ever moved into the switch.
+//
+// An empty callback means "no handler"; passing one to `set_interrupt()`
+// unregisters the callback, so nothing is invoked on a state change.
+using SwitchCallback = std::move_only_function<void() noexcept>;
 
 // Concept: a switch type that exposes the shared interface — an inline
 // static `create(gpio)` factory, a `read()` returning `SwitchState`, a
-// `gpio()` getter, and a `set_interrupt()` that registers (or clears) a
-// state-change callback. `hal_board` and `hal_stub` both satisfy it, so a
-// project can `static_assert` which implementation it linked in.
+// `gpio()` getter, a `set_interrupt()` that registers (or clears) a
+// state-change callback, and a `remove_interrupt()` that unregisters it.
+// `hal_board` and `hal_stub` both satisfy it, so a project can `static_assert`
+// which implementation it linked in.
 template<typename T>
 concept SwitchLike =
     std::is_class_v<T> &&
@@ -67,7 +73,10 @@ concept SwitchLike =
         { T::create(gpio) } -> std::same_as<T>;
         { std::declval<T const&>().gpio() } -> std::same_as<int>;
         { std::declval<T&>().read() } -> std::same_as<SwitchState>;
-        { std::declval<T&>().set_interrupt(callback) } -> std::same_as<void>;
+        {
+            std::declval<T&>().set_interrupt(std::move(callback))
+        } -> std::same_as<void>;
+        { std::declval<T&>().remove_interrupt() } -> std::same_as<void>;
     };
 
 }  // namespace thermo::hal

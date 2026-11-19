@@ -79,6 +79,11 @@ class Switch {
     // invoked on a state change; polling via read() still works.
     void set_interrupt([[thermo::isr_safe]] SwitchCallback handler) noexcept;
 
+    // Unregisters the callback installed by set_interrupt(), if any. After
+    // this call `set()` invokes nothing until a new callback is registered.
+    // Idempotent, and a no-op on a moved-from switch.
+    void remove_interrupt() noexcept;
+
   private:
     int gpio_ = 0;
     SwitchState state_ = SwitchState::kOff;
