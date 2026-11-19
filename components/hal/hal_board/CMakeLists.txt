@@ -8,6 +8,7 @@
 
 idf_component_register(
     SRCS
+        "interrupt_handle.cpp"
         "led.cpp"
         "switch.cpp"
         "onewire.cpp"

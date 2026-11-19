@@ -14,19 +14,32 @@
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "driver/gpio.h"
 #include "esp_attr.h"
+#include "esp_err.h"
 #pragma GCC diagnostic pop
 // NOLINTEND
 
 #include <array>
+#include <atomic>
 #include <utility>
 
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
 
 #include "hal_board/switch.hpp"
 
 namespace thermo::hal::board {
 namespace {
+
+// Whether switch_isr() is currently inside the registered callback. Explicitly
+// 32-bit because a narrower atomic is not guaranteed lock-free on Xtensa, and
+// the ISR runs from IRAM where a call into libatomic's fallback would be fatal.
+// The width is a hardware requirement, not a size optimization.
+// NOLINTNEXTLINE(performance-enum-size)
+enum class HandlerState : std::uint32_t {
+    kIdle = 0,
+    kRunning,
+};
 
 // One slot per GPIO, indexed by the pin number. The slot's address travels
 // through `gpio_isr_handler_add()`'s `void*` argument, so the ISR can reach its
@@ -35,8 +48,13 @@ namespace {
 struct IsrSlot {
     int gpio = 0;
     SwitchState last_state = SwitchState::kOff;
+    // Read by the task that destroys the switch after it has removed the ISR.
+    std::atomic<HandlerState> handler_state{HandlerState::kIdle};
     SwitchCallback handler;
 };
+
+static_assert(std::atomic<HandlerState>::is_always_lock_free,
+              "the ISR must not call a libatomic fallback from IRAM");
 
 std::array<IsrSlot, static_cast<std::size_t>(GPIO_NUM_MAX)> g_slots{};
 
@@ -68,7 +86,14 @@ void IRAM_ATTR switch_isr(void* arg) noexcept {
     }
     slot.last_state = state;
     if (slot.handler) {
+        static_assert(noexcept(slot.handler()),
+                      "the switch ISR callback must not throw");
+
+        slot.handler_state.store(HandlerState::kRunning,
+                                 std::memory_order_release);
         slot.handler();
+        slot.handler_state.store(HandlerState::kIdle,
+                                 std::memory_order_release);
     }
 }
 
@@ -77,14 +102,11 @@ void IRAM_ATTR switch_isr(void* arg) noexcept {
 Switch::Switch(int gpio) noexcept : gpio_(gpio) {}
 
 Switch::Switch(Switch&& other) noexcept
-    : gpio_(other.gpio_), valid_(std::exchange(other.valid_, false)) {}
+    : gpio_(other.gpio_),
+      interrupt_handle_(std::move(other.interrupt_handle_)) {}
 
 Switch::~Switch() noexcept {
-    // A moved-from switch is invalid and must not touch the moved-to
-    // switch's registration.
-    if (valid_) {
-        set_interrupt({});
-    }
+    remove_interrupt();
 }
 
 esp_err_t Switch::init() noexcept {
@@ -100,22 +122,52 @@ SwitchState Switch::read() const noexcept {
 
 void Switch::set_interrupt(SwitchCallback handler) noexcept {
     assert(gpio_ >= 0 && gpio_ < GPIO_NUM_MAX);
+
+    if (!handler) {
+        // An empty callback is the same request as remove_interrupt().
+        remove_interrupt();
+        return;
+    }
+
     auto& slot = g_slots[static_cast<std::size_t>(gpio_)];
     slot.gpio = gpio_;
     slot.handler = std::move(handler);
     slot.last_state = read();
 
-    auto gpio = static_cast<gpio_num_t>(gpio_);
-    if (!slot.handler) {
-        // Unregistering: disable the ISR on this pin.
-        gpio_set_intr_type(gpio, GPIO_INTR_DISABLE);
-        gpio_isr_handler_remove(gpio);
+    // Replacing a callback keeps the registration: removing the ISR here would
+    // tear down the handler this call is about to own.
+    if (interrupt_handle_.engaged() == InterruptHandle::Engaged::kEngaged) {
         return;
     }
+
     // Report both edges so the first close and the first open after
     // registration are both delivered.
+    auto gpio = static_cast<gpio_num_t>(gpio_);
     gpio_set_intr_type(gpio, GPIO_INTR_ANYEDGE);
-    gpio_isr_handler_add(gpio, switch_isr, &slot);
+    ESP_ERROR_CHECK(gpio_isr_handler_add(gpio, switch_isr, &slot));
+    interrupt_handle_ = InterruptHandle{gpio_};
+}
+
+void Switch::remove_interrupt() noexcept {
+    // A moved-from switch owns no registration and must not touch the slot:
+    // that slot now belongs to the moved-to switch.
+    if (interrupt_handle_.engaged() == InterruptHandle::Engaged::kIdle) {
+        return;
+    }
+
+    // Stop new invocations before checking for one already in progress.
+    auto gpio = static_cast<gpio_num_t>(gpio_);
+    gpio_set_intr_type(gpio, GPIO_INTR_DISABLE);
+    interrupt_handle_.release();
+
+    // A handler entered just before the removal can still be running on
+    // either core, and this switch's state is about to be destroyed. That
+    // must never happen, so fail loudly before releasing the callback.
+    auto& slot = g_slots[static_cast<std::size_t>(gpio_)];
+    assert(slot.handler_state.load(std::memory_order_acquire) ==
+           HandlerState::kIdle);
+
+    slot.handler = {};
 }
 
 }  // namespace thermo::hal::board

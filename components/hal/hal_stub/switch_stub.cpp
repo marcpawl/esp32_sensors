@@ -18,7 +18,7 @@ namespace thermo::hal::stub {
 Switch::Switch(int gpio) noexcept : gpio_(gpio) {}
 
 Switch::~Switch() noexcept {
-    set_interrupt({});
+    remove_interrupt();
 }
 
 esp_err_t Switch::init() noexcept {
@@ -43,6 +43,10 @@ void Switch::set(SwitchState state) noexcept {
 
 void Switch::set_interrupt(SwitchCallback handler) noexcept {
     handler_ = std::move(handler);
+}
+
+void Switch::remove_interrupt() noexcept {
+    handler_ = {};
 }
 
 }  // namespace thermo::hal::stub

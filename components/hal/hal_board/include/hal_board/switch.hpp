@@ -23,6 +23,7 @@
 // NOLINTEND
 
 #include "hal/switch_types.hpp"
+#include "hal_board/interrupt_handle.hpp"
 
 namespace thermo::hal::board {
 
@@ -34,9 +35,9 @@ class Switch {
 
     Switch(Switch const&) = delete;
     // Movable so `create()` (and containers/factories) can hand a Switch
-    // back by value without needing guaranteed copy elision. The moved-from
-    // switch is marked invalid, so its destructor does not unregister the
-    // moved-to switch's handler.
+    // back by value without needing guaranteed copy elision. Moving transfers
+    // the interrupt registration, so the moved-from switch owns nothing and
+    // its destructor cannot unregister the moved-to switch's handler.
     Switch(Switch&& other) noexcept;
     // Unregisters any handler: an ISR must not call into a destroyed switch.
     ~Switch() noexcept;
@@ -72,11 +73,17 @@ class Switch {
     // invoked on a state change; polling via read() still works.
     void set_interrupt([[thermo::isr_safe]] SwitchCallback handler) noexcept;
 
+    // Unregisters the callback installed by set_interrupt(), if any, and
+    // removes the GPIO interrupt. Idempotent, and a no-op on a moved-from
+    // switch. After this call nothing is invoked on a state change; polling
+    // via read() still works.
+    void remove_interrupt() noexcept;
+
   private:
     int const gpio_;
-    // False on a moved-from switch, so its destructor does not unregister the
-    // moved-to switch's handler. The pin stays const.
-    bool valid_ = true;
+    // Owns the ISR registration, so the destructor cannot forget to remove it.
+    // Moving transfers it and leaves the source idle.
+    InterruptHandle interrupt_handle_;
 };
 
 static_assert(SwitchLike<Switch>, "Switch must satisfy the SwitchLike concept");

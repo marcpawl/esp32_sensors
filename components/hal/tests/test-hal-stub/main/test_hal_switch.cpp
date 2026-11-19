@@ -21,6 +21,8 @@
 // NOLINTEND
 
 #include <concepts>
+#include <optional>
+#include <type_traits>
 #include <utility>
 
 #include "hal/switch_types.hpp"
@@ -30,8 +32,14 @@
 namespace {
 
 // Convenience aliases for the shared HAL vocabulary.
+using thermo::hal::SwitchCallback;
 using thermo::hal::SwitchState;
 using thermo::hal::stub::Switch;
+
+// The callback type is the ISR contract: a throwing callable cannot be stored,
+// and a `noexcept` one can. Pin both directions.
+static_assert(!std::is_constructible_v<SwitchCallback, void (*)()>);
+static_assert(std::is_constructible_v<SwitchCallback, void (*)() noexcept>);
 
 // Pin numbers are irrelevant to the stub's state, but the factory takes them
 // for interface parity with the GPIO-backed implementation, and `gpio()`
@@ -155,7 +163,7 @@ TEST_CASE("hal switch: set_interrupt() fires on a state change",
     Switch b = make_switch();
     int calls = 0;
     SwitchState last = SwitchState::kOff;
-    b.set_interrupt([&b, &calls, &last] {
+    b.set_interrupt([&b, &calls, &last]() noexcept {
         ++calls;
         last = b.read();
     });
@@ -175,7 +183,7 @@ TEST_CASE("hal switch: callback is not fired without a state change",
           "[hal_switch]") {
     Switch b = make_switch();
     int calls = 0;
-    b.set_interrupt([&calls] { ++calls; });
+    b.set_interrupt([&calls]() noexcept { ++calls; });
 
     b.set(SwitchState::kOn);
     b.set(SwitchState::kOn);  // unchanged: no second notification
@@ -190,7 +198,7 @@ TEST_CASE("hal switch: callback reports the close/open sequence",
           "[hal_switch]") {
     Switch b = make_switch();
     CallbackLog log;
-    b.set_interrupt([&b, &log] {
+    b.set_interrupt([&b, &log]() noexcept {
         ++log.calls;
         if (b.read() == SwitchState::kOn) {
             ++log.closes;
@@ -212,7 +220,7 @@ TEST_CASE("hal switch: set_interrupt({}) unregisters the callback",
           "[hal_switch]") {
     Switch b = make_switch();
     int calls = 0;
-    b.set_interrupt([&calls] { ++calls; });
+    b.set_interrupt([&calls]() noexcept { ++calls; });
     b.set(SwitchState::kOn);
     TEST_ASSERT_EQUAL(1, calls);
 
@@ -228,13 +236,50 @@ TEST_CASE("hal switch: set_interrupt() can replace the callback",
     Switch b = make_switch();
     int first_calls = 0;
     int second_calls = 0;
-    b.set_interrupt([&first_calls] { ++first_calls; });
+    b.set_interrupt([&first_calls]() noexcept { ++first_calls; });
 
     // Replace the handler: the close must reach the new callback only.
-    b.set_interrupt([&second_calls] { ++second_calls; });
+    b.set_interrupt([&second_calls]() noexcept { ++second_calls; });
     b.set(SwitchState::kOn);
     TEST_ASSERT_EQUAL(1, second_calls);
     TEST_ASSERT_EQUAL(0, first_calls);
+}
+
+TEST_CASE("hal switch: remove_interrupt() unregisters the callback",
+          "[hal_switch]") {
+    Switch b = make_switch();
+    int calls = 0;
+    b.set_interrupt([&calls]() noexcept { ++calls; });
+    b.set(SwitchState::kOn);
+    TEST_ASSERT_EQUAL(1, calls);
+
+    b.remove_interrupt();
+    b.set(SwitchState::kOff);
+    b.set(SwitchState::kOn);
+    TEST_ASSERT_EQUAL(1, calls);
+}
+
+TEST_CASE("hal switch: remove_interrupt() is safe without a callback",
+          "[hal_switch]") {
+    Switch b = make_switch();
+    b.remove_interrupt();
+    b.remove_interrupt();
+    b.set(SwitchState::kOn);
+    TEST_PASS();
+}
+
+TEST_CASE("hal switch: set_interrupt() after remove_interrupt() re-registers",
+          "[hal_switch]") {
+    Switch b = make_switch();
+    int first_calls = 0;
+    int second_calls = 0;
+    b.set_interrupt([&first_calls]() noexcept { ++first_calls; });
+    b.remove_interrupt();
+
+    b.set_interrupt([&second_calls]() noexcept { ++second_calls; });
+    b.set(SwitchState::kOn);
+    TEST_ASSERT_EQUAL(0, first_calls);
+    TEST_ASSERT_EQUAL(1, second_calls);
 }
 
 TEST_CASE("hal switch: two switches keep independent handlers",
@@ -243,8 +288,8 @@ TEST_CASE("hal switch: two switches keep independent handlers",
     Switch b = make_switch(1);
     int a_calls = 0;
     int b_calls = 0;
-    a.set_interrupt([&a_calls] { ++a_calls; });
-    b.set_interrupt([&b_calls] { ++b_calls; });
+    a.set_interrupt([&a_calls]() noexcept { ++a_calls; });
+    b.set_interrupt([&b_calls]() noexcept { ++b_calls; });
 
     a.set(SwitchState::kOn);
     TEST_ASSERT_EQUAL(1, a_calls);
@@ -268,14 +313,53 @@ TEST_CASE("hal switch: moving transfers the handler to the destination",
           "[hal_switch]") {
     Switch source = make_switch();
     int calls = 0;
-    source.set_interrupt([&calls] { ++calls; });
+    source.set_interrupt([&calls]() noexcept { ++calls; });
 
     Switch moved = std::move(source);
     moved.set(SwitchState::kOn);
     TEST_ASSERT_EQUAL(1, calls);
 }
 
+TEST_CASE("hal switch: a destroyed moved-from switch keeps the handler alive",
+          "[hal_switch]") {
+    int calls = 0;
+    // The optional holds the destination so the source's destructor runs while
+    // the destination is still alive.
+    std::optional<Switch> destination;
+    {
+        Switch source = make_switch();
+        source.set_interrupt([&calls]() noexcept { ++calls; });
+        destination.emplace(std::move(source));
+    }
+
+    destination->set(SwitchState::kOn);
+    TEST_ASSERT_EQUAL(1, calls);
+}
+
 // --- The stub satisfies the shared concept ---------------------------------
+
+namespace {
+
+// The rest of the switch interface without remove_interrupt(): the concept
+// must reject it, or a consumer could unregister only by relying on a
+// destructor.
+struct NoRemoveInterrupt {
+    static NoRemoveInterrupt create(int /*gpio*/) noexcept {
+        return NoRemoveInterrupt{};
+    }
+
+    [[nodiscard]] int gpio() const noexcept { return 0; }
+
+    [[nodiscard]] SwitchState read() const noexcept {
+        return SwitchState::kOff;
+    }
+
+    void set_interrupt(SwitchCallback /*handler*/) noexcept {}
+};
+
+static_assert(!thermo::hal::SwitchLike<NoRemoveInterrupt>);
+
+}  // namespace
 
 TEST_CASE("hal switch: stub Switch models SwitchLike", "[hal_switch]") {
     static_assert(thermo::hal::SwitchLike<Switch>);

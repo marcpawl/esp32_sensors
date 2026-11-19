@@ -35,18 +35,21 @@ it and adds the concrete class. For the switch:
 - `hal/switch_types.hpp` (`hal_common`) defines
   `thermo::hal::SwitchState`, `thermo::hal::SwitchCallback`, and the
   `thermo::hal::SwitchLike` concept — the single definition of the shared
-  types. `SwitchCallback` is a `std::function<void()>`: the handler reads the
-  new state through the switch (`read()`), so it can capture the object it
-  belongs to. An empty function unregisters.
+  types. `SwitchCallback` is a move-only
+  `std::move_only_function<void() noexcept>`: the handler reads the new state
+  through the switch (`read()`), so it can capture the object it belongs to.
+  The `noexcept` is part of the ISR contract — a callback that might throw
+  cannot be stored, so a lambda written without `noexcept` refuses to convert.
+  An empty callback unregisters.
 
   The handler runs in the GPIO interrupt, so `set_interrupt()` annotates its
   parameter `[[thermo::isr_safe]]` (see `utility/isr_safe.hpp`).
 - `hal_board/switch.hpp` and `hal_stub/switch.hpp` (one each) define
   `thermo::hal::board::Switch` and `thermo::hal::stub::Switch` with an
   identical public interface (same ctor, inline `create()` factory, `init()`,
-  `read()`, `gpio()`, `set_interrupt()`). Each `static_assert`s
-  `SwitchLike<Switch>`, so the two implementations cannot drift from the shared
-  contract (or from each other).
+  `read()`, `gpio()`, `set_interrupt()`, `remove_interrupt()`). Each
+  `static_assert`s `SwitchLike<Switch>`, so the two implementations cannot
+  drift from the shared contract (or from each other).
 
 The device is a **switch**, not a push button: the board's inputs are switch
 poles, and a momentary button is just a switch a caller closes and opens again.
@@ -58,9 +61,17 @@ service is installed once by the aggregate `Board` constructor; `BoardStub`
 calls the same entry point, which `hal_stub/gpio_stub.cpp` supplies as a no-op
 because `esp_driver_gpio` registers an empty component on the `linux` target.
 
-`Switch`'s destructor unregisters the handler, so an ISR cannot call into a
-destroyed switch. On `hal_board`, moving a switch marks the source invalid, so
-destroying a moved-from switch does not remove the moved-to switch's handler.
+`Switch`'s destructor calls `remove_interrupt()`, so an ISR cannot call into a
+destroyed switch. `remove_interrupt()` clears the callback and removes the
+GPIO interrupt; on `hal_board` the removal is owned by an RAII
+`InterruptHandle` (`hal_board/interrupt_handle.hpp`), whose destructor calls
+`gpio_isr_handler_remove()`. A moved-from switch owns no handle, so destroying
+it does not remove the moved-to switch's handler.
+
+After removing the interrupt, `hal_board` asserts that the ISR is not still
+inside the callback. A handler entered just before the removal would otherwise
+read a switch that is being destroyed; it is a race that must never happen, so
+the firmware aborts instead of proceeding.
 
 ## The board names its device types
 
