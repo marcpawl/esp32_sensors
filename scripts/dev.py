@@ -41,7 +41,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
-from typing import NamedTuple
+from typing import Callable, NamedTuple
 
 # Always operate from the repository root, regardless of the caller's cwd.
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -301,6 +301,18 @@ def _discover_projects(directory: Path) -> list[Project]:
     return projects
 
 
+def _espidf_projects_under(
+    directory: Path, root: Path = REPO_ROOT
+) -> list[Project]:
+    """Every ESP-IDF project at or under `directory`, in path order.
+
+    A thin wrapper over `_discover_projects` with the `(directory, root)`
+    signature the selection helpers take; the root plays no part in plain
+    discovery. Pure.
+    """
+    return _discover_projects(directory)
+
+
 def _is_host_test_project(project: Project, root: Path = REPO_ROOT) -> bool:
     """Whether `project` is a host test suite rather than an application."""
     if project.target != "linux":
@@ -475,6 +487,21 @@ def source_files(directories: list[Path] | None = None) -> list[str]:
         raise
 
     return _select_sources(result.stdout.splitlines())
+
+
+def _cxx_sources_under(
+    directory: Path, root: Path = REPO_ROOT
+) -> list[str]:
+    """Every C/C++ source at or under `directory`, in path order.
+
+    The `format`/`format-check`/`clang-tidy` notion of "this directory can run
+    the command": a directory with no source has nothing for those commands to
+    do, so the selection climbs to a parent that has some (see
+    `_escalated_directories`). `root` is unused; it keeps the
+    `(directory, root)` signature the selection helpers take. Nearly pure
+    (it shells out to git, like `source_files`).
+    """
+    return source_files([directory])
 
 
 def _is_vendored_path(path: str) -> bool:
@@ -862,6 +889,69 @@ def _parse_directories(
     return directories
 
 
+def _carrying_directory(
+    directory: Path,
+    projects_at: Callable[[Path, Path], list[Project]],
+    description: str,
+    root: Path = REPO_ROOT,
+) -> Path | None:
+    """The nearest directory at or above `directory` the command can run in.
+
+    A directory that has no `description` cannot run the command, so it is
+    reported and its parent is tried instead; the climb repeats until a
+    directory yields a project, and stops at the repository root. The root
+    always has one of every project kind, so an empty root means the command
+    would have nothing to do anywhere -- a bug in this script rather than a
+    caller error. Pure apart from the report (testable).
+    """
+    root = root.resolve()
+    current = directory.resolve()
+    while True:
+        if projects_at(current, root):
+            return current
+        if current == root:
+            print(
+                f"The repository root '{_repo_relative(root, root)}' has no "
+                f"{description}; that is a bug in dev.py.",
+                file=sys.stderr,
+            )
+            return None
+        parent = current.parent
+        print(
+            f"No {description} in '{_repo_relative(current, root)}'; "
+            f"using its parent '{_repo_relative(parent, root)}'.",
+            file=sys.stderr,
+        )
+        current = parent
+
+
+def _escalated_directories(
+    directories: list[Path],
+    projects_at: Callable[[Path, Path], list[Project]],
+    description: str,
+    root: Path = REPO_ROOT,
+) -> list[Path] | None:
+    """`directories`, each replaced by the closest ancestor it can run in.
+
+    `projects_at(directory, root)` is the command's own selection: a
+    non-empty result means the directory can run it. Each rejected directory
+    has already been reported by `_carrying_directory`, and its parent is
+    selected instead (see that helper for the climb). The result is
+    de-duplicated so two arguments that climb to the same directory do not
+    run the command there twice. None means the root could not run it, which
+    `_carrying_directory` has reported as a bug. Pure apart from the reports
+    (testable).
+    """
+    escalated: list[Path] = []
+    for directory in directories:
+        chosen = _carrying_directory(directory, projects_at, description, root)
+        if chosen is None:
+            return None
+        if chosen not in escalated:
+            escalated.append(chosen)
+    return escalated
+
+
 _ANALYZER_FLAG = "--analyzer"
 _TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
 _FALSE_VALUES = frozenset({"0", "false", "no", "off"})
@@ -1003,12 +1093,25 @@ def cmd_build(arguments: list[str], analyzer: bool = False) -> int:
     repository is an error. The projects under a directory are discovered on
     disk (see `_discover_projects`), so a new ESP-IDF project needs no entry
     here.
+
+    A directory that has no ESP-IDF project at or under it cannot run the
+    command, so the report names it, its parent is tried instead, and the
+    climb repeats until one has a project (see `_escalated_directories`).
+    `dev.py build .` in a component directory therefore builds the closest
+    enclosing tree that does have a project, and the climb ends at the
+    repository root; a root with no project at all is a bug in this script.
     """
     directories = _start_directories(arguments)
     if directories is None:
         return 1
     change_to_container(_project_container_arguments("build", directories,
                                                      analyzer))
+    escalated = _escalated_directories(
+        directories, _espidf_projects_under, "ESP-IDF projects"
+    )
+    if escalated is None:
+        return 1
+    directories = escalated
     rc = _ensure_submodules()
     if rc != 0:
         return rc
@@ -1120,6 +1223,11 @@ def cmd_test_linux(arguments: list[str] | None = None) -> int:
     `cd components/utility && dev.py test-linux` runs the utility suite, and
     `dev.py test-linux .` from the root runs every suite. The aggregate the
     pre-commit hook and CI call.
+
+    A directory with no host suite at or under it cannot run the command, so
+    its parent is tried instead, up to the repository root (see
+    `_escalated_directories`); the climb is decided by whether suites exist
+    there, not by the exit status of a suite that ran.
     """
     directories = _start_directories(arguments or [])
     if directories is None:
@@ -1127,7 +1235,12 @@ def cmd_test_linux(arguments: list[str] | None = None) -> int:
     change_to_container(
         _project_container_arguments("test-linux", directories)
     )
-    projects = _test_projects(directories)
+    escalated = _escalated_directories(
+        directories, _host_test_projects_under, "host (`linux`) test projects"
+    )
+    if escalated is None:
+        return 1
+    projects = _test_projects(escalated)
     if projects is None:
         return 1
     return _run_suites([
@@ -1191,6 +1304,10 @@ def cmd_test_esp32(arguments: list[str] | None = None) -> int:
     serial log, sentinel). With no directory, the current directory is used;
     a caller outside the repository is an error. `ESP32_PORT` selects the
     board.
+
+    A directory with no on-target test at or under it cannot run the command,
+    so its parent is tried instead, up to the repository root (see
+    `_escalated_directories`).
     """
     directories = _start_directories(arguments or [])
     if directories is None:
@@ -1198,6 +1315,13 @@ def cmd_test_esp32(arguments: list[str] | None = None) -> int:
     change_to_container(
         _project_container_arguments("test-esp32", directories)
     )
+    escalated = _escalated_directories(
+        directories, _on_target_test_projects_under,
+        "on-target (`esp32`) test projects",
+    )
+    if escalated is None:
+        return 1
+    directories = escalated
     projects = _on_target_projects(directories)
     if projects is None:
         return 1
@@ -1277,6 +1401,12 @@ def cmd_format(arguments: list[str]) -> int:
     if directories is None:
         return 1
     change_to_container(_project_container_arguments("format", directories))
+    escalated = _escalated_directories(
+        directories, _cxx_sources_under, "C/C++ sources"
+    )
+    if escalated is None:
+        return 1
+    directories = escalated
 
     for file in source_files(directories):
         cmd = ["clang-format", "-i", file]
@@ -1298,6 +1428,12 @@ def cmd_format_check(arguments: list[str]) -> int:
         return 1
     change_to_container(_project_container_arguments("format-check",
                                                      directories))
+    escalated = _escalated_directories(
+        directories, _cxx_sources_under, "C/C++ sources"
+    )
+    if escalated is None:
+        return 1
+    directories = escalated
 
     for file in source_files(directories):
         cmd = ["clang-format", "--dry-run", "--Werror", file]
@@ -1684,6 +1820,13 @@ def cmd_clang_tidy(directories: list[Path], fix: bool = False) -> int:
     the rewritten code should be re-formatted (`scripts/dev.py format`).
     """
     change_to_container(_tidy_container_arguments(directories, fix))
+
+    escalated = _escalated_directories(
+        directories, _cxx_sources_under, "C/C++ sources"
+    )
+    if escalated is None:
+        return 1
+    directories = escalated
 
     rc = _ensure_submodules()
     if rc != 0:
