@@ -35,6 +35,7 @@ invoked from the host.
 | both | `clang-tidy [DIRECTORY...] [--fix]` | Static analysis over every source under the directories (default: the current directory; a project directory uses its own compile database, any other draws from all databases below it); `--fix` applies fixes in place |
 | both | `shell [CMD...]` | Run a command in the container; no arguments = login shell |
 | host | `ssh [CMD...]` | SSH into the running dev container; no arguments = interactive login shell |
+| host | `clion-archive [ARCHIVE]` | Copy a local `CLion-*.tar.gz` into the container's Toolbox download cache |
 | both | `complete` | Internal: list subcommands matching a prefix |
 | host | `install-hooks` | Install the git commit hooks |
 
@@ -59,6 +60,13 @@ with `docker compose up -d dev` and connects over the loopback-published sshd.
 It authenticates with the host's `~/.ssh` keys, which the container already
 mounts read-only, and runs the command through a login shell in `/project`.
 `DEV_SSH_PORT` moves the host-side port (default 2222).
+
+`clion-archive` is host-only too. It copies a local `CLion-*.tar.gz` into the
+container path the Toolbox agent downloads the remote backend to, so CLion
+installs from that file instead of fetching it. With no argument it uses the
+only `~/Downloads/CLion-*.tar.gz`. It stops the Toolbox agent first, clears an
+interrupted download's `.tmp`/`journal`, and scp's the archive as a `.part`
+file that is renamed only after its SHA-256 matches.
 
 `build`, `test-linux`, `test-esp32`, and `clang-tidy` fetch missing submodules
 first.

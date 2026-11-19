@@ -293,6 +293,22 @@ download the IDE when connecting to dev containers.
 3.1.3   Open Project
 3.2  Wait for "Downloading IDE backend..." to complete.
 
+#### Offline backend archive
+
+CLion installs the remote backend through the Toolbox agent, which downloads
+a large `CLion-*.tar.gz` into the container. To install from an archive that
+is already on the host instead:
+
+```console
+$ ./scripts/dev.py clion-archive
+```
+
+The command uses the only `~/Downloads/CLion-*.tar.gz`, stops the Toolbox
+agent, clears an interrupted download, and copies the archive to the cache
+path CLion reads. Pass a path explicitly when several archives exist.
+Reconnect CLion afterwards; it installs from the seeded archive instead of
+downloading it.
+
 
 ### CLion Configuration Notes
 
