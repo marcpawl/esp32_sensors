@@ -26,7 +26,7 @@ inline constexpr DS18B20Reading kDefaultSensors[] = {
 
 }  // namespace
 
-OneWire::OneWire(int gpio) noexcept {
+OneWire::OneWire(Gpio gpio) noexcept {
     // Accepted for interface parity with the real implementation; unused.
     (void)gpio;
     for (const DS18B20Reading& reading : kDefaultSensors) {

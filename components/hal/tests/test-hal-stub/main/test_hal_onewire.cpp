@@ -29,6 +29,7 @@ namespace {
 
 // Convenience aliases for the shared HAL vocabulary.
 using thermo::hal::DS18B20Reading;
+using thermo::hal::Gpio;
 using thermo::hal::ReadingList;
 using thermo::hal::RomId;
 using thermo::hal::RomIdList;
@@ -36,7 +37,7 @@ using thermo::hal::stub::OneWire;
 
 // Pin number is irrelevant to the stub, but the factory takes it for interface
 // parity with the GPIO-backed implementation.
-constexpr int kDataGpio = 4;
+constexpr Gpio kDataGpio{4};
 
 RomId make_rom(std::initializer_list<unsigned> bytes) {
     RomId id{};
@@ -220,6 +221,6 @@ TEST_CASE("hal onewire: read() returns a copy", "[hal_onewire]") {
 TEST_CASE("hal onewire: stub OneWire models OneWireLike", "[hal_onewire]") {
     static_assert(thermo::hal::OneWireLike<OneWire>);
     // create() must return the same concrete type (part of the concept).
-    static_assert(std::same_as<decltype(OneWire::create(1)), OneWire>);
+    static_assert(std::same_as<decltype(OneWire::create(Gpio{1})), OneWire>);
     TEST_ASSERT_EQUAL(ESP_OK, make_bus().init());
 }

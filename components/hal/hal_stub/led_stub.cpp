@@ -21,7 +21,7 @@ const char* state_text(LedState state) noexcept {
 
 }  // namespace
 
-Led::Led(int gpio, const char* name) noexcept : name_(name) {
+Led::Led(Gpio gpio, const char* name) noexcept : name_(name) {
     // Accepted for interface parity with the real implementation; unused.
     (void)gpio;
 }

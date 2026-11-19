@@ -28,7 +28,7 @@ namespace thermo::hal::stub {
 class OneWire {
   public:
     // `gpio` is the 1-Wire data pin. The stub ignores it.
-    explicit OneWire(int gpio) noexcept;
+    explicit OneWire(Gpio gpio) noexcept;
 
     OneWire(OneWire const&) = delete;
     // Movable so `create()` (and containers/factories) can hand a OneWire back
@@ -40,7 +40,7 @@ class OneWire {
 
     // Builds a stub bus for the given pin. Same signature for the hardware and
     // stub implementations; call init() before discover_sensors()/read().
-    [[nodiscard]] static OneWire create(int gpio) noexcept {
+    [[nodiscard]] static OneWire create(Gpio gpio) noexcept {
         return OneWire(gpio);
     }
 

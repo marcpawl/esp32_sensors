@@ -41,6 +41,7 @@ namespace {
 using thermo::hal::AccessPointConfig;
 using thermo::hal::BoardPins;
 using thermo::hal::copy_text;
+using thermo::hal::Gpio;
 using thermo::hal::LedState;
 using thermo::hal::StationConfig;
 using thermo::hal::SwitchState;
@@ -55,14 +56,14 @@ using thermo::hal::stub::Switch;
 // Pin numbers are irrelevant to the stub, but every device takes them for
 // interface parity with the GPIO-backed implementation.
 constexpr BoardPins kPins{
-    .one_wire = 4,
-    .green_led = 17,
-    .red_led = 16,
+    .one_wire = Gpio{4},
+    .green_led = Gpio{17},
+    .red_led = Gpio{16},
     .green_name = "Green",
     .red_name = "Red",
-    .user_switch = 0,
-    .config_switch = 1,
-    .run_switch = 2,
+    .user_switch = Gpio{0},
+    .config_switch = Gpio{1},
+    .run_switch = Gpio{2},
 };
 
 // GCC's analyzer cannot model libstdc++'s std::string internals and

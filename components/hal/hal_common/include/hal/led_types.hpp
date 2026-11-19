@@ -25,6 +25,8 @@
 
 #include <cstdint>
 
+#include "hal/gpio.hpp"
+
 namespace thermo::hal {
 
 // State of a single output. `kOff` is de-energized, `kOn` is energized.
@@ -34,7 +36,7 @@ enum class LedState : std::uint8_t {
 };
 
 // Concept: an LED type that exposes the shared interface — an inline static
-// `create(gpio, name)` factory, an `init()`, and a `write(state)` that is
+// `create(Gpio, name)` factory, an `init()`, and a `write(state)` that is
 // callable with an `LedState`. Both implementations satisfy it, so a project
 // can `static_assert` which implementation it linked in.
 //
@@ -42,10 +44,10 @@ enum class LedState : std::uint8_t {
 // the stub for logging and ignored by the hardware implementation. It is
 // passed as a pointer to a static string literal and is not owned.
 template<typename T>
-concept LedLike =
-    std::is_class_v<T> && requires(int gpio, const char* name, LedState state) {
-        { T::create(gpio, name) } -> std::same_as<T>;
-        { std::declval<T&>().write(state) };
-    };
+concept LedLike = std::is_class_v<T> &&
+                  requires(Gpio gpio, const char* name, LedState state) {
+                      { T::create(gpio, name) } -> std::same_as<T>;
+                      { std::declval<T&>().write(state) };
+                  };
 
 }  // namespace thermo::hal

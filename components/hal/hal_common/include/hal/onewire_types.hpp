@@ -26,7 +26,8 @@
 #include <concepts>
 #include <type_traits>
 
-#include "hal/ds18b20_types.hpp"      // RomId, DS18B20Reading, kMaxSensors
+#include "hal/ds18b20_types.hpp"  // RomId, DS18B20Reading, kMaxSensors
+#include "hal/gpio.hpp"
 #include "utility/static_vector.hpp"  // static_vector
 
 namespace thermo::hal {
@@ -38,12 +39,12 @@ using RomIdList = utility::static_vector<RomId, kMaxSensors>;
 using ReadingList = utility::static_vector<DS18B20Reading, kMaxSensors>;
 
 // Concept: a 1-Wire bus type that exposes the shared interface — an inline
-// static `create(gpio)` factory, an `init()`, a `discover_sensors()` that
+// static `create(Gpio)` factory, an `init()`, a `discover_sensors()` that
 // returns the ROM IDs found on the bus, and a `read()` that returns a reading
 // (ROM ID + temperature) for each sensor. Both implementations satisfy it, so
 // a project can `static_assert` which implementation it linked in.
 template<typename T>
-concept OneWireLike = std::is_class_v<T> && requires(int gpio) {
+concept OneWireLike = std::is_class_v<T> && requires(Gpio gpio) {
     { T::create(gpio) } -> std::same_as<T>;
     { std::declval<T&>().init() } -> std::same_as<esp_err_t>;
     { std::declval<T&>().discover_sensors() } -> std::same_as<RomIdList>;

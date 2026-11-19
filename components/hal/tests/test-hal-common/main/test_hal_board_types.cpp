@@ -34,6 +34,7 @@ namespace {
 
 using thermo::hal::BoardLike;
 using thermo::hal::BoardPins;
+using thermo::hal::Gpio;
 using thermo::hal::WakeCauses;
 using thermo::hal::stub::ChipTemperature;
 using thermo::hal::stub::Led;
@@ -100,12 +101,12 @@ struct BoardDeviceSet {
 
   protected:
     ChipTemperature chip_temperature_;
-    OneWire one_wire_ = OneWire::create(4);
-    Led green_ = Led::create(17, "Green");
-    Led red_ = Led::create(16, "Red");
-    Switch user_switch_ = Switch::create(0);
-    Switch config_switch_ = Switch::create(1);
-    Switch run_switch_ = Switch::create(2);
+    OneWire one_wire_ = OneWire::create(Gpio{4});
+    Led green_ = Led::create(Gpio{17}, "Green");
+    Led red_ = Led::create(Gpio{16}, "Red");
+    Switch user_switch_ = Switch::create(Gpio{0});
+    Switch config_switch_ = Switch::create(Gpio{1});
+    Switch run_switch_ = Switch::create(Gpio{2});
     WifiRadio wifi_;
 };
 
@@ -136,13 +137,14 @@ TEST_CASE("hal board types: BoardPins defaults to the board pin map (§2.4)",
     // The default wiring comes from `hal/pin_map.hpp`, so a board can be built
     // on the reference hardware without repeating the numbers.
     const BoardPins def{};
-    TEST_ASSERT_EQUAL(thermo::pins::kWireBus, def.one_wire);
-    TEST_ASSERT_EQUAL(thermo::pins::kGreenLed, def.green_led);
-    TEST_ASSERT_EQUAL(thermo::pins::kRedLed, def.red_led);
-    TEST_ASSERT_EQUAL(thermo::pins::kConfig, def.config_switch);
-    TEST_ASSERT_EQUAL(thermo::pins::kRun, def.run_switch);
+    TEST_ASSERT_EQUAL(thermo::pins::kWireBus.as_int(), def.one_wire.as_int());
+    TEST_ASSERT_EQUAL(thermo::pins::kGreenLed.as_int(), def.green_led.as_int());
+    TEST_ASSERT_EQUAL(thermo::pins::kRedLed.as_int(), def.red_led.as_int());
+    TEST_ASSERT_EQUAL(thermo::pins::kConfig.as_int(),
+                      def.config_switch.as_int());
+    TEST_ASSERT_EQUAL(thermo::pins::kRun.as_int(), def.run_switch.as_int());
     // The plain (user) switch has no dedicated pin on the reference board.
-    TEST_ASSERT_EQUAL(0, def.user_switch);
+    TEST_ASSERT_EQUAL(0, def.user_switch.as_int());
     TEST_ASSERT_EQUAL_STRING("Green", def.green_name);
     TEST_ASSERT_EQUAL_STRING("Red", def.red_name);
 }

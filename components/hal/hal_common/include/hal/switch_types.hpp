@@ -33,6 +33,7 @@
 
 #include <cstdint>
 
+#include "hal/gpio.hpp"
 #include "utility/isr_safe.hpp"
 
 namespace thermo::hal {
@@ -61,7 +62,7 @@ enum class SwitchState : std::uint8_t {
 using SwitchCallback = std::move_only_function<void() noexcept>;
 
 // Concept: a switch type that exposes the shared interface — an inline
-// static `create(gpio)` factory, a `read()` returning `SwitchState`, a
+// static `create(Gpio)` factory, a `read()` returning `SwitchState`, a
 // `gpio()` getter, a `set_interrupt()` that registers (or clears) a
 // state-change callback, and a `remove_interrupt()` that unregisters it.
 // `hal_board` and `hal_stub` both satisfy it, so a project can `static_assert`
@@ -69,9 +70,9 @@ using SwitchCallback = std::move_only_function<void() noexcept>;
 template<typename T>
 concept SwitchLike =
     std::is_class_v<T> &&
-    requires(int gpio, [[thermo::isr_safe]] SwitchCallback callback) {
+    requires(Gpio gpio, [[thermo::isr_safe]] SwitchCallback callback) {
         { T::create(gpio) } -> std::same_as<T>;
-        { std::declval<T const&>().gpio() } -> std::same_as<int>;
+        { std::declval<T const&>().gpio() } -> std::same_as<Gpio>;
         { std::declval<T&>().read() } -> std::same_as<SwitchState>;
         {
             std::declval<T&>().set_interrupt(std::move(callback))

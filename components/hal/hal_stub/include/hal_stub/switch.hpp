@@ -30,7 +30,7 @@ class Switch {
   public:
     // `gpio` is kept for interface parity and reported by `gpio()`; the stub
     // does not touch a pin.
-    explicit Switch(int gpio) noexcept;
+    explicit Switch(Gpio gpio) noexcept;
 
     Switch(Switch const&) = delete;
     // Movable so `create()` (and containers/factories) can hand a Switch
@@ -43,7 +43,7 @@ class Switch {
 
     // Builds a stub switch for the given pin. Same signature for the hardware
     // and stub implementations; call init() before read().
-    [[nodiscard]] static Switch create(int gpio) noexcept {
+    [[nodiscard]] static Switch create(Gpio gpio) noexcept {
         // GCC's analyzer cannot model libstdc++'s std::function internals and
         // reports an uninitialized read while returning the switch by value.
         // The code is correct; keep the diagnostic fatal everywhere else.
@@ -62,7 +62,7 @@ class Switch {
     [[nodiscard]] SwitchState read() const noexcept;
 
     // The pin this switch was built for, as passed to `create()`.
-    [[nodiscard]] int gpio() const noexcept { return gpio_; }
+    [[nodiscard]] Gpio gpio() const noexcept { return gpio_; }
 
     // Sets the state reported by subsequent `read()` calls. Intended for host
     // tests. If the state actually changes and a callback is
@@ -85,7 +85,7 @@ class Switch {
     void remove_interrupt() noexcept;
 
   private:
-    int gpio_ = 0;
+    Gpio gpio_{};
     SwitchState state_ = SwitchState::kOff;
     SwitchCallback handler_;
 };

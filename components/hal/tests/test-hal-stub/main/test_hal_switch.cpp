@@ -32,6 +32,7 @@
 namespace {
 
 // Convenience aliases for the shared HAL vocabulary.
+using thermo::hal::Gpio;
 using thermo::hal::SwitchCallback;
 using thermo::hal::SwitchState;
 using thermo::hal::stub::Switch;
@@ -44,7 +45,7 @@ static_assert(std::is_constructible_v<SwitchCallback, void (*)() noexcept>);
 // Pin numbers are irrelevant to the stub's state, but the factory takes them
 // for interface parity with the GPIO-backed implementation, and `gpio()`
 // reports them back.
-constexpr int kSwitchGpio = 0;
+constexpr Gpio kSwitchGpio{0};
 
 // GCC's analyzer cannot model libstdc++'s std::function internals and reports
 // the switch returned by create() as uninitialised. The code is correct; keep
@@ -53,7 +54,7 @@ constexpr int kSwitchGpio = 0;
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
 
-Switch make_switch(int gpio = kSwitchGpio) {
+Switch make_switch(Gpio gpio = kSwitchGpio) {
     Switch b = Switch::create(gpio);
     b.init();
     return b;
@@ -97,15 +98,15 @@ TEST_CASE("hal switch: init() is idempotent and returns ESP_OK",
 // --- The pin is reported back -----------------------------------------------
 
 TEST_CASE("hal switch: gpio() reports the constructed pin", "[hal_switch]") {
-    const Switch a = Switch::create(7);
-    TEST_ASSERT_EQUAL(7, a.gpio());
+    const Switch a = Switch::create(Gpio{7});
+    TEST_ASSERT_EQUAL(7, a.gpio().as_int());
 
-    const Switch b = Switch::create(42);
-    TEST_ASSERT_EQUAL(42, b.gpio());
+    const Switch b = Switch::create(Gpio{42});
+    TEST_ASSERT_EQUAL(42, b.gpio().as_int());
 
     // Part of the concept, so a consumer can name the pin in a diagnostic.
     static_assert(
-        std::same_as<decltype(std::declval<Switch const&>().gpio()), int>);
+        std::same_as<decltype(std::declval<Switch const&>().gpio()), Gpio>);
 }
 
 // --- Default reading --------------------------------------------------------
@@ -284,8 +285,8 @@ TEST_CASE("hal switch: set_interrupt() after remove_interrupt() re-registers",
 
 TEST_CASE("hal switch: two switches keep independent handlers",
           "[hal_switch]") {
-    Switch a = make_switch(0);
-    Switch b = make_switch(1);
+    Switch a = make_switch(Gpio{0});
+    Switch b = make_switch(Gpio{1});
     int a_calls = 0;
     int b_calls = 0;
     a.set_interrupt([&a_calls]() noexcept { ++a_calls; });
@@ -344,11 +345,11 @@ namespace {
 // must reject it, or a consumer could unregister only by relying on a
 // destructor.
 struct NoRemoveInterrupt {
-    static NoRemoveInterrupt create(int /*gpio*/) noexcept {
+    static NoRemoveInterrupt create(Gpio /*gpio*/) noexcept {
         return NoRemoveInterrupt{};
     }
 
-    [[nodiscard]] int gpio() const noexcept { return 0; }
+    [[nodiscard]] Gpio gpio() const noexcept { return Gpio{}; }
 
     [[nodiscard]] SwitchState read() const noexcept {
         return SwitchState::kOff;
@@ -364,6 +365,6 @@ static_assert(!thermo::hal::SwitchLike<NoRemoveInterrupt>);
 TEST_CASE("hal switch: stub Switch models SwitchLike", "[hal_switch]") {
     static_assert(thermo::hal::SwitchLike<Switch>);
     // create() must return the same concrete type (part of the concept).
-    static_assert(std::same_as<decltype(Switch::create(1)), Switch>);
+    static_assert(std::same_as<decltype(Switch::create(Gpio{1})), Switch>);
     TEST_ASSERT_EQUAL(ESP_OK, make_switch().init());
 }

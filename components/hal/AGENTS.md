@@ -73,6 +73,28 @@ inside the callback. A handler entered just before the removal would otherwise
 read a switch that is being destroyed; it is a race that must never happen, so
 the firmware aborts instead of proceeding.
 
+## The GPIO strong type
+
+Every device that is wired to a pin takes `hal::Gpio`, defined in
+`hal/gpio.hpp` (`hal_common`), rather than an `int`:
+
+- the factories (`Switch::create(Gpio)`, `Led::create(Gpio, name)`,
+  `OneWire::create(Gpio)`);
+- `Switch::gpio()` and `InterruptHandle`;
+- every `BoardPins` field and every `thermo::pins` constant in
+  `hal/pin_map.hpp`.
+
+The constructor is `explicit` and the only way out is `as_int()`, so a pin
+cannot be swapped with another number by accident, and every conversion is
+greppable.
+
+`Gpio` stores a plain `int`, not ESP-IDF's `gpio_num_t`. `hal_common` is
+implementation-free and builds for the `linux` target, where
+`esp_driver_gpio` is an empty component and its headers are not on the include
+path, so `gpio_num_t` does not exist there. The cast to `gpio_num_t` lives in
+`hal_board` — the only layer that calls the driver — next to the call it
+feeds.
+
 ## The board names its device types
 
 `BoardLike` requires every board to declare two nested aliases:
@@ -192,8 +214,11 @@ on-target tests). The vocabulary the former pins is the shared one — the
 `BoardLike` concept and the deep-sleep types.
 
 - **`test-hal-common/`** covers the implementation-free `hal_common`
-  vocabulary. `test_hal_board_types.cpp` pins the `BoardLike` contract from the
-  other side: `BoardPins` defaults to the §2.4 pin map, a model spells out every
+  vocabulary. `test_hal_gpio.cpp` pins the `Gpio` value type (default pin 0,
+  `as_int()` round-trip, value equality, no implicit conversion either way,
+  `constexpr`) and the typed §2.4 pin map. `test_hal_board_types.cpp` pins the
+  `BoardLike` contract from the other side: `BoardPins` defaults to the §2.4
+  pin map, a model spells out every
   requirement using the real stub devices so the concept accepts it, a model
   without the nested `LedType` / `SwitchType` aliases is rejected, and a
   non-class, a class with none of the board interface, and a reference are each

@@ -31,7 +31,7 @@ bool g_cali_enabled = false;
 
 void ensure_gate_gpio() {
     gpio_config_t cfg = {};
-    cfg.pin_bit_mask = 1ULL << pins::kDividerGate;
+    cfg.pin_bit_mask = 1ULL << pins::kDividerGate.as_int();
     cfg.mode = GPIO_MODE_OUTPUT;
     cfg.pull_up_en = GPIO_PULLUP_DISABLE;
     cfg.pull_down_en = GPIO_PULLDOWN_DISABLE;
@@ -52,7 +52,8 @@ void gate_enable(bool on) {
     // analyzer is correct; suppress it until the pin map is settled (tracked
     // as a follow-up).
     // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
-    gpio_set_level(static_cast<gpio_num_t>(pins::kDividerGate), on ? 0 : 1);
+    gpio_set_level(static_cast<gpio_num_t>(pins::kDividerGate.as_int()),
+                   on ? 0 : 1);
 }
 
 // Reads the median-ish value: average after discarding the extremes.

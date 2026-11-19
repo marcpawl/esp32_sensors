@@ -33,7 +33,7 @@ namespace thermo::hal::board {
 class OneWire {
   public:
     // `gpio` is the 1-Wire data pin.
-    explicit OneWire(int gpio) noexcept;
+    explicit OneWire(Gpio gpio) noexcept;
 
     OneWire(OneWire const&) = delete;
     // Movable so `create()` (and containers/factories) can hand a OneWire back
@@ -45,7 +45,7 @@ class OneWire {
 
     // Builds a bus for the given data pin. Same signature for the hardware and
     // stub implementations; call init() before discover_sensors().
-    [[nodiscard]] static OneWire create(int gpio) noexcept {
+    [[nodiscard]] static OneWire create(Gpio gpio) noexcept {
         return OneWire(gpio);
     }
 
@@ -77,7 +77,7 @@ class OneWire {
     // Returns nullopt if the device does not respond or its CRC fails.
     std::optional<std::int16_t> read_temperature(const RomId& rom) noexcept;
 
-    int const gpio_;
+    Gpio const gpio_;
     bool initialized_ = false;
 };
 

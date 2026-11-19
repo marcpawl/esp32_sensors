@@ -96,7 +96,7 @@ template<hal::BoardLike Board>
         abort();
     }
 
-    SensorManager sensors(pins::kWireBus);
+    SensorManager sensors(pins::kWireBus.as_int());
     sensors.init();
 
     PowerManager power_manager(cfg);

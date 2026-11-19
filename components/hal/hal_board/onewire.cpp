@@ -50,16 +50,16 @@ class IrqGuard {
     portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
 };
 
-inline void drive_low(int gpio) noexcept {
-    gpio_set_level(static_cast<gpio_num_t>(gpio), 0);
+inline void drive_low(Gpio gpio) noexcept {
+    gpio_set_level(static_cast<gpio_num_t>(gpio.as_int()), 0);
 }
 
-inline void release(int gpio) noexcept {
-    gpio_set_level(static_cast<gpio_num_t>(gpio), 1);
+inline void release(Gpio gpio) noexcept {
+    gpio_set_level(static_cast<gpio_num_t>(gpio.as_int()), 1);
 }
 
-inline int sample(int gpio) noexcept {
-    return gpio_get_level(static_cast<gpio_num_t>(gpio));
+inline int sample(Gpio gpio) noexcept {
+    return gpio_get_level(static_cast<gpio_num_t>(gpio.as_int()));
 }
 
 // Dallas/Maxim CRC8, reflected polynomial 0x8C.
@@ -81,17 +81,17 @@ std::uint8_t crc8(const std::uint8_t* data, std::size_t len) noexcept {
 
 }  // namespace
 
-OneWire::OneWire(int gpio) noexcept : gpio_(gpio) {}
+OneWire::OneWire(Gpio gpio) noexcept : gpio_(gpio) {}
 
 OneWire::~OneWire() noexcept {
     if (initialized_) {
-        gpio_reset_pin(static_cast<gpio_num_t>(gpio_));
+        gpio_reset_pin(static_cast<gpio_num_t>(gpio_.as_int()));
     }
 }
 
 esp_err_t OneWire::init() noexcept {
     gpio_config_t cfg = {};
-    cfg.pin_bit_mask = 1ULL << gpio_;
+    cfg.pin_bit_mask = 1ULL << gpio_.as_int();
     cfg.mode = GPIO_MODE_INPUT_OUTPUT_OD;  // Open-drain.
     cfg.pull_up_en = GPIO_PULLUP_ENABLE;   // Internal pull-up on top of 4.7k.
     cfg.pull_down_en = GPIO_PULLDOWN_DISABLE;

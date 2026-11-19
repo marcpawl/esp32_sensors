@@ -16,6 +16,8 @@
 
 #include <cstdint>
 
+#include "hal/gpio.hpp"
+
 namespace thermo::hal::board {
 
 class InterruptHandle {
@@ -31,7 +33,7 @@ class InterruptHandle {
     InterruptHandle() noexcept = default;
 
     // Owns `gpio`: destroying the handle removes that pin's ISR handler.
-    explicit InterruptHandle(int gpio) noexcept;
+    explicit InterruptHandle(Gpio gpio) noexcept;
 
     // A registration must have exactly one owner, so copying is not allowed.
     InterruptHandle(InterruptHandle const&) = delete;
@@ -52,7 +54,7 @@ class InterruptHandle {
     void release() noexcept;
 
   private:
-    std::optional<int> gpio_;
+    std::optional<Gpio> gpio_;
 };
 
 }  // namespace thermo::hal::board
