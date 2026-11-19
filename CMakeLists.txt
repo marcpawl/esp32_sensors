@@ -66,9 +66,20 @@ if(NOT EXISTS "/etc/esp32-sensors-dev-container")
         "or:   docker compose run --rm dev cmake -B build_root")
 endif()
 
-if(NOT DEFINED ENV{IDF_PATH} OR NOT EXISTS "$ENV{IDF_PATH}/export.sh")
+# The remote CLion backend is started by the Toolbox agent without a login
+# shell, so IDF_PATH/IDF_TOOLS_PATH may be absent. Default them to the
+# locations the image bakes in (docker/esp-idf-profile.sh). The marker check
+# above still guarantees this is the dev container.
+if(NOT DEFINED ENV{IDF_PATH})
+    set(ENV{IDF_PATH} "/opt/esp/idf")
+endif()
+if(NOT DEFINED ENV{IDF_TOOLS_PATH})
+    set(ENV{IDF_TOOLS_PATH} "/opt/esp")
+endif()
+if(NOT EXISTS "$ENV{IDF_PATH}/export.sh")
     message(FATAL_ERROR
-        "IDF_PATH is not set; run this inside the ESP-IDF dev container.")
+        "IDF_PATH ($ENV{IDF_PATH}) has no export.sh; expected the ESP-IDF "
+        "checkout baked into the dev container.")
 endif()
 
 # Every idf.py invocation below goes through scripts/idf.sh, which establishes
