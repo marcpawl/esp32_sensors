@@ -1410,6 +1410,76 @@ class ClionRunConfigurationTests(unittest.TestCase):
                 )
 
 
+class ClionExclusionTests(unittest.TestCase):
+    """CLion's module excludes every generated and vendored tree.
+
+    CLion does not honour .gitignore for project analysis, so build output
+    and vendored trees have to be marked excluded in the committed `.iml`.
+    Derive the expected list from the same sources that create those trees:
+    `dev._discover_projects` for the subproject build directories,
+    `.idea/cmake.xml` for CLion's own trees, and the fixed set of
+    documentation/container/vendored directories. A new subproject or
+    profile that misses an exclusion then fails self-check.
+    """
+
+    def _excluded_directories(self) -> set[str]:
+        import xml.etree.ElementTree as ET
+
+        iml = dev.REPO_ROOT / ".idea" / "esp32_sensors.iml"
+        root = ET.parse(iml).getroot()
+        prefix = "file://$MODULE_DIR$/"
+        excluded = set()
+        for folder in root.iter("excludeFolder"):
+            url = folder.get("url") or ""
+            self.assertTrue(
+                url.startswith(prefix),
+                f"{iml.name}: unexpected excludeFolder URL {url!r}",
+            )
+            excluded.add(url[len(prefix):])
+        return excluded
+
+    def test_excludes_every_subproject_build_directory(self) -> None:
+        excluded = self._excluded_directories()
+        projects = dev._discover_projects(dev.REPO_ROOT)
+        self.assertTrue(projects, "no subprojects discovered")
+        for project in projects:
+            relative = project.directory.relative_to(dev.REPO_ROOT).as_posix()
+            build_dir = (
+                dev.TEST_BUILD_DIR
+                if project.target == "linux"
+                else dev.FW_BUILD_DIR
+            )
+            with self.subTest(project=relative):
+                self.assertIn(f"{relative}/{build_dir}", excluded)
+
+    def test_excludes_every_clion_generation_directory(self) -> None:
+        import xml.etree.ElementTree as ET
+
+        excluded = self._excluded_directories()
+        cmake_xml = dev.REPO_ROOT / ".idea" / "cmake.xml"
+        prefix = "$PROJECT_DIR$/"
+        found = 0
+        configurations = ET.parse(cmake_xml).getroot().iter("configuration")
+        for configuration in configurations:
+            generation_dir = configuration.get("GENERATION_DIR") or ""
+            if not generation_dir:
+                continue
+            self.assertTrue(
+                generation_dir.startswith(prefix),
+                f"unexpected GENERATION_DIR {generation_dir!r}",
+            )
+            found += 1
+            with self.subTest(profile=configuration.get("PROFILE_NAME")):
+                self.assertIn(generation_dir[len(prefix):], excluded)
+        self.assertTrue(found, "no CMake generation directories found")
+
+    def test_excludes_root_build_and_non_source_trees(self) -> None:
+        excluded = self._excluded_directories()
+        for directory in (dev.ROOT_BUILD_DIR, "doc", "docker", "third_party"):
+            with self.subTest(directory=directory):
+                self.assertIn(directory, excluded)
+
+
 class DevImageTests(unittest.TestCase):
     """The pinned prebuilt image is wired up consistently.
 
