@@ -71,6 +71,11 @@ file that is renamed only after its SHA-256 matches.
 `build`, `test-linux`, `test-esp32`, and `clang-tidy` fetch missing submodules
 first.
 
+`build` and the `linux` test commands run `idf.py set-target` only when a
+project's build tree is new or records a different target. `set-target`
+deletes ninja's dependency log, so running it before every build recompiles
+every translation unit; a second, unchanged build now does no work.
+
 `format`, `format-check`, `format-check-staged`, `build`, `test-linux`,
 `test-esp32`, and `clang-tidy` all take directory arguments (a host absolute
 path or `/project/...` works too) and start from the current directory when
