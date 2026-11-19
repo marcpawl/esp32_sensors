@@ -16,11 +16,13 @@ struct ToggleSwitchSm {
     // 1. Context storing Switch reference, last reading, and callbacks
     struct Context {
         hal::SwitchState last_reading_;
-        std::function<[[thermo::isr_safe]] void(hal::SwitchState)> const
+        std::function< void(hal::SwitchState)> const
             stable_callback_;
-        std::function<[[thermo::isr_safe]] void()> const bouncing_callback_;
-        std::function<[[thermo::isr_safe]] hal::SwitchState()> const
+        std::function< void()> const bouncing_callback_;
+        std::function< hal::SwitchState()> const
             read_switch_;
+// TODO        thermo::espidf_cpp::Timer debouncing_timer_;
+        int* sm = nullptr;
 
         // @param stable_cb Callback used to indicate that the
         //   switch has not changed in a while.
@@ -29,18 +31,22 @@ struct ToggleSwitchSm {
         // @param read_switch Function to call to get the current
         //   switch state.
         Context(
-            std::function<[[thermo::isr_safe]] void(hal::SwitchState)>
+            std::function< void(hal::SwitchState)>
                 stable_cb,
-            std::function<[[thermo::isr_safe]] void()> bouncing_cb,
-            std::function<[[thermo::isr_safe]] hal::SwitchState()> read_switch)
+            std::function< void()> bouncing_cb,
+            std::function< hal::SwitchState()> read_switch)
             : stable_callback_(std::move(stable_cb)),
               bouncing_callback_(std::move(bouncing_cb)),
               read_switch_(read_switch) {}
     };
 
+    void send_debouncing_timer_expired(auto& sm) {
+        sm.process_event(ToggleSwitchSm::DebounceTimerExpiredEvent{});
+    }
+
     // 2. Events
     struct SwitchChangedEvent {
-        hal::SwitchState state_;
+        hal::SwitchState  state_;
     };
 
     struct DebouncedEvent {
@@ -58,25 +64,26 @@ struct ToggleSwitchSm {
     // 3. States
     struct initializing {
         auto on_entry() {
-            return [](Context& ctx) { ctx.last_reading_ = ctx.read_switch_(); };
+            return [](Context& ctx, auto sm) {
+                ctx.sm = sm;
+                ctx.last_reading_ = ctx.read_switch_();
+            };
         }
     };
 
     // Composite State 'debouncing' containing timers, constructor, nested
     // sub-states, on_entry, and on_exit
     struct debouncing {
-        thermo::espidf_cpp::Timer debouncing_timer_;
+#if 0
 #if 0
         thermo::espidf_cpp::Timer unstable_timer_;
 #endif
 
-        // Constructor for debouncing composite state
-        debouncing() : debouncing_timer_([this]() -> void {}) {}
 
         // Nested sub-state 'entry'
         struct entry {
-            [[thermo::isr_safe]] auto on_entry() {
-                return [](debouncing& parent, auto sm) {
+             auto on_entry() {
+                return [](Context& context, debouncing& parent, auto sm) {
 #if 0
                     auto send_debouncing_timer_expired = [sm]() mutable {
                         sm.process_event(DebounceTimerExpiredEvent{});
@@ -99,20 +106,20 @@ struct ToggleSwitchSm {
         // debouncing_timer_.restart()
         struct changed {
 #if 0
-            [[thermo::isr_safe]] auto on_entry() {
+             auto on_entry() {
                 return [](debouncing& parent) {
                     parent.debouncing_timer_.restart();
                 };
             }
 
-            [[thermo::isr_safe]] auto on_exit() {
+             auto on_exit() {
                 return []() {
                 };
             }
 #endif
         };
 
-        [[thermo::isr_safe]] auto on_entry() {
+         auto on_entry() {
             return [](Context& ctx, debouncing& self) {
                 if (ctx.bouncing_callback_) {
                     ctx.bouncing_callback_();
@@ -120,7 +127,7 @@ struct ToggleSwitchSm {
             };
         }
 
-        [[thermo::isr_safe]] auto on_exit() {
+         auto on_exit() {
             return [](debouncing& self) {
 #if 0
                 self.debouncing_timer_.cancel();
@@ -144,10 +151,11 @@ struct ToggleSwitchSm {
                                          ctx.last_reading_ = event.state_;
                                      } = state<changed>);
         }
+#endif
     };
 
     struct stable {
-        [[thermo::isr_safe]] auto on_entry() {
+         auto on_entry() {
             return [](Context& ctx) {
                 if (ctx.stable_callback_) {
                     ctx.stable_callback_(ctx.last_reading_);
@@ -157,7 +165,7 @@ struct ToggleSwitchSm {
     };
 
     struct unstable {
-        [[thermo::isr_safe]] auto on_entry() {
+         auto on_entry() {
             return []() { reboot(); };
         }
     };
