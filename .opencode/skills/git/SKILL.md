@@ -252,3 +252,14 @@ detour existed only while the host `gh` 2.45.0 was in use: it cannot edit a
 pull request because it still asks for the sunset `projectCards` field
 (issue #90). The container's `gh` 2.104.0 makes the same call without it, so
 `gh pr edit` is the command again.
+
+## Pull requests that change only guidance
+
+When a pull request changes nothing but agent guidance, the CI checks can be
+skipped:
+
+- `AGENTS.md` files;
+- skill files under `.opencode/skills/`.
+
+Do not wait for the checks before asking for review. A single change to
+source, a `CMakeLists.txt`, or `scripts/` means the checks run as usual.
