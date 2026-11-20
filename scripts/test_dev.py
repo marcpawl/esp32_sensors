@@ -1013,17 +1013,23 @@ class ClionManualTestCommandTests(unittest.TestCase):
             "up",
         ])
 
-    def test_backend_log_check_accepts_a_log_without_a_download(self):
-        result = mock.Mock(
-            returncode=0,
-            stdout="INFO DownloadManagerImpl Starting to clean\n",
-            stderr="",
+    def test_backend_log_check_accepts_a_reused_cached_archive(self):
+        log = (
+            "INFO FileDownloaderImpl File "
+            "/home/dev/.cache/JetBrains/Toolbox/download/"
+            "72610a58b-CLion-2026.3.0.1.tar.gz will be reused as a "
+            "cached previous download of "
+            "https://download.jetbrains.com/cpp/CLion-2026.3.0.1.tar.gz\n"
+            "INFO VerificationStateWorkerKt Correct checksum for "
+            "/home/dev/.cache/JetBrains/Toolbox/download/"
+            "72610a58b-CLion-2026.3.0.1.tar.gz (sha256)\n"
         )
+        result = mock.Mock(returncode=0, stdout=log, stderr="")
         with mock.patch.object(dev.subprocess, "run",
                                return_value=result) as runner:
             skipped, detail = dev._backend_download_log_check()
         self.assertTrue(skipped)
-        self.assertIn("no CLion archive download", detail)
+        self.assertIn("reused from cache", detail)
         runner.assert_called_once_with(
             dev._compose_command(
                 "exec", "-T", "dev", "cat", dev.TOOLBOX_LOG,
@@ -1031,16 +1037,51 @@ class ClionManualTestCommandTests(unittest.TestCase):
             cwd=dev.REPO_ROOT, capture_output=True, text=True,
         )
 
-    def test_backend_log_check_rejects_a_recorded_download(self):
+    def test_backend_log_check_accepts_a_local_checksum_line(self):
+        log = (
+            "INFO VerificationStateWorkerKt Correct checksum for "
+            "/home/dev/.cache/JetBrains/Toolbox/download/"
+            "72610a58b-CLion-2026.3.0.1.tar.gz (sha256)\n"
+        )
+        result = mock.Mock(returncode=0, stdout=log, stderr="")
+        with mock.patch.object(dev.subprocess, "run", return_value=result):
+            skipped, detail = dev._backend_download_log_check()
+        self.assertTrue(skipped)
+        self.assertIn("reused from cache", detail)
+
+    def test_backend_log_check_rejects_a_remote_download(self):
+        log = (
+            "INFO FileDownloaderImpl Downloading "
+            "https://download.jetbrains.com/cpp/CLion-2026.3.0.1.tar.gz\n"
+        )
+        result = mock.Mock(returncode=0, stdout=log, stderr="")
+        with mock.patch.object(dev.subprocess, "run", return_value=result):
+            skipped, detail = dev._backend_download_log_check()
+        self.assertFalse(skipped)
+        self.assertIn("recorded a CLion archive download", detail)
+
+    def test_backend_log_check_rejects_a_remote_checksum_line(self):
+        log = (
+            "INFO VerificationStateWorkerKt Correct checksum for "
+            "https://download.jetbrains.com/cpp/CLion-2026.3.0.1.tar.gz "
+            "(sha256)\n"
+        )
+        result = mock.Mock(returncode=0, stdout=log, stderr="")
+        with mock.patch.object(dev.subprocess, "run", return_value=result):
+            skipped, detail = dev._backend_download_log_check()
+        self.assertFalse(skipped)
+        self.assertIn("recorded a CLion archive download", detail)
+
+    def test_backend_log_check_requires_reuse_evidence(self):
         result = mock.Mock(
             returncode=0,
-            stdout="INFO DownloadManagerImpl CLion-2026.3.tar.gz\n",
+            stdout="INFO DownloadManagerImpl Starting to clean\n",
             stderr="",
         )
         with mock.patch.object(dev.subprocess, "run", return_value=result):
             skipped, detail = dev._backend_download_log_check()
         self.assertFalse(skipped)
-        self.assertIn("recorded a CLion archive download", detail)
+        self.assertIn("no evidence", detail)
 
     def test_backend_log_check_reports_an_unreadable_log(self):
         result = mock.Mock(returncode=1, stdout="", stderr="no such file")

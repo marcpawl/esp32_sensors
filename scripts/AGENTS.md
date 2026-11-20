@@ -120,8 +120,11 @@ The command checks for `.clion/compile_commands.json`, removes this project's
 dev containers with `docker compose down --remove-orphans`, then calls
 `dev.py up`. If `~/Downloads/CLion-*.tar.gz` exists, it calls
 `dev.py clion-archive` to seed the backend archive; the first manual step
-then requires the Toolbox log to contain no CLion archive download. Without
-an archive, that step tells the user to wait for *Downloading IDE backend...*
+then requires Toolbox log evidence that the archive was reused from the
+local download cache. A "will be reused as a cached previous download" line
+or a "Correct checksum for <cache path>" line passes even when the reuse
+line also names the remote URL; a remote download line fails. Without an
+archive, that step tells the user to wait for *Downloading IDE backend...*
 to finish. CLion is started without blocking.
 
 The wizard prints five manual steps and asks for `y` or `n` after each one.

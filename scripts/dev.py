@@ -2628,11 +2628,59 @@ def _dev_py_command(command: str) -> int:
     return run([sys.executable, str(script), command])
 
 
+def _is_clion_archive_log_line(line: str) -> bool:
+    """True for a Toolbox log line about the CLion backend archive. Pure."""
+    lowered = line.lower()
+    return "clion-" in lowered and ".tar.gz" in lowered
+
+
+def _is_cached_clion_archive_line(line: str) -> bool:
+    """True when a log line proves the archive came from the local cache.
+
+    Toolbox names the cached file by checksum and logs a "will be reused"
+    line that also mentions the remote URL. It then verifies the local file
+    with a "Correct checksum for <cache path>" line. Neither is a download.
+    """
+    lowered = line.lower()
+    if not _is_clion_archive_log_line(lowered):
+        return False
+    return (
+        "will be reused as a cached previous download" in lowered
+        or f"correct checksum for {TOOLBOX_DOWNLOAD_DIR.lower()}/" in lowered
+    )
+
+
+def _backend_download_log_verdict(stdout: str) -> tuple[bool, str]:
+    """Classify a fresh Toolbox log. Pure."""
+    lines = [line.strip() for line in stdout.splitlines()]
+    cached = [line for line in lines if _is_cached_clion_archive_line(line)]
+    downloads = [
+        line
+        for line in lines
+        if _is_clion_archive_log_line(line)
+        and not _is_cached_clion_archive_line(line)
+        and re.search(r"download|fetch", line, re.IGNORECASE)
+    ]
+    if downloads:
+        return False, (
+            "Toolbox log recorded a CLion archive download: "
+            + downloads[-1][:120]
+        )
+    if cached:
+        return True, (
+            "Toolbox log shows the CLion archive was reused from cache"
+        )
+    return False, (
+        "Toolbox log has no evidence that the CLion archive was reused"
+    )
+
+
 def _backend_download_log_check() -> tuple[bool, str]:
-    """Check the fresh Toolbox log for a CLion archive download.
+    """Check the fresh Toolbox log for local reuse of the seeded archive.
 
     The wizard removes the container first, so this log belongs only to the
-    run being tested. A seeded archive must produce no CLion download line.
+    run being tested. A seeded archive must produce a cache-reuse or local
+    checksum line, not a remote download.
     """
     command = _compose_command(
         "exec", "-T", DEV_SSH_SERVICE, "cat", TOOLBOX_LOG,
@@ -2644,20 +2692,7 @@ def _backend_download_log_check() -> tuple[bool, str]:
         detail = result.stderr.strip() or f"exit {result.returncode}"
         return False, f"could not read {TOOLBOX_LOG}: {detail}"
 
-    downloads = [
-        line.strip()
-        for line in result.stdout.splitlines()
-        if re.search(
-            r"CLion.*(tar\.gz|download)|download.*CLion",
-            line, re.IGNORECASE,
-        )
-    ]
-    if downloads:
-        return False, (
-            "Toolbox log recorded a CLion archive download: "
-            + downloads[-1][:120]
-        )
-    return True, "Toolbox log has no CLion archive download"
+    return _backend_download_log_verdict(result.stdout)
 
 
 def cmd_clion_manual_test() -> int:
