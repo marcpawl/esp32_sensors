@@ -12,7 +12,7 @@
 
 #include <cstddef>
 
-namespace thermo {
+namespace thermo::logic {
 
 void rtc_state_reset(RtcState& st) {
     st = RtcState();
@@ -47,4 +47,4 @@ void rtc_wifi_cache_clear(RtcState& st) {
     st.wifi = WifiCache{};
 }
 
-}  // namespace thermo
+}  // namespace thermo::logic

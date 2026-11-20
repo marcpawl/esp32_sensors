@@ -30,11 +30,11 @@
 #include "logic/temp_format.hpp"      // kTempNull
 #include "utility/static_vector.hpp"  // static_vector
 
-namespace thermo {
+namespace thermo::logic {
 
 // `RomId` is defined in the shared, implementation-free `hal_common` component;
-// re-export it into `thermo` as `sensor.hpp` does, so the RTC state names it
-// without pulling in the 1-Wire driver header.
+// re-export it into `thermo::logic`, so the RTC state names it without pulling
+// in the 1-Wire driver header.
 using thermo::hal::RomId;
 
 // One buffered sample record (§4.1). Fixed-size and trivially copyable so it
@@ -101,4 +101,4 @@ void rtc_buffer_clear(RtcState& st);
 // §3.10: invalidate the cached Wi-Fi parameters.
 void rtc_wifi_cache_clear(RtcState& st);
 
-}  // namespace thermo
+}  // namespace thermo::logic

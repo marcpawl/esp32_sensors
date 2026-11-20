@@ -70,6 +70,6 @@ extern "C" void app_main(void) {
     // the application boots.
     thermo::ConsoleTask console(board);
 
-    thermo::Application<thermo::hal::stub::BoardStub> app(board);
+    thermo::logic::Application<thermo::hal::stub::BoardStub> app(board);
     app.application_main();
 }

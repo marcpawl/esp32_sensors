@@ -24,12 +24,12 @@ namespace thermo {
 // must be running on the same board (it shares it, so the two may be used
 // concurrently). `Board` is any `hal::BoardLike` type.
 template<hal::BoardLike Board>
-[[noreturn]] void run_mode_cycle(Board& board, LedTask<Board>& led_task);
+[[noreturn]] void run_mode_cycle(Board& board, logic::LedTask<Board>& led_task);
 
 // Entry point used by `app_main`: runs one cycle on the board the firmware
 // links in (`hal_board` on target, `hal_stub` in the host tests). Defined
 // in run_mode.cpp.
 [[noreturn]] void run_mode_cycle(hal::board::Board& board,
-                                 LedTask<hal::board::Board>& led_task);
+                                 logic::LedTask<hal::board::Board>& led_task);
 
 }  // namespace thermo

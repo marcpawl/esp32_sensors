@@ -17,11 +17,11 @@
 
 #include <cstdint>
 
-namespace thermo {
+namespace thermo::logic {
 
 enum class TxState : std::uint8_t {
     kTxOk = 0,         // Transmission permitted.
     kTxInhibited = 1,  // Low battery; buffering only.
 };
 
-}  // namespace thermo
+}  // namespace thermo::logic

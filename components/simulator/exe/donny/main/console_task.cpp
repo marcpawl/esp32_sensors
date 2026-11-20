@@ -277,8 +277,8 @@ json sensors_json(const hal::stub::BoardStub& board) {
         if (reading.temp_c_x100.has_value()) {
             temp = *reading.temp_c_x100;
         }
-        sensors.push_back(
-            json{{"rom", rom_id_to_hex(reading.rom)}, {"temp_c_x100", temp}});
+        sensors.push_back(json{{"rom", logic::rom_id_to_hex(reading.rom)},
+                               {"temp_c_x100", temp}});
     }
     return sensors;
 }
@@ -551,7 +551,8 @@ std::optional<std::string> apply(const json& doc, hal::stub::BoardStub& board) {
             if (rom_field == entry.end() || !rom_field->is_string()) {
                 return "each sensor needs a string \"rom\"";
             }
-            const auto rom = rom_id_from_hex(rom_field->get<std::string>());
+            const auto rom =
+                logic::rom_id_from_hex(rom_field->get<std::string>());
             if (!rom.has_value()) {
                 return "sensor \"rom\" must be 16 hex characters";
             }

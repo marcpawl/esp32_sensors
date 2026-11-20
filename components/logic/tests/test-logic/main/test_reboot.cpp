@@ -1,8 +1,8 @@
 // Tests for the reboot helper (`logic/reboot.hpp`).
 //
-// `thermo::reboot()` is `[[noreturn]]`: it waits for serial output to flush,
-// then hands over to `esp_restart()`, which on the `linux` target runs the
-// shutdown handlers and exits the process. The test registers a shutdown
+// `thermo::logic::reboot()` is `[[noreturn]]`: it waits for serial output to
+// flush, then hands over to `esp_restart()`, which on the `linux` target runs
+// the shutdown handlers and exits the process. The test registers a shutdown
 // handler that longjmps back out of the restart, so it can observe both the
 // flush delay and the restart path without ending the test runner.
 // NOLINTBEGIN
@@ -43,7 +43,7 @@ TEST_CASE("reboot: waits for the log flush, then enters the restart path",
     bool returned = false;
 
     if (setjmp(g_reboot_jump) == 0) {
-        thermo::reboot();
+        thermo::logic::reboot();
         // Reached only if the reboot helper returned, which its `[[noreturn]]`
         // contract forbids.
         returned = true;

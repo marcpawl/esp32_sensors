@@ -24,7 +24,7 @@
 namespace thermo {
 
 // Obtains the single RTC-resident state.
-RtcState& rtc_state();
+logic::RtcState& rtc_state();
 
 // Prepares the RTC state for this boot. Must be called once, early in app_main,
 // before any other rtc_* function. On a cold boot (power-on, or a reset that

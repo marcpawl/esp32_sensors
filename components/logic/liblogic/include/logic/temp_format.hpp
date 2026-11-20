@@ -16,7 +16,7 @@
 
 #include "utility/static_string.hpp"
 
-namespace thermo {
+namespace thermo::logic {
 
 // Sentinel for "no reading" (§4.1): 0x8000.
 constexpr std::int16_t kTempNull = static_cast<std::int16_t>(0x8000);
@@ -29,4 +29,4 @@ using TempText = utility::static_string<8>;
 // '+' or exponent, so the result is always a valid JSON number.
 TempText format_temp_c_x100(std::int16_t temp_c_x100);
 
-}  // namespace thermo
+}  // namespace thermo::logic

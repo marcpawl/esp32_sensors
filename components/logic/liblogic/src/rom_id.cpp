@@ -15,7 +15,7 @@
 
 #include <cstdio>
 
-namespace thermo {
+namespace thermo::logic {
 
 std::string rom_id_to_hex(const hal::RomId& rom) {
     // 8 bytes -> 16 uppercase hex chars, no separator.
@@ -64,4 +64,4 @@ std::optional<hal::RomId> rom_id_from_hex(std::string_view hex) {
     return id;
 }
 
-}  // namespace thermo
+}  // namespace thermo::logic

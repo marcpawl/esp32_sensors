@@ -15,9 +15,9 @@
 #include "logic/temp_format.hpp"
 #include "unity.h"
 
-using thermo::format_temp_c_x100;
-using thermo::kTempNull;
-using thermo::TempText;
+using thermo::logic::format_temp_c_x100;
+using thermo::logic::kTempNull;
+using thermo::logic::TempText;
 
 namespace {
 TempText fmt(std::int16_t v) {

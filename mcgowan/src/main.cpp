@@ -35,14 +35,14 @@ constexpr const char* kTag = "app_main";
 // Reads the two mode-sense poles and maps them to a mode (§3). The mapping
 // itself is pure and host-tested (`logic/mode_selection.hpp`); this wrapper
 // only turns its hardware-fault result into the firmware's fail-loudly policy.
-thermo::Mode read_mode(thermo::hal::board::Board& board) {
-    const thermo::ModeSelection selection = thermo::mode_from_switches(
+thermo::logic::Mode read_mode(thermo::hal::board::Board& board) {
+    const thermo::logic::ModeSelection selection = thermo::logic::mode_from_switches(
         board.config_switch().read(), board.run_switch().read());
     if (!selection.has_value()) {
         // Both poles energized: the switch is miswired or shorted. Fail loudly
         // rather than guess a mode.
         ESP_LOGE(kTag, "switch fault: both sense pins on");
-        thermo::reboot();
+        thermo::logic::reboot();
     }
     return *selection;
 }
@@ -72,7 +72,7 @@ extern "C" void app_main(void) {
         thermo::hal::board::Board::create({}));
     ESP_ERROR_CHECK(board->init_all());
 
-    thermo::Application<typeof(*board)> app(board);
+    thermo::logic::Application<typeof(*board)> app(board);
     app.application_main();
 
 #if 0
@@ -81,20 +81,20 @@ extern "C" void app_main(void) {
     // Cold boot clears the retained block; a deep-sleep wake keeps it (§8).
     thermo::rtc_state_init(*board);
 
-    const thermo::Mode mode = read_mode(*board);
-    ESP_LOGI(kTag, "boot: mode=%s", thermo::to_string(mode));
+    const thermo::logic::Mode mode = read_mode(*board);
+    ESP_LOGI(kTag, "boot: mode=%s", thermo::logic::to_string(mode));
 
     // The LED task drives the LEDs through the board, so it is independent of
     // the concrete board implementation (hal_board on target, hal_stub in the
     // host tests).
-    thermo::LedTask led_task(board);
+    thermo::logic::LedTask led_task(board);
 
     switch (mode) {
-        case thermo::Mode::kConfigure:
+        case thermo::logic::Mode::kConfigure:
             thermo::run_configure_mode(led_task);
             break;
 
-        case thermo::Mode::kRun:
+        case thermo::logic::Mode::kRun:
             // Run mode executes one cycle, then deep-sleeps (does not return).
             // If it does return (e.g. sleep disabled for debugging), loop.
             while (true) {
@@ -102,7 +102,7 @@ extern "C" void app_main(void) {
             }
             break;
 
-        case thermo::Mode::kOff:
+        case thermo::logic::Mode::kOff:
             // The switch cuts power in the center position, so reaching here
             // means the sense pins read low transiently. Nothing to do; the
             // device will power down.

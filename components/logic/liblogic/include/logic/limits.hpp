@@ -20,7 +20,7 @@
 
 #include "hal/ds18b20_types.hpp"  // kMaxSensors
 
-namespace thermo::limits {
+namespace thermo::logic::limits {
 
 // The application logs every sensor the shared bus can carry (§2.1). The
 // bus capacity is the single definition; this name is the application's
@@ -50,4 +50,4 @@ constexpr std::size_t kMaxBufferRecords = 256;
 // The DS18B20 ROM-ID byte count lives with the type in `hal_common`
 // (`hal/ds18b20_types.hpp`: `thermo::hal::kRomIdBytes`).
 
-}  // namespace thermo::limits
+}  // namespace thermo::logic::limits

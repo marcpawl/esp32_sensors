@@ -9,9 +9,9 @@
 // (`battery_monitor.cpp`, `configure_mode.cpp`, `run_mode.cpp`) reach
 // `thermo::pins::` through this header.
 //
-// The fixed capacities (`thermo::limits::kSensorCount`,
-// `thermo::limits::kMaxBufferRecords`) are board-independent and shared with
-// the host tests, so they live in the `liblogic` component
+// The fixed capacities (`thermo::logic::limits::kSensorCount`,
+// `thermo::logic::limits::kMaxBufferRecords`) are board-independent and shared
+// with the host tests, so they live in the `liblogic` component
 // (`logic/limits.hpp`).
 #pragma once
 

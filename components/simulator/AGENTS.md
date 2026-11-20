@@ -38,7 +38,7 @@ require only lower layers.
 ## `donny`
 
 A plain (non-test) `linux`-target application that constructs
-`thermo::Application<thermo::hal::stub::BoardStub>`. It requires `hal_stub`,
+`thermo::logic::Application<thermo::hal::stub::BoardStub>`. It requires `hal_stub`,
 `liblogic`, `libespidfcpp`, `libsimulator`, and the vendored `json` component
 (its layer requirements are in the `platform_layers` skill).
 

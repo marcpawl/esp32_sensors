@@ -24,11 +24,12 @@ namespace thermo {
 // The ESP32 will reboot when the switch is changed, otherwise we
 // stay in Configure mode.
 template<hal::BoardLike Board>
-[[noreturn]] void run_configure_mode(LedTask<Board>& led_task);
+[[noreturn]] void run_configure_mode(logic::LedTask<Board>& led_task);
 
 // Entry point used by `app_main`: runs the Configure-mode workflow on the board
 // the firmware links in (`hal_board` on target, `hal_stub` in the host
 // tests). Defined in configure_mode.cpp.
-[[noreturn]] void run_configure_mode(LedTask<hal::board::Board>& led_task);
+[[noreturn]] void run_configure_mode(
+    logic::LedTask<hal::board::Board>& led_task);
 
 }  // namespace thermo

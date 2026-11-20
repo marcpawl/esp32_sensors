@@ -15,7 +15,7 @@
 #include "unity.h"
 
 using thermo::Config;
-using thermo::limits::kMaxSensorNameLength;
+using thermo::logic::limits::kMaxSensorNameLength;
 using thermo::validation::validate;
 using thermo::validation::validate_ap_password;
 using thermo::validation::validate_device_name;

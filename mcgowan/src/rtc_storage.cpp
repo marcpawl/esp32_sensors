@@ -19,11 +19,11 @@ namespace {
 
 // The single RTC-resident state block. RTC_DATA_ATTR places it in RTC slow
 // memory, which is retained across deep sleep.
-RTC_DATA_ATTR RtcState g_rtc_state;
+RTC_DATA_ATTR logic::RtcState g_rtc_state;
 
 }  // namespace
 
-RtcState& rtc_state() {
+logic::RtcState& rtc_state() {
     return g_rtc_state;
 }
 

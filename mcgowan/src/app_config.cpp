@@ -83,7 +83,8 @@ std::optional<std::string> validate_interval(std::string_view v) {
 }
 
 std::optional<std::string> validate_device_name(const std::string& v) {
-    return check_length(v, 1, limits::kMaxDeviceNameLength, "Device name");
+    return check_length(v, 1, logic::limits::kMaxDeviceNameLength,
+                        "Device name");
 }
 
 std::optional<std::string> validate_ntp_server(const std::string& v) {
@@ -127,7 +128,7 @@ ValidationResult validate(const Config& cfg) {
     // here. One error is enough: the form re-renders with the messages.
     for (const auto& mapping : cfg.mappings) {
         if (mapping.name.empty() ||
-            mapping.name.size() > limits::kMaxSensorNameLength) {
+            mapping.name.size() > logic::limits::kMaxSensorNameLength) {
             result.errors.push_back(
                 {"mappings", "Sensor names must be 1-32 characters"});
             break;

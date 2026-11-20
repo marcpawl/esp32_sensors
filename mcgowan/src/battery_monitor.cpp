@@ -177,24 +177,25 @@ std::optional<std::uint32_t> BatteryMonitor::read_mv() {
     return static_cast<std::uint32_t>(batt);
 }
 
-TxState BatteryMonitor::evaluate_tx_state(std::uint32_t batt_mv,
-                                          const Config& cfg, TxState current) {
+logic::TxState BatteryMonitor::evaluate_tx_state(std::uint32_t batt_mv,
+                                                 const Config& cfg,
+                                                 logic::TxState current) {
     // §3.6 hysteresis:
     //  - On boot the caller passes kTxInhibited when batt < high water, which
     //    this function then re-evaluates.
     //  - TX_OK drops to inhibited when batt < low water.
     //  - TX_INHIBITED returns to OK when batt > high water.
     switch (current) {
-        case TxState::kTxOk:
+        case logic::TxState::kTxOk:
             if (batt_mv < cfg.batt_low_mv) {
-                return TxState::kTxInhibited;
+                return logic::TxState::kTxInhibited;
             }
-            return TxState::kTxOk;
-        case TxState::kTxInhibited:
+            return logic::TxState::kTxOk;
+        case logic::TxState::kTxInhibited:
             if (batt_mv > cfg.batt_high_mv) {
-                return TxState::kTxOk;
+                return logic::TxState::kTxOk;
             }
-            return TxState::kTxInhibited;
+            return logic::TxState::kTxInhibited;
     }
     return current;
 }

@@ -17,7 +17,7 @@
 #include "config_page.hpp"
 #include "constants.hpp"
 #include "https_server.hpp"
-#include "logic/rom_id.hpp"  // rom_id_from_hex, rom_id_to_hex
+#include "logic/rom_id.hpp"  // logic::rom_id_from_hex, logic::rom_id_to_hex
 #include "ntp_client.hpp"
 #include "power_manager.hpp"
 #include "sensor.hpp"
@@ -39,7 +39,7 @@ ScanSnapshot make_snapshot(Config& cfg, SensorManager& sensors,
     // table is empty (fresh device), SensorManager performs a bus scan.
     hal::RomIdList roms;
     for (const auto& m : cfg.mappings) {
-        if (auto rom = rom_id_from_hex(m.rom)) {
+        if (auto rom = logic::rom_id_from_hex(m.rom)) {
             if (!roms.try_push_back(*rom)) {
                 // A mapping table larger than the bus capacity is user
                 // input, not a programming error: keep the first
@@ -56,7 +56,8 @@ ScanSnapshot make_snapshot(Config& cfg, SensorManager& sensors,
     // in the config page (§5.1.3).
     if (roms.empty() && !discovered.empty()) {
         for (const auto& rom : discovered) {
-            cfg.mappings.push_back({rom_id_to_hex(rom), rom_id_to_hex(rom)});
+            cfg.mappings.push_back(
+                {logic::rom_id_to_hex(rom), logic::rom_id_to_hex(rom)});
         }
     }
     return snap;
@@ -82,7 +83,7 @@ std::optional<std::string> on_save(Config& cfg) {
 }  // namespace
 
 template<hal::BoardLike Board>
-[[noreturn]] void run_configure_mode(LedTask<Board>& led_task) {
+[[noreturn]] void run_configure_mode(logic::LedTask<Board>& led_task) {
     ESP_LOGI(kTag, "entering Configure mode");
 
     Config cfg;
@@ -119,7 +120,7 @@ template<hal::BoardLike Board>
 
     ESP_LOGI(kTag, "config server ready at https://%s/",
              ap.ip_address().c_str());
-    led_task.set_state(LedState::kConfig);
+    led_task.set_state(logic::LedState::kConfig);
 
     // Stay in Configure mode. The switch is checked periodically; moving to
     // Run requires a power re-gate, so we simply idle here.
@@ -128,7 +129,8 @@ template<hal::BoardLike Board>
     }
 }
 
-[[noreturn]] void run_configure_mode(LedTask<hal::board::Board>& led_task) {
+[[noreturn]] void run_configure_mode(
+    logic::LedTask<hal::board::Board>& led_task) {
     run_configure_mode<hal::board::Board>(led_task);
 }
 

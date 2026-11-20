@@ -16,7 +16,7 @@
 
 #include <cstddef>
 
-namespace thermo::certs {
+namespace thermo::logic::certs {
 
 // PEM-encoded server certificate (NUL-terminated).
 extern const char kServerCertPem[];
@@ -31,4 +31,4 @@ extern const char kServerKeyPem[];
 std::size_t server_cert_len();
 std::size_t server_key_len();
 
-}  // namespace thermo::certs
+}  // namespace thermo::logic::certs
