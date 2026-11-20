@@ -1,20 +1,18 @@
-# Developer Environment
+# Developer environment
 
-## Terminolgy
+## Terminology
 
-host: Computer running docker. Physical connections are made from the host to
-the dev board.
+- **Host:** the computer running Docker. Physical connections to the
+  development board are made from the host.
+- **Development board:** the ESP32 development board.
+- **Container:** the Docker container used for development. It contains the
+  ESP-IDF toolchain.
+- **IDE:** the integrated development environment. In this setup, CLion runs
+  on the host and connects to the container for development.
 
-dev board: ESP32 development board
+## Hardware setup
 
-container: Docker container used for development. Contains the ESP-IDF toolset.
-
-IDE: Integrated Development Environment. CLion instance running on the host
-that will connect to the container for development.
-
-## Hardware Setup to Laptop
-
-Connect the USB 3.0 SuperSpeed 4-Port Hub to the front-left USB-C port.
+Connect the USB 3.0 SuperSpeed four-port hub to the front-left USB-C port.
 
 - Connect hub USB1 to **S** (Serial) on the ESP32 dev board.
 - Connect hub USB2 to **V** (Volt) on the ESP32 dev board.
@@ -26,7 +24,7 @@ Wait 30 seconds.
 Use the buttons on the hub to enable USB1 and USB2; the ESP32 dev board should
 have a red light.
 
-On the host, verify that the ESP dev board is seen:
+From the host, verify that the ESP32 board is detected:
 
 ```console
 $ dmesg | tail -n 20 | grep USB
@@ -39,26 +37,26 @@ $ dmesg | tail -n 20 | grep USB
 $
 ```
 
-Optionally if ESP-IDF is installed on the host:
+If ESP-IDF is installed on the host, you can also check the board with:
+
 ```console
 $ esptool --port /dev/ttyACM0
 ```
 
-
-## Setup the Docker Environment
+## Docker environment setup
 
 The development container uses the **prebuilt** image
-`marcpawl/esp-idf:20261119c` (ESP-IDF v6.1 plus the project tooling: gh,
-PyGithub, esp-clang, and `pycodestyle`). The
-tag is pinned in `docker-compose.yml`, is never moved, and is the same image CI
-pulls, so there is nothing to build on a fresh machine — just pull it.
+`marcpawl/esp-idf:20261119c` (ESP-IDF v6.1 plus the project tooling: `gh`,
+PyGithub, esp-clang, and `pycodestyle`). The tag is pinned in
+`docker-compose.yml`, never moves, and is used by CI, so there is nothing to
+build on a fresh machine — just pull it.
 
 Pull the image and start the container:
 
 ```console
 $ ./scripts/dev.py pull
 ...
-$ docker compose up -d
+$ ./scripts/dev.py up
 ...
 $ ./scripts/dev.py shell esptool --port /dev/ttyACM0 chip-id
 esptool v5.4.0
@@ -94,10 +92,11 @@ The image ships the [GitHub CLI](https://cli.github.com/) (`gh`), but **the
 host's SSH keys do not log it in**. `gh` is an API client: `git push` uses
 `~/.ssh`, while `gh pr create`, `gh release`, `gh api`, and the rest call the
 GitHub REST API, which accepts only an OAuth token or a personal access token.
-So there are two independent ways to get an authenticated `gh` inside the
-container, and both are wired up:
+There are two independent ways to get an authenticated `gh` inside the
+container, and both are configured:
 
-**1. Pass the token through the environment (recommended).**
+#### 1. Pass the token through the environment (recommended)
+
 `docker-compose.yml` declares `GH_TOKEN:` and `GITHUB_TOKEN:` with no value,
 which makes compose take them from your host environment when they are set:
 
@@ -116,10 +115,11 @@ committed `docker-compose.yml`. Note that an *unset* host variable passes
 nothing (compose keeps the variable absent rather than making it empty), so a
 machine without the variable simply gets an unauthenticated `gh`.
 
-**2. Share the host's `gh` state.** `docker-compose.yml` bind-mounts the host's
-`~/.config/gh` (read/write) at both possible container homes, like
-`~/.ssh`, so when `gh auth login` stored the token in
-`hosts.yml` the container reads the same login:
+#### 2. Share the host's `gh` state
+
+`docker-compose.yml` bind-mounts the host's `~/.config/gh` (read/write) at
+both possible container homes, like `~/.ssh`, so when `gh auth login` stored
+the token in `hosts.yml` the container reads the same login:
 
 ```console
 $ ./scripts/dev.py shell gh auth status
@@ -225,7 +225,7 @@ and `CCACHE_DIR=/tmp/.cache/ccache` for every uid except 1000 (uid 1000 owns
 `/home/dev` and keeps it, including the persisted cache volume). GitHub's
 runners are uid 1001, so CI depends on this.
 
-### Updating / publishing the dev image
+### Updating or publishing the dev image
 
 The `Dockerfile` is kept so the image can still be rebuilt, but a rebuild
 is **not** part of the normal workflow. When the `Dockerfile` changes (or the
@@ -256,7 +256,7 @@ $ docker push marcpawl/esp-idf:YYYYMMDD
 so `./scripts/dev.py self-check` catches a half-done bump.
 
 To try a Dockerfile change without touching the pinned image, build it under a
-throw-away tag and run it directly with the compose service's mounts:
+throwaway tag and run it directly with the compose service's mounts:
 
 ```console
 $ ./scripts/dev.py image            # docker build -t esp32-sensors-dev:local .
@@ -266,59 +266,65 @@ $ docker run --rm -it --init -v "$PWD:/project" -v /dev:/dev \
 ```
 
 (`docker compose build` also works, but it overwrites the locally cached copy
-of the pinned tag, so `docker compose pull` afterwards to restore it.)
+of the pinned tag. Run `docker compose pull` afterwards to restore it.)
 
 ## CLion
 
 Version: CLion 2026.3
 
-### CLion IDE Usage
+### CLion IDE usage
 
-On host:
+On the host:
+
+```console
+$ ./scripts/dev.py up
+$ ./scripts/dev.py build
+$ ./scripts/dev.py clion-compdb
+$ ./scripts/dev.py clion-archive
 ```
-cd docker
-docker compose up -d
-```
 
-Change the CLion registry as described in
-[SUPPORT-A-258](https://youtrack.jetbrains.com/articles/SUPPORT-A-258) to not
-download the IDE when connecting to dev containers.
+Seed the backend archive before starting CLion to avoid a long download from
+the internet. Copy
+[`CLion-2026.3.0.1.tar.gz`](https://download-cdn.jetbrains.com/cpp/CLion-2026.3.0.1.tar.gz?_gl=1*hqmpvq*_gcl_au*MTY1MDY1MTk3OS4xNzkwNjI3MTY2Li0uLS4xNzkwNzE1MjkyLjc4ODEyNDAyLjE3OTEwMzMxMzcuMTc5MTAzMzEzNg..*FPAU*MTY1MDY1MTk3OS4xNzkwNjI3MTY2*_ga*MTg4OTA5NTg0NC4xNzkwNjI3MTY2*_ga_9J976DJZ68*czE3OTUwMjg1MTUkbzI2JGcwJHQxNzk1MDI4NTM0JGo0MSRsMCRoMA..&_cl=Mjt7ImFsbEFsbG93ZWQiOnRydWUsImFsbG93U2FsZSI6ZmFsc2UsInJlZ2lvbiI6IkcwIiwiYW5zd2VyZWQiOnRydWUsInRpbWVzdGFtcCI6IjIwMjYtMDktMjhUMjA6MjY6MDUuNTA0WiJ9&Expires=1795114947&Signature=HhaZcIaq27pipi-AFDhfn~WZaU-~YZPu1lP6FK8loMyYCcsL5ea415C0HLbvtwydme43pBGuTSJ-1q28T8tne3ybLQLTdzRBXDJs3igLmNqJyxERexOG~yDZGsF70qwFUqfjeTIBKdMuo~hAjvmOQzZsEP94Nbgb4suMq~mZGhXgBlingQ1pw0pMVkLercE8ma0aoKbgiYHWmksXWQfmGcv03lin7t2E9zjs6XvZZJP1Thy5CtfPJTyFN-u5Tr48VA3GWCAJ6beXk4yvtvY6XxdQaG7-qtf9FomDQqNOmgUcxT~SWTvOGoTRuU5GJ0Hv~BtmZQT7Cjk2myyOMjBkMg__&Key-Pair-Id=K2PI9GMSMWJY0)
+into `~/Downloads/`.
 
-1. start CLion
-2. Close any opened projects.
-3.  At the welcome to CLion screen
-3.1  select "Remote Connections", "ssh"
-3.1.1   use "ssh -p 2222 dev@localhost" and connect
-3.1.2   use project directory /project
-3.1.3   Open Project
-3.2  Wait for "Downloading IDE backend..." to complete.
+1. Start CLion.
+2. Close any open projects.
+3. At the welcome screen, select **Remote Connections → ssh**.
+4. Connect with `ssh -p 2222 dev@localhost`.
+5. Set the project directory to `/project/.clion/compile_commands.json` and
+   select **Open Project**.
+6. Provide the path to your SSH key, `~/.ssh/id_rsa.pub`.
 
 #### Offline backend archive
 
 CLion installs the remote backend through the Toolbox agent, which downloads
 a large `CLion-*.tar.gz` into the container. To install from an archive that
-is already on the host instead:
+is already on the host:
 
 ```console
 $ ./scripts/dev.py clion-archive
 ```
 
-The command uses the only `~/Downloads/CLion-*.tar.gz`, stops the Toolbox
-agent, clears an interrupted download, and copies the archive to the cache
-path CLion reads. Pass a path explicitly when several archives exist.
-Reconnect CLion afterwards; it installs from the seeded archive instead of
-downloading it.
+The command:
 
+- uses the only `~/Downloads/CLion-*.tar.gz` archive;
+- stops the Toolbox agent;
+- clears an interrupted download; and
+- copies the archive to the cache path CLion reads.
 
-### CLion Configuration Notes
+Pass a path explicitly when several archives exist. Reconnect CLion
+afterwards; it installs from the seeded archive instead of downloading it.
 
+### CLion configuration notes
 
-**ESP-IDF environment in CLion:** Inside the Docker container, ESP-IDF's
-environment is already sourced by the image entrypoint, so the environment-file
-mechanism is typically unnecessary. If CLion complains about missing `idf.py`,
-point its **Environment file** setting at `/opt/esp/idf/export.sh` (path inside
-the image) or leave it blank and rely on the container's entrypoint.
+**ESP-IDF environment in CLion:** inside the Docker container, ESP-IDF's
+environment is already sourced by the image entrypoint, so the
+environment-file mechanism is typically unnecessary. If CLion complains about
+missing `idf.py`, point its **Environment file** setting at
+`/opt/esp/idf/export.sh` (a path inside the image) or leave it blank and rely
+on the container's entrypoint.
 
-**Recommended workflow:** Use CLion for editing, code navigation, and CMake
+**Recommended workflow:** use CLion for editing, code navigation, and CMake
 configuration; use CLion's built-in terminal (`Alt+F12`) for `idf.py`
 operations (build, flash, monitor, menuconfig).
