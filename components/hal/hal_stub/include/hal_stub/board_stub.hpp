@@ -56,6 +56,8 @@ class BoardStub {
     using LedType = Led;
     using SwitchType = Switch;
 
+    enum class Power { Off = 0, On };
+
     // `pins` describes the wiring; see `BoardPins`. The stub ignores the pin
     // numbers but keeps the LED labels for logging. Constructs the devices but
     // does not touch any hardware — call init_all() for that.
@@ -139,6 +141,10 @@ class BoardStub {
 
     [[nodiscard]] WifiRadio const& wifi() const noexcept { return wifi_; }
 
+    [[nodiscard]] Power power() const noexcept { return power_; }
+
+    void set_power(Power power) noexcept { power_ = power; }
+
     // --- Deep sleep (§3.8) -------------------------------------------------
 
     // Stubbed deep sleep: records `duration`, arms the wake cause the real
@@ -187,6 +193,7 @@ class BoardStub {
     WakeCauses wakeup_causes_ = wake_cause_bit(WakeCause::kUndefined);
     // Duration last passed to `deep_sleep_start()`, if any.
     std::optional<std::chrono::seconds> last_deep_sleep_;
+    Power power_ = Power::Off;
 };
 
 static_assert(BoardLike<BoardStub>,

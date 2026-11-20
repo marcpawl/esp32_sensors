@@ -59,7 +59,7 @@ extern "C" void app_main(void) {
     // The board is shared: it is heap-allocated and held by a `std::shared_ptr`
     // so it can be handed to the console task and the application
     // (`logic/led_task.hpp` takes a `std::shared_ptr<Board>` for any
-    // `hal::BoardLike` board and does not own it) without the board being
+    // `hal::BoardLike` board and does not own it) without the board beingq
     // destroyed while either still uses it.
     auto board = std::make_shared<thermo::hal::stub::BoardStub>(
         thermo::hal::stub::BoardStub::create({}));
@@ -71,5 +71,11 @@ extern "C" void app_main(void) {
     thermo::ConsoleTask console(board);
 
     thermo::logic::Application<thermo::hal::stub::BoardStub> app(board);
+
+    // Wait until the power is turned on.
+    while (board->power() == thermo::hal::stub::BoardStub::Power::Off) {
+        thermo::espidf_cpp::vTaskDelay(std::chrono::seconds{1});
+    }
+
     app.application_main();
 }
