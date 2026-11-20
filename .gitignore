@@ -64,6 +64,27 @@ CMakeCache.txt
 CMakeFiles/
 compile_commands.json
 
+# CLion compilation-database project (`scripts/dev.py clion-compdb`). CLion
+# creates its own .idea/ next to the imported database; keeping it here avoids
+# overwriting the tracked CMake project's .idea/ in the repository root.
+#
+# The generated database stays local. These four .idea files are shared:
+#
+#   .clion/.idea/.gitignore   local-ignore rules for this directory
+#   .clion/.idea/editor.xml   editor settings
+#   .clion/.idea/misc.xml     compilation-database project/root mapping
+#   .clion/.idea/vcs.xml      VCS mapping
+#
+# Everything else, including workspace.xml and compile_commands.json, is
+# local state.
+.clion/*
+!.clion/.idea/
+.clion/.idea/*
+!.clion/.idea/.gitignore
+!.clion/.idea/editor.xml
+!.clion/.idea/misc.xml
+!.clion/.idea/vcs.xml
+
 # IDE / editor
 #
 # CLion configuration is handled by *explicitly listing* each file rather than

@@ -96,11 +96,12 @@
   compile_commands.json, each one's codemodel names project
   `esp32_sensors_subprojects`, and the only targets are the aggregate
   custom targets - all of type UTILITY, i.e. no compilable translation units.
-  A profile has no per-profile source directory, so fixing this means opening
-  the subprojects as separate CLion projects, or giving CLion a merged
-  compile_commands.json for the root. Until then, navigation and refactorings
-  are not driven by these profiles; the ELF run configurations still work
-  because their executable path is given explicitly.
+  A profile has no per-profile source directory. Code model, navigation and
+  tooltips come instead from `scripts/dev.py clion-compdb`, which merges the
+  subprojects' compile databases into .clion/compile_commands.json for CLion
+  to open as a compilation-database project (see AGENTS.md). Until then,
+  navigation and refactorings are not driven by these profiles; the ELF run
+  configurations still work because their executable path is given explicitly.
 -->
 <project version="4">
   <component name="CMakeSharedSettings">

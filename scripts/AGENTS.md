@@ -19,6 +19,8 @@ invoked from the host.
 |---|---|---|
 | host | `pull` | Pull the pinned prebuilt dev image |
 | host | `image` | Build the dev image locally from the `Dockerfile` |
+| host | `up` | Start the `dev` service with `docker compose up -d` |
+| host | `down` | Stop/remove the dev containers with `docker compose down --remove-orphans` |
 | both | `submodules` | Fetch the pinned git submodules (`third_party/sml`) |
 | both | `build [--analyzer[=BOOL]] [DIRECTORY...]` | Build every project in/under the directories (from the root, the root aggregator builds everything); the analyzer is off by default, `--analyzer` enables it |
 | both | `build-test-espidf-cpp` | Build the `libespidfcpp` unit tests for `linux` |
@@ -36,6 +38,8 @@ invoked from the host.
 | both | `shell [CMD...]` | Run a command in the container; no arguments = login shell |
 | host | `ssh [CMD...]` | SSH into the running dev container; no arguments = interactive login shell |
 | host | `clion-archive [ARCHIVE]` | Copy a local `CLion-*.tar.gz` into the container's Toolbox download cache |
+| both | `clion-compdb` | Merge every subproject's `compile_commands.json` into `.clion/compile_commands.json` for CLion's code model |
+| host | `clion-manual-test` | Start CLion and prompt through the manual tooltip check; refuses in CI |
 | both | `complete` | Internal: list subcommands matching a prefix |
 | host | `install-hooks` | Install the git commit hooks |
 
@@ -61,12 +65,77 @@ It authenticates with the host's `~/.ssh` keys, which the container already
 mounts read-only, and runs the command through a login shell in `/project`.
 `DEV_SSH_PORT` moves the host-side port (default 2222).
 
+`up` is host-only. It runs `docker compose up -d` for the `dev` service using
+the repository's compose file, so the container is already running before
+`ssh`, a Dev Container, or a CLion backend connects. `down` is its host-only
+counterpart: it runs `docker compose down --remove-orphans`, removing the
+container and its in-memory state such as the Toolbox logs.
+
 `clion-archive` is host-only too. It copies a local `CLion-*.tar.gz` into the
 container path the Toolbox agent downloads the remote backend to, so CLion
 installs from that file instead of fetching it. With no argument it uses the
 only `~/Downloads/CLion-*.tar.gz`. It stops the Toolbox agent first, clears an
 interrupted download's `.tmp`/`journal`, and scp's the archive as a `.part`
 file that is renamed only after its SHA-256 matches.
+
+### `clion-compdb`
+
+The root CMake project is an aggregator with no C/C++ code model. This command
+merges the databases written by `build` into `.clion/compile_commands.json`,
+which CLion opens as one compilation-database project covering every source.
+The file is generated, git-ignored, and safe to delete.
+
+Databases are read in a fixed order:
+
+- `mcgowan` (Xtensa firmware)
+- the other chip projects, e.g. the `esp_timer` board suite
+- the `linux` suites and application, in path order
+
+The first database that lists a source wins, so a file built for several
+targets keeps the ESP-IDF include paths and defines; host-only test files come
+from their `linux` project. Command lines are copied unchanged, including
+their container-absolute `/project/...` and `/opt/esp/...` paths.
+
+Run `build` first: a project without a database is skipped with a warning.
+After a rebuild, run `clion-compdb` again and reload the project in CLion.
+See the root `AGENTS.md` for opening the database as a CLion project.
+
+CLion's shared project files for that database are committed under
+`.clion/.idea/`: `.gitignore`, `editor.xml`, `misc.xml`, and `vcs.xml`.
+`misc.xml` maps the content root to `/project`, so opening
+`/project/.clion/compile_commands.json` from a fresh clone does not require
+*Change Project Root*. The generated database and `workspace.xml` stay local.
+
+### `clion-manual-test`
+
+This host-only wizard records a manual check of the tooltip workflow. Refuse
+to run it in CI (`CI` set) or inside the container: it needs the host's
+JetBrains Toolbox launcher and a terminal for prompts.
+
+The launcher is chosen in this order:
+
+- `CLION_LAUNCHER`, which may include arguments
+- `clion` on `PATH`
+- the Toolbox `scripts/clion`, `scripts/clion1`, and `apps/clion/bin/clion`
+  paths under the host user's home directory
+
+The command checks for `.clion/compile_commands.json`, then calls
+`dev.py down` and `dev.py up`. If `~/Downloads/CLion-*.tar.gz` exists, it calls
+`dev.py clion-archive` to seed the backend archive; the first manual step
+then requires Toolbox log evidence that the archive was reused from the
+local download cache. A "will be reused as a cached previous download" line
+or a "Correct checksum for <cache path>" line passes even when the reuse
+line also names the remote URL; a remote download line fails. Without an
+archive, that step tells the user to wait for *Downloading IDE backend...*
+to finish. CLion is started without blocking.
+
+The wizard prints five manual steps and asks for `y` or `n` after each one.
+An invalid answer is rejected, EOF aborts the run, and `n` fails the run and
+names the step. Only five confirmed steps, plus the backend log check when
+an archive was seeded, produce a pass. The logic lives in
+`scripts/clion_manual_test.py`, with all process starts and input injected so
+`self-check` can cover it without launching an IDE. Running that file
+directly also works; it delegates to the same `dev.py` command.
 
 `build`, `test-linux`, `test-esp32`, and `clang-tidy` fetch missing submodules
 first.
@@ -97,9 +166,10 @@ Stdlib-`unittest` tests for `dev.py` itself, run by
 `scripts/dev.py self-check`. It pins the format/pycodestyle source discovery,
 directory scoping for build/test-linux/test-esp32/format/tidy, the staged
 format check, the run-configuration invariants, the test commands, clang-tidy
-wiring, the `sml` submodule pin, that `dev.py` is on the PATH of the pinned
-image for every kind of shell, and that `self-check` is host-only. Add
-coverage there when changing `dev.py`.
+wiring, the `sml` submodule pin, the `clion-compdb` merge order and atomic
+write, that `dev.py` is on the PATH of the pinned image for every kind of
+shell, and that `self-check` is host-only. Add coverage there when changing
+`dev.py`.
 
 ## Shell completion
 

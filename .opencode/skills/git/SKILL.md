@@ -268,3 +268,25 @@ skipped:
 
 Do not wait for the checks before asking for review. A single change to
 source, a `CMakeLists.txt`, or `scripts/` means the checks run as usual.
+
+## Branches
+
+### Protected branches
+
+Branches whose names match `v[0-9]+.[0-9]+(\.[0-9]+)?` are **protected**.
+Do not remove them, either locally or remotely.
+
+### Stale branches
+
+A **stale branch** is an unprotected branch that:
+
+- is not the current branch; and
+- has no uncommitted changes in the working tree.
+
+### Deleting stale branches
+
+When asked to delete stale branches:
+
+1. Gather the branches that qualify as stale.
+2. Present the list for confirmation before deleting anything.
+3. Delete only the branches the user confirms.

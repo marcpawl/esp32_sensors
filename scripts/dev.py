@@ -9,13 +9,13 @@
 # specifics live in one place.
 #
 # Usage:
-#   scripts/dev.py [pull|image|submodules|build|build-test-espidf-cpp|flash|\
-#                   monitor|menuconfig|test|test-utility|test-hal-common|\
+#   scripts/dev.py [pull|image|up|submodules|build|build-test-espidf-cpp|\
+#                   flash|monitor|menuconfig|test|test-utility|test-hal-common|\
 #                   test-hal-stub|test-logic|test-espidf-cpp|\
 #                   test-simulator|\
 #                   test-esp32-timer|self-check|format|format-check|\
 #                   format-check-staged|pycodestyle|clang-tidy|install-hooks|\
-#                   shell|ssh|clion-archive]
+#                   shell|ssh|clion-archive|clion-compdb|clion-manual-test]
 #   scripts/dev.py --help        # full help, including per-command details
 #
 # Environment:
@@ -47,6 +47,13 @@ import sys
 import tempfile
 import time
 from typing import Callable, NamedTuple
+
+from clion_manual_test import (
+    CLION_LAUNCHER_ENV,
+    find_clion_launcher,
+    prompt_yes_no,
+    run_manual_test,
+)
 
 # Always operate from the repository root, regardless of the caller's cwd.
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -168,6 +175,9 @@ DEV_SSH_START_TIMEOUT_SECONDS = 30.0
 # `<first 9 hex of sha256>-<filename from the download URL>`, and its
 # downloader treats an existing file at that path as a cached download.
 TOOLBOX_DOWNLOAD_DIR = "/home/dev/.cache/JetBrains/Toolbox/download"
+TOOLBOX_LOG = (
+    "/home/dev/.local/share/JetBrains/Toolbox/logs/toolbox-cli.latest.log"
+)
 # A character class keeps `pkill -f` from matching the shell that runs it,
 # whose command line also contains this text (the `ps | grep [p]attern` trick).
 TOOLBOX_AGENT_REGEX = "com.jetbrains.toolbox.[M]ainKt"
@@ -261,6 +271,12 @@ DEFAULT_TARGET = "esp32s3"
 FW_BUILD_DIR = "build_esp32s3"
 TEST_BUILD_DIR = "build_linux"
 ROOT_BUILD_DIR = "build_root"
+
+# CLion's compilation-database project is kept in its own directory: CLion
+# writes a `.idea/` next to the compile_commands.json it imports, and doing
+# that in the repo root would overwrite the tracked CMake project's config.
+# The files it resolves are still rooted at /project; see AGENTS.md.
+CLION_DB_DIRECTORY = ".clion"
 
 # Directories never descended into while discovering projects. Build output
 # holds no sources, `.git` is not a tree of either, and the vendored trees are
@@ -410,6 +426,83 @@ def _repo_relative(path: Path, root: Path = REPO_ROOT) -> str:
         return path.resolve().relative_to(root.resolve()).as_posix()
     except ValueError:
         return path.resolve().as_posix()
+
+
+def _project_compile_db(project: Project) -> Path:
+    """The compile database `build` writes for `project`. Pure."""
+    build_dir = TEST_BUILD_DIR if project.target == "linux" else FW_BUILD_DIR
+    return project.directory / build_dir / "compile_commands.json"
+
+
+def _clion_databases(root: Path = REPO_ROOT) -> list[tuple[Project, Path]]:
+    """Databases to merge, in precedence order, paired with their projects.
+
+    Firmware first, then the other chip projects, then the linux projects in
+    path order. Because the merge takes the first entry for a source (see
+    `_merge_compilation_databases`), a file compiled by several projects keeps
+    the ESP-IDF include paths and defines the chip build sees. Host-only
+    test files still come from their linux project. Missing databases are
+    omitted, so an unbuilt project cannot block the others.
+    """
+    projects = sorted(
+        _discover_projects(root),
+        key=lambda project: (
+            project.directory != root / FIRMWARE_DIR,
+            project.target == "linux",
+            project.directory.as_posix(),
+        ),
+    )
+    return [
+        (project, database)
+        for project in projects
+        if (database := _project_compile_db(project)).is_file()
+    ]
+
+
+def _merge_compilation_databases(databases: list[Path]) -> list[dict]:
+    """One entry per source file, from the first database that lists it.
+
+    Each entry is copied verbatim: the subprojects record container-absolute
+    paths (`/project/...`, `/opt/esp/...`), which is what CLion needs when its
+    backend runs inside the dev container.
+    """
+    entries: list[dict] = []
+    seen: set[str] = set()
+    for database in databases:
+        for entry in json.loads(database.read_text()):
+            source = entry["file"]
+            if source in seen:
+                continue
+            seen.add(source)
+            entries.append(entry)
+    return entries
+
+
+def _write_compilation_database(
+    entries: list[dict], destination: Path
+) -> None:
+    """Write `entries` as JSON, replacing `destination` atomically.
+
+    CLion may reload the file while it is being regenerated, so the JSON is
+    written to a sibling temp file and renamed into place only once complete.
+    """
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=destination.parent,
+        prefix=f".{destination.name}.",
+        suffix=".tmp",
+        delete=False,
+    ) as handle:
+        temporary = Path(handle.name)
+        try:
+            json.dump(entries, handle, indent=2)
+            handle.write("\n")
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
+    os.replace(temporary, destination)
 
 
 # The firmware app binary (named after the mcgowan project).
@@ -863,6 +956,33 @@ def cmd_image() -> int:
         print("Image cannot be built while in container", file=sys.stderr)
         return 1
     return run(_image_command())
+
+
+def cmd_up() -> int:
+    """Start the long-running dev container in the background.
+
+    Runs `docker compose up -d` for the `dev` service, the same container
+    `ssh` connects to and CLion's Dev Container uses. Host-only: compose is
+    not available inside the container.
+    """
+    if is_in_container():
+        print("up: run this on the host; inside use `shell`.", file=sys.stderr)
+        return 1
+    return run(_compose_command("up", "-d", DEV_SSH_SERVICE))
+
+
+def cmd_down() -> int:
+    """Stop and remove the long-running dev container.
+
+    Runs `docker compose down --remove-orphans` with the repository's compose
+    file, so a later `up` starts from a clean container and a fresh Toolbox
+    log. Host-only, like `up`.
+    """
+    if is_in_container():
+        print("down: run this on the host; inside use `shell`.",
+              file=sys.stderr)
+        return 1
+    return run(_compose_command("down", "--remove-orphans"))
 
 
 def _idf(directory: str, build_dir: str, *args: str) -> list[str]:
@@ -2450,6 +2570,192 @@ def cmd_clion_archive(archive: str | None) -> int:
     return 0
 
 
+def cmd_clion_compdb() -> int:
+    """Merge the subprojects' compile databases for CLion's code model.
+
+    The root CMake project is an aggregator with no C/C++ code model, so
+    hovering an ESP-IDF declaration cannot reach its Doxygen comments. This
+    command combines the databases that `scripts/dev.py build` writes into
+    `.clion/compile_commands.json`, which CLion opens as a compilation
+    database project. The first database listing a source wins: firmware,
+    then the other chip projects, then the linux projects, so shared sources
+    keep the ESP-IDF include paths that make tooltips work. Open that file as
+    a project inside the dev container, set its project root to /project,
+    and choose a container-local System toolchain.
+    """
+    change_to_container()
+
+    found = _clion_databases()
+    if not found:
+        print(
+            "clion-compdb: no compile databases found; "
+            "run `scripts/dev.py build` first.",
+            file=sys.stderr,
+        )
+        return 1
+
+    databases = [database for _, database in found]
+    entries = _merge_compilation_databases(databases)
+
+    known = set(databases)
+    for project in _discover_projects(REPO_ROOT):
+        database = _project_compile_db(project)
+        if database not in known:
+            print(
+                f"clion-compdb: no {_repo_relative(database)}; "
+                f"build {_repo_relative(project.directory)} first",
+                file=sys.stderr,
+            )
+
+    destination = REPO_ROOT / CLION_DB_DIRECTORY / "compile_commands.json"
+    _write_compilation_database(entries, destination)
+    print(
+        f"clion-compdb: wrote {len(entries)} entries to "
+        f"{_repo_relative(destination)}"
+    )
+    return 0
+
+
+def _launch_clion(command: str) -> int:
+    """Start CLion detached on the host, without waiting for it to exit."""
+    argv = shlex.split(command)
+    if not argv:
+        print("clion-manual-test: empty CLion launcher", file=sys.stderr)
+        return 1
+    try:
+        subprocess.Popen(argv, cwd=REPO_ROOT, start_new_session=True)
+    except OSError as error:
+        print(f"clion-manual-test: could not start CLion: {error}",
+              file=sys.stderr)
+        return 1
+    return 0
+
+
+def _dev_py_command(command: str) -> int:
+    """Run another `dev.py` command through its documented entry point."""
+    script = REPO_ROOT / "scripts" / "dev.py"
+    return run([sys.executable, str(script), command])
+
+
+def _is_clion_archive_log_line(line: str) -> bool:
+    """True for a Toolbox log line about the CLion backend archive. Pure."""
+    lowered = line.lower()
+    return "clion-" in lowered and ".tar.gz" in lowered
+
+
+def _is_cached_clion_archive_line(line: str) -> bool:
+    """True when a log line proves the archive came from the local cache.
+
+    Toolbox names the cached file by checksum and logs a "will be reused"
+    line that also mentions the remote URL. It then verifies the local file
+    with a "Correct checksum for <cache path>" line. Neither is a download.
+    """
+    lowered = line.lower()
+    if not _is_clion_archive_log_line(lowered):
+        return False
+    return (
+        "will be reused as a cached previous download" in lowered
+        or f"correct checksum for {TOOLBOX_DOWNLOAD_DIR.lower()}/" in lowered
+    )
+
+
+def _backend_download_log_verdict(stdout: str) -> tuple[bool, str]:
+    """Classify a fresh Toolbox log. Pure."""
+    lines = [line.strip() for line in stdout.splitlines()]
+    cached = [line for line in lines if _is_cached_clion_archive_line(line)]
+    downloads = [
+        line
+        for line in lines
+        if _is_clion_archive_log_line(line)
+        and not _is_cached_clion_archive_line(line)
+        and re.search(r"download|fetch", line, re.IGNORECASE)
+    ]
+    if downloads:
+        return False, (
+            "Toolbox log recorded a CLion archive download: "
+            + downloads[-1][:120]
+        )
+    if cached:
+        return True, (
+            "Toolbox log shows the CLion archive was reused from cache"
+        )
+    return False, (
+        "Toolbox log has no evidence that the CLion archive was reused"
+    )
+
+
+def _backend_download_log_check() -> tuple[bool, str]:
+    """Check the fresh Toolbox log for local reuse of the seeded archive.
+
+    The wizard removes the container first, so this log belongs only to the
+    run being tested. A seeded archive must produce a cache-reuse or local
+    checksum line, not a remote download.
+    """
+    command = _compose_command(
+        "exec", "-T", DEV_SSH_SERVICE, "cat", TOOLBOX_LOG,
+    )
+    result = subprocess.run(
+        command, cwd=REPO_ROOT, capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or f"exit {result.returncode}"
+        return False, f"could not read {TOOLBOX_LOG}: {detail}"
+
+    return _backend_download_log_verdict(result.stdout)
+
+
+def cmd_clion_manual_test() -> int:
+    """Start CLion and guide the host-only manual tooltip check (never CI).
+
+    Preflight checks the host, the absence of `CI`, a built compilation
+    database, and a CLion launcher. The launcher is taken from
+    `CLION_LAUNCHER`, then PATH, then the JetBrains Toolbox locations. The
+    wizard starts the dev container, starts CLion detached, and asks for an
+    explicit yes/no after each manual IDE step.
+    """
+    if is_in_container():
+        print("clion-manual-test: run this on the host.", file=sys.stderr)
+        return 1
+    if os.environ.get("CI"):
+        print("clion-manual-test: refusing to run on CI.", file=sys.stderr)
+        return 1
+
+    launcher = find_clion_launcher()
+    if not launcher:
+        print(
+            "clion-manual-test: no CLion launcher found; "
+            f"set {CLION_LAUNCHER_ENV}",
+            file=sys.stderr,
+        )
+        return 1
+
+    archives = _clion_archive_candidates()
+    if len(archives) > 1:
+        print(
+            "clion-manual-test: several CLion archives found; pass one "
+            "explicitly to `clion-archive`",
+            file=sys.stderr,
+        )
+        for archive in archives:
+            print(f"  {archive}", file=sys.stderr)
+        return 1
+    archive_path = str(archives[0]) if archives else None
+
+    return run_manual_test(
+        launcher=launcher,
+        start_container=lambda: _dev_py_command("up"),
+        launch_clion=_launch_clion,
+        prompt=prompt_yes_no,
+        database_exists=lambda: (
+            REPO_ROOT / CLION_DB_DIRECTORY / "compile_commands.json"
+        ).is_file(),
+        remove_containers=lambda: _dev_py_command("down"),
+        archive_path=archive_path,
+        seed_archive=lambda: _dev_py_command("clion-archive"),
+        check_backend_log=_backend_download_log_check,
+    )
+
+
 def cmd_complete() -> int:
     """Print the command names matching a prefix (used by shell completion).
 
@@ -2643,6 +2949,8 @@ def cmd_format_check_staged(arguments: list[str]) -> int:
 COMMANDS = {
     "pull": cmd_pull,
     "image": cmd_image,
+    "up": cmd_up,
+    "down": cmd_down,
     "submodules": cmd_submodules,
     "build": cmd_build,
     "build-test-espidf-cpp": cmd_build_test_espidf_cpp,
@@ -2661,6 +2969,8 @@ COMMANDS = {
     "shell": cmd_shell,
     "ssh": cmd_ssh,
     "clion-archive": cmd_clion_archive,
+    "clion-compdb": cmd_clion_compdb,
+    "clion-manual-test": cmd_clion_manual_test,
     "complete": cmd_complete,
 }
 

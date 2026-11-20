@@ -36,6 +36,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
+import clion_manual_test  # noqa: E402
 import dev  # noqa: E402  (import after sys.path is prepared)
 
 
@@ -439,6 +440,710 @@ class ClionArchiveTests(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertEqual(calls, [])
         self.assertIn("several CLion archives", err.getvalue())
+
+
+class ClionCompilationDatabaseTests(unittest.TestCase):
+    """`clion-compdb` merges the subproject databases for CLion."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name).resolve()
+        for relative, name, target in (
+            ("components/z/host", "z", "linux"),
+            ("mcgowan", "mcgowan", "esp32s3"),
+            ("components/a/host", "a", "linux"),
+            ("components/b/board", "b", "esp32s3"),
+        ):
+            directory = self.root / relative
+            directory.mkdir(parents=True)
+            (directory / "CMakeLists.txt").write_text(
+                "include($ENV{IDF_PATH}/tools/cmake/project.cmake)\n"
+                f"project({name})\n"
+            )
+            (directory / "sdkconfig.defaults").write_text(
+                f'CONFIG_IDF_TARGET="{target}"\n'
+            )
+
+    def _write_db(self, relative, target, sources, tag):
+        """Write one project's database with a tag in every command."""
+        build = self.root / relative / (
+            dev.TEST_BUILD_DIR if target == "linux" else dev.FW_BUILD_DIR
+        )
+        build.mkdir(parents=True, exist_ok=True)
+        database = build / "compile_commands.json"
+        database.write_text(json.dumps([
+            {
+                "directory": str(build),
+                "file": source,
+                "command": f"cc -c {source} -D{tag}",
+            }
+            for source in sources
+        ]))
+        return database
+
+    def test_command_is_registered(self):
+        self.assertIn("clion-compdb", dev.COMMANDS)
+        self.assertIs(dev.COMMANDS["clion-compdb"], dev.cmd_clion_compdb)
+
+    def test_database_order_is_firmware_board_then_host(self):
+        databases = [
+            self._write_db(relative, target, [], "X")
+            for relative, target in (
+                ("components/z/host", "linux"),
+                ("components/a/host", "linux"),
+                ("components/b/board", "esp32s3"),
+                ("mcgowan", "esp32s3"),
+            )
+        ]
+        # The two host projects are in path order, not creation order.
+        self.assertEqual(
+            [database for _, database in dev._clion_databases(self.root)],
+            [databases[3], databases[2], databases[1], databases[0]],
+        )
+
+    def test_missing_database_is_skipped(self):
+        database = self._write_db("mcgowan", "esp32s3", [], "FW")
+        self.assertEqual(
+            [path for _, path in dev._clion_databases(self.root)],
+            [database],
+        )
+
+    def test_first_database_listing_a_source_wins(self):
+        self._write_db("mcgowan", "esp32s3", ["/shared.cpp", "/fw.cpp"], "FW")
+        self._write_db(
+            "components/b/board", "esp32s3", ["/shared.cpp"], "BOARD"
+        )
+        self._write_db(
+            "components/a/host", "linux", ["/shared.cpp", "/host.cpp"], "HOST"
+        )
+        entries = dev._merge_compilation_databases([
+            database for _, database in dev._clion_databases(self.root)
+        ])
+        self.assertEqual(
+            [entry["file"] for entry in entries],
+            ["/shared.cpp", "/fw.cpp", "/host.cpp"],
+        )
+        self.assertEqual(
+            entries[0]["command"], "cc -c /shared.cpp -DFW"
+        )
+
+    def test_entries_keep_their_original_command_line(self):
+        database = self._write_db("mcgowan", "esp32s3", ["/fw.cpp"], "FW")
+        self.assertEqual(
+            dev._merge_compilation_databases([database]),
+            json.loads(database.read_text()),
+        )
+
+    def test_write_replaces_the_file_with_complete_json(self):
+        destination = self.root / dev.CLION_DB_DIRECTORY / (
+            "compile_commands.json"
+        )
+        dev._write_compilation_database([{"file": "/x.cpp"}], destination)
+        self.assertEqual(
+            json.loads(destination.read_text()), [{"file": "/x.cpp"}]
+        )
+        self.assertEqual(list(destination.parent.iterdir()), [destination])
+
+    def test_command_reports_when_no_database_exists(self):
+        originals = dev.change_to_container, dev._clion_databases
+        err = io.StringIO()
+        try:
+            dev.change_to_container = lambda *args, **kwargs: None
+            dev._clion_databases = lambda: []
+            with redirect_stderr(err):
+                rc = dev.cmd_clion_compdb()
+        finally:
+            dev.change_to_container, dev._clion_databases = originals
+        self.assertEqual(rc, 1)
+        self.assertIn("no compile databases", err.getvalue())
+
+    def test_command_merges_and_warns_about_unbuilt_projects(self):
+        self._write_db("mcgowan", "esp32s3", ["/shared.cpp"], "FW")
+        self._write_db("components/a/host", "linux", ["/host.cpp"], "HOST")
+        originals = (
+            dev.change_to_container,
+            dev._clion_databases,
+            dev.REPO_ROOT,
+        )
+        discover = dev._clion_databases
+        err, out = io.StringIO(), io.StringIO()
+        try:
+            dev.change_to_container = lambda *args, **kwargs: None
+            dev._clion_databases = lambda: discover(self.root)
+            dev.REPO_ROOT = self.root
+            with redirect_stderr(err), redirect_stdout(out):
+                rc = dev.cmd_clion_compdb()
+        finally:
+            (
+                dev.change_to_container,
+                dev._clion_databases,
+                dev.REPO_ROOT,
+            ) = originals
+        database = self.root / dev.CLION_DB_DIRECTORY / (
+            "compile_commands.json"
+        )
+        self.assertEqual(rc, 0)
+        self.assertEqual(
+            [entry["file"] for entry in json.loads(database.read_text())],
+            ["/shared.cpp", "/host.cpp"],
+        )
+        self.assertIn("components/b/board", err.getvalue())
+        self.assertIn("wrote 2 entries", out.getvalue())
+
+
+class ClionManualWizardTests(unittest.TestCase):
+    """The injected procedure in `scripts/clion_manual_test.py`."""
+
+    def _run(self, answers, *, launcher="/bin/clion", database=True,
+             archive_path=None, log_check=None, on_remove=0, on_seed=0):
+        calls = []
+        pending = iter(answers)
+
+        def prompt(question):
+            calls.append(f"PROMPT {question}")
+            return next(pending)
+
+        if log_check is None:
+            def log_check():
+                return True, "backend log check passed"
+
+        code = clion_manual_test.run_manual_test(
+            launcher=launcher,
+            start_container=lambda: calls.append("CONTAINER") or 0,
+            launch_clion=(
+                lambda command: calls.append(f"LAUNCH {command}") or 0
+            ),
+            prompt=prompt,
+            say=calls.append,
+            database_exists=lambda: database,
+            remove_containers=(
+                lambda: calls.append("REMOVE") or on_remove
+            ),
+            archive_path=archive_path,
+            seed_archive=lambda: calls.append("SEED") or on_seed,
+            check_backend_log=log_check,
+        )
+        return code, calls
+
+    def test_finder_prefers_the_environment_override(self):
+        def fail_if_called(name):
+            self.fail("PATH lookup must not run after an override")
+
+        launcher = clion_manual_test.find_clion_launcher(
+            env={"CLION_LAUNCHER": "/custom/clion --flag"},
+            which=fail_if_called,
+            home=Path("/unused"),
+        )
+        self.assertEqual(launcher, "/custom/clion --flag")
+
+    def test_finder_uses_clion_from_path(self):
+        launcher = clion_manual_test.find_clion_launcher(
+            env={},
+            which=lambda name: "/usr/bin/clion" if name == "clion" else None,
+            home=Path("/unused"),
+        )
+        self.assertEqual(launcher, "/usr/bin/clion")
+
+    def test_finder_falls_back_to_a_toolbox_launcher(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            candidate = home / clion_manual_test.TOOLBOX_LAUNCHERS[0]
+            candidate.parent.mkdir(parents=True)
+            candidate.write_text("")
+            launcher = clion_manual_test.find_clion_launcher(
+                env={}, which=lambda name: None, home=home,
+            )
+            self.assertEqual(launcher, str(candidate))
+
+    def test_finder_returns_none_when_clion_is_not_installed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            launcher = clion_manual_test.find_clion_launcher(
+                env={}, which=lambda name: None, home=Path(directory),
+            )
+            self.assertIsNone(launcher)
+
+    def test_prompt_rejects_invalid_answers_before_accepting_yes(self):
+        answers = iter(("maybe", "YES"))
+        output = io.StringIO()
+        answer = clion_manual_test.prompt_yes_no(
+            "Continue?",
+            input_fn=lambda: next(answers),
+            output=output.write,
+        )
+        self.assertTrue(answer)
+        self.assertEqual(output.getvalue().count("Continue? [y/n]: "), 2)
+        self.assertIn("Please answer 'y' or 'n'.", output.getvalue())
+
+    def test_prompt_accepts_no(self):
+        output = io.StringIO()
+        answer = clion_manual_test.prompt_yes_no(
+            "Continue?",
+            input_fn=lambda: "n",
+            output=output.write,
+        )
+        self.assertFalse(answer)
+
+    def test_prompt_aborts_on_end_of_input(self):
+        def end_of_input():
+            raise EOFError
+
+        output = io.StringIO()
+        answer = clion_manual_test.prompt_yes_no(
+            "Continue?",
+            input_fn=end_of_input,
+            output=output.write,
+        )
+        self.assertIsNone(answer)
+        self.assertIn("Aborted", output.getvalue())
+
+    def test_steps_pin_the_verified_project_and_hover_check(self):
+        first_lines = clion_manual_test.STEPS[0].instructions
+        self.assertTrue(
+            any("/project/.clion/compile_commands.json" in line
+                for line in first_lines)
+        )
+        last_lines = clion_manual_test.STEPS[-1].instructions
+        self.assertTrue(
+            any("timer.hpp" in line for line in last_lines)
+        )
+        self.assertTrue(
+            any("esp_timer_start_once" in line for line in last_lines)
+        )
+        self.assertIn("Select Open Project", first_lines)
+
+    def test_clean_start_uploads_archive_and_checks_the_log(self):
+        def log_check():
+            return True, "Toolbox log has no CLion archive download"
+
+        code, calls = self._run(
+            [True] * len(clion_manual_test.STEPS),
+            archive_path="/home/dev/Downloads/CLion-2026.3.tar.gz",
+            log_check=log_check,
+        )
+        self.assertEqual(code, 0)
+        self.assertLess(calls.index("REMOVE"), calls.index("CONTAINER"))
+        self.assertLess(calls.index("CONTAINER"), calls.index("SEED"))
+        self.assertLess(calls.index("SEED"),
+                        next(i for i, call in enumerate(calls)
+                             if call.startswith("LAUNCH")))
+        self.assertTrue(
+            any("downloading should be skipped" in call for call in calls)
+        )
+        self.assertIn("  - Toolbox log has no CLion archive download", calls)
+
+    def test_no_archive_shows_the_download_instruction(self):
+        code, calls = self._run([True] * len(clion_manual_test.STEPS))
+        self.assertEqual(code, 0)
+        self.assertNotIn("SEED", calls)
+        self.assertTrue(any(
+            'Wait for "Downloading IDE backend..."' in call
+            for call in calls
+        ))
+
+    def test_a_recorded_backend_download_fails_the_first_step(self):
+        def log_check():
+            return False, "Toolbox log recorded a CLion archive download"
+
+        code, calls = self._run(
+            [True] * len(clion_manual_test.STEPS),
+            archive_path="/home/dev/Downloads/CLion-2026.3.tar.gz",
+            log_check=log_check,
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("FAILED: the IDE backend download was not skipped.",
+                      calls)
+
+    def test_remove_failure_stops_before_starting_the_container(self):
+        code, calls = self._run([], on_remove=1)
+        self.assertEqual(code, 1)
+        self.assertNotIn("CONTAINER", calls)
+        self.assertIn("FAILED: the dev containers did not stop cleanly.",
+                      calls)
+
+    def test_archive_upload_failure_stops_before_launching_clion(self):
+        code, calls = self._run(
+            [],
+            archive_path="/home/dev/Downloads/CLion-2026.3.tar.gz",
+            on_seed=1,
+        )
+        self.assertEqual(code, 1)
+        self.assertFalse(any(call.startswith("LAUNCH") for call in calls))
+        self.assertIn("FAILED: the CLion backend archive was not uploaded.",
+                      calls)
+
+    def test_all_confirmed_steps_pass(self):
+        code, calls = self._run([True] * len(clion_manual_test.STEPS))
+        self.assertEqual(code, 0)
+        self.assertIn("CONTAINER", calls)
+        self.assertIn("LAUNCH /bin/clion", calls)
+        prompts = [line for line in calls if line.startswith("PROMPT ")]
+        self.assertEqual(len(prompts), len(clion_manual_test.STEPS))
+        self.assertTrue(any("PASS:" in line for line in calls))
+
+    def test_a_rejected_step_fails_and_names_the_step(self):
+        answers = [True] * (len(clion_manual_test.STEPS) - 1) + [False]
+        code, calls = self._run(answers)
+        self.assertEqual(code, 1)
+        self.assertIn(
+            f"FAILED: step {len(clion_manual_test.STEPS)}: "
+            "Verify the ESP-IDF tooltip",
+            calls,
+        )
+
+    def test_an_unanswered_step_aborts(self):
+        code, calls = self._run([None])
+        self.assertEqual(code, 1)
+        self.assertIn("Aborted by the user.", calls)
+
+    def test_missing_database_stops_before_starting_anything(self):
+        code, calls = self._run([], database=False)
+        self.assertEqual(code, 1)
+        self.assertNotIn("CONTAINER", calls)
+        self.assertTrue(
+            any("clion-compdb" in line for line in calls)
+        )
+
+    def test_no_launcher_stops_before_starting_anything(self):
+        code, calls = self._run([], launcher=None)
+        self.assertEqual(code, 1)
+        self.assertTrue(
+            any("CLION_LAUNCHER" in line for line in calls)
+        )
+
+    def test_container_failure_stops_before_launching_clion(self):
+        calls = []
+        code = clion_manual_test.run_manual_test(
+            launcher="/bin/clion",
+            start_container=lambda: 1,
+            launch_clion=(
+                lambda command: calls.append(command) or 0
+            ),
+            prompt=(lambda question: self.fail("no prompt expected")),
+            say=calls.append,
+        )
+        self.assertEqual(code, 1)
+        self.assertEqual(calls[-1], "FAILED: the dev container did not start.")
+        self.assertFalse(any(call.startswith("LAUNCH") for call in calls))
+
+    def test_launch_failure_stops_before_the_first_manual_step(self):
+        calls = []
+        code = clion_manual_test.run_manual_test(
+            launcher="/bin/clion",
+            start_container=lambda: 0,
+            launch_clion=lambda command: 1,
+            prompt=(lambda question: self.fail("no prompt expected")),
+            say=calls.append,
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("FAILED: CLion did not start.", calls)
+
+
+class ClionManualTestCommandTests(unittest.TestCase):
+    """`dev.py clion-manual-test` host-only command wiring."""
+
+    def test_command_is_registered_and_documented(self):
+        self.assertIn("clion-manual-test", dev.COMMANDS)
+        self.assertIs(
+            dev.COMMANDS["clion-manual-test"],
+            dev.cmd_clion_manual_test,
+        )
+        self.assertTrue((dev.cmd_clion_manual_test.__doc__ or "").strip())
+
+    def test_direct_execution_delegates_to_the_dev_py_command(self):
+        with mock.patch.object(dev, "cmd_clion_manual_test",
+                               return_value=7) as command:
+            code = clion_manual_test.main()
+        self.assertEqual(code, 7)
+        command.assert_called_once_with()
+
+    def test_command_is_listed_in_help(self):
+        output = subprocess.run(
+            (sys.executable, str(dev.REPO_ROOT / "scripts" / "dev.py"),
+             "--help"),
+            cwd=dev.REPO_ROOT, capture_output=True, text=True, check=True,
+        ).stdout
+        self.assertIn("clion-manual-test", output)
+        self.assertIn("Start CLion and guide", output)
+
+    def test_command_refuses_to_run_inside_the_container(self):
+        err = io.StringIO()
+        with mock.patch.object(dev, "is_in_container", return_value=True), \
+                mock.patch.object(dev, "run_manual_test") as wizard, \
+                redirect_stderr(err):
+            code = dev.cmd_clion_manual_test()
+        self.assertEqual(code, 1)
+        wizard.assert_not_called()
+        self.assertIn("run this on the host", err.getvalue())
+
+    def test_command_refuses_to_run_on_ci(self):
+        err = io.StringIO()
+        with mock.patch.object(dev, "is_in_container", return_value=False), \
+                mock.patch.dict(dev.os.environ, {"CI": "true"}), \
+                mock.patch.object(dev, "run_manual_test") as wizard, \
+                redirect_stderr(err):
+            code = dev.cmd_clion_manual_test()
+        self.assertEqual(code, 1)
+        wizard.assert_not_called()
+        self.assertIn("refusing to run on CI", err.getvalue())
+
+    def test_missing_launcher_fails_before_the_wizard_runs(self):
+        err = io.StringIO()
+        with mock.patch.dict(dev.os.environ, {}, clear=True), \
+                mock.patch.object(dev, "is_in_container",
+                                  return_value=False), \
+                mock.patch.object(dev, "find_clion_launcher",
+                                  return_value=None), \
+                mock.patch.object(dev, "run_manual_test") as wizard, \
+                redirect_stderr(err):
+            code = dev.cmd_clion_manual_test()
+        self.assertEqual(code, 1)
+        wizard.assert_not_called()
+        self.assertIn("no CLion launcher", err.getvalue())
+
+    def test_command_wires_the_host_only_steps(self):
+        with mock.patch.dict(dev.os.environ, {}, clear=True), \
+                mock.patch.object(dev, "is_in_container",
+                                  return_value=False), \
+                mock.patch.object(dev, "find_clion_launcher",
+                                  return_value="/bin/clion"), \
+                mock.patch.object(dev, "_clion_archive_candidates",
+                                  return_value=[]), \
+                mock.patch.object(dev, "run_manual_test",
+                                  return_value=0) as wizard:
+            code = dev.cmd_clion_manual_test()
+        self.assertEqual(code, 0)
+        arguments = wizard.call_args.kwargs
+        self.assertEqual(arguments["launcher"], "/bin/clion")
+        self.assertIs(arguments["launch_clion"], dev._launch_clion)
+        self.assertIs(arguments["prompt"], dev.prompt_yes_no)
+        self.assertTrue(callable(arguments["remove_containers"]))
+        self.assertIsNone(arguments["archive_path"])
+        self.assertIs(arguments["check_backend_log"],
+                      dev._backend_download_log_check)
+        self.assertTrue(callable(arguments["database_exists"]))
+
+        with mock.patch.object(dev, "_dev_py_command",
+                               return_value=0) as command:
+            self.assertEqual(arguments["start_container"](), 0)
+            command.assert_called_once_with("up")
+
+        with mock.patch.object(dev, "_dev_py_command",
+                               return_value=0) as command:
+            self.assertEqual(arguments["remove_containers"](), 0)
+            command.assert_called_once_with("down")
+
+    def test_command_passes_the_only_archive_to_the_wizard(self):
+        archive = Path("/home/marcpawl/Downloads/CLion-2026.3.tar.gz")
+        with mock.patch.dict(dev.os.environ, {}, clear=True), \
+                mock.patch.object(dev, "is_in_container",
+                                  return_value=False), \
+                mock.patch.object(dev, "find_clion_launcher",
+                                  return_value="/bin/clion"), \
+                mock.patch.object(dev, "_clion_archive_candidates",
+                                  return_value=[archive]), \
+                mock.patch.object(dev, "run_manual_test",
+                                  return_value=0) as wizard:
+            self.assertEqual(dev.cmd_clion_manual_test(), 0)
+        self.assertEqual(wizard.call_args.kwargs["archive_path"],
+                         str(archive))
+        with mock.patch.object(dev, "_dev_py_command",
+                               return_value=0) as command:
+            self.assertEqual(
+                wizard.call_args.kwargs["seed_archive"](), 0,
+            )
+            command.assert_called_once_with("clion-archive")
+
+    def test_several_archives_are_rejected_before_the_wizard(self):
+        err = io.StringIO()
+        archives = [
+            Path("/home/marcpawl/Downloads/CLion-2026.2.tar.gz"),
+            Path("/home/marcpawl/Downloads/CLion-2026.3.tar.gz"),
+        ]
+        with mock.patch.dict(dev.os.environ, {}, clear=True), \
+                mock.patch.object(dev, "is_in_container",
+                                  return_value=False), \
+                mock.patch.object(dev, "find_clion_launcher",
+                                  return_value="/bin/clion"), \
+                mock.patch.object(dev, "_clion_archive_candidates",
+                                  return_value=archives), \
+                mock.patch.object(dev, "run_manual_test") as wizard, \
+                redirect_stderr(err):
+            code = dev.cmd_clion_manual_test()
+        self.assertEqual(code, 1)
+        wizard.assert_not_called()
+        self.assertIn("several CLion archives", err.getvalue())
+
+    def test_launch_helper_starts_clion_detached(self):
+        with mock.patch.object(dev.subprocess, "Popen") as popen:
+            code = dev._launch_clion("/opt/clion/bin/clion --flag")
+        self.assertEqual(code, 0)
+        popen.assert_called_once_with(
+            ["/opt/clion/bin/clion", "--flag"],
+            cwd=dev.REPO_ROOT, start_new_session=True,
+        )
+
+    def test_launch_helper_reports_an_empty_launcher(self):
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = dev._launch_clion("   ")
+        self.assertEqual(code, 1)
+        self.assertIn("empty CLion launcher", err.getvalue())
+
+    def test_launch_helper_reports_a_failed_start(self):
+        err = io.StringIO()
+        with mock.patch.object(dev.subprocess, "Popen",
+                               side_effect=OSError("not found")), \
+                redirect_stderr(err):
+            code = dev._launch_clion("/bin/clion")
+        self.assertEqual(code, 1)
+        self.assertIn("could not start CLion", err.getvalue())
+
+    def test_dev_py_command_uses_the_documented_entry_point(self):
+        with mock.patch.object(dev, "run", return_value=0) as runner:
+            code = dev._dev_py_command("up")
+        self.assertEqual(code, 0)
+        runner.assert_called_once_with([
+            sys.executable,
+            str(dev.REPO_ROOT / "scripts" / "dev.py"),
+            "up",
+        ])
+
+    def test_backend_log_check_accepts_a_reused_cached_archive(self):
+        log = (
+            "INFO FileDownloaderImpl File "
+            "/home/dev/.cache/JetBrains/Toolbox/download/"
+            "72610a58b-CLion-2026.3.0.1.tar.gz will be reused as a "
+            "cached previous download of "
+            "https://download.jetbrains.com/cpp/CLion-2026.3.0.1.tar.gz\n"
+            "INFO VerificationStateWorkerKt Correct checksum for "
+            "/home/dev/.cache/JetBrains/Toolbox/download/"
+            "72610a58b-CLion-2026.3.0.1.tar.gz (sha256)\n"
+        )
+        result = mock.Mock(returncode=0, stdout=log, stderr="")
+        with mock.patch.object(dev.subprocess, "run",
+                               return_value=result) as runner:
+            skipped, detail = dev._backend_download_log_check()
+        self.assertTrue(skipped)
+        self.assertIn("reused from cache", detail)
+        runner.assert_called_once_with(
+            dev._compose_command(
+                "exec", "-T", "dev", "cat", dev.TOOLBOX_LOG,
+            ),
+            cwd=dev.REPO_ROOT, capture_output=True, text=True,
+        )
+
+    def test_backend_log_check_accepts_a_local_checksum_line(self):
+        log = (
+            "INFO VerificationStateWorkerKt Correct checksum for "
+            "/home/dev/.cache/JetBrains/Toolbox/download/"
+            "72610a58b-CLion-2026.3.0.1.tar.gz (sha256)\n"
+        )
+        result = mock.Mock(returncode=0, stdout=log, stderr="")
+        with mock.patch.object(dev.subprocess, "run", return_value=result):
+            skipped, detail = dev._backend_download_log_check()
+        self.assertTrue(skipped)
+        self.assertIn("reused from cache", detail)
+
+    def test_backend_log_check_rejects_a_remote_download(self):
+        log = (
+            "INFO FileDownloaderImpl Downloading "
+            "https://download.jetbrains.com/cpp/CLion-2026.3.0.1.tar.gz\n"
+        )
+        result = mock.Mock(returncode=0, stdout=log, stderr="")
+        with mock.patch.object(dev.subprocess, "run", return_value=result):
+            skipped, detail = dev._backend_download_log_check()
+        self.assertFalse(skipped)
+        self.assertIn("recorded a CLion archive download", detail)
+
+    def test_backend_log_check_rejects_a_remote_checksum_line(self):
+        log = (
+            "INFO VerificationStateWorkerKt Correct checksum for "
+            "https://download.jetbrains.com/cpp/CLion-2026.3.0.1.tar.gz "
+            "(sha256)\n"
+        )
+        result = mock.Mock(returncode=0, stdout=log, stderr="")
+        with mock.patch.object(dev.subprocess, "run", return_value=result):
+            skipped, detail = dev._backend_download_log_check()
+        self.assertFalse(skipped)
+        self.assertIn("recorded a CLion archive download", detail)
+
+    def test_backend_log_check_requires_reuse_evidence(self):
+        result = mock.Mock(
+            returncode=0,
+            stdout="INFO DownloadManagerImpl Starting to clean\n",
+            stderr="",
+        )
+        with mock.patch.object(dev.subprocess, "run", return_value=result):
+            skipped, detail = dev._backend_download_log_check()
+        self.assertFalse(skipped)
+        self.assertIn("no evidence", detail)
+
+    def test_backend_log_check_reports_an_unreadable_log(self):
+        result = mock.Mock(returncode=1, stdout="", stderr="no such file")
+        with mock.patch.object(dev.subprocess, "run", return_value=result):
+            skipped, detail = dev._backend_download_log_check()
+        self.assertFalse(skipped)
+        self.assertIn("could not read", detail)
+
+
+class ClionDatabaseProjectConfigTests(unittest.TestCase):
+    """The committed `.clion/.idea` project config works in a fresh clone."""
+
+    SHARED = (
+        ".clion/.idea/.gitignore",
+        ".clion/.idea/editor.xml",
+        ".clion/.idea/misc.xml",
+        ".clion/.idea/vcs.xml",
+    )
+
+    def test_shared_files_are_tracked(self):
+        for relative in self.SHARED:
+            result = subprocess.run(
+                ("git", "ls-files", "--error-unmatch", relative),
+                cwd=dev.REPO_ROOT, capture_output=True, text=True,
+            )
+            with self.subTest(path=relative):
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_shared_files_are_not_ignored(self):
+        result = subprocess.run(
+            ("git", "check-ignore", "--no-index", *self.SHARED),
+            cwd=dev.REPO_ROOT, capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 1, result.stdout)
+
+    def test_generated_files_are_ignored(self):
+        result = subprocess.run(
+            ("git", "check-ignore", ".clion/compile_commands.json",
+             ".clion/.idea/workspace.xml"),
+            cwd=dev.REPO_ROOT, capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        ignored = set(result.stdout.splitlines())
+        self.assertIn(".clion/compile_commands.json", ignored)
+        self.assertIn(".clion/.idea/workspace.xml", ignored)
+
+    def test_misc_maps_the_content_root_to_the_project_mount(self):
+        import xml.etree.ElementTree as ET
+
+        misc = dev.REPO_ROOT / ".clion" / ".idea" / "misc.xml"
+        root = ET.parse(misc).getroot()
+        settings = root.find("./component[@name='CompDBSettings']")
+        self.assertIsNotNone(settings)
+        external = settings.find(
+            "./option[@name='linkedExternalProjectsSettings']"
+            "/CompDBProjectSettings/option[@name='externalProjectPath']"
+        )
+        self.assertIsNotNone(external)
+        self.assertEqual(external.get("value"), "$PROJECT_DIR$")
+
+        workspace = root.find("./component[@name='CompDBWorkspace']")
+        self.assertIsNotNone(workspace)
+        self.assertEqual(workspace.get("PROJECT_DIR"), "$PROJECT_DIR$")
+        content_root = workspace.find("contentRoot")
+        self.assertIsNotNone(content_root)
+        self.assertEqual(content_root.get("DIR"), "$PROJECT_DIR$/..")
 
 
 class ResolveContainerDirectoryTests(unittest.TestCase):
@@ -1602,6 +2307,111 @@ class DevImageTests(unittest.TestCase):
         # `/project` is the compose bind mount of the repo root.
         compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
         self.assertIn("..:/project", compose)
+
+
+class DevContainerUpTests(unittest.TestCase):
+    """`dev.py up` starts the compose service used by the whole workflow."""
+
+    def test_up_is_registered_and_host_only(self):
+        self.assertIn("up", dev.COMMANDS)
+        self.assertIs(dev.COMMANDS["up"], dev.cmd_up)
+        self.assertTrue((dev.cmd_up.__doc__ or "").strip())
+
+    def test_up_is_listed_in_the_command_table_help(self):
+        output = subprocess.run(
+            (sys.executable, str(dev.REPO_ROOT / "scripts" / "dev.py"),
+             "--help"),
+            cwd=dev.REPO_ROOT, capture_output=True, text=True, check=True,
+        ).stdout
+        self.assertIn("up", output)
+        self.assertIn("Start the long-running dev container", output)
+
+    def test_up_uses_the_repository_compose_file_and_dev_service(self):
+        self.assertEqual(
+            dev._compose_command("up", "-d", dev.DEV_SSH_SERVICE),
+            [
+                "docker", "compose", "-f", "docker/docker-compose.yml",
+                "up", "-d", "dev",
+            ],
+        )
+
+    def test_up_refuses_to_run_inside_the_container(self):
+        calls = []
+        original_in_container, original_run = dev.is_in_container, dev.run
+        err = io.StringIO()
+        try:
+            dev.is_in_container = lambda: True
+            dev.run = (
+                lambda cmd, cwd=dev.REPO_ROOT:
+                calls.append(list(cmd)) or 0
+            )
+            with redirect_stderr(err):
+                rc = dev.cmd_up()
+        finally:
+            dev.is_in_container, dev.run = original_in_container, original_run
+        self.assertEqual(rc, 1)
+        self.assertEqual(calls, [])
+        self.assertIn("run this on the host", err.getvalue())
+
+    def test_up_starts_the_detached_container_on_the_host(self):
+        calls = []
+        original_in_container, original_run = dev.is_in_container, dev.run
+        try:
+            dev.is_in_container = lambda: False
+            dev.run = (
+                lambda cmd, cwd=dev.REPO_ROOT:
+                calls.append(list(cmd)) or 0
+            )
+            self.assertEqual(dev.cmd_up(), 0)
+        finally:
+            dev.is_in_container, dev.run = original_in_container, original_run
+        self.assertEqual(calls, [dev._compose_command("up", "-d", "dev")])
+
+
+class DevContainerDownTests(unittest.TestCase):
+    """`dev.py down` removes the compose service used by the workflow."""
+
+    def test_down_is_registered_and_host_only(self):
+        self.assertIn("down", dev.COMMANDS)
+        self.assertIs(dev.COMMANDS["down"], dev.cmd_down)
+        self.assertTrue((dev.cmd_down.__doc__ or "").strip())
+
+    def test_down_is_listed_in_the_command_table_help(self):
+        output = subprocess.run(
+            (sys.executable, str(dev.REPO_ROOT / "scripts" / "dev.py"),
+             "--help"),
+            cwd=dev.REPO_ROOT, capture_output=True, text=True, check=True,
+        ).stdout
+        self.assertIn("down", output)
+        self.assertIn("Stop and remove the long-running dev container",
+                      output)
+
+    def test_down_uses_the_repository_compose_file(self):
+        self.assertEqual(
+            dev._compose_command("down", "--remove-orphans"),
+            [
+                "docker", "compose", "-f", "docker/docker-compose.yml",
+                "down", "--remove-orphans",
+            ],
+        )
+
+    def test_down_refuses_to_run_inside_the_container(self):
+        err = io.StringIO()
+        with mock.patch.object(dev, "is_in_container", return_value=True), \
+                mock.patch.object(dev, "run") as runner, \
+                redirect_stderr(err):
+            rc = dev.cmd_down()
+        self.assertEqual(rc, 1)
+        runner.assert_not_called()
+        self.assertIn("run this on the host", err.getvalue())
+
+    def test_down_stops_the_container_on_the_host(self):
+        with mock.patch.object(dev, "is_in_container", return_value=False), \
+                mock.patch.object(dev, "run", return_value=0) as runner:
+            self.assertEqual(dev.cmd_down(), 0)
+        runner.assert_called_once_with(
+            dev._compose_command("down", "--remove-orphans"),
+        )
 
 
 class DevImageShellTests(unittest.TestCase):
@@ -3903,13 +4713,15 @@ class PythonSourceDiscoveryTests(unittest.TestCase):
     # -- the real repository ------------------------------------------------
 
     def test_the_repository_enumerates_its_expected_python_sources(self):
-        # Pins the actual set: the two dev.py scripts and the on-target test
-        # driver. A new Python source is meant to be noticed here, so this list
-        # is a deliberate tripwire rather than an over-broad assertion.
+        # Pins the actual set: the two dev.py scripts, the manual CLion
+        # wizard, and the on-target test driver. A new Python source is meant
+        # to be noticed here, so this list is a deliberate tripwire rather
+        # than an over-broad assertion.
         self.assertEqual(
             dev.python_sources(),
             [
                 "components/hal/tests/esp_timer/board/test.py",
+                "scripts/clion_manual_test.py",
                 "scripts/dev.py",
                 "scripts/test_dev.py",
             ],
