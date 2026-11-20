@@ -519,9 +519,10 @@ def _write_compilation_database(
 # The firmware app binary (named after the mcgowan project).
 FW_BINARY = "mcgowan.bin"
 
-# Host-side unit tests for this script itself (stdlib `unittest`), run by
-# `scripts/dev.py self-check`.
-SELF_CHECK_MODULE = "scripts.test_dev"
+# Host-side unit tests for the repository's scripts (stdlib `unittest`), run
+# by `scripts/dev.py self-check`.
+SELF_CHECK_MODULES = ("scripts.test_dev", "scripts.test_donny")
+SELF_CHECK_MODULE = SELF_CHECK_MODULES[0]
 
 # Source extensions clang-tidy analyzes. The compile database lists every
 # translation unit, including the generated C/assembly ESP-IDF compiles; only
@@ -1598,7 +1599,7 @@ def cmd_self_check() -> int:
             file=sys.stderr,
         )
         return 1
-    return run(["python3", "-m", "unittest", "-v", SELF_CHECK_MODULE])
+    return run(["python3", "-m", "unittest", "-v", *SELF_CHECK_MODULES])
 
 
 def _format_directories(arguments: list[str]) -> list[Path] | None:

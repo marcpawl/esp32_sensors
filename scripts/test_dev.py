@@ -5271,7 +5271,9 @@ class PythonSourceDiscoveryTests(unittest.TestCase):
                 "components/hal/tests/esp_timer/board/test.py",
                 "scripts/clion_manual_test.py",
                 "scripts/dev.py",
+                "scripts/donny.py",
                 "scripts/test_dev.py",
+                "scripts/test_donny.py",
             ],
         )
 
@@ -5317,24 +5319,27 @@ class PycodestyleGateTests(unittest.TestCase):
 
 
 class SelfCheckModuleTests(unittest.TestCase):
-    """Sanity check on the module dev.py invokes for `self-check`.
+    """Sanity check on the modules dev.py invokes for `self-check`.
 
     Also pins `self-check` itself: it is host-only, because inside the
     container none of the decisions this suite pins ever happen (no command
     re-execs itself), so a run there would pass vacuously.
     """
 
-    def test_self_check_module_points_at_this_file(self):
-        # `SELF_CHECK_MODULE` is dotted (`scripts.test_dev`); its final
-        # component must name this test module so `python3 -m unittest` runs
-        # these tests.
-        self.assertEqual(dev.SELF_CHECK_MODULE, "scripts.test_dev")
-        self.assertEqual(dev.SELF_CHECK_MODULE.split(".")[-1], "test_dev")
+    def test_self_check_modules_cover_the_script_test_suites(self):
+        self.assertEqual(
+            dev.SELF_CHECK_MODULES,
+            ("scripts.test_dev", "scripts.test_donny"),
+        )
+        self.assertEqual(dev.SELF_CHECK_MODULE, dev.SELF_CHECK_MODULES[0])
 
-    def test_self_check_module_file_exists(self):
-        # From the repo root, `scripts/test_dev.py` must exist.
-        expected = dev.REPO_ROOT / "scripts" / "test_dev.py"
-        self.assertTrue(os.path.isfile(expected))
+    def test_self_check_module_files_exist(self):
+        for module in dev.SELF_CHECK_MODULES:
+            with self.subTest(module=module):
+                expected = dev.REPO_ROOT / "scripts" / (
+                    module.split(".")[-1] + ".py"
+                )
+                self.assertTrue(os.path.isfile(expected), expected)
 
     # -- host-only ----------------------------------------------------------
 
@@ -5372,7 +5377,7 @@ class SelfCheckModuleTests(unittest.TestCase):
             dev.run, dev.is_in_container = original_run, original_in_container
         self.assertEqual(
             calls,
-            [["python3", "-m", "unittest", "-v", dev.SELF_CHECK_MODULE]],
+            [["python3", "-m", "unittest", "-v", *dev.SELF_CHECK_MODULES]],
         )
 
     def test_self_check_never_hops_into_the_container(self):
