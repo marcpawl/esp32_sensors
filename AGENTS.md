@@ -164,7 +164,7 @@ required.
 
 #### Run configurations
 
-Shared run configurations live under `.idea/runConfigurations/`. Six call
+Shared run configurations live under `.idea/runConfigurations/`. Eleven call
 `scripts/dev.py`, so a single script stays the source of truth for container
 commands; the rest are native CLion **CMake** run configurations.
 
@@ -190,10 +190,24 @@ backend runs inside the same container, so **Debug** works with breakpoints.
 `esp32_sensors_subprojects`. `ClionRunConfigurationTests` pins one ELF config
 per linux project and checks that every profile and root target resolves.
 
+**Build one component from the Run widget.** One configuration exists per
+component that owns a buildable ESP-IDF project:
+
+- `Build utility component (container)` — `components/utility`
+- `Build hal component (container)` — `components/hal`
+- `Build logic component (container)` — `components/logic`
+- `Build espidfcpp component (container)` — `components/espidfcpp`
+- `Build simulator component (container)` — `components/simulator`
+
+Each passes its directory to `scripts/dev.py build`, so `hal` builds all four
+of its test projects in one go. `components/sml` is header-only, has no project
+to discover, and intentionally has no configuration.
+
 | Run configuration | Kind | What it does |
 |---|---|---|
 | `*_build` CMake configurations (four) | CMake | Build one subproject via its root aggregate target; see the "Verified reality" note above for why they do not index sources |
 | Build firmware (container) | `scripts/dev.py build` | builds every subproject |
+| `Build <component> component` (five) | `scripts/dev.py build components/<name>` | builds every project under one component; no config for header-only `sml` |
 | Flash & monitor (container) | `scripts/dev.py flash` | `idf.py -C mcgowan -B mcgowan/build_esp32s3 -p $ESP32_PORT flash monitor` (default `/dev/ttyUSB0`) |
 | Host unit tests (container) | `scripts/dev.py test-linux` | runs every discovered host test suite (below) in path order, or those in/under a directory argument |
 | clang-format check (container) | `scripts/dev.py format-check` | `clang-format --dry-run --Werror` |
