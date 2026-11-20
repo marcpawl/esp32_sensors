@@ -9,13 +9,13 @@
 # specifics live in one place.
 #
 # Usage:
-#   scripts/dev.py [pull|image|submodules|build|build-test-espidf-cpp|flash|\
-#                   monitor|menuconfig|test|test-utility|test-hal-common|\
+#   scripts/dev.py [pull|image|up|submodules|build|build-test-espidf-cpp|\
+#                   flash|monitor|menuconfig|test|test-utility|test-hal-common|\
 #                   test-hal-stub|test-logic|test-espidf-cpp|\
 #                   test-simulator|\
 #                   test-esp32-timer|self-check|format|format-check|\
 #                   format-check-staged|pycodestyle|clang-tidy|install-hooks|\
-#                   shell|ssh|clion-archive]
+#                   shell|ssh|clion-archive|clion-compdb]
 #   scripts/dev.py --help        # full help, including per-command details
 #
 # Environment:
@@ -262,6 +262,12 @@ FW_BUILD_DIR = "build_esp32s3"
 TEST_BUILD_DIR = "build_linux"
 ROOT_BUILD_DIR = "build_root"
 
+# CLion's compilation-database project is kept in its own directory: CLion
+# writes a `.idea/` next to the compile_commands.json it imports, and doing
+# that in the repo root would overwrite the tracked CMake project's config.
+# The files it resolves are still rooted at /project; see AGENTS.md.
+CLION_DB_DIRECTORY = ".clion"
+
 # Directories never descended into while discovering projects. Build output
 # holds no sources, `.git` is not a tree of either, and the vendored trees are
 # not ours to build. CLion's per-subproject build trees (`cmake-build-*`) are
@@ -410,6 +416,83 @@ def _repo_relative(path: Path, root: Path = REPO_ROOT) -> str:
         return path.resolve().relative_to(root.resolve()).as_posix()
     except ValueError:
         return path.resolve().as_posix()
+
+
+def _project_compile_db(project: Project) -> Path:
+    """The compile database `build` writes for `project`. Pure."""
+    build_dir = TEST_BUILD_DIR if project.target == "linux" else FW_BUILD_DIR
+    return project.directory / build_dir / "compile_commands.json"
+
+
+def _clion_databases(root: Path = REPO_ROOT) -> list[tuple[Project, Path]]:
+    """Databases to merge, in precedence order, paired with their projects.
+
+    Firmware first, then the other chip projects, then the linux projects in
+    path order. Because the merge takes the first entry for a source (see
+    `_merge_compilation_databases`), a file compiled by several projects keeps
+    the ESP-IDF include paths and defines the chip build sees. Host-only
+    test files still come from their linux project. Missing databases are
+    omitted, so an unbuilt project cannot block the others.
+    """
+    projects = sorted(
+        _discover_projects(root),
+        key=lambda project: (
+            project.directory != root / FIRMWARE_DIR,
+            project.target == "linux",
+            project.directory.as_posix(),
+        ),
+    )
+    return [
+        (project, database)
+        for project in projects
+        if (database := _project_compile_db(project)).is_file()
+    ]
+
+
+def _merge_compilation_databases(databases: list[Path]) -> list[dict]:
+    """One entry per source file, from the first database that lists it.
+
+    Each entry is copied verbatim: the subprojects record container-absolute
+    paths (`/project/...`, `/opt/esp/...`), which is what CLion needs when its
+    backend runs inside the dev container.
+    """
+    entries: list[dict] = []
+    seen: set[str] = set()
+    for database in databases:
+        for entry in json.loads(database.read_text()):
+            source = entry["file"]
+            if source in seen:
+                continue
+            seen.add(source)
+            entries.append(entry)
+    return entries
+
+
+def _write_compilation_database(
+    entries: list[dict], destination: Path
+) -> None:
+    """Write `entries` as JSON, replacing `destination` atomically.
+
+    CLion may reload the file while it is being regenerated, so the JSON is
+    written to a sibling temp file and renamed into place only once complete.
+    """
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=destination.parent,
+        prefix=f".{destination.name}.",
+        suffix=".tmp",
+        delete=False,
+    ) as handle:
+        temporary = Path(handle.name)
+        try:
+            json.dump(entries, handle, indent=2)
+            handle.write("\n")
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
+    os.replace(temporary, destination)
 
 
 # The firmware app binary (named after the mcgowan project).
@@ -863,6 +946,19 @@ def cmd_image() -> int:
         print("Image cannot be built while in container", file=sys.stderr)
         return 1
     return run(_image_command())
+
+
+def cmd_up() -> int:
+    """Start the long-running dev container in the background.
+
+    Runs `docker compose up -d` for the `dev` service, the same container
+    `ssh` connects to and CLion's Dev Container uses. Host-only: compose is
+    not available inside the container.
+    """
+    if is_in_container():
+        print("up: run this on the host; inside use `shell`.", file=sys.stderr)
+        return 1
+    return run(_compose_command("up", "-d", DEV_SSH_SERVICE))
 
 
 def _idf(directory: str, build_dir: str, *args: str) -> list[str]:
@@ -2450,6 +2546,52 @@ def cmd_clion_archive(archive: str | None) -> int:
     return 0
 
 
+def cmd_clion_compdb() -> int:
+    """Merge the subprojects' compile databases for CLion's code model.
+
+    The root CMake project is an aggregator with no C/C++ code model, so
+    hovering an ESP-IDF declaration cannot reach its Doxygen comments. This
+    command combines the databases that `scripts/dev.py build` writes into
+    `.clion/compile_commands.json`, which CLion opens as a compilation
+    database project. The first database listing a source wins: firmware,
+    then the other chip projects, then the linux projects, so shared sources
+    keep the ESP-IDF include paths that make tooltips work. Open that file as
+    a project inside the dev container, set its project root to /project,
+    and choose a container-local System toolchain.
+    """
+    change_to_container()
+
+    found = _clion_databases()
+    if not found:
+        print(
+            "clion-compdb: no compile databases found; "
+            "run `scripts/dev.py build` first.",
+            file=sys.stderr,
+        )
+        return 1
+
+    databases = [database for _, database in found]
+    entries = _merge_compilation_databases(databases)
+
+    known = set(databases)
+    for project in _discover_projects(REPO_ROOT):
+        database = _project_compile_db(project)
+        if database not in known:
+            print(
+                f"clion-compdb: no {_repo_relative(database)}; "
+                f"build {_repo_relative(project.directory)} first",
+                file=sys.stderr,
+            )
+
+    destination = REPO_ROOT / CLION_DB_DIRECTORY / "compile_commands.json"
+    _write_compilation_database(entries, destination)
+    print(
+        f"clion-compdb: wrote {len(entries)} entries to "
+        f"{_repo_relative(destination)}"
+    )
+    return 0
+
+
 def cmd_complete() -> int:
     """Print the command names matching a prefix (used by shell completion).
 
@@ -2643,6 +2785,7 @@ def cmd_format_check_staged(arguments: list[str]) -> int:
 COMMANDS = {
     "pull": cmd_pull,
     "image": cmd_image,
+    "up": cmd_up,
     "submodules": cmd_submodules,
     "build": cmd_build,
     "build-test-espidf-cpp": cmd_build_test_espidf_cpp,
@@ -2661,6 +2804,7 @@ COMMANDS = {
     "shell": cmd_shell,
     "ssh": cmd_ssh,
     "clion-archive": cmd_clion_archive,
+    "clion-compdb": cmd_clion_compdb,
     "complete": cmd_complete,
 }
 

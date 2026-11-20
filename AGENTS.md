@@ -120,6 +120,8 @@ required.
   on demand. Note that compose falls back to building the local `Dockerfile` if
   the pull fails, so run `./scripts/dev.py pull` first if you want that failure
   to be loud.
+- **Start:** `./scripts/dev.py up` runs `docker compose up -d` for the `dev`
+  service before connecting a backend or shell.
 - **Toolchain/CMake:** select the container as the remote host (SSH into the
   Dev Container). `.idea/cmake.xml` has one profile per subproject: the
   firmware plus each of the eight `linux` executables. Every profile uses its
@@ -156,6 +158,28 @@ required.
   > `compile_commands.json` exposed at the root. Until then
   > `scripts/dev.py build` is the way to build, and navigation/refactorings are
   > not driven by these profiles.
+
+#### Code model, navigation, and tooltips
+
+The CMake profiles do not provide a code model. For hover documentation,
+`Ctrl+Q`, and Go to Definition, use a compilation-database project:
+
+1. Run `./scripts/dev.py build` so every subproject has a compile database.
+2. Run `./scripts/dev.py clion-compdb`. It merges the subproject databases
+   into `.clion/compile_commands.json` (git-ignored). The firmware and board
+   databases come first, so a source built for both targets keeps the ESP-IDF
+   include paths; host-only files keep their `linux` flags.
+3. In CLion, inside the dev container, use `File → Open` on that file and
+   choose *Open as Project*. Set `Tools → Compilation Database → Change
+   Project Root` to `/project`, and select a container-local System toolchain
+   in `Settings → Build, Execution, Deployment → Compilation Database`.
+   Remote Host toolchains are not supported for compilation-database projects.
+4. After a rebuild, re-run `clion-compdb` and reload with `Ctrl+Shift+O`.
+
+ESP-IDF's Doxygen comments live in the resolved headers under `/opt/esp/idf`,
+so no documentation import is needed: `esp_timer_start_once` is documented in
+`/opt/esp/idf/components/esp_timer/include/esp_timer.h`. This workflow is the
+intended path; the CLion hover check still needs to be done in the IDE.
 
 > Editing the image, mounts, or user? Change `docker-compose.yml` (and
 > `Dockerfile`), **not** `devcontainer.json`. The Dev Container deliberately

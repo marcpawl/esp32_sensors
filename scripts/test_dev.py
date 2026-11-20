@@ -441,6 +441,156 @@ class ClionArchiveTests(unittest.TestCase):
         self.assertIn("several CLion archives", err.getvalue())
 
 
+class ClionCompilationDatabaseTests(unittest.TestCase):
+    """`clion-compdb` merges the subproject databases for CLion."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name).resolve()
+        for relative, name, target in (
+            ("components/z/host", "z", "linux"),
+            ("mcgowan", "mcgowan", "esp32s3"),
+            ("components/a/host", "a", "linux"),
+            ("components/b/board", "b", "esp32s3"),
+        ):
+            directory = self.root / relative
+            directory.mkdir(parents=True)
+            (directory / "CMakeLists.txt").write_text(
+                "include($ENV{IDF_PATH}/tools/cmake/project.cmake)\n"
+                f"project({name})\n"
+            )
+            (directory / "sdkconfig.defaults").write_text(
+                f'CONFIG_IDF_TARGET="{target}"\n'
+            )
+
+    def _write_db(self, relative, target, sources, tag):
+        """Write one project's database with a tag in every command."""
+        build = self.root / relative / (
+            dev.TEST_BUILD_DIR if target == "linux" else dev.FW_BUILD_DIR
+        )
+        build.mkdir(parents=True, exist_ok=True)
+        database = build / "compile_commands.json"
+        database.write_text(json.dumps([
+            {
+                "directory": str(build),
+                "file": source,
+                "command": f"cc -c {source} -D{tag}",
+            }
+            for source in sources
+        ]))
+        return database
+
+    def test_command_is_registered(self):
+        self.assertIn("clion-compdb", dev.COMMANDS)
+        self.assertIs(dev.COMMANDS["clion-compdb"], dev.cmd_clion_compdb)
+
+    def test_database_order_is_firmware_board_then_host(self):
+        databases = [
+            self._write_db(relative, target, [], "X")
+            for relative, target in (
+                ("components/z/host", "linux"),
+                ("components/a/host", "linux"),
+                ("components/b/board", "esp32s3"),
+                ("mcgowan", "esp32s3"),
+            )
+        ]
+        # The two host projects are in path order, not creation order.
+        self.assertEqual(
+            [database for _, database in dev._clion_databases(self.root)],
+            [databases[3], databases[2], databases[1], databases[0]],
+        )
+
+    def test_missing_database_is_skipped(self):
+        database = self._write_db("mcgowan", "esp32s3", [], "FW")
+        self.assertEqual(
+            [path for _, path in dev._clion_databases(self.root)],
+            [database],
+        )
+
+    def test_first_database_listing_a_source_wins(self):
+        self._write_db("mcgowan", "esp32s3", ["/shared.cpp", "/fw.cpp"], "FW")
+        self._write_db(
+            "components/b/board", "esp32s3", ["/shared.cpp"], "BOARD"
+        )
+        self._write_db(
+            "components/a/host", "linux", ["/shared.cpp", "/host.cpp"], "HOST"
+        )
+        entries = dev._merge_compilation_databases([
+            database for _, database in dev._clion_databases(self.root)
+        ])
+        self.assertEqual(
+            [entry["file"] for entry in entries],
+            ["/shared.cpp", "/fw.cpp", "/host.cpp"],
+        )
+        self.assertEqual(
+            entries[0]["command"], "cc -c /shared.cpp -DFW"
+        )
+
+    def test_entries_keep_their_original_command_line(self):
+        database = self._write_db("mcgowan", "esp32s3", ["/fw.cpp"], "FW")
+        self.assertEqual(
+            dev._merge_compilation_databases([database]),
+            json.loads(database.read_text()),
+        )
+
+    def test_write_replaces_the_file_with_complete_json(self):
+        destination = self.root / dev.CLION_DB_DIRECTORY / (
+            "compile_commands.json"
+        )
+        dev._write_compilation_database([{"file": "/x.cpp"}], destination)
+        self.assertEqual(
+            json.loads(destination.read_text()), [{"file": "/x.cpp"}]
+        )
+        self.assertEqual(list(destination.parent.iterdir()), [destination])
+
+    def test_command_reports_when_no_database_exists(self):
+        originals = dev.change_to_container, dev._clion_databases
+        err = io.StringIO()
+        try:
+            dev.change_to_container = lambda *args, **kwargs: None
+            dev._clion_databases = lambda: []
+            with redirect_stderr(err):
+                rc = dev.cmd_clion_compdb()
+        finally:
+            dev.change_to_container, dev._clion_databases = originals
+        self.assertEqual(rc, 1)
+        self.assertIn("no compile databases", err.getvalue())
+
+    def test_command_merges_and_warns_about_unbuilt_projects(self):
+        self._write_db("mcgowan", "esp32s3", ["/shared.cpp"], "FW")
+        self._write_db("components/a/host", "linux", ["/host.cpp"], "HOST")
+        originals = (
+            dev.change_to_container,
+            dev._clion_databases,
+            dev.REPO_ROOT,
+        )
+        discover = dev._clion_databases
+        err, out = io.StringIO(), io.StringIO()
+        try:
+            dev.change_to_container = lambda *args, **kwargs: None
+            dev._clion_databases = lambda: discover(self.root)
+            dev.REPO_ROOT = self.root
+            with redirect_stderr(err), redirect_stdout(out):
+                rc = dev.cmd_clion_compdb()
+        finally:
+            (
+                dev.change_to_container,
+                dev._clion_databases,
+                dev.REPO_ROOT,
+            ) = originals
+        database = self.root / dev.CLION_DB_DIRECTORY / (
+            "compile_commands.json"
+        )
+        self.assertEqual(rc, 0)
+        self.assertEqual(
+            [entry["file"] for entry in json.loads(database.read_text())],
+            ["/shared.cpp", "/host.cpp"],
+        )
+        self.assertIn("components/b/board", err.getvalue())
+        self.assertIn("wrote 2 entries", out.getvalue())
+
+
 class ResolveContainerDirectoryTests(unittest.TestCase):
     """`_resolve_container_directory` — `shell -C DIR` path handling."""
 
@@ -1602,6 +1752,65 @@ class DevImageTests(unittest.TestCase):
         # `/project` is the compose bind mount of the repo root.
         compose = (dev.REPO_ROOT / "docker" / "docker-compose.yml").read_text()
         self.assertIn("..:/project", compose)
+
+
+class DevContainerUpTests(unittest.TestCase):
+    """`dev.py up` starts the compose service used by the whole workflow."""
+
+    def test_up_is_registered_and_host_only(self):
+        self.assertIn("up", dev.COMMANDS)
+        self.assertIs(dev.COMMANDS["up"], dev.cmd_up)
+        self.assertTrue((dev.cmd_up.__doc__ or "").strip())
+
+    def test_up_is_listed_in_the_command_table_help(self):
+        output = subprocess.run(
+            (sys.executable, str(dev.REPO_ROOT / "scripts" / "dev.py"),
+             "--help"),
+            cwd=dev.REPO_ROOT, capture_output=True, text=True, check=True,
+        ).stdout
+        self.assertIn("up", output)
+        self.assertIn("Start the long-running dev container", output)
+
+    def test_up_uses_the_repository_compose_file_and_dev_service(self):
+        self.assertEqual(
+            dev._compose_command("up", "-d", dev.DEV_SSH_SERVICE),
+            [
+                "docker", "compose", "-f", "docker/docker-compose.yml",
+                "up", "-d", "dev",
+            ],
+        )
+
+    def test_up_refuses_to_run_inside_the_container(self):
+        calls = []
+        original_in_container, original_run = dev.is_in_container, dev.run
+        err = io.StringIO()
+        try:
+            dev.is_in_container = lambda: True
+            dev.run = (
+                lambda cmd, cwd=dev.REPO_ROOT:
+                calls.append(list(cmd)) or 0
+            )
+            with redirect_stderr(err):
+                rc = dev.cmd_up()
+        finally:
+            dev.is_in_container, dev.run = original_in_container, original_run
+        self.assertEqual(rc, 1)
+        self.assertEqual(calls, [])
+        self.assertIn("run this on the host", err.getvalue())
+
+    def test_up_starts_the_detached_container_on_the_host(self):
+        calls = []
+        original_in_container, original_run = dev.is_in_container, dev.run
+        try:
+            dev.is_in_container = lambda: False
+            dev.run = (
+                lambda cmd, cwd=dev.REPO_ROOT:
+                calls.append(list(cmd)) or 0
+            )
+            self.assertEqual(dev.cmd_up(), 0)
+        finally:
+            dev.is_in_container, dev.run = original_in_container, original_run
+        self.assertEqual(calls, [dev._compose_command("up", "-d", "dev")])
 
 
 class DevImageShellTests(unittest.TestCase):

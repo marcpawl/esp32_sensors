@@ -64,6 +64,11 @@ CMakeCache.txt
 CMakeFiles/
 compile_commands.json
 
+# CLion compilation-database project (`scripts/dev.py clion-compdb`). CLion
+# creates its own .idea/ next to the imported database; keeping it here avoids
+# overwriting the tracked CMake project's .idea/ in the repository root.
+.clion/
+
 # IDE / editor
 #
 # CLion configuration is handled by *explicitly listing* each file rather than
