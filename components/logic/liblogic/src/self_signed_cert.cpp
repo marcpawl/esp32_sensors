@@ -15,7 +15,7 @@
 
 #include <cstring>
 
-namespace thermo::certs {
+namespace thermo::logic::certs {
 
 const char kServerCertPem[] =
     "-----BEGIN CERTIFICATE-----\n"
@@ -77,4 +77,4 @@ std::size_t server_key_len() {
     return std::strlen(kServerKeyPem);
 }
 
-}  // namespace thermo::certs
+}  // namespace thermo::logic::certs

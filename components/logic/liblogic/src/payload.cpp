@@ -17,7 +17,7 @@
 
 #include "logic/temp_format.hpp"  // format_temp_c_x100, kTempNull
 
-namespace thermo::payload {
+namespace thermo::logic::payload {
 namespace {
 
 // Appends `s` as a JSON string literal, escaping the characters JSON requires
@@ -134,4 +134,4 @@ Payload build_batch_json(const DeviceName& device, const SensorNames& names,
     return out;
 }
 
-}  // namespace thermo::payload
+}  // namespace thermo::logic::payload

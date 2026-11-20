@@ -316,11 +316,11 @@ esp_err_t ConfigHttpsServer::start() {
     // MBEDTLS_ERR_X509_INVALID_FORMAT (-0x2180), which surfaces as a HTTPD
     // connection-accept error.
     conf.servercert =
-        reinterpret_cast<const std::uint8_t*>(certs::kServerCertPem);
-    conf.servercert_len = certs::server_cert_len() + 1;
+        reinterpret_cast<const std::uint8_t*>(logic::certs::kServerCertPem);
+    conf.servercert_len = logic::certs::server_cert_len() + 1;
     conf.prvtkey_pem =
-        reinterpret_cast<const std::uint8_t*>(certs::kServerKeyPem);
-    conf.prvtkey_len = certs::server_key_len() + 1;
+        reinterpret_cast<const std::uint8_t*>(logic::certs::kServerKeyPem);
+    conf.prvtkey_len = logic::certs::server_key_len() + 1;
 
     httpd_handle_t server = nullptr;
     esp_err_t err = httpd_ssl_start(&server, &conf);

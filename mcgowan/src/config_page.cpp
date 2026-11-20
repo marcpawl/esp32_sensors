@@ -10,8 +10,8 @@
 #include <ctime>
 
 #include "constants.hpp"
-#include "logic/rom_id.hpp"       // rom_id_to_hex
-#include "logic/temp_format.hpp"  // format_temp_c_x100
+#include "logic/rom_id.hpp"       // logic::rom_id_to_hex
+#include "logic/temp_format.hpp"  // logic::format_temp_c_x100
 
 namespace thermo::config_page {
 namespace {
@@ -109,7 +109,7 @@ std::string render_scan_json(const Config& cfg, const ScanSnapshot& scan) {
 
     for (std::size_t i = 0; i < scan.sensors.size(); ++i) {
         const auto& reading = scan.sensors[i];
-        const std::string rom = rom_id_to_hex(reading.rom);
+        const std::string rom = logic::rom_id_to_hex(reading.rom);
 
         // Resolve the friendly name from the mapping, defaulting to the ROM.
         std::string name = rom;
@@ -123,7 +123,7 @@ std::string render_scan_json(const Config& cfg, const ScanSnapshot& scan) {
         out += "    { \"rom\": \"" + rom + "\", \"name\": \"" +
                html_escape(name) + "\", \"temp_c\": ";
         if (reading.temp_c_x100) {
-            out += format_temp_c_x100(*reading.temp_c_x100).c_str();
+            out += logic::format_temp_c_x100(*reading.temp_c_x100).c_str();
         } else {
             out += "null";
         }
@@ -211,7 +211,7 @@ std::string render_form(const Config& cfg, const ScanSnapshot& scan,
         "<table><tr><th>ROM ID</th><th>Friendly Name</th>"
         "<th>Current Temp</th></tr>";
     for (const auto& reading : scan.sensors) {
-        const std::string rom = rom_id_to_hex(reading.rom);
+        const std::string rom = logic::rom_id_to_hex(reading.rom);
         std::string name = rom;
         for (const auto& m : cfg.mappings) {
             if (m.rom == rom) {
@@ -225,7 +225,7 @@ std::string render_form(const Config& cfg, const ScanSnapshot& scan,
         out += "<td>";
         const auto& temp = reading.temp_c_x100;
         if (temp.has_value()) {
-            out += format_temp_c_x100(*temp).c_str();
+            out += logic::format_temp_c_x100(*temp).c_str();
             out += " &deg;C";
         } else {
             out += "n/a";

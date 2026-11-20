@@ -17,10 +17,10 @@
 #include "logic/temp_format.hpp"
 #include "unity.h"
 
-using thermo::kTempNull;
-using thermo::payload::build_batch_json;
-using thermo::payload::NamedSample;
-using thermo::payload::SensorNames;
+using thermo::logic::kTempNull;
+using thermo::logic::payload::build_batch_json;
+using thermo::logic::payload::NamedSample;
+using thermo::logic::payload::SensorNames;
 
 namespace {
 

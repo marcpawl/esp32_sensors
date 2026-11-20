@@ -10,7 +10,7 @@
 
 #include "logic/reboot.hpp"
 
-namespace thermo {
+namespace thermo::logic {
 
 [[noreturn]]
 void reboot() {
@@ -20,4 +20,4 @@ void reboot() {
     esp_restart();
 }
 
-}  // namespace thermo
+}  // namespace thermo::logic

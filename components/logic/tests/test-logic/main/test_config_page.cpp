@@ -27,10 +27,10 @@
 using thermo::Config;
 using thermo::DS18B20Reading;
 using thermo::PowerSource;
-using thermo::rom_id_to_hex;
 using thermo::RomId;
 using thermo::ScanSnapshot;
 using thermo::config_page::render_scan_json;
+using thermo::logic::rom_id_to_hex;
 
 namespace {
 

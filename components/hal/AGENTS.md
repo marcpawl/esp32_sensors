@@ -170,7 +170,7 @@ implementation provides its own `WifiRadio` alias. Code that must work with
 either takes the `hal::BoardLike` template parameter and never names a concrete
 board — see
 `logic/led_task.hpp`, whose LED-cycle table and coverage checks are free
-functions (`thermo::ledtask::led_cycles()` / `has_cycle()`), so the
+functions (`thermo::logic::ledtask::led_cycles()` / `has_cycle()`), so the
 `static_assert`s naming every `LedState` need no board at all.
 
 ## Deep sleep

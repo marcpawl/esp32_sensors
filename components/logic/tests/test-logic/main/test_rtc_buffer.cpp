@@ -17,14 +17,14 @@
 #include "logic/temp_format.hpp"
 #include "unity.h"
 
-using thermo::rtc_buffer_clear;
-using thermo::rtc_buffer_push;
-using thermo::rtc_state_reset;
-using thermo::rtc_wifi_cache_clear;
-using thermo::RtcState;
-using thermo::SampleRecord;
-using thermo::limits::kMaxBufferRecords;
-using thermo::limits::kSensorCount;
+using thermo::logic::rtc_buffer_clear;
+using thermo::logic::rtc_buffer_push;
+using thermo::logic::rtc_state_reset;
+using thermo::logic::rtc_wifi_cache_clear;
+using thermo::logic::RtcState;
+using thermo::logic::SampleRecord;
+using thermo::logic::limits::kMaxBufferRecords;
+using thermo::logic::limits::kSensorCount;
 
 namespace {
 
@@ -34,8 +34,8 @@ SampleRecord make_record(std::uint32_t age, std::uint16_t batt,
     rec.age_base = age;
     rec.batt_mv = batt;
     rec.t1 = t1;
-    rec.t2 = thermo::kTempNull;
-    rec.t3 = thermo::kTempNull;
+    rec.t2 = thermo::logic::kTempNull;
+    rec.t3 = thermo::logic::kTempNull;
     return rec;
 }
 
@@ -67,7 +67,8 @@ TEST_CASE("rtc: state reset clears everything a cold boot must not keep",
     RtcState st{};
     st.boot_count = 42;
     st.fail_count = 3;
-    st.tx_state = static_cast<std::uint8_t>(thermo::TxState::kTxInhibited);
+    st.tx_state =
+        static_cast<std::uint8_t>(thermo::logic::TxState::kTxInhibited);
     st.next_sample_at = 999;
     st.last_upload_ok = 0;
     st.wifi.valid = 1;
@@ -86,8 +87,8 @@ TEST_CASE("rtc: state reset clears everything a cold boot must not keep",
     TEST_ASSERT_EQUAL_UINT8(0, st.wifi.valid);
     TEST_ASSERT_EQUAL_UINT8(0, st.wifi.channel);
     // A cold boot always transmits: a retained inhibition must not survive.
-    TEST_ASSERT_EQUAL_UINT8(static_cast<std::uint8_t>(thermo::TxState::kTxOk),
-                            st.tx_state);
+    TEST_ASSERT_EQUAL_UINT8(
+        static_cast<std::uint8_t>(thermo::logic::TxState::kTxOk), st.tx_state);
 }
 
 TEST_CASE("rtc: state reset leaves the block reusable", "[rtc_buffer]") {
@@ -206,7 +207,7 @@ TEST_CASE("rtc: overflow preserves field integrity", "[rtc_buffer]") {
     }
     SampleRecord rec = make_record(7, 3999, -1234);
     rec.t2 = 4321;
-    rec.t3 = thermo::kTempNull;
+    rec.t3 = thermo::logic::kTempNull;
     rtc_buffer_push(st, rec);
 
     const SampleRecord& last = st.buffer[kMaxBufferRecords - 1];
@@ -214,7 +215,7 @@ TEST_CASE("rtc: overflow preserves field integrity", "[rtc_buffer]") {
     TEST_ASSERT_EQUAL_UINT16(3999, last.batt_mv);
     TEST_ASSERT_EQUAL_INT16(-1234, last.t1);
     TEST_ASSERT_EQUAL_INT16(4321, last.t2);
-    TEST_ASSERT_EQUAL_INT16(thermo::kTempNull, last.t3);
+    TEST_ASSERT_EQUAL_INT16(thermo::logic::kTempNull, last.t3);
 }
 
 // --- Clearing ---------------------------------------------------------------

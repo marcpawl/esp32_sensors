@@ -13,7 +13,7 @@
 #include <cstdint>
 
 #include "app_config.hpp"
-#include "logic/led_manager.hpp"  // TxState
+#include "logic/led_manager.hpp"  // logic::TxState
 
 namespace thermo {
 class BatteryMonitor {
@@ -28,8 +28,9 @@ class BatteryMonitor {
 
     // Applies the §3.6 hysteresis rules against `current` state.
     // Pure w.r.t. hardware; exposed as a static for host testing.
-    static TxState evaluate_tx_state(std::uint32_t batt_mv, const Config& cfg,
-                                     TxState current);
+    static logic::TxState evaluate_tx_state(std::uint32_t batt_mv,
+                                            const Config& cfg,
+                                            logic::TxState current);
 
   private:
     // Configures the ADC (12 dB attenuation) and curve-fitting calibration.

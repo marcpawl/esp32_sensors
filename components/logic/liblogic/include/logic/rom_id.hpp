@@ -23,7 +23,7 @@
 
 #include "hal/ds18b20_types.hpp"  // RomId
 
-namespace thermo {
+namespace thermo::logic {
 
 // Renders `rom` as 16 uppercase hex characters, no separator (§5.1.3, §6.1).
 std::string rom_id_to_hex(const hal::RomId& rom);
@@ -34,4 +34,4 @@ std::string rom_id_to_hex(const hal::RomId& rom);
 // `rom_id_to_hex()` form, §5.1.3).
 std::optional<hal::RomId> rom_id_from_hex(std::string_view hex);
 
-}  // namespace thermo
+}  // namespace thermo::logic

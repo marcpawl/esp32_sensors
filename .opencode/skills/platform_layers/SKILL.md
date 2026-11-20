@@ -185,7 +185,7 @@ never require either implementation.
    requirements.
 2. If it needs something from a higher layer, move the code up or invert the
    dependency. A template parameter constrained by a `hal_common` concept is
-   the usual answer — see `logic::LedTask<Board>`.
+   the usual answer — see `thermo::logic::LedTask<Board>`.
 3. Never make `libespidfcpp`, `liblogic`, or `libsimulator` depend on
    `hal_board` or `hal_stub`; that breaks one of the two builds. `libsimulator`
    must not be built for the chip at all.

@@ -37,7 +37,7 @@
 #include "constants.hpp"
 #include "logic/limits.hpp"
 #include "logic/payload.hpp"
-#include "logic/rom_id.hpp"  // rom_id_to_hex
+#include "logic/rom_id.hpp"  // logic::rom_id_to_hex
 #include "logic/temp_format.hpp"
 #include "rtc_storage.hpp"
 #include "sensor.hpp"
@@ -49,19 +49,19 @@ constexpr const char* kTag = "run";
 
 // Builds a fixed-size sample record from a reading set (§4.1); `age_base` and
 // `batt_mv` are the record's first two fields, in layout order.
-SampleRecord make_record(std::uint32_t age_base, std::uint16_t batt_mv,
-                         const ReadingList& readings) {
-    SampleRecord rec{};
+logic::SampleRecord make_record(std::uint32_t age_base, std::uint16_t batt_mv,
+                                const ReadingList& readings) {
+    logic::SampleRecord rec{};
     rec.age_base = age_base;
     rec.batt_mv = batt_mv;
-    rec.t1 = kTempNull;
-    rec.t2 = kTempNull;
-    rec.t3 = kTempNull;
+    rec.t1 = logic::kTempNull;
+    rec.t2 = logic::kTempNull;
+    rec.t3 = logic::kTempNull;
 
-    std::int16_t* const slots[limits::kSensorCount] = {&rec.t1, &rec.t2,
-                                                       &rec.t3};
-    for (std::size_t i = 0; i < readings.size() && i < limits::kSensorCount;
-         ++i) {
+    std::int16_t* const slots[logic::limits::kSensorCount] = {&rec.t1, &rec.t2,
+                                                              &rec.t3};
+    for (std::size_t i = 0;
+         i < readings.size() && i < logic::limits::kSensorCount; ++i) {
         const auto& temp = readings[i].temp_c_x100;
         if (temp.has_value()) {
             *slots[i] = *temp;
@@ -79,11 +79,12 @@ SampleRecord make_record(std::uint32_t age_base, std::uint16_t batt_mv,
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
 
-std::vector<payload::NamedSample> collect_batch(const RtcState& st) {
-    std::vector<payload::NamedSample> out;
+std::vector<logic::payload::NamedSample> collect_batch(
+    const logic::RtcState& st) {
+    std::vector<logic::payload::NamedSample> out;
     out.reserve(st.buffer.size());
-    for (const SampleRecord& rec : st.buffer) {
-        payload::NamedSample sample{};
+    for (const logic::SampleRecord& rec : st.buffer) {
+        logic::payload::NamedSample sample{};
         sample.age_s = rec.age_base;
         sample.batt_mv = rec.batt_mv;
         sample.temps_c_x100 = {rec.t1, rec.t2, rec.t3};
@@ -97,13 +98,14 @@ std::vector<payload::NamedSample> collect_batch(const RtcState& st) {
 // NOLINTEND
 
 // Friendly names in column order, padded to the sensor count (§5.1.3).
-payload::SensorNames names_for(const Config& cfg, const ReadingList& readings) {
-    payload::SensorNames names;
-    for (std::size_t i = 0; i < limits::kSensorCount && i < readings.size();
-         ++i) {
-        payload::SensorName name;
+logic::payload::SensorNames names_for(const Config& cfg,
+                                      const ReadingList& readings) {
+    logic::payload::SensorNames names;
+    for (std::size_t i = 0;
+         i < logic::limits::kSensorCount && i < readings.size(); ++i) {
+        logic::payload::SensorName name;
         for (const auto& mapping : cfg.mappings) {
-            if (mapping.rom == rom_id_to_hex(readings[i].rom)) {
+            if (mapping.rom == logic::rom_id_to_hex(readings[i].rom)) {
                 name.assign(mapping.name.c_str());
                 break;
             }
@@ -116,11 +118,12 @@ payload::SensorNames names_for(const Config& cfg, const ReadingList& readings) {
 // STUB: §3.5 batch upload. The payload is fully formatted (§9) and logged so
 // the wire format can be reviewed, but no connection is attempted yet. Returns
 // false to represent "not yet implemented", which triggers backoff (§3.7).
-bool stub_upload(const Config& cfg, RtcState& st, const ReadingList& readings) {
+bool stub_upload(const Config& cfg, logic::RtcState& st,
+                 const ReadingList& readings) {
     const auto batch = collect_batch(st);
-    const payload::DeviceName device(cfg.dev_name.c_str());
-    const payload::Payload json =
-        payload::build_batch_json(device, names_for(cfg, readings), batch);
+    const logic::payload::DeviceName device(cfg.dev_name.c_str());
+    const logic::payload::Payload json = logic::payload::build_batch_json(
+        device, names_for(cfg, readings), batch);
     ESP_LOGW(kTag,
              "STUB: %u samples to '%s' not uploaded. Payload (%u bytes): %s",
              static_cast<unsigned>(st.buffer.size()), cfg.dest_url.c_str(),
@@ -131,11 +134,12 @@ bool stub_upload(const Config& cfg, RtcState& st, const ReadingList& readings) {
 }  // namespace
 
 template<hal::BoardLike Board>
-[[noreturn]] void run_mode_cycle(Board& board, LedTask<Board>& led_task) {
-    RtcState& st = rtc_state();
+[[noreturn]] void run_mode_cycle(Board& board,
+                                 logic::LedTask<Board>& led_task) {
+    logic::RtcState& st = rtc_state();
     st.boot_count++;
 
-    led_task.set_state(LedState::kRun);
+    led_task.set_state(logic::LedState::kRun);
 
     Config cfg;
     config_load(cfg);
@@ -154,12 +158,12 @@ template<hal::BoardLike Board>
         ESP_LOGW(kTag, "battery read failed; assuming 0 mV");
     }
 
-    auto tx_state = static_cast<TxState>(st.tx_state);
+    auto tx_state = static_cast<logic::TxState>(st.tx_state);
     tx_state = BatteryMonitor::evaluate_tx_state(batt_mv, cfg, tx_state);
     st.tx_state = static_cast<std::uint8_t>(tx_state);
 
     // --- Sample (§3.4) ---
-    led_task.set_state(LedState::kRun);
+    led_task.set_state(logic::LedState::kRun);
 
     SensorManager sensors(pins::kWireBus.as_int());
     sensors.init();
@@ -180,37 +184,37 @@ template<hal::BoardLike Board>
 
     const std::uint32_t age_s =
         static_cast<std::uint32_t>(esp_timer_get_time() / 1000000ULL);
-    rtc_buffer_push(
+    logic::rtc_buffer_push(
         st, make_record(age_s, static_cast<std::uint16_t>(batt_mv), readings));
 
     // --- Upload decision (§3.4 step 4, §3.5) ---
-    const bool tx_allowed = tx_state == TxState::kTxOk;
+    const bool tx_allowed = tx_state == logic::TxState::kTxOk;
     const bool batch_ready = st.buffer.size() >= cfg.batch_size;
 
     if (!tx_allowed) {
         ESP_LOGI(kTag, "TX inhibited (batt %u mV)",
                  static_cast<unsigned>(batt_mv));
-        led_task.set_state(LedState::kRun_battery_low);
+        led_task.set_state(logic::LedState::kRun_battery_low);
     } else {
         if (batch_ready) {
-            led_task.set_state(LedState::kRun_uploading);
+            led_task.set_state(logic::LedState::kRun_uploading);
             if (stub_upload(cfg, st, readings)) {
                 // Success path (unreachable until the uploader is implemented):
                 // pulse green, clear the buffer, reset fail_count, update
                 // cache.
-                rtc_buffer_clear(st);
+                logic::rtc_buffer_clear(st);
                 st.fail_count = 0;
                 st.last_upload_ok = 1;
-                led_task.set_state(LedState::kRun);
+                led_task.set_state(logic::LedState::kRun);
             } else {
                 // Failure path (§3.7): red on, increment backoff, clear Wi-Fi
                 // cache.
-                led_task.set_state(LedState::kRun_upload_error);
+                led_task.set_state(logic::LedState::kRun_upload_error);
                 if (st.fail_count < 0xFF) {
                     st.fail_count++;
                 }
                 st.last_upload_ok = 0;
-                rtc_wifi_cache_clear(st);  // §3.10
+                logic::rtc_wifi_cache_clear(st);  // §3.10
             }
         }
     }
@@ -244,7 +248,7 @@ template<hal::BoardLike Board>
 }
 
 [[noreturn]] void run_mode_cycle(hal::board::Board& board,
-                                 LedTask<hal::board::Board>& led_task) {
+                                 logic::LedTask<hal::board::Board>& led_task) {
     run_mode_cycle<hal::board::Board>(board, led_task);
 }
 

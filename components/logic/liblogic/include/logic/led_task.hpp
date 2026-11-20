@@ -29,7 +29,7 @@
 #include "espidf_cpp/task.hpp"
 #include "hal/board_types.hpp"
 
-namespace thermo {
+namespace thermo::logic {
 // Operating states the LED task can display.
 enum class LedState : std::uint8_t {
     kOff = 0,       // Power Off
@@ -357,4 +357,4 @@ LedTask<Board>::LedTask(std::shared_ptr<Board> board)
           ledtask::LedRunner<Board>(std::move(board)),
           espidf_cpp::TaskParams()) {}
 
-}  // namespace thermo
+}  // namespace thermo::logic

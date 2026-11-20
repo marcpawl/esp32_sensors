@@ -17,9 +17,9 @@
 #include "sensor.hpp"
 #include "unity.h"
 
-using thermo::rom_id_from_hex;
-using thermo::rom_id_to_hex;
 using thermo::RomId;
+using thermo::logic::rom_id_from_hex;
+using thermo::logic::rom_id_to_hex;
 
 namespace {
 

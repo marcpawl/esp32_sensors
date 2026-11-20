@@ -10,7 +10,7 @@
 
 #include <cstdio>
 
-namespace thermo {
+namespace thermo::logic {
 
 TempText format_temp_c_x100(std::int16_t temp_c_x100) {
     // §9.3 round-half-away-from-zero at one decimal place:
@@ -54,4 +54,4 @@ TempText format_temp_c_x100(std::int16_t temp_c_x100) {
     // NOLINTEND
 }
 
-}  // namespace thermo
+}  // namespace thermo::logic

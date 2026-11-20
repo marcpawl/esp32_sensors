@@ -16,7 +16,7 @@
 
 #include <cstdint>
 
-namespace thermo {
+namespace thermo::logic {
 
 enum class Mode : std::uint8_t {
     kOff = 0,        // Center position; power is cut by the switch, so this is
@@ -37,4 +37,4 @@ constexpr const char* to_string(Mode mode) {
     return "Unknown";
 }
 
-}  // namespace thermo
+}  // namespace thermo::logic

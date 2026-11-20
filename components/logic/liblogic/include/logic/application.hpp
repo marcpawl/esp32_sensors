@@ -18,7 +18,7 @@
 
 // NOLINTEND
 
-namespace thermo {
+namespace thermo::logic {
 
 // Runs the application: reads the two mode-sense poles and dispatches to
 // Configure mode, the Off position, or the Run-mode loop (§3). Called once
@@ -50,4 +50,4 @@ void Application<Board>::application_main(void) {
     }
 }
 
-}  // namespace thermo
+}  // namespace thermo::logic

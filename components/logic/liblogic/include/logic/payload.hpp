@@ -22,7 +22,7 @@
 #include "utility/static_string.hpp"
 #include "utility/static_vector.hpp"
 
-namespace thermo::payload {
+namespace thermo::logic::payload {
 
 // One sample in the outgoing batch, already resolved to friendly names.
 //
@@ -82,4 +82,4 @@ static_assert(kMaxPayloadSamples >= 1,
 Payload build_batch_json(const DeviceName& device, const SensorNames& names,
                          const std::vector<NamedSample>& samples);
 
-}  // namespace thermo::payload
+}  // namespace thermo::logic::payload

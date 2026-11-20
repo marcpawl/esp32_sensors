@@ -1,7 +1,7 @@
 
-namespace thermo {
+namespace thermo::logic {
 
 /** Reboot the ESP32. */
 [[noreturn]] void reboot();
 
-}  // namespace thermo
+}  // namespace thermo::logic

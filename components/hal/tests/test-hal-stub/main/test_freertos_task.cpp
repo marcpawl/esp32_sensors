@@ -1,10 +1,10 @@
 // Tests for FreeRTOS task primitives on the ESP-IDF `linux` target.
 //
-// `vTaskDelay()` is what `thermo::reboot()` uses to let serial output flush
-// before it resets the chip, so it has to really block on the host as well as
-// on the target. A delay that returned immediately would still build and link,
-// which is exactly the failure this probe catches: it measures the call
-// against both the scheduler tick and the wall clock.
+// `vTaskDelay()` is what `thermo::logic::reboot()` uses to let serial output
+// flush before it resets the chip, so it has to really block on the host as
+// well as on the target. A delay that returned immediately would still build
+// and link, which is exactly the failure this probe catches: it measures the
+// call against both the scheduler tick and the wall clock.
 //
 // The bounds are deliberately loose. FreeRTOS aligns a delay to the tick, so
 // the wait can be one tick shorter than the nominal duration (the tick in

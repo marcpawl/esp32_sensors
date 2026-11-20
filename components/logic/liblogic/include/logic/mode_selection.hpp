@@ -22,7 +22,7 @@
 
 #include "logic/mode.hpp"
 
-namespace thermo {
+namespace thermo::logic {
 
 // The selected mode, or `std::nullopt` when the pole states are impossible for
 // a healthy switch (both poles energized — miswired or shorted).
@@ -58,4 +58,4 @@ using ModeSelection = std::optional<Mode>;
     return std::nullopt;
 }
 
-}  // namespace thermo
+}  // namespace thermo::logic

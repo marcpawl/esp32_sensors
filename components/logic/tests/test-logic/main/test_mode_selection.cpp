@@ -31,24 +31,27 @@ constexpr SwitchState kOff = SwitchState::kOff;
 // --- Healthy switch positions ------------------------------------------------
 
 TEST_CASE("mode: configure pole alone selects Configure", "[mode_selection]") {
-    const thermo::ModeSelection mode = thermo::mode_from_switches(kOn, kOff);
+    const thermo::logic::ModeSelection mode =
+        thermo::logic::mode_from_switches(kOn, kOff);
     TEST_ASSERT_TRUE(mode.has_value());
-    TEST_ASSERT_EQUAL(thermo::Mode::kConfigure, *mode);
+    TEST_ASSERT_EQUAL(thermo::logic::Mode::kConfigure, *mode);
 }
 
 TEST_CASE("mode: run pole alone selects Run", "[mode_selection]") {
-    const thermo::ModeSelection mode = thermo::mode_from_switches(kOff, kOn);
+    const thermo::logic::ModeSelection mode =
+        thermo::logic::mode_from_switches(kOff, kOn);
     TEST_ASSERT_TRUE(mode.has_value());
-    TEST_ASSERT_EQUAL(thermo::Mode::kRun, *mode);
+    TEST_ASSERT_EQUAL(thermo::logic::Mode::kRun, *mode);
 }
 
 TEST_CASE("mode: neither pole selects Off (center position)",
           "[mode_selection]") {
     // The center position cuts power, so firmware observes it only
     // transiently; it is a valid state, not an error.
-    const thermo::ModeSelection mode = thermo::mode_from_switches(kOff, kOff);
+    const thermo::logic::ModeSelection mode =
+        thermo::logic::mode_from_switches(kOff, kOff);
     TEST_ASSERT_TRUE(mode.has_value());
-    TEST_ASSERT_EQUAL(thermo::Mode::kOff, *mode);
+    TEST_ASSERT_EQUAL(thermo::logic::Mode::kOff, *mode);
 }
 
 // --- Hardware fault ----------------------------------------------------------
@@ -56,7 +59,7 @@ TEST_CASE("mode: neither pole selects Off (center position)",
 TEST_CASE("mode: both poles on reports a fault", "[mode_selection]") {
     // Miswired or shorted switch: impossible for a healthy DPDT, so the
     // mapping refuses to guess a mode.
-    TEST_ASSERT_FALSE(thermo::mode_from_switches(kOn, kOn).has_value());
+    TEST_ASSERT_FALSE(thermo::logic::mode_from_switches(kOn, kOn).has_value());
 }
 
 // --- Contract ----------------------------------------------------------------
@@ -65,16 +68,16 @@ TEST_CASE("mode: mapping is constexpr", "[mode_selection]") {
     // The mapping must stay usable at compile time (it is pure), which keeps
     // it free of logging, allocation, and reboot side effects.
     static_assert(
-        thermo::mode_from_switches(SwitchState::kOn, SwitchState::kOff)
-            .value() == thermo::Mode::kConfigure);
+        thermo::logic::mode_from_switches(SwitchState::kOn, SwitchState::kOff)
+            .value() == thermo::logic::Mode::kConfigure);
     static_assert(
-        thermo::mode_from_switches(SwitchState::kOff, SwitchState::kOn)
-            .value() == thermo::Mode::kRun);
+        thermo::logic::mode_from_switches(SwitchState::kOff, SwitchState::kOn)
+            .value() == thermo::logic::Mode::kRun);
     static_assert(
-        thermo::mode_from_switches(SwitchState::kOff, SwitchState::kOff)
-            .value() == thermo::Mode::kOff);
+        thermo::logic::mode_from_switches(SwitchState::kOff, SwitchState::kOff)
+            .value() == thermo::logic::Mode::kOff);
     static_assert(
-        !thermo::mode_from_switches(SwitchState::kOn, SwitchState::kOn)
+        !thermo::logic::mode_from_switches(SwitchState::kOn, SwitchState::kOn)
              .has_value());
     TEST_ASSERT_TRUE(true);  // The assertions above are the test.
 }
@@ -82,8 +85,10 @@ TEST_CASE("mode: mapping is constexpr", "[mode_selection]") {
 TEST_CASE("mode: to_string names every mode", "[mode_selection]") {
     // `mode_from_switches()` returns these values, so each must be printable
     // for the boot log.
-    TEST_ASSERT_EQUAL_STRING("Off", thermo::to_string(thermo::Mode::kOff));
-    TEST_ASSERT_EQUAL_STRING("Configure",
-                             thermo::to_string(thermo::Mode::kConfigure));
-    TEST_ASSERT_EQUAL_STRING("Run", thermo::to_string(thermo::Mode::kRun));
+    TEST_ASSERT_EQUAL_STRING(
+        "Off", thermo::logic::to_string(thermo::logic::Mode::kOff));
+    TEST_ASSERT_EQUAL_STRING(
+        "Configure", thermo::logic::to_string(thermo::logic::Mode::kConfigure));
+    TEST_ASSERT_EQUAL_STRING(
+        "Run", thermo::logic::to_string(thermo::logic::Mode::kRun));
 }
