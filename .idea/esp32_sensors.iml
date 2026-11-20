@@ -1,2 +1,54 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<module classpath="CIDR" type="CPP_MODULE" version="4" />
+<!--
+  Shared CLion module definition.
+
+  The exclusions below are the committed equivalent of right-clicking a
+  directory in the Project tree and choosing "Mark Directory as | Excluded".
+  CLion skips them during project analysis (code completion, navigation,
+  refactorings, inspections and Find in Files), which keeps generated build
+  output and vendored trees out of the index. Build directories are listed
+  explicitly because CLion does not honour .gitignore for analysis and the
+  subproject build trees are too numerous to rely on manual exclusion.
+
+  Keep this list in sync with the discovered subprojects:
+  scripts/test_dev.py::ClionRunConfigurationTests checks that every build
+  directory is excluded, so adding a subproject without its build tree here
+  fails self-check.
+-->
+<module classpath="CIDR" type="CPP_MODULE" version="4">
+  <component name="NewModuleRootManager">
+    <content url="file://$MODULE_DIR$">
+      <!-- Generated build output (git-ignored). -->
+      <excludeFolder url="file://$MODULE_DIR$/build_root" />
+      <excludeFolder url="file://$MODULE_DIR$/components/espidfcpp/tests/test-espidf-cpp/build_linux" />
+      <excludeFolder url="file://$MODULE_DIR$/components/espidfcpp/tests/test-espidf-cpp/cmake-build-linux-test-espidf-cpp" />
+      <excludeFolder url="file://$MODULE_DIR$/components/hal/tests/esp_timer/board/build_esp32s3" />
+      <excludeFolder url="file://$MODULE_DIR$/components/hal/tests/esp_timer/stub/build_linux" />
+      <excludeFolder url="file://$MODULE_DIR$/components/hal/tests/esp_timer/stub/cmake-build-linux-esp-timer-stub" />
+      <excludeFolder url="file://$MODULE_DIR$/components/hal/tests/test-hal-common/build_linux" />
+      <excludeFolder url="file://$MODULE_DIR$/components/hal/tests/test-hal-common/cmake-build-linux-test-hal-common" />
+      <excludeFolder url="file://$MODULE_DIR$/components/hal/tests/test-hal-stub/build_linux" />
+      <excludeFolder url="file://$MODULE_DIR$/components/hal/tests/test-hal-stub/cmake-build-linux-test-hal-stub" />
+      <excludeFolder url="file://$MODULE_DIR$/components/logic/tests/test-logic/build_linux" />
+      <excludeFolder url="file://$MODULE_DIR$/components/logic/tests/test-logic/cmake-build-linux-test-logic" />
+      <excludeFolder url="file://$MODULE_DIR$/components/simulator/exe/donny/build_linux" />
+      <excludeFolder url="file://$MODULE_DIR$/components/simulator/exe/donny/cmake-build-linux-donny" />
+      <excludeFolder url="file://$MODULE_DIR$/components/simulator/tests/test-simulator/build_linux" />
+      <excludeFolder url="file://$MODULE_DIR$/components/simulator/tests/test-simulator/cmake-build-linux-test-simulator" />
+      <excludeFolder url="file://$MODULE_DIR$/components/utility/tests/test-utility/build_linux" />
+      <excludeFolder url="file://$MODULE_DIR$/components/utility/tests/test-utility/cmake-build-linux-test-utility" />
+      <excludeFolder url="file://$MODULE_DIR$/donny/cmake-build-linux-donny" />
+      <excludeFolder url="file://$MODULE_DIR$/espidf-cpp-test/cmake-build-linux-espidf-cpp-test" />
+      <excludeFolder url="file://$MODULE_DIR$/mcgowan/build_esp32s3" />
+      <excludeFolder url="file://$MODULE_DIR$/mcgowan/cmake-build-esp32s3" />
+      <excludeFolder url="file://$MODULE_DIR$/test/cmake-build-linux-test" />
+
+      <!-- Documentation and container tooling: no C++ sources to analyse. -->
+      <excludeFolder url="file://$MODULE_DIR$/doc" />
+      <excludeFolder url="file://$MODULE_DIR$/docker" />
+
+      <!-- Vendored sources (third-party, never formatted or analysed). -->
+      <excludeFolder url="file://$MODULE_DIR$/third_party" />
+    </content>
+  </component>
+</module>

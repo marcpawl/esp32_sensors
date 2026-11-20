@@ -121,13 +121,11 @@ required.
   the pull fails, so run `./scripts/dev.py pull` first if you want that failure
   to be loud.
 - **Toolchain/CMake:** select the container as the remote host (SSH into the
-  Dev Container). CLion configures and builds **each subproject** under its own
-  CMake build directory (all from `.idea/cmake.xml`):
-  `mcgowan/cmake-build-esp32s3/`, `test/cmake-build-linux-test/`,
-  `espidf-cpp-test/cmake-build-linux-espidf-cpp-test/`,
-  `donny/cmake-build-linux-donny/` — so the IDE and `idf.py` never share a
-  CMake cache. `mcgowan/build_esp32s3/` remains the canonical `idf.py` build
-  used by `scripts/dev.py build`/`flash`.
+  Dev Container). `.idea/cmake.xml` has one profile per subproject: the
+  firmware plus each of the eight `linux` executables. Every profile uses its
+  own `cmake-build-*` directory, so the IDE and `idf.py` never share a CMake
+  cache. `mcgowan/build_esp32s3/` and `<suite>/build_linux/` remain the
+  canonical `idf.py` trees used by `scripts/dev.py build`/`flash`.
 - **Why one CMake profile per subproject.** A CLion CMake profile has no way to
   point CMake at a *sub*directory — a profile *is* a project. The repo root is
   only an aggregator (`project(... NONE)`) that shells out to `idf.py`, so a
@@ -136,10 +134,10 @@ required.
   is a standalone ESP-IDF project and ESP-IDF sets
   `CMAKE_EXPORT_COMPILE_COMMANDS` on by default
   (`$IDF_PATH/tools/cmake/project.cmake`), so each one produces a database that
-  CLion turns into a full resolve configuration. The four profiles coexist
-  rather than being merged because the projects share sources (`mcgowan/src` is
-  compiled by both `mcgowan` and `test`; `components/*` by three or four of
-  them) and genuinely need different defines/include paths — notably
+  CLion turns into a full resolve configuration. The profiles coexist rather
+  than being merged because the projects share sources (`mcgowan/src` is
+  compiled by the firmware and the host suites; `components/*` by all of them)
+  and genuinely need different defines/include paths — notably
   `hal_board` (Xtensa) vs `hal_stub` (host/linux). The active profile is chosen
   by the run configuration's `CONFIG_NAME`.
 
@@ -147,12 +145,12 @@ required.
   > `GENERATION_DIR` sets only the *build* directory; the *source* directory is
   > the single CMake workspace in `.idea/misc.xml`
   > (`CMakeWorkspace PROJECT_DIR="$PROJECT_DIR$"`), which is the repo root for
-  > every profile. After a clean CLion rebuild all four `cmake-build-*` trees
+  > every profile. After a clean CLion rebuild the `cmake-build-*` trees
   > recorded `CMAKE_HOME_DIRECTORY=/project`, none contained a
   > `compile_commands.json`, and each codemodel named project
-  > `esp32_sensors_subprojects` with only the four aggregate custom targets —
-  > all `UTILITY`, i.e. no compilable translation units. So all four profiles
-  > build the same root aggregator, `-DIDF_TARGET=...` is unused by
+  > `esp32_sensors_subprojects` with only the aggregate custom targets —
+  > all `UTILITY`, i.e. no compilable translation units. So every profile
+  > builds the same root aggregator, `-DIDF_TARGET=...` is unused by
   > `project(... NONE)`, and CLion gets no code model from them. Fixing it
   > needs either one CLion project per subproject or a merged
   > `compile_commands.json` exposed at the root. Until then
@@ -166,31 +164,50 @@ required.
 
 #### Run configurations
 
-Eight shared run configurations are committed under `.idea/runConfigurations/`
-(and mirrored in the local `.idea/workspace.xml`). Six call `scripts/dev.py`,
-so a single script is the source of truth for container commands — run them
-from the CLion Run/Debug toolbar. The other two kinds are native
-CLion **CMake** run configurations: the four below (one per subproject profile)
-are meant to drive CLion's own CMake project model, which is what would make
-the compile database live and therefore enable code navigation and
-C++ **refactorings** — but see the "Verified reality" note above: they
-currently all configure the root aggregator and produce no compile database, so
-today they only build. `PROJECT_NAME` in each must match the root `project()`
-name, `esp32_sensors_subprojects`, and `TARGET_NAME` must name a target **of
-that root project** — i.e. one of the `*_build` aggregate targets, not a
-subproject's ESP-IDF `<name>.elf`. The root is `project(... NONE)` and defines
-only the aggregate custom targets, so an ELF name is unresolvable there and
-CLion reports "cannot find target". CLion rewrites `PROJECT_NAME` to the real
-root name once it has resolved the project, so a stale value there is a
-symptom, not a fix; `ClionRunConfigurationTests` pins both invariants.
+Shared run configurations live under `.idea/runConfigurations/`. Eleven call
+`scripts/dev.py`, so a single script stays the source of truth for container
+commands; the rest are native CLion **CMake** run configurations.
+
+**Run and Debug for every Linux executable.** One configuration exists per
+`linux` project:
+
+- `test-utility (linux ELF, container)`
+- `test-hal-stub (linux ELF, container)`
+- `test-hal-common (linux ELF, container)`
+- `test-logic (linux ELF, container)`
+- `test-espidf-cpp (linux ELF, container)`
+- `test-simulator (linux ELF, container)`
+- `test-esp_timer-stub (linux ELF, container)`
+- `donny (linux ELF, container)`
+
+Each builds through the matching `<subproject>_build` root target, then runs
+the generated ELF from `build_linux`. `RUN_PATH`, not `TARGET_NAME`, carries the
+executable path: the root is `project(... NONE)` and defines only `UTILITY`
+wrappers around `idf.py`, so naming an ELF in `TARGET_NAME` makes CLion report
+"cannot find target". Host binaries carry `-gdwarf-4 -ggdb -Og` and the CLion
+backend runs inside the same container, so **Debug** works with breakpoints.
+`PROJECT_NAME` in every CMake configuration must be the root `project()` name,
+`esp32_sensors_subprojects`. `ClionRunConfigurationTests` pins one ELF config
+per linux project and checks that every profile and root target resolves.
+
+**Build one component from the Run widget.** One configuration exists per
+component that owns a buildable ESP-IDF project:
+
+- `Build utility component (container)` — `components/utility`
+- `Build hal component (container)` — `components/hal`
+- `Build logic component (container)` — `components/logic`
+- `Build espidfcpp component (container)` — `components/espidfcpp`
+- `Build simulator component (container)` — `components/simulator`
+
+Each passes its directory to `scripts/dev.py build`, so `hal` builds all four
+of its test projects in one go. `components/sml` is header-only, has no project
+to discover, and intentionally has no configuration.
 
 | Run configuration | Kind | What it does |
 |---|---|---|
-| esp32_sensors (container CMake) | CMake | Builds the `mcgowan_build` aggregate target via the `Espressif ESP32-S3` profile; intended (not yet achieved) to index the firmware for refactorings |
-| Host tests (test, container CMake) | CMake | Builds the `test_build` aggregate target via the `Host tests (test)` profile |
-| Host tests (espidf-cpp-test, container CMake) | CMake | Builds the `test-espidf-cpp_build` aggregate target via the `Host tests (espidf-cpp-test)` profile |
-| Linux app (donny, container CMake) | CMake | Builds the `donny_build` aggregate target via the `Linux app (donny)` profile |
-| Build firmware (container) | `scripts/dev.py build` | `idf.py -C mcgowan -B mcgowan/build_esp32s3 build` (and the other subprojects) |
+| `*_build` CMake configurations (four) | CMake | Build one subproject via its root aggregate target; see the "Verified reality" note above for why they do not index sources |
+| Build firmware (container) | `scripts/dev.py build` | builds every subproject |
+| `Build <component> component` (five) | `scripts/dev.py build components/<name>` | builds every project under one component; no config for header-only `sml` |
 | Flash & monitor (container) | `scripts/dev.py flash` | `idf.py -C mcgowan -B mcgowan/build_esp32s3 -p $ESP32_PORT flash monitor` (default `/dev/ttyUSB0`) |
 | Host unit tests (container) | `scripts/dev.py test-linux` | runs every discovered host test suite (below) in path order, or those in/under a directory argument |
 | clang-format check (container) | `scripts/dev.py format-check` | `clang-format --dry-run --Werror` |

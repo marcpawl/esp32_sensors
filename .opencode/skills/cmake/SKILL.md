@@ -73,6 +73,35 @@ A new `.cpp` file has to be listed wherever its target collects sources —
 is build configuration, not documentation, so it belongs in the file; the rule
 above only forbids describing the sources, not naming them as inputs.
 
+## Headers are target sources
+
+**Every header the target owns must be listed in `target_sources()`**, even
+though CMake needs no such thing to build. A CMake file-API client — CLion —
+attaches a header to a target only when the target names it or a compiled
+source includes it, so an unreferenced or newly added header otherwise gets no
+code model ("this file does not belong to any project target"). Listing a
+header adds no compile step: CMake treats a header as a header.
+
+- List every header under the target's `INCLUDE_DIRS`, in path order, as a
+  path relative to the `CMakeLists.txt` (or through the component's own path
+  variable, e.g. `${mcgowan_src}/include/...`).
+- Put the call *after* `idf_component_register()`: that call is what defines
+  `${COMPONENT_LIB}` in the component's scope.
+- Use `PRIVATE`; the headers are already exported through `INCLUDE_DIRS`.
+- A header-only target (`components/sml`) and vendored trees are the
+  exceptions: their headers belong to upstream, so they are exposed through
+  `INCLUDE_DIRS` only.
+- Add a new header to the list in the same change that adds the file.
+
+```cmake
+# Headers are target sources so a CMake file-API client (CLion) attaches them
+# to this target; CMake adds no compile step for a header.
+target_sources(${COMPONENT_LIB} PRIVATE
+    "include/logic/mode.hpp"
+    "include/logic/payload.hpp"
+)
+```
+
 ## Vendored code
 
 `third_party/` is copied verbatim from upstream and is never edited — its

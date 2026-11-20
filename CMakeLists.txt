@@ -66,9 +66,20 @@ if(NOT EXISTS "/etc/esp32-sensors-dev-container")
         "or:   docker compose run --rm dev cmake -B build_root")
 endif()
 
-if(NOT DEFINED ENV{IDF_PATH} OR NOT EXISTS "$ENV{IDF_PATH}/export.sh")
+# The remote CLion backend is started by the Toolbox agent without a login
+# shell, so IDF_PATH/IDF_TOOLS_PATH may be absent. Default them to the
+# locations the image bakes in (docker/esp-idf-profile.sh). The marker check
+# above still guarantees this is the dev container.
+if(NOT DEFINED ENV{IDF_PATH})
+    set(ENV{IDF_PATH} "/opt/esp/idf")
+endif()
+if(NOT DEFINED ENV{IDF_TOOLS_PATH})
+    set(ENV{IDF_TOOLS_PATH} "/opt/esp")
+endif()
+if(NOT EXISTS "$ENV{IDF_PATH}/export.sh")
     message(FATAL_ERROR
-        "IDF_PATH is not set; run this inside the ESP-IDF dev container.")
+        "IDF_PATH ($ENV{IDF_PATH}) has no export.sh; expected the ESP-IDF "
+        "checkout baked into the dev container.")
 endif()
 
 # Every idf.py invocation below goes through scripts/idf.sh, which establishes
@@ -123,7 +134,8 @@ set(ENV{PATH} "$ENV{IDF_PATH}/tools:$ENV{PATH}")
 # invocation: a `|`-separated `SUBCOMMAND|arg|arg` string (e.g. "build" or
 # "--preview|set-target|linux"), run in order. `|` (not `;`) separates the
 # words because `;` is CMake's list separator; the invocations are `;`-separated
-# in turn. One target per subproject keeps its name unique.
+# in turn. A `set-target` step is skipped when the build tree already records
+# that target. One target per subproject keeps its name unique.
 function(_idf_subproject name dir build_dir)
     # idf.py is run through scripts/idf.sh rather than directly: the wrapper
     # guarantees the ESP-IDF environment, which an IDE-launched build does not
@@ -137,9 +149,34 @@ function(_idf_subproject name dir build_dir)
         -B "${CMAKE_CURRENT_SOURCE_DIR}/${dir}/${build_dir}"
         "-DTHERMO_GCC_ANALYZER=${THERMO_GCC_ANALYZER}"
         --no-hints)
+    # `idf.py set-target` deletes the build tree's ninja dependency log, so
+    # running it before every build recompiles every translation unit. Read
+    # the target ESP-IDF recorded in the cache and skip the step when the tree
+    # is already configured for it.
+    set(configured_target "")
+    set(cache "${CMAKE_CURRENT_SOURCE_DIR}/${dir}/${build_dir}/CMakeCache.txt")
+    if(EXISTS "${cache}")
+        file(STRINGS "${cache}" target_lines REGEX "^IDF_TARGET:")
+        foreach(line IN LISTS target_lines)
+            string(REGEX REPLACE "^IDF_TARGET:[^=]*=([^\r\n]+).*" "\\1"
+                configured_target "${line}")
+        endforeach()
+    endif()
+
     set(commands)
     foreach(step IN LISTS ARGN)
         string(REPLACE "|" ";" words "${step}")
+        list(LENGTH words word_count)
+        if(word_count GREATER 2)
+            list(GET words 0 first_word)
+            list(GET words 1 second_word)
+            list(GET words 2 requested_target)
+            if(first_word STREQUAL "--preview"
+                    AND second_word STREQUAL "set-target"
+                    AND requested_target STREQUAL configured_target)
+                continue()
+            endif()
+        endif()
         list(APPEND commands COMMAND ${common} ${words})
     endforeach()
     add_custom_target(${name}_build ALL
@@ -180,8 +217,8 @@ if(test-hal-common IN_LIST SUBPROJECTS)
 endif()
 
 # --- test-logic: host unit tests (linux target) -> target test-logic_build ---
-# `set-target linux` is only meaningful when sdkconfig is (re)generated, so it
-# is cheap on every invocation and keeps a fresh build tree pointed at linux.
+# Every `linux` project keeps a fresh build tree pointed at linux: the helper
+# runs `set-target` only until the tree's cache records that target.
 if(test-logic IN_LIST SUBPROJECTS)
     _idf_subproject(test-logic components/logic/tests/test-logic
         build_linux "--preview|set-target|linux" "build")

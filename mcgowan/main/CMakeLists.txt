@@ -46,6 +46,25 @@ idf_component_register(
         lwip
 )
 
+# Headers are target sources so a CMake file-API client (CLion) attaches them
+# to this target; CMake adds no compile step for a header.
+target_sources(${COMPONENT_LIB} PRIVATE
+    "${mcgowan_src}/include/app_config.hpp"
+    "${mcgowan_src}/include/app_config_store.hpp"
+    "${mcgowan_src}/include/battery_monitor.hpp"
+    "${mcgowan_src}/include/config_page.hpp"
+    "${mcgowan_src}/include/configure_mode.hpp"
+    "${mcgowan_src}/include/constants.hpp"
+    "${mcgowan_src}/include/https_server.hpp"
+    "${mcgowan_src}/include/ntp_client.hpp"
+    "${mcgowan_src}/include/power_manager.hpp"
+    "${mcgowan_src}/include/power_source.hpp"
+    "${mcgowan_src}/include/rtc_storage.hpp"
+    "${mcgowan_src}/include/run_mode.hpp"
+    "${mcgowan_src}/include/sensor.hpp"
+    "${mcgowan_src}/include/wifi_ap.hpp"
+)
+
 # GCC's analyzer emits a locationless uninitialized-value diagnostic for the
 # `std::optional<std::string>` return in `on_save()`. Because GCC attaches no
 # source line to it, a diagnostic pragma cannot scope it; disable that one

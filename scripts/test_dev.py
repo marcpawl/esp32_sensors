@@ -510,6 +510,28 @@ class SubprojectBuildTests(unittest.TestCase):
             ["flash", "monitor"],
         )
 
+    def test_configured_target_comes_from_the_build_cache(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            build_dir = Path(temporary)
+            self.assertIsNone(dev._configured_target(build_dir))
+            (build_dir / "CMakeCache.txt").write_text(
+                "# generated\nIDF_TARGET:STRING=linux\n", encoding="utf-8"
+            )
+            self.assertEqual(dev._configured_target(build_dir), "linux")
+
+    def test_set_target_is_needed_only_for_a_new_or_mismatched_tree(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            build_dir = Path(temporary)
+            self.assertTrue(dev._needs_set_target(build_dir, "linux"))
+            (build_dir / "CMakeCache.txt").write_text(
+                "IDF_TARGET:STRING=esp32s3\n", encoding="utf-8"
+            )
+            self.assertTrue(dev._needs_set_target(build_dir, "linux"))
+            (build_dir / "CMakeCache.txt").write_text(
+                "IDF_TARGET:STRING=linux\n", encoding="utf-8"
+            )
+            self.assertFalse(dev._needs_set_target(build_dir, "linux"))
+
     def test_build_climbs_from_a_component_directory(self):
         # The reported case: `dev.py build .` inside a component directory.
         # The component is not an ESP-IDF project, so it cannot run the
@@ -527,6 +549,7 @@ class SubprojectBuildTests(unittest.TestCase):
         with (
             mock.patch.object(dev, "change_to_container"),
             mock.patch.object(dev, "_ensure_submodules", return_value=0),
+            mock.patch.object(dev, "_needs_set_target", return_value=True),
             mock.patch.object(dev, "run", fake_run),
             redirect_stderr(err),
         ):
@@ -1238,6 +1261,17 @@ class IdfRunnerTests(unittest.TestCase):
         helper = root_cmake.split("function(_idf_subproject", 1)[1]
         self.assertIn('"${IDF_RUNNER}"', helper.split("endfunction()", 1)[0])
 
+    def test_set_target_is_skipped_for_a_configured_tree(self):
+        # The helper reads the tree's cache and drops any `set-target` step
+        # that asks for the target it already records, so a repeat build does
+        # not wipe ninja's dependency log.
+        root_cmake = (dev.REPO_ROOT / "CMakeLists.txt").read_text()
+        helper = root_cmake.split("function(_idf_subproject", 1)[1]
+        helper = helper.split("endfunction()", 1)[0]
+        self.assertIn('REGEX "^IDF_TARGET:"', helper)
+        self.assertIn("requested_target STREQUAL configured_target", helper)
+        self.assertIn("continue()", helper)
+
 
 class ClionRunConfigurationTests(unittest.TestCase):
     """CLion CMake run configurations name the root CMake project.
@@ -1317,6 +1351,45 @@ class ClionRunConfigurationTests(unittest.TestCase):
             )
         }
 
+    def test_every_linux_executable_has_a_run_configuration(self):
+        # Each linux subproject builds one ELF. A run configuration names it
+        # through RUN_PATH (CLion's executable field) because the root CMake
+        # project has no executable targets - only `*_build` UTILITY wrappers
+        # that call idf.py. Require one config and a real binary per project.
+        elf_configs = [
+            (name, config)
+            for name, config in self._cmake_run_configurations()
+            if (config.get("RUN_PATH") or "").endswith(".elf")
+        ]
+        projects = [
+            project
+            for project in dev._discover_projects(dev.REPO_ROOT)
+            if project.target == "linux"
+        ]
+        self.assertTrue(projects, "no linux projects discovered")
+        self.assertEqual(len(elf_configs), len(projects))
+        configured = set()
+        for name, config in elf_configs:
+            with self.subTest(configuration=name):
+                run_path = config.get("RUN_PATH")
+                self.assertTrue(run_path.startswith("$PROJECT_DIR$/"))
+                relative = run_path[len("$PROJECT_DIR$/"):]
+                directory, executable = relative.rsplit("/", 1)
+                self.assertTrue(executable.endswith(".elf"))
+                self.assertTrue(directory.endswith("/build_linux"))
+                project_dir = directory.rsplit("/build_linux", 1)[0]
+                configured.add(project_dir)
+                build = config.find(
+                    "./method/option[@name='com.jetbrains.cidr.execution."
+                    "CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask']"
+                )
+                self.assertIsNotNone(build, f"{name}: no before-launch build")
+                self.assertEqual(build.get("enabled"), "true")
+        expected = {
+            dev._repo_relative(project.directory) for project in projects
+        }
+        self.assertEqual(configured, expected)
+
     def test_cmake_run_configurations_name_an_existing_root_target(self):
         # Regression: the configurations used to name the subprojects' ESP-IDF
         # ELF targets (mcgowan.elf, donny.elf, ...). Those belong to the
@@ -1335,6 +1408,76 @@ class ClionRunConfigurationTests(unittest.TestCase):
                     f"{configuration.get('TARGET_NAME')!r} is not a target of "
                     f"{project_name!r} (has {sorted(root)})",
                 )
+
+
+class ClionExclusionTests(unittest.TestCase):
+    """CLion's module excludes every generated and vendored tree.
+
+    CLion does not honour .gitignore for project analysis, so build output
+    and vendored trees have to be marked excluded in the committed `.iml`.
+    Derive the expected list from the same sources that create those trees:
+    `dev._discover_projects` for the subproject build directories,
+    `.idea/cmake.xml` for CLion's own trees, and the fixed set of
+    documentation/container/vendored directories. A new subproject or
+    profile that misses an exclusion then fails self-check.
+    """
+
+    def _excluded_directories(self) -> set[str]:
+        import xml.etree.ElementTree as ET
+
+        iml = dev.REPO_ROOT / ".idea" / "esp32_sensors.iml"
+        root = ET.parse(iml).getroot()
+        prefix = "file://$MODULE_DIR$/"
+        excluded = set()
+        for folder in root.iter("excludeFolder"):
+            url = folder.get("url") or ""
+            self.assertTrue(
+                url.startswith(prefix),
+                f"{iml.name}: unexpected excludeFolder URL {url!r}",
+            )
+            excluded.add(url[len(prefix):])
+        return excluded
+
+    def test_excludes_every_subproject_build_directory(self) -> None:
+        excluded = self._excluded_directories()
+        projects = dev._discover_projects(dev.REPO_ROOT)
+        self.assertTrue(projects, "no subprojects discovered")
+        for project in projects:
+            relative = project.directory.relative_to(dev.REPO_ROOT).as_posix()
+            build_dir = (
+                dev.TEST_BUILD_DIR
+                if project.target == "linux"
+                else dev.FW_BUILD_DIR
+            )
+            with self.subTest(project=relative):
+                self.assertIn(f"{relative}/{build_dir}", excluded)
+
+    def test_excludes_every_clion_generation_directory(self) -> None:
+        import xml.etree.ElementTree as ET
+
+        excluded = self._excluded_directories()
+        cmake_xml = dev.REPO_ROOT / ".idea" / "cmake.xml"
+        prefix = "$PROJECT_DIR$/"
+        found = 0
+        configurations = ET.parse(cmake_xml).getroot().iter("configuration")
+        for configuration in configurations:
+            generation_dir = configuration.get("GENERATION_DIR") or ""
+            if not generation_dir:
+                continue
+            self.assertTrue(
+                generation_dir.startswith(prefix),
+                f"unexpected GENERATION_DIR {generation_dir!r}",
+            )
+            found += 1
+            with self.subTest(profile=configuration.get("PROFILE_NAME")):
+                self.assertIn(generation_dir[len(prefix):], excluded)
+        self.assertTrue(found, "no CMake generation directories found")
+
+    def test_excludes_root_build_and_non_source_trees(self) -> None:
+        excluded = self._excluded_directories()
+        for directory in (dev.ROOT_BUILD_DIR, "doc", "docker", "third_party"):
+            with self.subTest(directory=directory):
+                self.assertIn(directory, excluded)
 
 
 class DevImageTests(unittest.TestCase):
@@ -2126,6 +2269,13 @@ class HostTestCommandTests(unittest.TestCase):
 
     def setUp(self):
         # Record the commands `run()` would execute instead of executing them.
+        # The suites below are treated as fresh trees unless a test says
+        # otherwise; a real checked-out build tree may already be configured.
+        patcher = mock.patch.object(
+            dev, "_needs_set_target", return_value=True
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.calls = []
         self._original_run = dev.run
         self._original_change_to_container = dev.change_to_container
@@ -2208,6 +2358,21 @@ class HostTestCommandTests(unittest.TestCase):
             f"./{dev.ESP_TIMER_STUB_DIR}/{dev.TEST_BUILD_DIR}/"
             f"esp32_sensors_esp_timer_stub_tests.elf",
             executed,
+        )
+
+    def test_a_configured_suite_is_built_without_set_target(self):
+        # `set-target` wipes ninja's dependency log; on a repeat run it must
+        # not appear in the command sequence at all.
+        dev._needs_set_target.return_value = False
+        utility = str(dev.REPO_ROOT / "components" / "utility")
+        self.assertEqual(dev.cmd_test_linux([utility]), 0)
+        self.assertEqual(
+            self.calls,
+            [
+                dev._idf(dev.UTILITY_TEST_DIR, dev.TEST_BUILD_DIR, "build"),
+                [f"./{dev.UTILITY_TEST_DIR}/{dev.TEST_BUILD_DIR}/"
+                 "test-utility.elf"],
+            ],
         )
 
     def test_linux_with_a_directory_runs_only_that_tree(self):

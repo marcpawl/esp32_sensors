@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Run/debug the donny Linux ELF inside the dev container.
+
+  The before-launch step builds it with the root aggregator's `donny_build`
+  target (`idf.py build` in components/simulator/exe/donny). RUN_PATH names
+  the ELF explicitly: the root CMake project is `project(... NONE)` and
+  exposes only UTILITY targets, so no executable can be selected as
+  TARGET_NAME. Selecting this configuration also activates the matching
+  .idea/cmake.xml profile.
+
+  The linux app carries the same debug flags as the host tests, and the
+  CLion backend runs in the same container as the ELF, so Debug works with
+  breakpoints.
+-->
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="donny (linux ELF, container)" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="esp32_sensors_subprojects" TARGET_NAME="donny_build" CONFIG_NAME="Linux app (donny)" RUN_PATH="$PROJECT_DIR$/components/simulator/exe/donny/build_linux/donny.elf">
+    <method v="2">
+      <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+    </method>
+  </configuration>
+</component>

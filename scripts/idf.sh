@@ -39,6 +39,14 @@ if [ "$#" -eq 0 ]; then
     exit 2
 fi
 
+# Default to the locations the image bakes in (docker/esp-idf-profile.sh).
+# The remote CLion backend is started by the Toolbox agent without a login
+# shell, so it inherits neither variable; without these defaults the
+# aggregator configure aborts and idf.py cannot find the toolchain.
+IDF_PATH="${IDF_PATH:-/opt/esp/idf}"
+IDF_TOOLS_PATH="${IDF_TOOLS_PATH:-/opt/esp}"
+export IDF_PATH IDF_TOOLS_PATH
+
 # idf.py lives in $IDF_PATH/tools; make sure it is reachable even when the rest
 # of the environment came from the IDE (which sets PATH but not export.sh's
 # derived variables).

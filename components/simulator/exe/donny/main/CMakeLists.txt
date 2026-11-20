@@ -13,3 +13,7 @@ idf_component_register(
         libsimulator
         json
 )
+
+# Headers are target sources so a CMake file-API client (CLion) attaches them
+# to this target; CMake adds no compile step for a header.
+target_sources(${COMPONENT_LIB} PRIVATE "console_task.hpp")

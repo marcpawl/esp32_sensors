@@ -20,6 +20,15 @@ idf_component_register(
     WHOLE_ARCHIVE
 )
 
+# Headers are target sources so a CMake file-API client (CLion) attaches them
+# to this target; CMake adds no compile step for a header.
+target_sources(${COMPONENT_LIB} PRIVATE
+    "assert_test_support.hpp"
+    "assert_unity_support.hpp"
+    "static_string_assert_cases.hpp"
+    "static_vector_assert_cases.hpp"
+)
+
 # Standalone assert-trigger programs.
 #
 # The Unity tests fork+exec these programs to verify that contract violations
