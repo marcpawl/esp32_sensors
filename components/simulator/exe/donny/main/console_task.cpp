@@ -618,7 +618,7 @@ ConsoleRunner::ConsoleRunner(
         // driver must never take the task down.
         const json doc = json::parse(*line, nullptr, false);
         if (doc.is_discarded()) {
-            std::fprintf(stdout, "{\"error\":\"malformed JSON\"}\n");
+            std::fprintf(stdout, "MODEL {\"error\":\"malformed JSON\"}\n");
             std::fflush(stdout);
             continue;
         }
@@ -629,7 +629,7 @@ ConsoleRunner::ConsoleRunner(
         } else {
             response = snapshot(*board_);
         }
-        std::fprintf(stdout, "%s\n", response.dump().c_str());
+        std::fprintf(stdout, "MODEL %s\n", response.dump().c_str());
         std::fflush(stdout);
     }
 }
