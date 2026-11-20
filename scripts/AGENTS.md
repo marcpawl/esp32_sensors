@@ -38,6 +38,7 @@ invoked from the host.
 | host | `ssh [CMD...]` | SSH into the running dev container; no arguments = interactive login shell |
 | host | `clion-archive [ARCHIVE]` | Copy a local `CLion-*.tar.gz` into the container's Toolbox download cache |
 | both | `clion-compdb` | Merge every subproject's `compile_commands.json` into `.clion/compile_commands.json` for CLion's code model |
+| host | `clion-manual-test` | Start CLion and prompt through the manual tooltip check; refuses in CI |
 | both | `complete` | Internal: list subcommands matching a prefix |
 | host | `install-hooks` | Install the git commit hooks |
 
@@ -95,6 +96,41 @@ their container-absolute `/project/...` and `/opt/esp/...` paths.
 Run `build` first: a project without a database is skipped with a warning.
 After a rebuild, run `clion-compdb` again and reload the project in CLion.
 See the root `AGENTS.md` for opening the database as a CLion project.
+
+CLion's shared project files for that database are committed under
+`.clion/.idea/`: `.gitignore`, `editor.xml`, `misc.xml`, and `vcs.xml`.
+`misc.xml` maps the content root to `/project`, so opening
+`/project/.clion/compile_commands.json` from a fresh clone does not require
+*Change Project Root*. The generated database and `workspace.xml` stay local.
+
+### `clion-manual-test`
+
+This host-only wizard records a manual check of the tooltip workflow. Refuse
+to run it in CI (`CI` set) or inside the container: it needs the host's
+JetBrains Toolbox launcher and a terminal for prompts.
+
+The launcher is chosen in this order:
+
+- `CLION_LAUNCHER`, which may include arguments
+- `clion` on `PATH`
+- the Toolbox `scripts/clion`, `scripts/clion1`, and `apps/clion/bin/clion`
+  paths under the host user's home directory
+
+The command checks for `.clion/compile_commands.json`, removes this project's
+dev containers with `docker compose down --remove-orphans`, then calls
+`dev.py up`. If `~/Downloads/CLion-*.tar.gz` exists, it calls
+`dev.py clion-archive` to seed the backend archive; the first manual step
+then requires the Toolbox log to contain no CLion archive download. Without
+an archive, that step tells the user to wait for *Downloading IDE backend...*
+to finish. CLion is started without blocking.
+
+The wizard prints five manual steps and asks for `y` or `n` after each one.
+An invalid answer is rejected, EOF aborts the run, and `n` fails the run and
+names the step. Only five confirmed steps, plus the backend log check when
+an archive was seeded, produce a pass. The logic lives in
+`scripts/clion_manual_test.py`, with all process starts and input injected so
+`self-check` can cover it without launching an IDE. Running that file
+directly also works; it delegates to the same `dev.py` command.
 
 `build`, `test-linux`, `test-esp32`, and `clang-tidy` fetch missing submodules
 first.

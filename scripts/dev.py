@@ -15,7 +15,7 @@
 #                   test-simulator|\
 #                   test-esp32-timer|self-check|format|format-check|\
 #                   format-check-staged|pycodestyle|clang-tidy|install-hooks|\
-#                   shell|ssh|clion-archive|clion-compdb]
+#                   shell|ssh|clion-archive|clion-compdb|clion-manual-test]
 #   scripts/dev.py --help        # full help, including per-command details
 #
 # Environment:
@@ -47,6 +47,13 @@ import sys
 import tempfile
 import time
 from typing import Callable, NamedTuple
+
+from clion_manual_test import (
+    CLION_LAUNCHER_ENV,
+    find_clion_launcher,
+    prompt_yes_no,
+    run_manual_test,
+)
 
 # Always operate from the repository root, regardless of the caller's cwd.
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -168,6 +175,9 @@ DEV_SSH_START_TIMEOUT_SECONDS = 30.0
 # `<first 9 hex of sha256>-<filename from the download URL>`, and its
 # downloader treats an existing file at that path as a cached download.
 TOOLBOX_DOWNLOAD_DIR = "/home/dev/.cache/JetBrains/Toolbox/download"
+TOOLBOX_LOG = (
+    "/home/dev/.local/share/JetBrains/Toolbox/logs/toolbox-cli.latest.log"
+)
 # A character class keeps `pkill -f` from matching the shell that runs it,
 # whose command line also contains this text (the `ps | grep [p]attern` trick).
 TOOLBOX_AGENT_REGEX = "com.jetbrains.toolbox.[M]ainKt"
@@ -2592,6 +2602,116 @@ def cmd_clion_compdb() -> int:
     return 0
 
 
+def _launch_clion(command: str) -> int:
+    """Start CLion detached on the host, without waiting for it to exit."""
+    argv = shlex.split(command)
+    if not argv:
+        print("clion-manual-test: empty CLion launcher", file=sys.stderr)
+        return 1
+    try:
+        subprocess.Popen(argv, cwd=REPO_ROOT, start_new_session=True)
+    except OSError as error:
+        print(f"clion-manual-test: could not start CLion: {error}",
+              file=sys.stderr)
+        return 1
+    return 0
+
+
+def _remove_dev_containers() -> int:
+    """Stop and remove this compose project's containers. Host-only."""
+    return run(_compose_command("down", "--remove-orphans"))
+
+
+def _dev_py_command(command: str) -> int:
+    """Run another `dev.py` command through its documented entry point."""
+    script = REPO_ROOT / "scripts" / "dev.py"
+    return run([sys.executable, str(script), command])
+
+
+def _backend_download_log_check() -> tuple[bool, str]:
+    """Check the fresh Toolbox log for a CLion archive download.
+
+    The wizard removes the container first, so this log belongs only to the
+    run being tested. A seeded archive must produce no CLion download line.
+    """
+    command = _compose_command(
+        "exec", "-T", DEV_SSH_SERVICE, "cat", TOOLBOX_LOG,
+    )
+    result = subprocess.run(
+        command, cwd=REPO_ROOT, capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or f"exit {result.returncode}"
+        return False, f"could not read {TOOLBOX_LOG}: {detail}"
+
+    downloads = [
+        line.strip()
+        for line in result.stdout.splitlines()
+        if re.search(
+            r"CLion.*(tar\.gz|download)|download.*CLion",
+            line, re.IGNORECASE,
+        )
+    ]
+    if downloads:
+        return False, (
+            "Toolbox log recorded a CLion archive download: "
+            + downloads[-1][:120]
+        )
+    return True, "Toolbox log has no CLion archive download"
+
+
+def cmd_clion_manual_test() -> int:
+    """Start CLion and guide the host-only manual tooltip check (never CI).
+
+    Preflight checks the host, the absence of `CI`, a built compilation
+    database, and a CLion launcher. The launcher is taken from
+    `CLION_LAUNCHER`, then PATH, then the JetBrains Toolbox locations. The
+    wizard starts the dev container, starts CLion detached, and asks for an
+    explicit yes/no after each manual IDE step.
+    """
+    if is_in_container():
+        print("clion-manual-test: run this on the host.", file=sys.stderr)
+        return 1
+    if os.environ.get("CI"):
+        print("clion-manual-test: refusing to run on CI.", file=sys.stderr)
+        return 1
+
+    launcher = find_clion_launcher()
+    if not launcher:
+        print(
+            "clion-manual-test: no CLion launcher found; "
+            f"set {CLION_LAUNCHER_ENV}",
+            file=sys.stderr,
+        )
+        return 1
+
+    archives = _clion_archive_candidates()
+    if len(archives) > 1:
+        print(
+            "clion-manual-test: several CLion archives found; pass one "
+            "explicitly to `clion-archive`",
+            file=sys.stderr,
+        )
+        for archive in archives:
+            print(f"  {archive}", file=sys.stderr)
+        return 1
+    archive_path = str(archives[0]) if archives else None
+
+    return run_manual_test(
+        launcher=launcher,
+        start_container=lambda: _dev_py_command("up"),
+        launch_clion=_launch_clion,
+        prompt=prompt_yes_no,
+        database_exists=lambda: (
+            REPO_ROOT / CLION_DB_DIRECTORY / "compile_commands.json"
+        ).is_file(),
+        remove_containers=_remove_dev_containers,
+        archive_path=archive_path,
+        seed_archive=lambda: _dev_py_command("clion-archive"),
+        check_backend_log=_backend_download_log_check,
+    )
+
+
 def cmd_complete() -> int:
     """Print the command names matching a prefix (used by shell completion).
 
@@ -2805,6 +2925,7 @@ COMMANDS = {
     "ssh": cmd_ssh,
     "clion-archive": cmd_clion_archive,
     "clion-compdb": cmd_clion_compdb,
+    "clion-manual-test": cmd_clion_manual_test,
     "complete": cmd_complete,
 }
 

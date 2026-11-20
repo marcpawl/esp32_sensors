@@ -169,17 +169,31 @@ The CMake profiles do not provide a code model. For hover documentation,
    into `.clion/compile_commands.json` (git-ignored). The firmware and board
    databases come first, so a source built for both targets keeps the ESP-IDF
    include paths; host-only files keep their `linux` flags.
-3. In CLion, inside the dev container, use `File → Open` on that file and
-   choose *Open as Project*. Set `Tools → Compilation Database → Change
-   Project Root` to `/project`, and select a container-local System toolchain
-   in `Settings → Build, Execution, Deployment → Compilation Database`.
-   Remote Host toolchains are not supported for compilation-database projects.
-4. After a rebuild, re-run `clion-compdb` and reload with `Ctrl+Shift+O`.
+3. In CLion select *Remote Connections → ssh*. Use
+   `ssh -p 2222 dev@localhost` with project directory
+   `/project/.clion/compile_commands.json`, then choose *Open Project*. Wait
+   for *Downloading IDE backend...* to finish. This direct path was verified
+   on 2026-11-20.
+4. In that project tree, double-click
+   `components/espidfcpp/libespidfcpp/include/espidf_cpp/timer.hpp` and
+   hover `esp_timer_start_once`.
+5. The committed `.clion/.idea/misc.xml` already maps the content root to
+   `/project`, so no *Change Project Root* step is normally needed. Leave the
+   toolchain as *Use Default* in *Settings → Build, Execution, Deployment →
+   Compilation Database*; it is the container-local System toolchain. Remote
+   Host toolchains are not supported here.
+6. After a rebuild, re-run `clion-compdb` and reload with `Ctrl+Shift+O`.
+7. For a guided check, run `./scripts/dev.py clion-manual-test` on the host.
+   It removes old dev containers, calls `dev.py up`, seeds `clion-archive`
+   when a `~/Downloads/CLion-*.tar.gz` exists, starts CLion, and prompts
+   after each manual step. It refuses to run when `CI` is set; see
+   `scripts/AGENTS.md`.
 
 ESP-IDF's Doxygen comments live in the resolved headers under `/opt/esp/idf`,
 so no documentation import is needed: `esp_timer_start_once` is documented in
-`/opt/esp/idf/components/esp_timer/include/esp_timer.h`. This workflow is the
-intended path; the CLion hover check still needs to be done in the IDE.
+`/opt/esp/idf/components/esp_timer/include/esp_timer.h`. This is the verified
+path; repeat the hover check after changing include paths or rebuilding the
+database.
 
 > Editing the image, mounts, or user? Change `docker-compose.yml` (and
 > `Dockerfile`), **not** `devcontainer.json`. The Dev Container deliberately
