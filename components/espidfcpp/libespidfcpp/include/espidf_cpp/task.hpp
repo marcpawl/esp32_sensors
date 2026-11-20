@@ -107,4 +107,6 @@ class Task {
     Runner runner_;
 };
 
+    void vTaskDelay(std::chrono::milliseconds delay);
+
 }  // namespace thermo::espidf_cpp

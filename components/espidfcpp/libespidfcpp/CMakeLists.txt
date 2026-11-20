@@ -16,6 +16,7 @@ idf_component_register(
     SRCS
         "src/http_server.cpp"
         "src/mutex.cpp"
+        "src/task.cpp"
     INCLUDE_DIRS
         "include"
     REQUIRES
