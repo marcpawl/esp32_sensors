@@ -917,8 +917,7 @@ class ClionManualTestCommandTests(unittest.TestCase):
         self.assertEqual(arguments["launcher"], "/bin/clion")
         self.assertIs(arguments["launch_clion"], dev._launch_clion)
         self.assertIs(arguments["prompt"], dev.prompt_yes_no)
-        self.assertIs(arguments["remove_containers"],
-                      dev._remove_dev_containers)
+        self.assertTrue(callable(arguments["remove_containers"]))
         self.assertIsNone(arguments["archive_path"])
         self.assertIs(arguments["check_backend_log"],
                       dev._backend_download_log_check)
@@ -928,6 +927,11 @@ class ClionManualTestCommandTests(unittest.TestCase):
                                return_value=0) as command:
             self.assertEqual(arguments["start_container"](), 0)
             command.assert_called_once_with("up")
+
+        with mock.patch.object(dev, "_dev_py_command",
+                               return_value=0) as command:
+            self.assertEqual(arguments["remove_containers"](), 0)
+            command.assert_called_once_with("down")
 
     def test_command_passes_the_only_archive_to_the_wizard(self):
         archive = Path("/home/marcpawl/Downloads/CLion-2026.3.tar.gz")
@@ -994,14 +998,6 @@ class ClionManualTestCommandTests(unittest.TestCase):
             code = dev._launch_clion("/bin/clion")
         self.assertEqual(code, 1)
         self.assertIn("could not start CLion", err.getvalue())
-
-    def test_remove_dev_containers_uses_compose_down(self):
-        with mock.patch.object(dev, "run", return_value=0) as runner:
-            code = dev._remove_dev_containers()
-        self.assertEqual(code, 0)
-        runner.assert_called_once_with(
-            dev._compose_command("down", "--remove-orphans"),
-        )
 
     def test_dev_py_command_uses_the_documented_entry_point(self):
         with mock.patch.object(dev, "run", return_value=0) as runner:
@@ -2370,6 +2366,52 @@ class DevContainerUpTests(unittest.TestCase):
         finally:
             dev.is_in_container, dev.run = original_in_container, original_run
         self.assertEqual(calls, [dev._compose_command("up", "-d", "dev")])
+
+
+class DevContainerDownTests(unittest.TestCase):
+    """`dev.py down` removes the compose service used by the workflow."""
+
+    def test_down_is_registered_and_host_only(self):
+        self.assertIn("down", dev.COMMANDS)
+        self.assertIs(dev.COMMANDS["down"], dev.cmd_down)
+        self.assertTrue((dev.cmd_down.__doc__ or "").strip())
+
+    def test_down_is_listed_in_the_command_table_help(self):
+        output = subprocess.run(
+            (sys.executable, str(dev.REPO_ROOT / "scripts" / "dev.py"),
+             "--help"),
+            cwd=dev.REPO_ROOT, capture_output=True, text=True, check=True,
+        ).stdout
+        self.assertIn("down", output)
+        self.assertIn("Stop and remove the long-running dev container",
+                      output)
+
+    def test_down_uses_the_repository_compose_file(self):
+        self.assertEqual(
+            dev._compose_command("down", "--remove-orphans"),
+            [
+                "docker", "compose", "-f", "docker/docker-compose.yml",
+                "down", "--remove-orphans",
+            ],
+        )
+
+    def test_down_refuses_to_run_inside_the_container(self):
+        err = io.StringIO()
+        with mock.patch.object(dev, "is_in_container", return_value=True), \
+                mock.patch.object(dev, "run") as runner, \
+                redirect_stderr(err):
+            rc = dev.cmd_down()
+        self.assertEqual(rc, 1)
+        runner.assert_not_called()
+        self.assertIn("run this on the host", err.getvalue())
+
+    def test_down_stops_the_container_on_the_host(self):
+        with mock.patch.object(dev, "is_in_container", return_value=False), \
+                mock.patch.object(dev, "run", return_value=0) as runner:
+            self.assertEqual(dev.cmd_down(), 0)
+        runner.assert_called_once_with(
+            dev._compose_command("down", "--remove-orphans"),
+        )
 
 
 class DevImageShellTests(unittest.TestCase):

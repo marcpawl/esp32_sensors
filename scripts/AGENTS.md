@@ -20,6 +20,7 @@ invoked from the host.
 | host | `pull` | Pull the pinned prebuilt dev image |
 | host | `image` | Build the dev image locally from the `Dockerfile` |
 | host | `up` | Start the `dev` service with `docker compose up -d` |
+| host | `down` | Stop/remove the dev containers with `docker compose down --remove-orphans` |
 | both | `submodules` | Fetch the pinned git submodules (`third_party/sml`) |
 | both | `build [--analyzer[=BOOL]] [DIRECTORY...]` | Build every project in/under the directories (from the root, the root aggregator builds everything); the analyzer is off by default, `--analyzer` enables it |
 | both | `build-test-espidf-cpp` | Build the `libespidfcpp` unit tests for `linux` |
@@ -66,7 +67,9 @@ mounts read-only, and runs the command through a login shell in `/project`.
 
 `up` is host-only. It runs `docker compose up -d` for the `dev` service using
 the repository's compose file, so the container is already running before
-`ssh`, a Dev Container, or a CLion backend connects.
+`ssh`, a Dev Container, or a CLion backend connects. `down` is its host-only
+counterpart: it runs `docker compose down --remove-orphans`, removing the
+container and its in-memory state such as the Toolbox logs.
 
 `clion-archive` is host-only too. It copies a local `CLion-*.tar.gz` into the
 container path the Toolbox agent downloads the remote backend to, so CLion
@@ -116,9 +119,8 @@ The launcher is chosen in this order:
 - the Toolbox `scripts/clion`, `scripts/clion1`, and `apps/clion/bin/clion`
   paths under the host user's home directory
 
-The command checks for `.clion/compile_commands.json`, removes this project's
-dev containers with `docker compose down --remove-orphans`, then calls
-`dev.py up`. If `~/Downloads/CLion-*.tar.gz` exists, it calls
+The command checks for `.clion/compile_commands.json`, then calls
+`dev.py down` and `dev.py up`. If `~/Downloads/CLion-*.tar.gz` exists, it calls
 `dev.py clion-archive` to seed the backend archive; the first manual step
 then requires Toolbox log evidence that the archive was reused from the
 local download cache. A "will be reused as a cached previous download" line

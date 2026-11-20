@@ -184,7 +184,7 @@ The CMake profiles do not provide a code model. For hover documentation,
    Host toolchains are not supported here.
 6. After a rebuild, re-run `clion-compdb` and reload with `Ctrl+Shift+O`.
 7. For a guided check, run `./scripts/dev.py clion-manual-test` on the host.
-   It removes old dev containers, calls `dev.py up`, seeds `clion-archive`
+   It calls `dev.py down` then `dev.py up`, seeds `clion-archive`
    when a `~/Downloads/CLion-*.tar.gz` exists, starts CLion, and prompts
    after each manual step. It refuses to run when `CI` is set; see
    `scripts/AGENTS.md`.

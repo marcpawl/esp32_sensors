@@ -971,6 +971,20 @@ def cmd_up() -> int:
     return run(_compose_command("up", "-d", DEV_SSH_SERVICE))
 
 
+def cmd_down() -> int:
+    """Stop and remove the long-running dev container.
+
+    Runs `docker compose down --remove-orphans` with the repository's compose
+    file, so a later `up` starts from a clean container and a fresh Toolbox
+    log. Host-only, like `up`.
+    """
+    if is_in_container():
+        print("down: run this on the host; inside use `shell`.",
+              file=sys.stderr)
+        return 1
+    return run(_compose_command("down", "--remove-orphans"))
+
+
 def _idf(directory: str, build_dir: str, *args: str) -> list[str]:
     """`idf.py` argv for a project directory relative to the repo root. Pure.
 
@@ -2617,11 +2631,6 @@ def _launch_clion(command: str) -> int:
     return 0
 
 
-def _remove_dev_containers() -> int:
-    """Stop and remove this compose project's containers. Host-only."""
-    return run(_compose_command("down", "--remove-orphans"))
-
-
 def _dev_py_command(command: str) -> int:
     """Run another `dev.py` command through its documented entry point."""
     script = REPO_ROOT / "scripts" / "dev.py"
@@ -2740,7 +2749,7 @@ def cmd_clion_manual_test() -> int:
         database_exists=lambda: (
             REPO_ROOT / CLION_DB_DIRECTORY / "compile_commands.json"
         ).is_file(),
-        remove_containers=_remove_dev_containers,
+        remove_containers=lambda: _dev_py_command("down"),
         archive_path=archive_path,
         seed_archive=lambda: _dev_py_command("clion-archive"),
         check_backend_log=_backend_download_log_check,
@@ -2941,6 +2950,7 @@ COMMANDS = {
     "pull": cmd_pull,
     "image": cmd_image,
     "up": cmd_up,
+    "down": cmd_down,
     "submodules": cmd_submodules,
     "build": cmd_build,
     "build-test-espidf-cpp": cmd_build_test_espidf_cpp,
