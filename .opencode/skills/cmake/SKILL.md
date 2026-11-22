@@ -77,6 +77,22 @@ After a successful build that verifies adding or removing a `.cpp` or `.hpp`
 in a `CMakeLists.txt`, run `./scripts/dev.py clion-compdb` to refresh
 `.clion/compile_commands.json` for CLion's code model.
 
+## Adding a project
+
+Adding a new ESP-IDF subproject means adding its `CMakeLists.txt` and wiring
+it into the build (for example, the root aggregator's `_idf_subproject(...)`
+call when it belongs there).
+
+- Run `./scripts/dev.py clion-run-configs` after adding a new project so
+  CLion's linux ELF run/debug configurations and CMake profiles stay in sync
+  with the discovered projects.
+
+## Adding to a project
+When a C++ file (.cpp, .hpp) is added or removed from a CMakeLists.txt
+
+- After a successful build, run `./scripts/dev.py clion-compdb` to refresh the
+  merged compilation database for CLion's code model.
+
 ## Headers are target sources
 
 **Every header the target owns must be listed in `target_sources()`**, even

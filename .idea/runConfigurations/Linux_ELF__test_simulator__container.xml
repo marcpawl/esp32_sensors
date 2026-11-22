@@ -4,10 +4,10 @@
 
   The before-launch step builds it with the root aggregator's
   `test-simulator_build` target (`idf.py build` in
-  components/simulator/tests/test-simulator). RUN_PATH names the ELF
-  explicitly: the root CMake project is `project(... NONE)` and exposes only
-  UTILITY targets, so no executable can be selected as TARGET_NAME. Selecting
-  this configuration also activates the matching .idea/cmake.xml profile.
+  components/simulator/tests/test-simulator). RUN_PATH names the ELF explicitly:
+  the root CMake project is `project(... NONE)` and exposes only UTILITY
+  targets, so no executable can be selected as TARGET_NAME. Selecting this
+  configuration also activates the matching .idea/cmake.xml profile.
 
   Host tests compile with -gdwarf-4 -ggdb -Og and the CLion backend runs in
   the same container as the ELF, so Debug works with breakpoints.
