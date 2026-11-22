@@ -53,6 +53,7 @@
 #include "hal/led_types.hpp"
 #include "hal/switch_types.hpp"
 #include "hal/wifi_types.hpp"
+#include "hal_stub/board_stub.hpp"
 #include "logic/rom_id.hpp"
 
 // The vendored JSON library is not analyzed. `-fanalyzer` reports findings
@@ -162,6 +163,10 @@ constexpr const char* to_text(hal::SwitchState state) noexcept {
 
 constexpr const char* to_text(hal::LedState state) noexcept {
     return state == hal::LedState::kOn ? "on" : "off";
+}
+
+constexpr const char* to_text(hal::stub::BoardStub::Power state) {
+    return state == hal::stub::BoardStub::Power::On ? "on" : "off";
 }
 
 // Parses "on" / "off" (or a JSON boolean). Returns `std::nullopt` for anything
@@ -323,6 +328,7 @@ json snapshot(const hal::stub::BoardStub& board) {
     }
 
     return json{
+        {"power", to_text(board.power())},
         {"user_switch", to_text(board.user_switch().read())},
         {"config_switch", to_text(board.config_switch().read())},
         {"run_switch", to_text(board.run_switch().read())},
@@ -491,6 +497,11 @@ std::optional<std::string> apply(const json& doc, hal::stub::BoardStub& board) {
     if (!doc.is_object()) {
         return "document must be a JSON object";
     }
+
+    // TODO(AI!) Parse power
+    // Parse power in JSON.  If the new value is off, and the board is currently
+    // on, then call log::reboot.
+    // ESP_LOGI("Powering off, rebooting.")
 
     // Switches.
     for (const auto& [key, sw] :

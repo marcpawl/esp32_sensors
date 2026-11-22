@@ -8,14 +8,64 @@ simulated board model with tab-completed commands.
 Usage:
     scripts/donny.py
 
-Initial commands:
-    power on    Set the run switch on and the config switch off.
-    power off   Set the run and config switches off.
-    show        Request and display the current model.
-    help        Show command help.
-    quit        Exit the console.
-
 The simulator prints each state response as `MODEL <json>` on stdout.
+
+# TODO(AI!)
+Have the application be a TUI, curses based.
+
+Three panes:
+    ----------------
+    : Left | Right |
+    ----------------
+    :   Bottom     |
+    ----------------
+
+Add a command send, that sends the json,  
+The power command will prepare the json to modify.
+Add commands to modify the prepared json:
+    switch config on  # config_switch
+    switch config off 
+    switch run on # run_switch
+    switch run off
+
+Add commands to remove from the prepared JSON:
+    no power
+    no switch config
+    no switch run
+
+
+Have the application be a TUI (Textual User Interface). 
+Think 1980's mainframe applications visual style. Using a TUI
+will allow donny.py to run in the container without needing
+a windowing environment. Maybe curses based.
+
+Three panes:
+    :--Board---:--Settings--:
+    |          |            |
+    | Left     | Right      |
+    |          |            |
+    :--Commands-------------:
+    |                       |
+    |   Bottom              |
+    |                       |
+    :-----------------------:
+
+The Bottom pane should be 5 lines high and will be the area where
+commands are typed.  There should be a prompt "] " to indicate that
+we are waiting for a command. Error messages about invalid commands go in this
+area.  The title should be "Commands".
+
+The Left and Right panes should take up the remainder of the screen
+height. And be on top of Commands.  Left and Right divide up the screen width.
+
+The Left pane should contain a live view of the most recent
+model as received by the simulator. It's title should be "Board"
+The simulator can send model updates at any time.
+
+The Right pane should contain the formatted JSON that
+the send command will transmit to the simulator when executed. It's title should
+be "Settings".
+
 """
 
 from __future__ import annotations
@@ -220,9 +270,9 @@ class DonnyConsole:
             return True
         if command == "power":
             if args.state == "on":
-                self.send({"run_switch": "on", "config_switch": "off"})
+                self.send({"power": "on"})
             else:
-                self.send({"run_switch": "off", "config_switch": "off"})
+                self.send({"power": "off"})
             return True
 
         print(f"unknown command: {command}")

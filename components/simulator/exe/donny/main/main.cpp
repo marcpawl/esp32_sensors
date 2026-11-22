@@ -31,6 +31,7 @@ namespace {
 constexpr char kTag[] = "donny";
 
 // Sends ESP-IDF's log output to stderr.
+//vi :q
 //
 // The console task's protocol owns stdout (one JSON document per line), but
 // ESP-IDF logs to stdout by default (`esp_log_vprint_func = &vprintf`), and the
