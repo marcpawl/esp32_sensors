@@ -73,6 +73,10 @@ A new `.cpp` file has to be listed wherever its target collects sources —
 is build configuration, not documentation, so it belongs in the file; the rule
 above only forbids describing the sources, not naming them as inputs.
 
+After a successful build that verifies adding or removing a `.cpp` or `.hpp`
+in a `CMakeLists.txt`, run `./scripts/dev.py clion-compdb` to refresh
+`.clion/compile_commands.json` for CLion's code model.
+
 ## Headers are target sources
 
 **Every header the target owns must be listed in `target_sources()`**, even
