@@ -39,7 +39,8 @@ invoked from the host.
 | host | `ssh [CMD...]` | SSH into the running dev container; no arguments = interactive login shell |
 | host | `clion-archive [ARCHIVE]` | Copy a local `CLion-*.tar.gz` into the container's Toolbox download cache |
 | both | `clion-compdb` | Merge every subproject's `compile_commands.json` into `.clion/compile_commands.json` for CLion's code model |
-| host | `clion-manual-test` | Start CLion and prompt through the manual tooltip check; refuses in CI |
+| both | `clion-run-configs` | Generate CLion CMake profiles and linux ELF run/debug configurations for every discovered linux executable project |
+| host | `clion-manual-test` | Start CLion and prompt through the manual tooltip check; refuses in CI or when CLion is already running |
 | both | `complete` | Internal: list subcommands matching a prefix |
 | host | `install-hooks` | Install the git commit hooks |
 
@@ -85,6 +86,19 @@ merges the databases written by `build` into `.clion/compile_commands.json`,
 which CLion opens as one compilation-database project covering every source.
 The file is generated, git-ignored, and safe to delete.
 
+### `clion-run-configs`
+
+Discovers every `linux`-target ESP-IDF project (host suites and applications
+such as `donny`) and (re)generates the shared linux ELF run/debug
+configurations in `.idea/runConfigurations/` (`Linux_ELF__*__container.xml`).
+Each configuration builds through the matching root `<subproject>_build`
+target, runs the ELF from `build_linux`, and selects the corresponding
+`.idea/cmake.xml` profile, so it can be run and debugged from CLion. The
+linux profiles in `.idea/cmake.xml` are updated to match the discovered
+projects. Other shared run configurations are left untouched; stale generated
+linux ELF configs are removed. Re-run it after adding or renaming a linux
+executable project.
+
 Databases are read in a fixed order:
 
 - `mcgowan` (Xtensa firmware)
@@ -119,23 +133,58 @@ The launcher is chosen in this order:
 - the Toolbox `scripts/clion`, `scripts/clion1`, and `apps/clion/bin/clion`
   paths under the host user's home directory
 
-The command checks for `.clion/compile_commands.json`, then calls
-`dev.py down` and `dev.py up`. If `~/Downloads/CLion-*.tar.gz` exists, it calls
-`dev.py clion-archive` to seed the backend archive; the first manual step
-then requires Toolbox log evidence that the archive was reused from the
-local download cache. A "will be reused as a cached previous download" line
-or a "Correct checksum for <cache path>" line passes even when the reuse
-line also names the remote URL; a remote download line fails. Without an
-archive, that step tells the user to wait for *Downloading IDE backend...*
-to finish. CLion is started without blocking.
+The wizard's first two actions are fixed:
 
-The wizard prints five manual steps and asks for `y` or `n` after each one.
-An invalid answer is rejected, EOF aborts the run, and `n` fails the run and
-names the step. Only five confirmed steps, plus the backend log check when
-an archive was seeded, produce a pass. The logic lives in
-`scripts/clion_manual_test.py`, with all process starts and input injected so
-`self-check` can cover it without launching an IDE. Running that file
-directly also works; it delegates to the same `dev.py` command.
+1. Refuse and abort when CLion is already running on the host. It scans
+   `/proc/<pid>/cmdline` for CLion's install path and skips its own process,
+   so the `clion-manual-test` argument is not a false positive. There is no
+   check inside the dev container, which is about to be removed.
+2. Kill and delete the dev container with `dev.py down`
+   (`docker compose down --remove-orphans`). A failure here aborts the test.
+
+The command then runs `dev.py up`, `dev.py build`, `dev.py clion-compdb`, and
+`dev.py clion-run-configs` in that order to start the container and prepare
+the compilation database and linux ELF run/debug configurations. If
+`~/Downloads/CLion-*.tar.gz` exists, it calls `dev.py clion-archive` to seed
+the backend archive; the first manual step then requires Toolbox log evidence
+that the archive was reused from the local download cache. A "will be reused
+as a cached previous download" line or a "Correct checksum for <cache path>"
+line passes even when the reuse line also names the remote URL; a remote
+download line fails. Without an archive, that step tells the user to wait for
+*Downloading IDE backend...* to finish. CLion is started without blocking.
+
+Before the first prompt the wizard polls the Toolbox log for the opened remote
+project. No `serverMode` entry yet means CLion has not connected, so it polls
+every 10 seconds for up to 10 minutes before asking
+`No project opened in 10 minutes; wait some more?`:
+
+- `y` — wait another 10 minutes
+- `n` — fail with `FAILED: no project was opened in 10 minutes.`
+- EOF — abort the run
+
+A `serverMode` entry other than `/project` fails at once with
+`FAILED: the wrong project is opened in CLion.` without waiting or prompting.
+
+The wizard prints three manual steps and asks for `y` or `n` after each one:
+
+1. Connect CLion to the remote project.
+2. Verify the ESP-IDF tooltip, directly after the connection.
+3. Run the `test-espidf-cpp` linux ELF run/debug configuration.
+
+The compilation-database checks are the tooltip step's fallback, numbered
+2.1, 2.2, and 2.3: open the database, check path settings, and check the
+toolchain. They run in order only when step 2 fails and are skipped when it
+succeeds; the run still fails on step 2 after they finish.
+
+Before the tooltip and run steps it scans the Toolbox log and fails if the
+remote project directory is not `/project`, so a wrong connection directory is
+caught. An invalid answer is rejected, EOF aborts the run, and `n` fails the
+run and names the step. Only the three default steps, plus the backend log
+check when an archive was seeded and the remote project directory checks,
+produce a pass. The logic lives in `scripts/clion_manual_test.py`, with all
+process starts and input injected so `self-check` can cover it without
+launching an IDE. Running that file directly also works; it delegates to the
+same `dev.py` command.
 
 `build`, `test-linux`, `test-esp32`, and `clang-tidy` fetch missing submodules
 first.

@@ -9,13 +9,11 @@
 # specifics live in one place.
 #
 # Usage:
-#   scripts/dev.py [pull|image|up|submodules|build|build-test-espidf-cpp|\
-#                   flash|monitor|menuconfig|test|test-utility|test-hal-common|\
-#                   test-hal-stub|test-logic|test-espidf-cpp|\
-#                   test-simulator|\
-#                   test-esp32-timer|self-check|format|format-check|\
-#                   format-check-staged|pycodestyle|clang-tidy|install-hooks|\
-#                   shell|ssh|clion-archive|clion-compdb|clion-manual-test]
+#   scripts/dev.py [pull|image|up|down|submodules|build|build-test-espidf-cpp|\
+#                   flash|monitor|menuconfig|test-linux|test-esp32|self-check|\
+#                   format|format-check|format-check-staged|pycodestyle|\
+#                   clang-tidy|install-hooks|shell|ssh|clion-archive|\
+#                   clion-compdb|clion-manual-test|clion-run-configs]
 #   scripts/dev.py --help        # full help, including per-command details
 #
 # Environment:
@@ -50,6 +48,9 @@ from typing import Callable, NamedTuple
 
 from clion_manual_test import (
     CLION_LAUNCHER_ENV,
+    PROJECT_OPEN_PENDING,
+    PROJECT_OPEN_READY,
+    PROJECT_OPEN_WRONG,
     find_clion_launcher,
     prompt_yes_no,
     run_manual_test,
@@ -182,6 +183,12 @@ TOOLBOX_LOG = (
 # whose command line also contains this text (the `ps | grep [p]attern` trick).
 TOOLBOX_AGENT_REGEX = "com.jetbrains.toolbox.[M]ainKt"
 CLION_ARCHIVE_PATTERN = "CLion-*.tar.gz"
+# A running CLion has its install path in `/proc/<pid>/cmdline` (for example
+# `.../Toolbox/apps/clion/bin/clion`). Matching a path component rather than
+# the bare word "clion" avoids matching this script's own `clion-manual-test`
+# argument. The optional version suffix and `-` cover `clion1` and
+# `clion-radler`.
+CLION_PROCESS_MARKER = re.compile(r"/clion(?:[0-9]+)?(?:/|$|[\s-])")
 
 # ESP-IDF's locations in the dev image: `IDF_PATH` is a Docker ENV in the
 # official base image, and `/opt/esp/entrypoint.sh` exports `IDF_TOOLS_PATH`
@@ -277,6 +284,10 @@ ROOT_BUILD_DIR = "build_root"
 # that in the repo root would overwrite the tracked CMake project's config.
 # The files it resolves are still rooted at /project; see AGENTS.md.
 CLION_DB_DIRECTORY = ".clion"
+
+# Shared CLion run configurations live here. The linux ELF run/debug configs
+# can be regenerated with `scripts/dev.py clion-run-configs`.
+CLION_RUN_CONFIG_DIR = ".idea/runConfigurations"
 
 # Directories never descended into while discovering projects. Build output
 # holds no sources, `.git` is not a tree of either, and the vendored trees are
@@ -2616,6 +2627,44 @@ def cmd_clion_compdb() -> int:
     return 0
 
 
+def _cmdline_names_clion(cmdline: str) -> bool:
+    """True when a `/proc/<pid>/cmdline` string belongs to CLion. Pure.
+
+    The arguments are NUL-separated; the search works with either separator.
+    """
+    text = cmdline.replace("\0", " ")
+    return CLION_PROCESS_MARKER.search(text) is not None
+
+
+def _local_clion_is_running(
+    proc_root: Path = Path("/proc"),
+    own_pid: int | None = None,
+) -> bool:
+    """True when a CLion IDE process is running on the host.
+
+    Scans `/proc/<pid>/cmdline` for CLion's install path. The current process
+    is skipped because it may itself be the `clion-manual-test` command.
+    Unreadable entries (short-lived processes, other users) are ignored: a
+    running CLion stays alive long enough to be seen.
+    """
+    skip_pid = os.getpid() if own_pid is None else own_pid
+    try:
+        entries = list(proc_root.iterdir())
+    except OSError:
+        return False
+    for entry in entries:
+        if not entry.name.isdigit() or int(entry.name) == skip_pid:
+            continue
+        try:
+            raw = (entry / "cmdline").read_bytes()
+        except OSError:
+            continue
+        cmdline = raw.decode("utf-8", "replace")
+        if _cmdline_names_clion(cmdline):
+            return True
+    return False
+
+
 def _launch_clion(command: str) -> int:
     """Start CLion detached on the host, without waiting for it to exit."""
     argv = shlex.split(command)
@@ -2704,14 +2753,93 @@ def _backend_download_log_check() -> tuple[bool, str]:
     return _backend_download_log_verdict(result.stdout)
 
 
+_REMOTE_SERVER_MODE_RE = re.compile(r"serverMode,\s*(/[^,\]\s]+)")
+
+
+def _opened_project_verdict(stdout: str) -> tuple[str, str]:
+    """Classify the opened remote project from a Toolbox log. Pure.
+
+    CLion remote connections started via Toolbox record `serverMode,
+    <directory>` in the log. No match means the connection has not happened
+    yet; a match other than `/project` is a wrong project, not a timeout.
+    """
+    matches = _REMOTE_SERVER_MODE_RE.findall(stdout)
+    if not matches:
+        return PROJECT_OPEN_PENDING, (
+            "Toolbox log has no remote project directory yet."
+        )
+
+    directory = matches[-1]
+    if directory == "/project":
+        return PROJECT_OPEN_READY, (
+            "Toolbox log shows the remote project directory `/project`."
+        )
+
+    return PROJECT_OPEN_WRONG, (
+        "Toolbox log shows remote project directory "
+        f"`{directory}`; expected `/project`."
+    )
+
+
+def _remote_project_dir_verdict(stdout: str) -> tuple[bool, str]:
+    """Classify the most recent remote project directory from Toolbox log.
+
+    The repository must be opened as `/project` so shared `.idea` run/debug
+    configurations are available. Both a missing and a wrong directory fail.
+    """
+    status, detail = _opened_project_verdict(stdout)
+    if status == PROJECT_OPEN_READY:
+        return True, detail
+    if status == PROJECT_OPEN_PENDING:
+        return False, (
+            "Toolbox log has no remote project directory; connect CLion to "
+            "the remote project `/project`."
+        )
+    return False, detail
+
+
+def _opened_project_log_check() -> tuple[str, str]:
+    """Poll the Toolbox log while CLion is opening the remote project."""
+    command = _compose_command(
+        "exec", "-T", DEV_SSH_SERVICE, "cat", TOOLBOX_LOG,
+    )
+    result = subprocess.run(
+        command, cwd=REPO_ROOT, capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or f"exit {result.returncode}"
+        return PROJECT_OPEN_PENDING, f"could not read {TOOLBOX_LOG}: {detail}"
+
+    return _opened_project_verdict(result.stdout)
+
+
+def _remote_project_dir_log_check() -> tuple[bool, str]:
+    """Check the Toolbox log for the remote project directory in use."""
+    command = _compose_command(
+        "exec", "-T", DEV_SSH_SERVICE, "cat", TOOLBOX_LOG,
+    )
+    result = subprocess.run(
+        command, cwd=REPO_ROOT, capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or f"exit {result.returncode}"
+        return False, f"could not read {TOOLBOX_LOG}: {detail}"
+
+    return _remote_project_dir_verdict(result.stdout)
+
+
 def cmd_clion_manual_test() -> int:
     """Start CLion and guide the host-only manual tooltip check (never CI).
 
-    Preflight checks the host, the absence of `CI`, a built compilation
-    database, and a CLion launcher. The launcher is taken from
-    `CLION_LAUNCHER`, then PATH, then the JetBrains Toolbox locations. The
-    wizard starts the dev container, starts CLion detached, and asks for an
-    explicit yes/no after each manual IDE step.
+    Preflight checks the host, the absence of `CI`, and a CLion launcher. The
+    launcher is taken from `CLION_LAUNCHER`, then PATH, then the JetBrains
+    Toolbox locations. The wizard first refuses when CLion is already running
+    locally, then kills and deletes the dev container (`down`), then runs `up`,
+    `build`, `clion-compdb`, and `clion-run-configs`, optionally seeds a local
+    backend archive, starts CLion detached, and asks for an explicit yes/no
+    after each manual IDE step. Before the first prompt it polls the Toolbox
+    log for the opened remote project, allowing a 10-minute wait that the user
+    may extend; a wrong project fails immediately.
     """
     if is_in_container():
         print("clion-manual-test: run this on the host.", file=sys.stderr)
@@ -2743,17 +2871,306 @@ def cmd_clion_manual_test() -> int:
 
     return run_manual_test(
         launcher=launcher,
+        check_clion_running=_local_clion_is_running,
+        stop_container=lambda: _dev_py_command("down"),
         start_container=lambda: _dev_py_command("up"),
+        build=lambda: _dev_py_command("build"),
+        clion_compdb=lambda: _dev_py_command("clion-compdb"),
+        clion_run_configs=lambda: _dev_py_command("clion-run-configs"),
         launch_clion=_launch_clion,
         prompt=prompt_yes_no,
-        database_exists=lambda: (
-            REPO_ROOT / CLION_DB_DIRECTORY / "compile_commands.json"
-        ).is_file(),
-        remove_containers=lambda: _dev_py_command("down"),
         archive_path=archive_path,
         seed_archive=lambda: _dev_py_command("clion-archive"),
         check_backend_log=_backend_download_log_check,
+        check_remote_project_dir=_remote_project_dir_log_check,
+        check_opened_project=_opened_project_log_check,
     )
+
+
+# ---------------------------------------------------------------------------
+# CLion Linux ELF run/debug configuration generation
+# ---------------------------------------------------------------------------
+
+_IDF_SUBPROJECT_CALL = re.compile(
+    r"_idf_subproject\(\s*([^\s)]+)\s+([^\s)]+)\s+"
+    r"(build_linux|build_esp32s3)\b"
+)
+
+# Profiles that are always kept in .idea/cmake.xml (firmware/chip targets and
+# any other non-generated profile). Linux ELF profiles for discovered linux
+# executable projects are regenerated by `clion-run-configs`.
+_CLION_FIRMWARE_PROFILE = (
+    '      <configuration PROFILE_NAME="Espressif ESP32-S3" ENABLED="true" '
+    'CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" '
+    'GENERATION_DIR="$PROJECT_DIR$/mcgowan/cmake-build-esp32s3" '
+    'GENERATION_OPTIONS="-DIDF_TARGET=esp32s3 -DCMAKE_BUILD_TYPE=Debug" />'
+)
+
+
+def _linux_subproject_ids(root: Path = REPO_ROOT) -> dict[str, str]:
+    """Map a linux subproject's repo-relative directory to its aggregate id.
+
+    The root aggregator's `_idf_subproject(<id> <dir> build_linux ...)` calls
+    define the `<id>_build` target name CLion run configurations must use.
+    """
+    text = _read_text(root / "CMakeLists.txt") or ""
+    ids: dict[str, str] = {}
+    for match in _IDF_SUBPROJECT_CALL.finditer(text):
+        aggregate_id, rel_dir, build_dir = match.groups()
+        if build_dir == "build_linux":
+            ids[rel_dir] = aggregate_id
+    return ids
+
+
+def _clion_linux_generation_suffix(aggregate_id: str) -> str:
+    """The `cmake-build-linux-*` directory suffix for a linux profile."""
+    if aggregate_id == "test-esp_timer-stub":
+        return "esp-timer-stub"
+    return aggregate_id
+
+
+def _clion_linux_profile_name(aggregate_id: str) -> str:
+    """The CLion CMake profile name for a linux executable project."""
+    if aggregate_id == "donny":
+        return "Linux app (donny)"
+    if aggregate_id == "test-esp_timer-stub":
+        return "Host tests (esp_timer stub)"
+    return f"Host tests ({aggregate_id})"
+
+
+def _clion_linux_run_slug(aggregate_id: str) -> str:
+    """Filename slug for a `Linux_ELF__<slug>__container.xml` config."""
+    return aggregate_id.replace("-", "_")
+
+
+def _clion_linux_descriptors(
+    root: Path = REPO_ROOT,
+) -> list[dict[str, str]]:
+    """Linux executable projects with their CLion/run/debug metadata.
+
+    Each descriptor carries the information needed to write the matching
+    `.idea/cmake.xml` profile and `.idea/runConfigurations/Linux_ELF__*` file.
+    Projects are returned in path order for deterministic output.
+    """
+    ids = _linux_subproject_ids(root)
+    descriptors: list[dict[str, str]] = []
+    for project in _discover_projects(root):
+        if project.target != "linux":
+            continue
+        rel_dir = _repo_relative(project.directory, root)
+        aggregate_id = ids.get(rel_dir, project.name)
+        profile_name = _clion_linux_profile_name(aggregate_id)
+        descriptors.append({
+            "aggregate_id": aggregate_id,
+            "project_name": project.name,
+            "rel_dir": rel_dir,
+            "elf_path": f"{rel_dir}/{TEST_BUILD_DIR}/{project.name}.elf",
+            "target_name": f"{aggregate_id}_build",
+            "profile_name": profile_name,
+            "config_name": profile_name,
+            "display_name": f"{aggregate_id} (linux ELF, container)",
+            "slug": _clion_linux_run_slug(aggregate_id),
+            "generation_dir": (
+                f"$PROJECT_DIR$/{rel_dir}/cmake-build-linux-"
+                f"{_clion_linux_generation_suffix(aggregate_id)}"
+            ),
+            "kind": "app" if aggregate_id == "donny" else "test",
+        })
+    return descriptors
+
+
+def _render_linux_run_configuration(descriptor: dict[str, str]) -> str:
+    """The XML content of a Linux ELF run/debug configuration."""
+    aggregate_id = descriptor["aggregate_id"]
+    rel_dir = descriptor["rel_dir"]
+    display_name = descriptor["display_name"]
+    target_name = descriptor["target_name"]
+    config_name = descriptor["config_name"]
+    elf_path = descriptor["elf_path"]
+    if descriptor["kind"] == "app":
+        subject = f"the {aggregate_id} Linux ELF"
+        build_comment = (
+            f"  The before-launch step builds it with the root aggregator's "
+            f"`{target_name}`\n"
+            f"  target (`idf.py build` in {rel_dir}). RUN_PATH names\n"
+            f"  the ELF explicitly: the root CMake project is "
+            f"`project(... NONE)` and\n"
+            f"  exposes only UTILITY targets, so no executable can be "
+            f"selected as\n"
+            f"  TARGET_NAME. Selecting this configuration also activates the "
+            f"matching\n"
+            f"  .idea/cmake.xml profile.\n"
+        )
+        debug_comment = (
+            "  The linux app carries the same debug flags as the host "
+            "tests, and the\n"
+            "  CLion backend runs in the same container as the ELF, so Debug "
+            "works with\n"
+            "  breakpoints.\n"
+        )
+    elif aggregate_id == "test-esp_timer-stub":
+        subject = "the esp_timer host-test Linux ELF"
+        build_comment = (
+            f"  The before-launch step builds it with the root aggregator's\n"
+            f"  `{target_name}` target (`idf.py build` in\n"
+            f"  {rel_dir}). RUN_PATH names the ELF explicitly:\n"
+            f"  the root CMake project is `project(... NONE)` and exposes "
+            f"only UTILITY\n"
+            f"  targets, so no executable can be selected as TARGET_NAME. "
+            f"Selecting this\n"
+            f"  configuration also activates the matching .idea/cmake.xml "
+            f"profile.\n"
+        )
+        debug_comment = (
+            "  Host tests compile with -gdwarf-4 -ggdb -Og and the CLion "
+            "backend runs in\n"
+            "  the same container as the ELF, so Debug works with "
+            "breakpoints.\n"
+        )
+    else:
+        subject = f"the {aggregate_id} Linux ELF"
+        build_comment = (
+            f"  The before-launch step builds it with the root aggregator's\n"
+            f"  `{target_name}` target (`idf.py build` in\n"
+            f"  {rel_dir}). RUN_PATH names the ELF explicitly:\n"
+            f"  the root CMake project is `project(... NONE)` and exposes "
+            f"only UTILITY\n"
+            f"  targets, so no executable can be selected as TARGET_NAME. "
+            f"Selecting this\n"
+            f"  configuration also activates the matching .idea/cmake.xml "
+            f"profile.\n"
+        )
+        debug_comment = (
+            "  Host tests compile with -gdwarf-4 -ggdb -Og and the CLion "
+            "backend runs in\n"
+            "  the same container as the ELF, so Debug works with "
+            "breakpoints.\n"
+        )
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        "<!--\n"
+        f"  Run/debug {subject} inside the dev container.\n"
+        "\n"
+        f"{build_comment}"
+        "\n"
+        f"{debug_comment}"
+        "-->\n"
+        '<component name="ProjectRunConfigurationManager">\n'
+        f'  <configuration default="false" name="{display_name}" '
+        'type="CMakeRunConfiguration" factoryName="Application" '
+        'REDIRECT_INPUT="false" ELEVATE="false" '
+        'USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" '
+        'PASS_PARENT_ENVS_2="true" '
+        'PROJECT_NAME="esp32_sensors_subprojects" '
+        f'TARGET_NAME="{target_name}" CONFIG_NAME="{config_name}" '
+        f'RUN_PATH="$PROJECT_DIR$/{elf_path}">\n'
+        '    <method v="2">\n'
+        '      <option '
+        'name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider'
+        '$BuildBeforeRunTask" enabled="true" />\n'
+        "    </method>\n"
+        "  </configuration>\n"
+        "</component>\n"
+    )
+
+
+def _render_clion_cmake_profiles(descriptors: list[dict[str, str]]) -> str:
+    """The `<configuration .../>` lines for `.idea/cmake.xml`."""
+    lines = [_CLION_FIRMWARE_PROFILE]
+    for descriptor in descriptors:
+        lines.append(
+            '      <configuration '
+            f'PROFILE_NAME="{descriptor["profile_name"]}" '
+            'ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" '
+            f'GENERATION_DIR="{descriptor["generation_dir"]}" '
+            'GENERATION_OPTIONS="-DIDF_TARGET=linux '
+            '-DCMAKE_BUILD_TYPE=Debug" />'
+        )
+    return "\n".join(lines)
+
+
+def _update_clion_cmake_xml(
+    content: str, descriptors: list[dict[str, str]]
+) -> str:
+    """Replace the `<configurations>` block with generated profiles.
+
+    Preserves the surrounding file (header comment, component/project tags).
+    """
+    profiles = _render_clion_cmake_profiles(descriptors)
+    replacement = (
+        "    <configurations>\n"
+        f"{profiles}\n"
+        "    </configurations>"
+    )
+    pattern = re.compile(
+        r"    <configurations>.*?    </configurations>", re.DOTALL
+    )
+    if not pattern.search(content):
+        raise ValueError("cmake.xml has no <configurations> block")
+    return pattern.sub(replacement, content, count=1)
+
+
+def cmd_clion_run_configs() -> int:
+    """Generate CLion CMake profiles and Linux ELF run/debug configurations.
+
+    Discovers every `linux`-target ESP-IDF project in the repository and writes
+    the matching `.idea/cmake.xml` linux profiles and
+    `.idea/runConfigurations/Linux_ELF__*_container.xml` run/debug configs.
+    Existing shared build/flash/menuconfig/etc. run configurations are left
+    untouched. Stale generated Linux ELF configs for projects that no longer
+    exist are removed.
+    """
+    descriptors = _clion_linux_descriptors()
+    if not descriptors:
+        print(
+            "clion-run-configs: no linux executable projects found.",
+            file=sys.stderr,
+        )
+        return 1
+
+    run_dir = REPO_ROOT / ".idea" / "runConfigurations"
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    wanted = set()
+    for descriptor in descriptors:
+        filename = f'Linux_ELF__{descriptor["slug"]}__container.xml'
+        wanted.add(filename)
+        path = run_dir / filename
+        path.write_text(
+            _render_linux_run_configuration(descriptor), encoding="utf-8"
+        )
+
+    removed = 0
+    for existing in sorted(run_dir.glob("Linux_ELF__*__container.xml")):
+        if existing.name not in wanted:
+            existing.unlink()
+            removed += 1
+
+    cmake_xml = REPO_ROOT / ".idea" / "cmake.xml"
+    cmake_content = _read_text(cmake_xml)
+    if cmake_content is None:
+        print(
+            "clion-run-configs: .idea/cmake.xml is missing.",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        updated = _update_clion_cmake_xml(cmake_content, descriptors)
+    except ValueError as error:
+        print(f"clion-run-configs: {error}", file=sys.stderr)
+        return 1
+    cmake_xml.write_text(updated, encoding="utf-8")
+
+    print(
+        "clion-run-configs: wrote "
+        f"{len(descriptors)} Linux ELF run/debug configuration(s) and "
+        f"updated .idea/cmake.xml"
+        + (f" (removed {removed} stale)" if removed else "")
+        + "."
+    )
+    for descriptor in descriptors:
+        print(f"  - {descriptor['display_name']} ({descriptor['rel_dir']})")
+    return 0
 
 
 def cmd_complete() -> int:
@@ -2971,6 +3388,7 @@ COMMANDS = {
     "clion-archive": cmd_clion_archive,
     "clion-compdb": cmd_clion_compdb,
     "clion-manual-test": cmd_clion_manual_test,
+    "clion-run-configs": cmd_clion_run_configs,
     "complete": cmd_complete,
 }
 
@@ -3151,3 +3569,17 @@ def main(argv: list[str]) -> int:
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv))
+
+# CODE INSPECTION FINDING (scripts/dev.py:2790-2822)
+# _opened_project_log_check() returns PROJECT_OPEN_PENDING on exec/read errors.
+# wait_for_remote_project() only surfaces non-pending details, so a persistent
+# read error polls silently until timeout. Consider surfacing pending error
+# details or distinguishing "log not written yet" from "cannot read log".
+# _remote_project_dir_log_check() hard-fails on read errors, which is clearer
+# for its non-polling check.
+#
+# CODE INSPECTION FINDING (scripts/dev.py:2738-2822)
+# _backend_download_log_check, _opened_project_log_check, and
+# _remote_project_dir_log_check share compose-exec/cat/error-handling
+# boilerplate. A small helper could reduce drift while keeping
+# pending-vs-hard-fail behavior explicit.

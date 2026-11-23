@@ -442,6 +442,180 @@ class ClionArchiveTests(unittest.TestCase):
         self.assertIn("several CLion archives", err.getvalue())
 
 
+class ClionRunConfigTests(unittest.TestCase):
+    """`clion-run-configs` generates Linux ELF run/debug IDE configs."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name).resolve()
+        (self.root / ".idea" / "runConfigurations").mkdir(parents=True)
+        cmake = """<?xml version="1.0" encoding="UTF-8"?>
+<!-- header preserved -->
+<project version="4">
+  <component name="CMakeSharedSettings">
+    <configurations>
+      <configuration PROFILE_NAME="Espressif ESP32-S3" ENABLED="true"
+        CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default"
+        GENERATION_DIR="$PROJECT_DIR$/mcgowan/cmake-build-esp32s3"
+        GENERATION_OPTIONS="-DIDF_TARGET=esp32s3 -DCMAKE_BUILD_TYPE=Debug" />
+    </configurations>
+  </component>
+</project>
+"""
+        (self.root / ".idea" / "cmake.xml").write_text(cmake)
+        (self.root / "CMakeLists.txt").write_text(
+            "cmake_minimum_required(VERSION 3.22)\n"
+            "_idf_subproject(test-utility "
+            "components/utility/tests/test-utility\n"
+            "    build_linux \"--preview|set-target|linux\" \"build\")\n"
+            "_idf_subproject(donny components/simulator/exe/donny\n"
+            "    build_linux \"--preview|set-target|linux\" \"build\")\n"
+            "_idf_subproject(test-esp_timer-stub "
+            "components/hal/tests/esp_timer/stub\n"
+            "    build_linux \"--preview|set-target|linux\" \"build\")\n"
+            "_idf_subproject(mcgowan mcgowan build_esp32s3 \"build\")\n"
+        )
+
+        def mk(rel, name, target):
+            d = self.root / rel
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "CMakeLists.txt").write_text(
+                "include($ENV{IDF_PATH}/tools/cmake/project.cmake)\n"
+                f"project({name})\n"
+            )
+            (d / "sdkconfig.defaults").write_text(
+                f'CONFIG_IDF_TARGET="{target}"\n'
+            )
+
+        mk("components/utility/tests/test-utility", "test-utility", "linux")
+        mk("components/simulator/exe/donny", "donny", "linux")
+        mk(
+            "components/hal/tests/esp_timer/stub",
+            "esp32_sensors_esp_timer_stub_tests",
+            "linux",
+        )
+        mk("mcgowan", "mcgowan", "esp32s3")
+
+    def test_command_is_registered(self):
+        self.assertIn("clion-run-configs", dev.COMMANDS)
+        self.assertIs(
+            dev.COMMANDS["clion-run-configs"], dev.cmd_clion_run_configs
+        )
+
+    def test_linux_subproject_ids_parse_build_linux_targets(self):
+        ids = dev._linux_subproject_ids(self.root)
+        self.assertEqual(
+            ids,
+            {
+                "components/utility/tests/test-utility": "test-utility",
+                "components/simulator/exe/donny": "donny",
+                "components/hal/tests/esp_timer/stub": "test-esp_timer-stub",
+            },
+        )
+
+    def test_descriptors_capture_special_cases(self):
+        by_id = {
+            d["aggregate_id"]: d
+            for d in dev._clion_linux_descriptors(self.root)
+        }
+        self.assertEqual(by_id["donny"]["profile_name"], "Linux app (donny)")
+        self.assertEqual(by_id["donny"]["target_name"], "donny_build")
+        self.assertEqual(
+            by_id["donny"]["elf_path"],
+            "components/simulator/exe/donny/build_linux/donny.elf",
+        )
+        self.assertEqual(
+            by_id["test-esp_timer-stub"]["profile_name"],
+            "Host tests (esp_timer stub)",
+        )
+        self.assertEqual(
+            by_id["test-esp_timer-stub"]["generation_dir"],
+            "$PROJECT_DIR$/components/hal/tests/esp_timer/stub/"
+            "cmake-build-linux-esp-timer-stub",
+        )
+        self.assertEqual(
+            by_id["test-esp_timer-stub"]["elf_path"],
+            "components/hal/tests/esp_timer/stub/build_linux/"
+            "esp32_sensors_esp_timer_stub_tests.elf",
+        )
+        self.assertEqual(
+            by_id["test-utility"]["profile_name"],
+            "Host tests (test-utility)",
+        )
+
+    def test_render_run_configuration_contains_expected_metadata(self):
+        descriptor = {
+            "aggregate_id": "test-logic",
+            "project_name": "test-logic",
+            "rel_dir": "components/logic/tests/test-logic",
+            "elf_path": (
+                "components/logic/tests/test-logic/build_linux/"
+                "test-logic.elf"
+            ),
+            "target_name": "test-logic_build",
+            "profile_name": "Host tests (test-logic)",
+            "config_name": "Host tests (test-logic)",
+            "display_name": "test-logic (linux ELF, container)",
+            "slug": "test_logic",
+            "generation_dir": (
+                "$PROJECT_DIR$/components/logic/tests/test-logic/"
+                "cmake-build-linux-test-logic"
+            ),
+            "kind": "test",
+        }
+        xml = dev._render_linux_run_configuration(descriptor)
+        self.assertIn('name="test-logic (linux ELF, container)"', xml)
+        self.assertIn('TARGET_NAME="test-logic_build"', xml)
+        self.assertIn('CONFIG_NAME="Host tests (test-logic)"', xml)
+        self.assertIn(
+            'RUN_PATH="$PROJECT_DIR$/components/logic/tests/test-logic/'
+            'build_linux/test-logic.elf"',
+            xml,
+        )
+        self.assertIn("CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask", xml)
+
+    def test_update_cmake_xml_preserves_header_and_replaces_profiles(self):
+        original = (self.root / ".idea" / "cmake.xml").read_text()
+        descriptors = [{
+            "profile_name": "Host tests (test-utility)",
+            "generation_dir": "$PROJECT_DIR$/components/utility/tests/"
+                              "test-utility/cmake-build-linux-test-utility",
+        }]
+        updated = dev._update_clion_cmake_xml(original, descriptors)
+        self.assertIn("<!-- header preserved -->", updated)
+        self.assertIn('PROFILE_NAME="Espressif ESP32-S3"', updated)
+        self.assertIn('PROFILE_NAME="Host tests (test-utility)"', updated)
+        self.assertNotIn("CONFIG_NAME=\"Release\"", updated)
+
+    def test_cmd_clion_run_configs_writes_configs_and_removes_stale(self):
+        stale = self.root / ".idea" / "runConfigurations" / \
+            "Linux_ELF__stale__container.xml"
+        stale.write_text("old", encoding="utf-8")
+        original_repo_root = dev.REPO_ROOT
+        try:
+            dev.REPO_ROOT = self.root
+            rc = dev.cmd_clion_run_configs()
+        finally:
+            dev.REPO_ROOT = original_repo_root
+        self.assertEqual(rc, 0)
+        self.assertFalse(stale.exists())
+        run_dir = self.root / ".idea" / "runConfigurations"
+        self.assertTrue(
+            (run_dir / "Linux_ELF__donny__container.xml").is_file()
+        )
+        stub_config = (
+            run_dir / "Linux_ELF__test_esp_timer_stub__container.xml"
+        )
+        self.assertTrue(stub_config.is_file())
+        donny = (run_dir / "Linux_ELF__donny__container.xml").read_text()
+        self.assertIn('TARGET_NAME="donny_build"', donny)
+        cmake = (self.root / ".idea" / "cmake.xml").read_text()
+        self.assertIn('PROFILE_NAME="Linux app (donny)"', cmake)
+        self.assertIn('PROFILE_NAME="Host tests (esp_timer stub)"', cmake)
+        self.assertIn('PROFILE_NAME="Espressif ESP32-S3"', cmake)
+
+
 class ClionCompilationDatabaseTests(unittest.TestCase):
     """`clion-compdb` merges the subproject databases for CLion."""
 
@@ -595,10 +769,16 @@ class ClionCompilationDatabaseTests(unittest.TestCase):
 class ClionManualWizardTests(unittest.TestCase):
     """The injected procedure in `scripts/clion_manual_test.py`."""
 
-    def _run(self, answers, *, launcher="/bin/clion", database=True,
-             archive_path=None, log_check=None, on_remove=0, on_seed=0):
+    def _run(self, answers, *, launcher="/bin/clion", clion_running=False,
+             on_stop=0, on_up=0, on_build=0, on_compdb=0, on_run_configs=0,
+             archive_path=None, log_check=None, on_seed=0,
+             remote_dir_check=None, opened_project=None):
         calls = []
         pending = iter(answers)
+        if opened_project is None:
+            opened_project = (
+                clion_manual_test.PROJECT_OPEN_READY, "remote project ok"
+            )
 
         def prompt(question):
             calls.append(f"PROMPT {question}")
@@ -608,23 +788,156 @@ class ClionManualWizardTests(unittest.TestCase):
             def log_check():
                 return True, "backend log check passed"
 
+        if remote_dir_check is None:
+            def remote_dir_check():
+                calls.append("REMOTE_DIR_CHECK")
+                return True, "remote project directory ok"
+
         code = clion_manual_test.run_manual_test(
             launcher=launcher,
-            start_container=lambda: calls.append("CONTAINER") or 0,
+            check_clion_running=(
+                lambda: calls.append("CLION_CHECK") or clion_running
+            ),
+            stop_container=lambda: calls.append("DOWN") or on_stop,
+            check_opened_project=(
+                lambda: calls.append("OPEN_CHECK") or opened_project
+            ),
+            start_container=lambda: calls.append("UP") or on_up,
+            build=lambda: calls.append("BUILD") or on_build,
+            clion_compdb=lambda: calls.append("COMPDB") or on_compdb,
+            clion_run_configs=(
+                lambda: calls.append("RUN_CONFIGS") or on_run_configs
+            ),
             launch_clion=(
                 lambda command: calls.append(f"LAUNCH {command}") or 0
             ),
             prompt=prompt,
             say=calls.append,
-            database_exists=lambda: database,
-            remove_containers=(
-                lambda: calls.append("REMOVE") or on_remove
-            ),
             archive_path=archive_path,
             seed_archive=lambda: calls.append("SEED") or on_seed,
             check_backend_log=log_check,
+            check_remote_project_dir=remote_dir_check,
         )
         return code, calls
+
+    def _wait(self, statuses, answers, *, timeout_seconds=600.0):
+        calls = []
+        statuses = iter(statuses)
+        answers = iter(answers)
+        now = [0.0]
+
+        def check():
+            calls.append("OPEN_CHECK")
+            return next(statuses)
+
+        def prompt(question):
+            calls.append(f"PROMPT {question}")
+            return next(answers)
+
+        ok = clion_manual_test.wait_for_remote_project(
+            check,
+            prompt,
+            calls.append,
+            timeout_seconds=timeout_seconds,
+            poll_seconds=10.0,
+            sleep=lambda seconds: now.__setitem__(0, now[0] + seconds),
+            clock=lambda: now[0],
+        )
+        return ok, calls
+
+    def test_running_clion_fails_and_aborts_before_anything_else(self):
+        code, calls = self._run([], clion_running=True)
+        self.assertEqual(code, 1)
+        self.assertEqual(calls, [
+            "CLION_CHECK",
+            "FAILED: CLion is already running locally; close it and retry.",
+        ])
+
+    def test_container_is_removed_before_it_is_started(self):
+        code, calls = self._run([True] * len(clion_manual_test.STEPS))
+        self.assertEqual(code, 0)
+        self.assertEqual(calls[0], "CLION_CHECK")
+        self.assertEqual(
+            calls[1], "Stopping and removing the dev container..."
+        )
+        self.assertLess(calls.index("DOWN"), calls.index("UP"))
+
+    def test_container_removal_failure_stops_before_starting_it(self):
+        code, calls = self._run([], on_stop=1)
+        self.assertEqual(code, 1)
+        self.assertIn("DOWN", calls)
+        self.assertNotIn("UP", calls)
+        self.assertIn(
+            "FAILED: the dev container could not be stopped and removed.",
+            calls,
+        )
+
+    def test_step_one_scans_the_log_before_its_prompt(self):
+        code, calls = self._run([True, True, True])
+        self.assertEqual(code, 0)
+        self.assertIn("OPEN_CHECK", calls)
+        self.assertLess(
+            calls.index("OPEN_CHECK"),
+            next(i for i, call in enumerate(calls)
+                 if call.startswith("PROMPT ")),
+        )
+
+    def test_wrong_opened_project_fails_before_the_first_prompt(self):
+        code, calls = self._run([], opened_project=(
+            clion_manual_test.PROJECT_OPEN_WRONG, "opened /wrong"
+        ))
+        self.assertEqual(code, 1)
+        self.assertIn("FAILED: the wrong project is opened in CLion.", calls)
+        self.assertFalse(
+            any(call.startswith("PROMPT ") for call in calls)
+        )
+
+    def test_wait_accepts_a_ready_project_without_prompting(self):
+        ok, calls = self._wait([
+            (clion_manual_test.PROJECT_OPEN_READY, "opened /project")
+        ], [])
+        self.assertTrue(ok)
+        self.assertIn("OPEN_CHECK", calls)
+        self.assertFalse(
+            any(call.startswith("PROMPT ") for call in calls)
+        )
+
+    def test_wait_rejects_the_wrong_project_immediately(self):
+        ok, calls = self._wait([
+            (clion_manual_test.PROJECT_OPEN_WRONG, "opened /wrong")
+        ], [])
+        self.assertFalse(ok)
+        self.assertIn("FAILED: the wrong project is opened in CLion.", calls)
+        self.assertFalse(
+            any(call.startswith("PROMPT ") for call in calls)
+        )
+
+    def test_wait_offers_more_time_after_ten_minutes(self):
+        pending = [(clion_manual_test.PROJECT_OPEN_PENDING, "no project")] * 60
+        ok, calls = self._wait(pending, [False])
+        self.assertFalse(ok)
+        self.assertTrue(
+            any("wait some more" in call for call in calls)
+        )
+        self.assertIn("FAILED: no project was opened in 10 minutes.", calls)
+
+    def test_wait_extends_the_deadline_when_the_user_agrees(self):
+        statuses = (
+            [(clion_manual_test.PROJECT_OPEN_PENDING, "no project")] * 60
+            + [(clion_manual_test.PROJECT_OPEN_READY, "opened /project")]
+        )
+        ok, calls = self._wait(statuses, [True])
+        self.assertTrue(ok)
+        self.assertIn("  - opened /project", calls)
+        self.assertTrue(
+            any("wait some more" in call for call in calls)
+        )
+
+    def test_wait_aborts_when_the_user_declines_at_eof(self):
+        pending = [(clion_manual_test.PROJECT_OPEN_PENDING, "no project")] * 60
+        ok, calls = self._wait(pending, [None])
+        self.assertFalse(ok)
+        self.assertIn("Aborted by the user.", calls)
 
     def test_finder_prefers_the_environment_override(self):
         def fail_if_called(name):
@@ -697,20 +1010,60 @@ class ClionManualWizardTests(unittest.TestCase):
         self.assertIsNone(answer)
         self.assertIn("Aborted", output.getvalue())
 
-    def test_steps_pin_the_verified_project_and_hover_check(self):
+    def test_steps_pin_the_verified_project_hover_and_run_prompt(self):
         first_lines = clion_manual_test.STEPS[0].instructions
         self.assertTrue(
-            any("/project/.clion/compile_commands.json" in line
+            any('project directory "/project"' in line
                 for line in first_lines)
         )
-        last_lines = clion_manual_test.STEPS[-1].instructions
+        tooltip_step = clion_manual_test.STEPS[1]
+        self.assertEqual(tooltip_step.label, "2")
         self.assertTrue(
-            any("timer.hpp" in line for line in last_lines)
+            any("timer.hpp" in line for line in tooltip_step.instructions)
         )
         self.assertTrue(
-            any("esp_timer_start_once" in line for line in last_lines)
+            any("esp_timer_start_once" in line
+                for line in tooltip_step.instructions)
         )
-        self.assertIn("Select Open Project", first_lines)
+        self.assertTrue(
+            any("Select Open Project" in line for line in first_lines)
+        )
+        self.assertEqual(
+            clion_manual_test.STEPS[-1].prompt,
+            "Did test-espidf-cpp / Run execute in the dev container?",
+        )
+
+    def test_run_step_gives_the_requested_menu_instructions(self):
+        instructions = clion_manual_test.STEPS[-1].instructions
+        self.assertIn("Run / Run ...", instructions)
+        self.assertIn("In Run/Debug configurations select choose",
+                      instructions)
+        self.assertIn("test-espidf-cpp / Run", instructions)
+        self.assertIn("Verify the project executed in the dev container",
+                      instructions)
+        self.assertFalse(any("Use Run to execute it" in line
+                             for line in instructions))
+
+    def test_step_labels_follow_the_tooltip_first_order(self):
+        self.assertEqual(
+            [step.label for step in clion_manual_test.STEPS],
+            ["1", "2", "2.1", "2.2", "2.3", "3"],
+        )
+        fallback = clion_manual_test.STEPS[2:5]
+        self.assertTrue(all(step.on_tooltip_failure for step in fallback))
+
+    def test_setup_runs_up_build_compdb_and_run_configs_in_order(self):
+        code, calls = self._run([True] * len(clion_manual_test.STEPS))
+        self.assertEqual(code, 0)
+        setup = [call for call in calls
+                 if call in ("UP", "BUILD", "COMPDB", "RUN_CONFIGS")]
+        self.assertEqual(setup, ["UP", "BUILD", "COMPDB", "RUN_CONFIGS"])
+        self.assertLess(calls.index("RUN_CONFIGS"),
+                        next(i for i, call in enumerate(calls)
+                             if call.startswith("LAUNCH")))
+        remote_checks = [call for call in calls
+                         if call == "REMOTE_DIR_CHECK"]
+        self.assertEqual(len(remote_checks), 2)
 
     def test_clean_start_uploads_archive_and_checks_the_log(self):
         def log_check():
@@ -722,8 +1075,7 @@ class ClionManualWizardTests(unittest.TestCase):
             log_check=log_check,
         )
         self.assertEqual(code, 0)
-        self.assertLess(calls.index("REMOVE"), calls.index("CONTAINER"))
-        self.assertLess(calls.index("CONTAINER"), calls.index("SEED"))
+        self.assertLess(calls.index("RUN_CONFIGS"), calls.index("SEED"))
         self.assertLess(calls.index("SEED"),
                         next(i for i, call in enumerate(calls)
                              if call.startswith("LAUNCH")))
@@ -754,12 +1106,29 @@ class ClionManualWizardTests(unittest.TestCase):
         self.assertIn("FAILED: the IDE backend download was not skipped.",
                       calls)
 
-    def test_remove_failure_stops_before_starting_the_container(self):
-        code, calls = self._run([], on_remove=1)
+    def test_build_failure_stops_before_compdb(self):
+        code, calls = self._run([], on_build=1)
         self.assertEqual(code, 1)
-        self.assertNotIn("CONTAINER", calls)
-        self.assertIn("FAILED: the dev containers did not stop cleanly.",
-                      calls)
+        self.assertIn("UP", calls)
+        self.assertIn("BUILD", calls)
+        self.assertNotIn("COMPDB", calls)
+        self.assertIn("FAILED: the build did not complete.", calls)
+
+    def test_compdb_failure_stops_before_run_configs(self):
+        code, calls = self._run([], on_compdb=1)
+        self.assertEqual(code, 1)
+        self.assertNotIn("RUN_CONFIGS", calls)
+        self.assertIn(
+            "FAILED: the compilation database was not generated.", calls
+        )
+
+    def test_run_configs_failure_stops_before_launching_clion(self):
+        code, calls = self._run([], on_run_configs=1)
+        self.assertEqual(code, 1)
+        self.assertFalse(any(call.startswith("LAUNCH") for call in calls))
+        self.assertIn(
+            "FAILED: the run/debug configurations were not generated.", calls
+        )
 
     def test_archive_upload_failure_stops_before_launching_clion(self):
         code, calls = self._run(
@@ -773,21 +1142,46 @@ class ClionManualWizardTests(unittest.TestCase):
                       calls)
 
     def test_all_confirmed_steps_pass(self):
-        code, calls = self._run([True] * len(clion_manual_test.STEPS))
+        code, calls = self._run([True, True, True])
         self.assertEqual(code, 0)
-        self.assertIn("CONTAINER", calls)
+        self.assertIn("UP", calls)
+        self.assertIn("BUILD", calls)
+        self.assertIn("COMPDB", calls)
+        self.assertIn("RUN_CONFIGS", calls)
         self.assertIn("LAUNCH /bin/clion", calls)
         prompts = [line for line in calls if line.startswith("PROMPT ")]
-        self.assertEqual(len(prompts), len(clion_manual_test.STEPS))
+        self.assertEqual(len(prompts), 3)
+        self.assertTrue(any("Step 1/6:" in line for line in calls))
+        self.assertTrue(any("Step 2/6:" in line for line in calls))
+        self.assertTrue(any("Step 3/6:" in line for line in calls))
+        self.assertFalse(any("Step 2.1/" in line for line in calls))
         self.assertTrue(any("PASS:" in line for line in calls))
 
     def test_a_rejected_step_fails_and_names_the_step(self):
-        answers = [True] * (len(clion_manual_test.STEPS) - 1) + [False]
-        code, calls = self._run(answers)
+        code, calls = self._run([True, True, False])
         self.assertEqual(code, 1)
         self.assertIn(
-            f"FAILED: step {len(clion_manual_test.STEPS)}: "
-            "Verify the ESP-IDF tooltip",
+            "FAILED: step 3: Run the espidfcpp linux test configuration",
+            calls,
+        )
+
+    def test_tooltip_failure_runs_the_compilation_database_fallback(self):
+        code, calls = self._run([True, False, True, True, True])
+        self.assertEqual(code, 1)
+        self.assertTrue(
+            any("Step 2.1/6: Open the compilation database" in line
+                for line in calls)
+        )
+        self.assertTrue(any("Step 2.2/6:" in line for line in calls))
+        self.assertTrue(any("Step 2.3/6:" in line for line in calls))
+        self.assertFalse(any("Step 3/6:" in line for line in calls))
+        self.assertIn("FAILED: step 2: Verify the ESP-IDF tooltip", calls)
+
+    def test_a_failed_fallback_step_names_its_own_number(self):
+        code, calls = self._run([True, False, True, False])
+        self.assertEqual(code, 1)
+        self.assertIn(
+            "FAILED: step 2.2: Check compilation-database path settings",
             calls,
         )
 
@@ -796,47 +1190,71 @@ class ClionManualWizardTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("Aborted by the user.", calls)
 
-    def test_missing_database_stops_before_starting_anything(self):
-        code, calls = self._run([], database=False)
-        self.assertEqual(code, 1)
-        self.assertNotIn("CONTAINER", calls)
-        self.assertTrue(
-            any("clion-compdb" in line for line in calls)
-        )
-
     def test_no_launcher_stops_before_starting_anything(self):
         code, calls = self._run([], launcher=None)
         self.assertEqual(code, 1)
+        self.assertNotIn("UP", calls)
+        self.assertIn("DOWN", calls)
         self.assertTrue(
             any("CLION_LAUNCHER" in line for line in calls)
         )
 
     def test_container_failure_stops_before_launching_clion(self):
-        calls = []
-        code = clion_manual_test.run_manual_test(
-            launcher="/bin/clion",
-            start_container=lambda: 1,
-            launch_clion=(
-                lambda command: calls.append(command) or 0
-            ),
-            prompt=(lambda question: self.fail("no prompt expected")),
-            say=calls.append,
-        )
+        code, calls = self._run([], on_up=1)
         self.assertEqual(code, 1)
-        self.assertEqual(calls[-1], "FAILED: the dev container did not start.")
+        self.assertNotIn("BUILD", calls)
+        self.assertIn("FAILED: the dev container did not start.", calls)
         self.assertFalse(any(call.startswith("LAUNCH") for call in calls))
 
     def test_launch_failure_stops_before_the_first_manual_step(self):
         calls = []
         code = clion_manual_test.run_manual_test(
             launcher="/bin/clion",
+            check_clion_running=lambda: False,
+            stop_container=lambda: 0,
             start_container=lambda: 0,
+            build=lambda: 0,
+            clion_compdb=lambda: 0,
+            clion_run_configs=lambda: 0,
             launch_clion=lambda command: 1,
             prompt=(lambda question: self.fail("no prompt expected")),
             say=calls.append,
         )
         self.assertEqual(code, 1)
         self.assertIn("FAILED: CLion did not start.", calls)
+
+    def test_wrong_remote_project_dir_fails_before_tooltip_prompt(self):
+        def remote_dir_check():
+            return False, "wrong remote project directory"
+
+        code, calls = self._run(
+            [True],
+            remote_dir_check=remote_dir_check,
+        )
+        self.assertEqual(code, 1)
+        prompts = [call for call in calls if call.startswith("PROMPT ")]
+        self.assertEqual(len(prompts), 1)
+        self.assertIn("FAILED: the remote project directory is incorrect.",
+                      calls)
+
+    def test_wrong_remote_project_dir_fails_before_run_prompt(self):
+        results = iter([
+            (True, "remote project directory ok"),
+            (False, "wrong remote project directory"),
+        ])
+
+        def remote_dir_check():
+            return next(results)
+
+        code, calls = self._run(
+            [True, True],
+            remote_dir_check=remote_dir_check,
+        )
+        self.assertEqual(code, 1)
+        prompts = [call for call in calls if call.startswith("PROMPT ")]
+        self.assertEqual(len(prompts), 2)
+        self.assertIn("FAILED: the remote project directory is incorrect.",
+                      calls)
 
 
 class ClionManualTestCommandTests(unittest.TestCase):
@@ -915,23 +1333,153 @@ class ClionManualTestCommandTests(unittest.TestCase):
         self.assertEqual(code, 0)
         arguments = wizard.call_args.kwargs
         self.assertEqual(arguments["launcher"], "/bin/clion")
+        self.assertIs(arguments["check_clion_running"],
+                      dev._local_clion_is_running)
         self.assertIs(arguments["launch_clion"], dev._launch_clion)
         self.assertIs(arguments["prompt"], dev.prompt_yes_no)
-        self.assertTrue(callable(arguments["remove_containers"]))
         self.assertIsNone(arguments["archive_path"])
         self.assertIs(arguments["check_backend_log"],
                       dev._backend_download_log_check)
-        self.assertTrue(callable(arguments["database_exists"]))
+        self.assertIs(arguments["check_remote_project_dir"],
+                      dev._remote_project_dir_log_check)
+        self.assertIs(arguments["check_opened_project"],
+                      dev._opened_project_log_check)
 
+        with mock.patch.object(dev, "_dev_py_command",
+                               return_value=0) as command:
+            self.assertEqual(arguments["stop_container"](), 0)
+            command.assert_called_once_with("down")
         with mock.patch.object(dev, "_dev_py_command",
                                return_value=0) as command:
             self.assertEqual(arguments["start_container"](), 0)
             command.assert_called_once_with("up")
-
         with mock.patch.object(dev, "_dev_py_command",
                                return_value=0) as command:
-            self.assertEqual(arguments["remove_containers"](), 0)
-            command.assert_called_once_with("down")
+            self.assertEqual(arguments["build"](), 0)
+            command.assert_called_once_with("build")
+        with mock.patch.object(dev, "_dev_py_command",
+                               return_value=0) as command:
+            self.assertEqual(arguments["clion_compdb"](), 0)
+            command.assert_called_once_with("clion-compdb")
+        with mock.patch.object(dev, "_dev_py_command",
+                               return_value=0) as command:
+            self.assertEqual(arguments["clion_run_configs"](), 0)
+            command.assert_called_once_with("clion-run-configs")
+
+    def test_cmdline_names_clion_matches_install_paths(self):
+        cmdlines = (
+            "/bin/bash\0/home/u/.local/share/JetBrains/Toolbox/"
+            "scripts/clion\0",
+            "/home/u/.local/share/JetBrains/Toolbox/apps/clion/bin/clion\0",
+            "/home/u/.local/share/JetBrains/Toolbox/scripts/clion1\0",
+            "/opt/clion/bin/clion\0",
+        )
+        for cmdline in cmdlines:
+            with self.subTest(cmdline=cmdline):
+                self.assertTrue(dev._cmdline_names_clion(cmdline))
+
+    def test_cmdline_names_clion_ignores_the_manual_test_command(self):
+        self.assertFalse(dev._cmdline_names_clion(
+            "/usr/bin/python3\0/repo/scripts/dev.py\0"
+            "clion-manual-test\0"
+        ))
+
+    def test_local_clion_is_running_scans_proc_and_skips_self(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            own = root / "100"
+            own.mkdir()
+            (own / "cmdline").write_bytes(
+                b"/usr/bin/python3\0/repo/scripts/dev.py\0"
+                b"clion-manual-test\0"
+            )
+            other = root / "200"
+            other.mkdir()
+            (other / "cmdline").write_bytes(b"/usr/bin/bash\0")
+            self.assertFalse(dev._local_clion_is_running(root, own_pid=100))
+
+            (other / "cmdline").write_bytes(
+                b"/home/u/.local/share/JetBrains/Toolbox/"
+                b"apps/clion/bin/clion\0"
+            )
+            self.assertTrue(dev._local_clion_is_running(root, own_pid=100))
+
+    def test_local_clion_is_running_handles_a_missing_proc(self):
+        self.assertFalse(dev._local_clion_is_running(Path("/no/such/proc")))
+
+    def test_opened_project_verdict_separates_pending_ready_and_wrong(self):
+        status, detail = dev._opened_project_verdict("no serverMode here")
+        self.assertEqual(status, clion_manual_test.PROJECT_OPEN_PENDING)
+        self.assertIn("no remote project directory", detail)
+
+        status, detail = dev._opened_project_verdict(
+            "with [/bin/clion, serverMode, /project]\n"
+        )
+        self.assertEqual(status, clion_manual_test.PROJECT_OPEN_READY)
+        self.assertIn("/project", detail)
+
+        status, detail = dev._opened_project_verdict(
+            "with [/bin/clion, serverMode, /project/.clion]\n"
+        )
+        self.assertEqual(status, clion_manual_test.PROJECT_OPEN_WRONG)
+        self.assertIn("/project/.clion", detail)
+
+    def test_opened_project_log_check_reads_the_toolbox_log(self):
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0,
+            stdout="with [/bin/clion, serverMode, /project]\n",
+            stderr="",
+        )
+        with mock.patch.object(dev, "subprocess") as subprocess_mod:
+            subprocess_mod.run.return_value = completed
+            status, detail = dev._opened_project_log_check()
+        self.assertEqual(status, clion_manual_test.PROJECT_OPEN_READY)
+        self.assertIn("/project", detail)
+
+    def test_opened_project_log_check_treats_a_read_error_as_pending(self):
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="no such file",
+        )
+        with mock.patch.object(dev, "subprocess") as subprocess_mod:
+            subprocess_mod.run.return_value = completed
+            status, detail = dev._opened_project_log_check()
+        self.assertEqual(status, clion_manual_test.PROJECT_OPEN_PENDING)
+        self.assertIn("no such file", detail)
+
+    def test_remote_project_dir_verdict_accepts_project_root(self):
+        stdout = (
+            "INFO ... with [/bin/clion, serverMode, /project/.clion]\n"
+            "INFO ... with [/bin/clion, serverMode, /project]\n"
+        )
+        ok, detail = dev._remote_project_dir_verdict(stdout)
+        self.assertTrue(ok)
+        self.assertIn("/project", detail)
+
+    def test_remote_project_dir_verdict_rejects_wrong_directory(self):
+        stdout = (
+            "INFO ... with [/bin/clion, serverMode, /project/.clion]\n"
+        )
+        ok, detail = dev._remote_project_dir_verdict(stdout)
+        self.assertFalse(ok)
+        self.assertIn("/project/.clion", detail)
+        self.assertIn("expected `/project`", detail)
+
+    def test_remote_project_dir_verdict_requires_evidence(self):
+        ok, detail = dev._remote_project_dir_verdict("no serverMode here")
+        self.assertFalse(ok)
+        self.assertIn("no remote project directory", detail)
+
+    def test_remote_project_dir_log_check_reads_the_toolbox_log(self):
+        completed = subprocess.CompletedProcess(
+            args=[], returncode=0,
+            stdout="with [/bin/clion, serverMode, /project]\n",
+            stderr="",
+        )
+        with mock.patch.object(dev, "subprocess") as subprocess_mod:
+            subprocess_mod.run.return_value = completed
+            ok, detail = dev._remote_project_dir_log_check()
+        self.assertTrue(ok)
+        self.assertIn("/project", detail)
 
     def test_command_passes_the_only_archive_to_the_wizard(self):
         archive = Path("/home/marcpawl/Downloads/CLion-2026.3.tar.gz")
@@ -4838,3 +5386,10 @@ class SelfCheckModuleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# CODE INSPECTION FINDING (scripts/test_dev.py:2681-2692)
+# ClionExclusionTests._excluded_directories() parses the working-tree
+# .idea/esp32_sensors.iml. A running CLion can rewrite that tracked file to a
+# minimal module, causing 23 failures even when committed exclusions are
+# correct. Consider reading the committed blob instead, e.g.:
+#   git show HEAD:.idea/esp32_sensors.iml
