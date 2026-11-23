@@ -13,7 +13,7 @@ Dockerfile
 build_root/
 build_*/
 */build_*/
-components/espidfcpp/tests/test-espidf-cpp/build_linux/
+components/espidfcpp/tests/test-espidf-cpp-linux/build_linux/
 components/logic/tests/test-logic/build_linux/
 components/simulator/tests/test-simulator/build_linux/
 components/simulator/exe/donny/build_linux/

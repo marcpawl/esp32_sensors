@@ -14,12 +14,9 @@
 
 #include <cstdio>
 
-#include "app_config.hpp"
-#include "app_config_store.hpp"
 #include "configure_mode.hpp"
-#include "hal_board/board.hpp"
-#include "hal_board/switch.hpp"
 #include "logic/application.hpp"
+#include "logic/board.hpp"
 #include "logic/led_task.hpp"
 #include "logic/mode.hpp"
 #include "logic/mode_selection.hpp"
@@ -68,11 +65,10 @@ extern "C" void app_main(void) {
     // last wake happened (§3.8) and `read_mode()` reads the switch poles. It is
     // shared: `LedTask` holds a `std::shared_ptr` to it instead of owning it,
     // so it cannot be destroyed while the task still uses it.
-    auto board = std::make_shared<thermo::hal::board::Board>(
-        thermo::hal::board::Board::create({}));
+    auto board = std::make_shared<thermo::logic::Board>();
     ESP_ERROR_CHECK(board->init_all());
 
-    thermo::logic::Application<typeof(*board)> app(board);
+    thermo::logic::Application app(board);
     app.application_main();
 
 #if 0

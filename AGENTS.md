@@ -162,14 +162,21 @@ There are two kinds of test suite, runnable from the host via `scripts/dev.py`:
     firmware sources in `mcgowan/src` that need no chip driver
     (`app_config.cpp`, `config_page.cpp`, `power_source.cpp`); what each test
     pins is described in `components/logic/AGENTS.md`.
-  - `components/espidfcpp/tests/test-espidf-cpp/` covers the `libespidfcpp`
+  - `components/espidfcpp/tests/test-espidf-cpp-linux/` covers the `libespidfcpp`
     wrappers; what each test pins is described in
     `components/espidfcpp/AGENTS.md`.
+
+  - `components/espidfcpp/tests/test-espidf-cpp-esp32/` builds the same shared
+    `test-espidf-cpp-lib` cases for ESP32-S3; what each test pins is described
+    in `components/espidfcpp/AGENTS.md`.
   - `components/simulator/tests/test-simulator/` links `libsimulator`; the
     component is empty today, so the suite runs no cases yet. What it will
     cover is described in `components/simulator/AGENTS.md`.
-- **On-target tests** are planned for hardware-dependent code (1-Wire/DS18B20
-  reads, deep-sleep wake, Wi-Fi upload).
+- **On-target tests** are built, flashed, and run through `scripts/dev.py test-esp32`:
+  `components/espidfcpp/tests/test-espidf-cpp-esp32/` runs the shared wrapper
+  cases on ESP32-S3 and `components/hal/tests/esp_timer/board/` runs the timer
+  cases. Coverage for hardware-dependent code (1-Wire/DS18B20 reads, deep-sleep
+  wake, Wi-Fi upload) is still planned.
 - Keep hardware interactions behind thin interfaces so business logic remains
   host-testable. When adding pure logic that the firmware and the tests both
   need, put it in `components/logic/liblogic` (headers under `include/logic/`,

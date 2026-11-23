@@ -1030,7 +1030,7 @@ class ClionManualWizardTests(unittest.TestCase):
         )
         self.assertEqual(
             clion_manual_test.STEPS[-1].prompt,
-            "Did test-espidf-cpp / Run execute in the dev container?",
+            "Did test-espidf-cpp-linux / Run execute in the dev container?",
         )
 
     def test_run_step_gives_the_requested_menu_instructions(self):
@@ -1038,7 +1038,7 @@ class ClionManualWizardTests(unittest.TestCase):
         self.assertIn("Run / Run ...", instructions)
         self.assertIn("In Run/Debug configurations select choose",
                       instructions)
-        self.assertIn("test-espidf-cpp / Run", instructions)
+        self.assertIn("test-espidf-cpp-linux / Run", instructions)
         self.assertIn("Verify the project executed in the dev container",
                       instructions)
         self.assertFalse(any("Use Run to execute it" in line
@@ -1738,7 +1738,11 @@ class SubprojectBuildTests(unittest.TestCase):
                 ("components/hal/tests/test-hal-stub", "linux"),
                 ("components/hal/tests/test-hal-common", "linux"),
                 ("components/logic/tests/test-logic", "linux"),
-                ("components/espidfcpp/tests/test-espidf-cpp", "linux"),
+                ("components/espidfcpp/tests/test-espidf-cpp-linux", "linux"),
+                (
+                    "components/espidfcpp/tests/test-espidf-cpp-esp32",
+                    "esp32s3",
+                ),
                 ("components/simulator/tests/test-simulator", "linux"),
                 ("components/simulator/exe/donny", "linux"),
                 ("components/hal/tests/esp_timer/stub", "linux"),
@@ -2400,7 +2404,8 @@ class SubmoduleTests(unittest.TestCase):
         # so each entry point checks first.
         for name in (
             "cmd_build",
-            "cmd_build_test_espidf_cpp",
+            "cmd_build_test_espidf_cpp_linux",
+            "cmd_build_test_espidf_cpp_esp32",
             "_run_suites",
             "cmd_clang_tidy",
         ):
@@ -3558,11 +3563,18 @@ class CommandRegistryTests(unittest.TestCase):
         self.assertIn("self-check", dev.COMMANDS)
         self.assertIs(dev.COMMANDS["self-check"], dev.cmd_self_check)
 
-    def test_build_test_espidf_cpp_is_registered(self):
-        self.assertIn("build-test-espidf-cpp", dev.COMMANDS)
+    def test_build_test_espidf_cpp_linux_is_registered(self):
+        self.assertIn("build-test-espidf-cpp-linux", dev.COMMANDS)
         self.assertIs(
-            dev.COMMANDS["build-test-espidf-cpp"],
-            dev.cmd_build_test_espidf_cpp,
+            dev.COMMANDS["build-test-espidf-cpp-linux"],
+            dev.cmd_build_test_espidf_cpp_linux,
+        )
+
+    def test_build_test_espidf_cpp_esp32_is_registered(self):
+        self.assertIn("build-test-espidf-cpp-esp32", dev.COMMANDS)
+        self.assertIs(
+            dev.COMMANDS["build-test-espidf-cpp-esp32"],
+            dev.cmd_build_test_espidf_cpp_esp32,
         )
 
     def test_discovery_finds_every_host_suite(self):
@@ -3575,7 +3587,7 @@ class CommandRegistryTests(unittest.TestCase):
                 for project in projects
             ],
             [
-                "components/espidfcpp/tests/test-espidf-cpp",
+                "components/espidfcpp/tests/test-espidf-cpp-linux",
                 "components/hal/tests/esp_timer/stub",
                 "components/hal/tests/test-hal-common",
                 "components/hal/tests/test-hal-stub",
@@ -3679,7 +3691,7 @@ class HostTestCommandTests(unittest.TestCase):
             "test-hal-common",
             "test-hal-stub",
             "test-logic",
-            "test-espidf-cpp",
+            "test-espidf-cpp-linux",
             "test-simulator",
             "test-esp-timer-stub",
             "test-esp32-timer",
@@ -3846,23 +3858,28 @@ class OnTargetTestCommandTests(unittest.TestCase):
         self.assertIn("test-esp32", dev.COMMANDS)
         self.assertIs(dev.COMMANDS["test-esp32"], dev.cmd_test_esp32)
 
-    def test_builds_the_board_project_then_runs_its_driver(self):
+    def test_builds_every_on_target_project_then_runs_its_driver(self):
         self.assertEqual(dev.cmd_test_esp32(), 0)
-        board = dev._on_target_test_projects_under(dev.REPO_ROOT)
-        self.assertEqual(len(board), 1)
-        relative = dev._repo_relative(board[0].directory)
-        self.assertEqual(
-            self.calls,
-            [
-                dev._idf(
-                    relative,
-                    dev.FW_BUILD_DIR,
-                    "-DTHERMO_GCC_ANALYZER=OFF",
-                    "build",
-                ),
-                [sys.executable, str(board[0].directory / "test.py")],
-            ],
-        )
+        projects = dev._on_target_projects([dev.REPO_ROOT])
+        self.assertTrue(projects)
+        expected = []
+        for project in projects:
+            relative = dev._repo_relative(project.directory)
+            expected.extend(
+                [
+                    dev._idf(
+                        relative,
+                        dev.FW_BUILD_DIR,
+                        "-DTHERMO_GCC_ANALYZER=OFF",
+                        "build",
+                    ),
+                    [
+                        sys.executable,
+                        str(project.directory / "test.py"),
+                    ],
+                ]
+            )
+        self.assertEqual(self.calls, expected)
         self.assertEqual(self.hops, [["test-esp32", "/project"]])
 
     def test_esp32_climbs_from_a_directory_without_on_target_tests(self):
@@ -4142,7 +4159,7 @@ class TidyConfigurationTests(unittest.TestCase):
         # Every discovered project is analyzable; a project that discovery
         # misses silently weakens the gate.
         self.assertEqual(
-            len(dev._discover_projects(dev.REPO_ROOT)), 10
+            len(dev._discover_projects(dev.REPO_ROOT)), 11
         )
 
     def test_every_discovered_project_has_a_target(self):
@@ -4159,7 +4176,7 @@ class TidyConfigurationTests(unittest.TestCase):
             f"{root}/mcgowan/src/include/battery_monitor.hpp",
             f"{root}/components/logic/liblogic/include/logic/payload.hpp",
             f"{root}/components/logic/tests/test-logic/main/test_main.cpp",
-            f"{root}/components/espidfcpp/tests/test-espidf-cpp/main/"
+            f"{root}/components/espidfcpp/tests/test-espidf-cpp-linux/main/"
             "test_main.cpp",
             f"{root}/components/simulator/exe/donny/main/"
             "console_task.hpp",
@@ -5262,12 +5279,13 @@ class PythonSourceDiscoveryTests(unittest.TestCase):
 
     def test_the_repository_enumerates_its_expected_python_sources(self):
         # Pins the actual set: the two dev.py scripts, the manual CLion
-        # wizard, and the on-target test driver. A new Python source is meant
+        # wizard, and both on-target test drivers. A new Python source is meant
         # to be noticed here, so this list is a deliberate tripwire rather
         # than an over-broad assertion.
         self.assertEqual(
             dev.python_sources(),
             [
+                "components/espidfcpp/tests/test-espidf-cpp-esp32/test.py",
                 "components/hal/tests/esp_timer/board/test.py",
                 "scripts/clion_manual_test.py",
                 "scripts/dev.py",

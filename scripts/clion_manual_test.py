@@ -139,10 +139,10 @@ STEPS = (
             "shared run configurations from `.idea/runConfigurations`).",
             "Run / Run ...",
             "In Run/Debug configurations select choose",
-            "test-espidf-cpp / Run",
+            "test-espidf-cpp-linux / Run",
             "Verify the project executed in the dev container",
         ),
-        prompt="Did test-espidf-cpp / Run execute in the dev container?",
+        prompt="Did test-espidf-cpp-linux / Run execute in the dev container?",
     ),
 )
 

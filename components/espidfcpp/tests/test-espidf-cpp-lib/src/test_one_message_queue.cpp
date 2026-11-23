@@ -2,8 +2,8 @@
 //
 // The queue is a thin C++ wrapper over the FreeRTOS queue API: one slot,
 // overwritten by every `send()`, received as a `std::optional`. These tests
-// cover that contract on the ESP-IDF `linux` target's POSIX FreeRTOS
-// implementation:
+// cover that contract against FreeRTOS on both the host and chip
+// targets:
 //
 //   * creation (handle is valid) and destruction (the handle is deleted);
 //   * send/receive round-trips with a trivially copyable message type;
@@ -12,8 +12,8 @@
 //   * move construction / move assignment (exactly one owner of the handle);
 //   * `send_from_isr()` behaves like `send()` with respect to overwriting.
 //
-// ESP-IDF's linux FreeRTOS port runs on POSIX threads, so blocking calls and
-// ISR-style calls are exercised in their task-context form here.
+// Blocking calls and ISR-style calls are exercised in their
+// task-context form on both targets.
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "freertos/FreeRTOS.h"

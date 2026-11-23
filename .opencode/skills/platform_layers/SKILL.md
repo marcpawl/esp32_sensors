@@ -23,7 +23,7 @@ The hardware-abstraction layer (layers 1 and 2 below) is documented in
 | 0 (lowest) | `libutility` | `test-utility` |
 | 1 | `hal_common` | `test-hal-common` |
 | 2 | `hal_board`, `hal_stub` | `test-hal-stub` |
-| 3 | `libespidfcpp` | `test-espidf-cpp` |
+| 3 | `libespidfcpp` | `test-espidf-cpp-linux`, `test-espidf-cpp-esp32` |
 | 4 | `liblogic` | `test-logic` |
 | 5 | `libsimulator` | `test-simulator` |
 | 6 (highest) | — | `mcgowan`, `donny` |
@@ -61,8 +61,8 @@ today and must never be required by a chip-target project.
 
 | Target | May link | Must not link |
 |---|---|---|
-| ESP32-S3 (`mcgowan`) | `hal_board` | `hal_stub` |
-| `linux` (`test-utility`, `test-hal-common`, `test-hal-stub`, `test-logic`, `test-espidf-cpp`, `test-simulator`, `donny`) | `hal_stub` | `hal_board` |
+| ESP32-S3 (`mcgowan`, `test-espidf-cpp-esp32`, `test-esp_timer-board`) | `hal_board` | `hal_stub` |
+| `linux` (`test-utility`, `test-hal-common`, `test-hal-stub`, `test-logic`, `test-espidf-cpp-linux`, `test-simulator`, `donny`) | `hal_stub` | `hal_board` |
 | Platform-neutral components (`libutility`, `hal_common`, `libespidfcpp`, `liblogic`) | neither | both |
 
 `libespidfcpp` and `liblogic` build for both the chip and the host, so they
@@ -93,8 +93,9 @@ the lowest layer to the highest.
 1. `test-utility`
 2. `test-hal-common`
 3. `test-hal-stub`
-4. `test-espidf-cpp`
-5. `test-logic`
+4. `test-espidf-cpp-linux`
+5. `test-espidf-cpp-esp32`
+6. `test-logic`
 6. `test-simulator`
 
 **Applications:**
@@ -108,7 +109,7 @@ the lowest layer to the highest.
 2. `test-hal-common`
 3. `test-hal-stub`
 4. `test-logic`
-5. `test-espidf-cpp`
+5. `test-espidf-cpp-linux`
 6. `test-simulator`
 
 That is the command's existing order, not the layer order to use for a new
@@ -130,13 +131,15 @@ list.
 | `test-utility` | `libutility` |
 | `test-hal-common` | `hal_common`; privately `hal_stub` |
 | `test-hal-stub` | `hal_stub` |
-| `test-espidf-cpp` | `libespidfcpp`; privately `hal_stub` |
+| `test-espidf-cpp-lib` (component `test-espidf-cpp-lib`) | `libespidfcpp`, `unity`, `freertos`; `esp_driver_gpio` on chip, `hal_stub` on linux |
+| `test-espidf-cpp-linux` | `test-espidf-cpp-lib`; privately `libespidfcpp`, `hal_stub` |
+| `test-espidf-cpp-esp32` | `test-espidf-cpp-lib`, `unity`, `esp_driver_gpio`, `freertos` |
 | `test-logic` | `liblogic`; privately `libespidfcpp`, `hal_stub` |
 | `test-simulator` | `libsimulator`; privately `unity` |
 
 Test projects may privately link `hal_stub` even when their component is
 platform-neutral: `test-hal-common` needs the concrete device types because the
-`hal_common` concepts name them, and `test-espidf-cpp` keeps the requirement
+`hal_common` concepts name them, and `test-espidf-cpp-linux` keeps the requirement
 for parity and future HAL-facing tests. This is a test-project allowance, not a
 precedent for a component — `libespidfcpp` and `liblogic` themselves must
 never require either implementation.
@@ -149,6 +152,7 @@ never require either implementation.
   - `components/utility/` (the shared containers);
   - `components/hal/` (the three HAL components);
   - `components/espidfcpp/` (the ESP-IDF wrappers);
+  - `components/espidfcpp/tests/` (the shared test component);
   - `components/logic/` (the application logic);
   - `components/simulator/` (the simulator component), where it is linked.
 
@@ -170,7 +174,8 @@ never require either implementation.
   `<project>/main/CMakeLists.txt` (`donny`'s in
   `components/simulator/exe/donny/main/CMakeLists.txt`). Use `REQUIRES` when the dependency appears
   in public headers, `PRIV_REQUIRES` when only `.cpp` files use it.
-- The component *name* is the directory name, not its path:
+- The component *name* is normally the directory name, not its path (the shared test component is the deliberate exception: directory
+  `test-espidf-cpp-lib`, component `test-espidf-cpp-lib` via `NAME`):
   `components/hal/hal_common` is the component `hal_common`, so every
   `REQUIRES`, `PRIV_REQUIRES`, `EXCLUDE_COMPONENTS` and `set(COMPONENTS ...)`
   names the component and needs no change when a component moves.

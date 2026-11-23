@@ -8,13 +8,14 @@
 # Deep sleep (§3.8) needs no ESP-IDF dependency here: the stub implements it
 # entirely in software.
 #
-# `gpio_stub.cpp` supplies `gpio_install_isr_service()` for the `linux` target,
-# where `esp_driver_gpio` registers an empty component (no sources, no headers).
+# `gpio_stub.cpp` models the GPIO ISR API for the `linux` target, where
+# `esp_driver_gpio` registers an empty component. It lets the shared
+# `InterruptHandle` cases run on the host with the same source they use on the
+# chip. This component also supplies the mirrored `driver/gpio.h`.
 
 idf_component_register(
     SRCS
         "led_stub.cpp"
-        "switch_stub.cpp"
         "onewire_stub.cpp"
         "chip_temperature_stub.cpp"
         "wifi_stub.cpp"
@@ -38,10 +39,11 @@ idf_component_register(
 # Headers are target sources so a CMake file-API client (CLion) attaches them
 # to this target; CMake adds no compile step for a header.
 target_sources(${COMPONENT_LIB} PRIVATE
+    "include/driver/gpio.h"
+    "include/hal/gpio.hpp"
     "include/hal_stub/board_stub.hpp"
     "include/hal_stub/chip_temperature.hpp"
     "include/hal_stub/led.hpp"
     "include/hal_stub/onewire.hpp"
-    "include/hal_stub/switch.hpp"
     "include/hal_stub/wifi.hpp"
 )

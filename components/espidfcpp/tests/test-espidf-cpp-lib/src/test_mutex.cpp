@@ -2,8 +2,8 @@
 //
 // `Mutex` owns a FreeRTOS mutex and keeps acquisition and release private;
 // `Lock` is the only way to hold one, so a missing release is impossible.
-// These tests run against the ESP-IDF `linux` target's POSIX FreeRTOS
-// implementation and cover:
+// These tests run against FreeRTOS on both the host and chip targets
+// and cover:
 //
 //   * creation of a normal and a recursive mutex;
 //   * blocking acquisition through the Lock constructor;

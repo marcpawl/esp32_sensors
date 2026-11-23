@@ -26,7 +26,6 @@
 #include "hal_stub/chip_temperature.hpp"
 #include "hal_stub/led.hpp"
 #include "hal_stub/onewire.hpp"
-#include "hal_stub/switch.hpp"
 #include "hal_stub/wifi.hpp"
 #include "unity.h"
 
@@ -39,7 +38,6 @@ using thermo::hal::WakeCauses;
 using thermo::hal::stub::ChipTemperature;
 using thermo::hal::stub::Led;
 using thermo::hal::stub::OneWire;
-using thermo::hal::stub::Switch;
 using thermo::hal::stub::WifiRadio;
 
 // A class with none of the board interface.
@@ -77,24 +75,6 @@ struct BoardDeviceSet {
 
     [[nodiscard]] Led const& red() const noexcept { return red_; }
 
-    [[nodiscard]] Switch& user_switch() noexcept { return user_switch_; }
-
-    [[nodiscard]] Switch const& user_switch() const noexcept {
-        return user_switch_;
-    }
-
-    [[nodiscard]] Switch& config_switch() noexcept { return config_switch_; }
-
-    [[nodiscard]] Switch const& config_switch() const noexcept {
-        return config_switch_;
-    }
-
-    [[nodiscard]] Switch& run_switch() noexcept { return run_switch_; }
-
-    [[nodiscard]] Switch const& run_switch() const noexcept {
-        return run_switch_;
-    }
-
     [[nodiscard]] WifiRadio& wifi() noexcept { return wifi_; }
 
     [[nodiscard]] WifiRadio const& wifi() const noexcept { return wifi_; }
@@ -104,9 +84,6 @@ struct BoardDeviceSet {
     OneWire one_wire_ = OneWire::create(Gpio{4});
     Led green_ = Led::create(Gpio{17}, "Green");
     Led red_ = Led::create(Gpio{16}, "Red");
-    Switch user_switch_ = Switch::create(Gpio{0});
-    Switch config_switch_ = Switch::create(Gpio{1});
-    Switch run_switch_ = Switch::create(Gpio{2});
     WifiRadio wifi_;
 };
 
@@ -114,7 +91,6 @@ struct BoardDeviceSet {
 // concept requires.
 struct CompleteBoard : BoardDeviceSet {
     using LedType = Led;
-    using SwitchType = Switch;
 
     static CompleteBoard create(BoardPins /*pins*/) noexcept { return {}; }
 };
@@ -140,9 +116,6 @@ TEST_CASE("hal board types: BoardPins defaults to the board pin map (§2.4)",
     TEST_ASSERT_EQUAL(thermo::pins::kWireBus.as_int(), def.one_wire.as_int());
     TEST_ASSERT_EQUAL(thermo::pins::kGreenLed.as_int(), def.green_led.as_int());
     TEST_ASSERT_EQUAL(thermo::pins::kRedLed.as_int(), def.red_led.as_int());
-    TEST_ASSERT_EQUAL(thermo::pins::kConfig.as_int(),
-                      def.config_switch.as_int());
-    TEST_ASSERT_EQUAL(thermo::pins::kRun.as_int(), def.run_switch.as_int());
     // The plain (user) switch has no dedicated pin on the reference board.
     TEST_ASSERT_EQUAL(0, def.user_switch.as_int());
     TEST_ASSERT_EQUAL_STRING("Green", def.green_name);

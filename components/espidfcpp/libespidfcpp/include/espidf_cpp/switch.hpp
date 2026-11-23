@@ -1,13 +1,3 @@
-// Hardware abstraction: switch input, real GPIO implementation for the
-// development board.
-//
-// The shared switch vocabulary (`SwitchState`, `SwitchLike`) lives in
-// the header-only `hal_common` component (`hal/switch_types.hpp`); this
-// header adds the concrete, GPIO-backed `Switch` class. `hal_stub`
-// provides an identical `Switch` (same ctor, inline `create()` factory,
-// `init()`, `read()`, `gpio()`, `set_interrupt()`), so a project states its
-// choice by including `<hal_board/switch.hpp>`.
-//
 // The switch is reported without semantics: `read()` returns `kOn` while the
 // switch is closed and `kOff` while it is open. `gpio()` reports the pin the
 // switch was built for, so callers can name it in diagnostics. A registered
@@ -16,16 +6,42 @@
 // timing) is the caller's job.
 #pragma once
 
+#include <functional>
+
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "esp_err.h"
 #pragma GCC diagnostic pop
 // NOLINTEND
 
-#include "hal/switch_types.hpp"
-#include "hal_board/interrupt_handle.hpp"
+#include "espidf_cpp/gpio.hpp"
+#include "espidf_cpp/interrupt_handle.hpp"
+#include "utility/isr_safe.hpp"
 
-namespace thermo::hal::board {
+namespace thermo::espidf_cpp {
+
+// State of a switch. `kOff` is open, `kOn` is closed.
+enum class SwitchState : std::uint8_t {
+    kOff = 0,
+    kOn,
+};
+
+// Handler invoked when the switch's state changes. It takes no argument: the
+// switch's new state is read through the switch itself (`Switch::read()`).
+// This lets a handler capture the object it belongs to.
+//
+// The handler runs in the GPIO interrupt, so it must be ISR-safe: no blocking,
+// no heap, no mutex. `set_interrupt()` annotates its parameter
+// `[[thermo::isr_safe]]` to make that requirement explicit.
+//
+// The `noexcept` in the function type is part of the ISR contract, not
+// decoration: a callback that might throw cannot be stored, so a lambda
+// without `noexcept` refuses to convert. The wrapper is move-only because a
+// registration has exactly one owner and is only ever moved into the switch.
+//
+// An empty callback means "no handler"; passing one to `set_interrupt()`
+// unregisters the callback, so nothing is invoked on a state change.
+using SwitchCallback = std::move_only_function<void() noexcept>;
 
 // Reads a switch wired (with a pull-up) to a GPIO.
 class Switch {
@@ -44,8 +60,6 @@ class Switch {
     Switch& operator=(Switch const&) = delete;
     Switch& operator=(Switch&&) = delete;
 
-    // Builds a switch for the given input pin. Same signature for the hardware
-    // and stub implementations; call init() before read().
     [[nodiscard]] static Switch create(Gpio gpio) noexcept {
         return Switch(gpio);
     }
@@ -86,6 +100,4 @@ class Switch {
     InterruptHandle interrupt_handle_;
 };
 
-static_assert(SwitchLike<Switch>, "Switch must satisfy the SwitchLike concept");
-
-}  // namespace thermo::hal::board
+}  // namespace thermo::espidf_cpp

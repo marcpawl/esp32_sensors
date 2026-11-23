@@ -12,7 +12,8 @@
 // blocking acquire or a contract violation aborts instead of throwing.
 //
 // The parts of the FreeRTOS API used here exist on the ESP-IDF `linux` target
-// too, so both classes are host-testable (see the `test-espidf-cpp` project).
+// too, so both classes are host-testable (see the `test-espidf-cpp-linux`
+// project).
 #pragma once
 
 // NOLINTBEGIN

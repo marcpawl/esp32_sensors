@@ -14,7 +14,7 @@
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #pragma GCC diagnostic pop
-#include "hal/board_types.hpp"
+#include "logic/board.hpp"
 
 // NOLINTEND
 
@@ -23,7 +23,6 @@ namespace thermo::logic {
 // Runs the application: reads the two mode-sense poles and dispatches to
 // Configure mode, the Off position, or the Run-mode loop (§3). Called once
 // from `app_main`.
-template<hal::BoardLike Board>
 class Application {
   private:
     constexpr static char const* const kTag = "Application";
@@ -39,15 +38,13 @@ class Application {
     void application_main(void);
 
   private:
-    std::shared_ptr<Board> board_;
+    std::shared_ptr<logic::Board> board_;
 };
 
-template<hal::BoardLike Board>
-Application<Board>::Application(std::shared_ptr<Board> board)
+Application::Application(std::shared_ptr<logic::Board> board)
     : board_(std::move(board)) {}
 
-template<hal::BoardLike Board>
-void Application<Board>::application_main(void) {
+void Application::application_main(void) {
     ESP_LOGI(kTag, "Starting application");
 
     // Delay to allow switches to stabilize.

@@ -34,15 +34,7 @@ Board::Board(BoardPins pins) noexcept
       one_wire_(OneWire::create(pins.one_wire)),
       green_(Led::create(pins.green_led, pins.green_name)),
       red_(Led::create(pins.red_led, pins.red_name)),
-      user_switch_(Switch::create(pins.user_switch)),
-      config_switch_(Switch::create(pins.config_switch)),
-      run_switch_(Switch::create(pins.run_switch)),
-      wifi_(WifiRadio::create()) {
-    // The switch ISRs are installed by `Switch::set_interrupt()`, which needs
-    // the GPIO ISR service. `ESP_ERR_INVALID_STATE` means it is already
-    // installed (the service is process-wide), which is not an error.
-    (void)gpio_install_isr_service(0);
-}
+      wifi_(WifiRadio::create()) {}
 
 esp_err_t Board::init_all() noexcept {
     if (esp_err_t err = chip_temperature_.init(); err != ESP_OK) {
@@ -55,15 +47,6 @@ esp_err_t Board::init_all() noexcept {
         return err;
     }
     if (esp_err_t err = red_.init(); err != ESP_OK) {
-        return err;
-    }
-    if (esp_err_t err = user_switch_.init(); err != ESP_OK) {
-        return err;
-    }
-    if (esp_err_t err = config_switch_.init(); err != ESP_OK) {
-        return err;
-    }
-    if (esp_err_t err = run_switch_.init(); err != ESP_OK) {
         return err;
     }
     return wifi_.init();

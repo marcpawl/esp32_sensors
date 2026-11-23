@@ -21,7 +21,7 @@
 
 namespace {
 
-using thermo::hal::SwitchState;
+using thermo::espidf_cpp::SwitchState;
 
 constexpr SwitchState kOn = SwitchState::kOn;
 constexpr SwitchState kOff = SwitchState::kOff;

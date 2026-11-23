@@ -9,7 +9,9 @@
 # specifics live in one place.
 #
 # Usage:
-#   scripts/dev.py [pull|image|up|down|submodules|build|build-test-espidf-cpp|\
+#   scripts/dev.py [pull|image|up|down|submodules|build|\
+#                   build-test-espidf-cpp-linux|\
+#                   build-test-espidf-cpp-esp32|\
 #                   flash|monitor|menuconfig|test-linux|test-esp32|self-check|\
 #                   format|format-check|format-check-staged|pycodestyle|\
 #                   clang-tidy|install-hooks|shell|ssh|clion-archive|\
@@ -218,9 +220,13 @@ FORMAT_ARGS = ("--dry-run", "--Werror")
 #                                          -> .../test-utility/build_linux
 #   components/logic/tests/test-logic/
 #             host unit tests (linux target)      -> .../test-logic/build_linux
-#   components/espidfcpp/tests/test-espidf-cpp/
+#   components/espidfcpp/tests/test-espidf-cpp-linux/
 #             host unit tests for components/espidfcpp/libespidfcpp
-#                                     -> .../test-espidf-cpp/build_linux
+#                                     -> .../test-espidf-cpp-linux/build_linux
+#   components/espidfcpp/tests/test-espidf-cpp-esp32/
+#             on-target unit tests for the same wrappers (esp32s3)
+#                                     -> .../test-espidf-cpp-esp32/
+#                                        build_esp32s3
 #   components/simulator/tests/test-simulator/
 #             host tests for components/simulator/libsimulator (linux target)
 #                                          -> .../test-simulator/build_linux
@@ -240,7 +246,8 @@ UTILITY_TEST_DIR = "components/utility/tests/test-utility"
 LOGIC_TEST_DIR = "components/logic/tests/test-logic"
 HAL_STUB_TEST_DIR = "components/hal/tests/test-hal-stub"
 HAL_COMMON_TEST_DIR = "components/hal/tests/test-hal-common"
-ESPIDF_CPP_TEST_DIR = "components/espidfcpp/tests/test-espidf-cpp"
+ESPIDF_CPP_LINUX_TEST_DIR = "components/espidfcpp/tests/test-espidf-cpp-linux"
+ESPIDF_CPP_ESP32_TEST_DIR = "components/espidfcpp/tests/test-espidf-cpp-esp32"
 TEST_SIMULATOR_DIR = "components/simulator/tests/test-simulator"
 DONNY_DIR = "components/simulator/exe/donny"
 ESP_TIMER_STUB_DIR = "components/hal/tests/esp_timer/stub"
@@ -1333,13 +1340,22 @@ def cmd_build(arguments: list[str], analyzer: bool = False) -> int:
     return _build_project_directories(projects, analyzer)
 
 
-def cmd_build_test_espidf_cpp() -> int:
+def cmd_build_test_espidf_cpp_linux() -> int:
     """Build the libespidfcpp unit tests for the ESP-IDF `linux` target."""
     change_to_container()
     rc = _ensure_submodules()
     if rc != 0:
         return rc
-    return _build_project(ESPIDF_CPP_TEST_DIR)
+    return _build_project(ESPIDF_CPP_LINUX_TEST_DIR)
+
+
+def cmd_build_test_espidf_cpp_esp32() -> int:
+    """Build the libespidfcpp unit tests for the ESP32-S3 target."""
+    change_to_container()
+    rc = _ensure_submodules()
+    if rc != 0:
+        return rc
+    return _build_project(ESPIDF_CPP_ESP32_TEST_DIR)
 
 
 def cmd_flash() -> int:
@@ -3370,7 +3386,8 @@ COMMANDS = {
     "down": cmd_down,
     "submodules": cmd_submodules,
     "build": cmd_build,
-    "build-test-espidf-cpp": cmd_build_test_espidf_cpp,
+    "build-test-espidf-cpp-linux": cmd_build_test_espidf_cpp_linux,
+    "build-test-espidf-cpp-esp32": cmd_build_test_espidf_cpp_esp32,
     "flash": cmd_flash,
     "monitor": cmd_monitor,
     "menuconfig": cmd_menuconfig,

@@ -4,7 +4,8 @@ This file documents the three components in `components/hal/` — the hardware
 abstraction the firmware and the host tests share. Repository-wide guidance
 (the build, the workflow, the quality gates) is in the root `AGENTS.md`; the
 layering rules — which layer may require which — are in the `platform_layers`
-skill (`.opencode/skills/platform_layers/SKILL.md`).
+skill (`.opencode/skills/platform_layers/SKILL.md`). The `hal_stub` component
+has its own `AGENTS.md` for the mirrored ESP-IDF header rules.
 
 ## The three components
 
@@ -33,9 +34,8 @@ Each HAL device has a header pair: the shared vocabulary in `hal_common` (e.g.
 it and adds the concrete class. For the switch:
 
 - `hal/switch_types.hpp` (`hal_common`) defines
-  `thermo::hal::SwitchState`, `thermo::hal::SwitchCallback`, and the
-  `thermo::hal::SwitchLike` concept — the single definition of the shared
-  types. `SwitchCallback` is a move-only
+  `thermo::hal::SwitchState` and `thermo::hal::SwitchCallback` — the
+  single definition of the shared types. `SwitchCallback` is a move-only
   `std::move_only_function<void() noexcept>`: the handler reads the new state
   through the switch (`read()`), so it can capture the object it belongs to.
   The `noexcept` is part of the ISR contract — a callback that might throw
@@ -47,9 +47,9 @@ it and adds the concrete class. For the switch:
 - `hal_board/switch.hpp` and `hal_stub/switch.hpp` (one each) define
   `thermo::hal::board::Switch` and `thermo::hal::stub::Switch` with an
   identical public interface (same ctor, inline `create()` factory, `init()`,
-  `read()`, `gpio()`, `set_interrupt()`, `remove_interrupt()`). Each
-  `static_assert`s `SwitchLike<Switch>`, so the two implementations cannot
-  drift from the shared contract (or from each other).
+  `read()`, `gpio()`, `set_interrupt()`, `remove_interrupt()`). The shared
+  types come from `hal/switch_types.hpp`, so the two implementations cannot
+  drift from the vocabulary (or from each other).
 
 The device is a **switch**, not a push button: the board's inputs are switch
 poles, and a momentary button is just a switch a caller closes and opens again.
@@ -226,10 +226,11 @@ on-target tests). The vocabulary the former pins is the shared one — the
   (`WakeCause` at ESP-IDF's bit positions, `wake_cause_bit()`, and
   `woke_from()`).
 - **`test-hal-stub/`** covers the pin-free `hal_stub` devices. Each device's
-  own file exercises its stub contract and its `hal_common` concept:
-  `test_hal_led.cpp` (`LedLike`), `test_hal_switch.cpp` (`SwitchLike`,
-  including the `gpio()` getter, capturing handlers, two independent switches,
-  move, and the `set()` control the mode-sense poles use),
+  own file exercises its stub contract; where the vocabulary defines a device
+  concept, the file checks that too:
+  `test_hal_led.cpp` (`LedLike`), `test_hal_switch.cpp` (the switch device
+  contract — the `gpio()` getter, capturing handlers, two independent
+  switches, move, and the `set()` control the mode-sense poles use),
   `test_hal_onewire.cpp` (`OneWireLike` plus `set_sensors()`),
   `test_hal_chip_temperature.cpp` (`ChipTemperatureLike`), and
   `test_hal_wifi.cpp` (`WifiRadioLike`, AP/station start/stop independence, and

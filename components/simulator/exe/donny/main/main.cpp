@@ -23,8 +23,8 @@
 
 #include "console_task.hpp"
 #include "hal/board_types.hpp"
-#include "hal_stub/board_stub.hpp"
 #include "logic/application.hpp"
+#include "logic/board.hpp"
 
 namespace {
 
@@ -61,8 +61,7 @@ extern "C" void app_main(void) {
     // (`logic/led_task.hpp` takes a `std::shared_ptr<Board>` for any
     // `hal::BoardLike` board and does not own it) without the board being
     // destroyed while either still uses it.
-    auto board = std::make_shared<thermo::hal::stub::BoardStub>(
-        thermo::hal::stub::BoardStub::create({}));
+    auto board = std::make_shared<thermo::logic::Board>();
     ESP_ERROR_CHECK(board->init_all());
     ESP_LOGI(kTag, "board initialized");
 
@@ -70,10 +69,10 @@ extern "C" void app_main(void) {
     // the application boots.
     thermo::ConsoleTask console(board);
 
-    thermo::logic::Application<thermo::hal::stub::BoardStub> app(board);
+    thermo::logic::Application app(board);
 
     // Wait until the power is turned on.
-    while (board->power() == thermo::hal::stub::BoardStub::Power::Off) {
+    while (board->power() == thermo::logic::Board::Power::Off) {
         thermo::espidf_cpp::vTaskDelay(std::chrono::seconds{1});
     }
 
