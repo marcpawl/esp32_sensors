@@ -33,14 +33,55 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Detect doc-only changes
+        id: changes
+        shell: bash
+        # Markdown files are not part of the build or the quality checks, so a
+        # change that touches only *.md files skips every expensive step below,
+        # including the dev-image pull. If the diff cannot be determined
+        # (new branch, force-push with an unknown base, ...), run every check.
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+          else
+            base="${{ github.event.before }}"
+            head="${{ github.sha }}"
+          fi
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(git diff --name-only "$base" "$head")
+          if [ -z "$changed" ]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          non_md=$(printf '%s\n' "$changed" | grep -viE '\.md$' || true)
+          if [ -z "$non_md" ]; then
+            echo "docs_only=true" >> "$GITHUB_OUTPUT"
+            echo "Only Markdown files changed; skipping CI checks."
+          else
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Pull dev image
+        if: steps.changes.outputs.docs_only != 'true'
         # Host-only: `docker pull` of the pinned tag. Not run inside a
         # container, and not a build.
         run: |
           python3 ./scripts/dev.py pull
 
       - name: Fetch git submodules
+        if: steps.changes.outputs.docs_only != 'true'
         # `third_party/sml` (boost-ext/sml, pinned to v1.2.0) is a git submodule
         # and a requirement of the `liblogic` component, so the build cannot
         # configure without it. `build` fetches it automatically too, but this
@@ -50,6 +91,7 @@ jobs:
           python3 ./scripts/dev.py submodules
 
       - name: dev.py self-check
+        if: steps.changes.outputs.docs_only != 'true'
         # Host-only: `self-check` refuses to run inside the container, because
         # there the host-only decisions it pins (does a command re-exec itself
         # under `docker compose`?) never happen and the suite would pass
@@ -62,6 +104,7 @@ jobs:
       # compile database and no build, and a long line is fixed in seconds
       # compared with waiting for the toolchain below.
       - name: pycodestyle
+        if: steps.changes.outputs.docs_only != 'true'
         run: |
           python3 ./scripts/dev.py pycodestyle
 
@@ -69,20 +112,24 @@ jobs:
       # and is fast to run, catching formatting errors before
       # running the expensive checks.
       - name: format-check
+        if: steps.changes.outputs.docs_only != 'true'
         run: |
           python3 ./scripts/dev.py format-check
 
       - name: build
+        if: steps.changes.outputs.docs_only != 'true'
         run: |
           python3 ./scripts/dev.py build --analyzer
 
       # Static analysis reads the compile databases the build just produced, so
       # it must run after `build` (it never builds anything itself).
       - name: clang-tidy
+        if: steps.changes.outputs.docs_only != 'true'
         run: |
           python3 ./scripts/dev.py clang-tidy /project
 
       - name: tests
+        if: steps.changes.outputs.docs_only != 'true'
         run: |
           python3 ./scripts/dev.py test-linux
 
