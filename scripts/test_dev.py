@@ -1030,7 +1030,7 @@ class ClionManualWizardTests(unittest.TestCase):
         )
         self.assertEqual(
             clion_manual_test.STEPS[-1].prompt,
-            'Does Run/Run..../espidfcpp_test" execute (y/n)',
+            "Did test-espidf-cpp / Run execute in the dev container?",
         )
 
     def test_run_step_gives_the_requested_menu_instructions(self):
@@ -5386,3 +5386,10 @@ class SelfCheckModuleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# CODE INSPECTION FINDING (scripts/test_dev.py:2681-2692)
+# ClionExclusionTests._excluded_directories() parses the working-tree
+# .idea/esp32_sensors.iml. A running CLion can rewrite that tracked file to a
+# minimal module, causing 23 failures even when committed exclusions are
+# correct. Consider reading the committed blob instead, e.g.:
+#   git show HEAD:.idea/esp32_sensors.iml

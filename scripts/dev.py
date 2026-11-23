@@ -3569,3 +3569,17 @@ def main(argv: list[str]) -> int:
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv))
+
+# CODE INSPECTION FINDING (scripts/dev.py:2790-2822)
+# _opened_project_log_check() returns PROJECT_OPEN_PENDING on exec/read errors.
+# wait_for_remote_project() only surfaces non-pending details, so a persistent
+# read error polls silently until timeout. Consider surfacing pending error
+# details or distinguishing "log not written yet" from "cannot read log".
+# _remote_project_dir_log_check() hard-fails on read errors, which is clearer
+# for its non-polling check.
+#
+# CODE INSPECTION FINDING (scripts/dev.py:2738-2822)
+# _backend_download_log_check, _opened_project_log_check, and
+# _remote_project_dir_log_check share compose-exec/cat/error-handling
+# boilerplate. A small helper could reduce drift while keeping
+# pending-vs-hard-fail behavior explicit.

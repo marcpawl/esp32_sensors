@@ -142,7 +142,7 @@ STEPS = (
             "test-espidf-cpp / Run",
             "Verify the project executed in the dev container",
         ),
-        prompt='Does Run/Run..../espidfcpp_test" execute (y/n)',
+        prompt="Did test-espidf-cpp / Run execute in the dev container?",
     ),
 )
 
@@ -409,3 +409,8 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+# CODE INSPECTION FINDING (scripts/clion_manual_test.py:226-233)
+# wait_for_remote_project() never shows pending details from
+# check_opened_project(). If the Toolbox log cannot be read, the wizard polls
+# silently until timeout. See also scripts/dev.py:2790-2804.
