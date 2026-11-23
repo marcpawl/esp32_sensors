@@ -71,5 +71,11 @@ extern "C" void app_main(void) {
     thermo::ConsoleTask console(board);
 
     thermo::logic::Application<thermo::hal::stub::BoardStub> app(board);
+
+    // Wait until the power is turned on.
+    while (board->power() == thermo::hal::stub::BoardStub::Power::Off) {
+        thermo::espidf_cpp::vTaskDelay(std::chrono::seconds{1});
+    }
+
     app.application_main();
 }

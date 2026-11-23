@@ -5271,7 +5271,9 @@ class PythonSourceDiscoveryTests(unittest.TestCase):
                 "components/hal/tests/esp_timer/board/test.py",
                 "scripts/clion_manual_test.py",
                 "scripts/dev.py",
+                "scripts/donny.py",
                 "scripts/test_dev.py",
+                "scripts/test_donny.py",
             ],
         )
 

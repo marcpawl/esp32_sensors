@@ -11,6 +11,7 @@ set(test_srcs
     "test_ring_buffer.cpp"
     "test_http_server_types.cpp"
     "test_http_server.cpp"
+    "test_task.cpp"
     "test_timer.cpp"
     # Host implementation of the esp_timer C API, which ESP-IDF does not
     # provide for the `linux` target.
