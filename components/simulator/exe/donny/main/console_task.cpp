@@ -30,6 +30,7 @@
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "esp_err.h"
+#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #pragma GCC diagnostic pop
@@ -53,6 +54,8 @@
 #include "hal/led_types.hpp"
 #include "hal/switch_types.hpp"
 #include "hal/wifi_types.hpp"
+#include "hal_stub/board_stub.hpp"
+#include "logic/reboot.hpp"
 #include "logic/rom_id.hpp"
 
 // The vendored JSON library is not analyzed. `-fanalyzer` reports findings
@@ -162,6 +165,10 @@ constexpr const char* to_text(hal::SwitchState state) noexcept {
 
 constexpr const char* to_text(hal::LedState state) noexcept {
     return state == hal::LedState::kOn ? "on" : "off";
+}
+
+constexpr const char* to_text(hal::stub::BoardStub::Power state) {
+    return state == hal::stub::BoardStub::Power::On ? "on" : "off";
 }
 
 // Parses "on" / "off" (or a JSON boolean). Returns `std::nullopt` for anything
@@ -323,6 +330,7 @@ json snapshot(const hal::stub::BoardStub& board) {
     }
 
     return json{
+        {"power", to_text(board.power())},
         {"user_switch", to_text(board.user_switch().read())},
         {"config_switch", to_text(board.config_switch().read())},
         {"run_switch", to_text(board.run_switch().read())},
@@ -492,6 +500,23 @@ std::optional<std::string> apply(const json& doc, hal::stub::BoardStub& board) {
         return "document must be a JSON object";
     }
 
+    if (const auto it = doc.find("power"); it != doc.end()) {
+        const auto power = parse_switch(*it);
+        if (!power.has_value()) {
+            return "power must be \"on\" or \"off\"";
+        }
+        const bool on = *power;
+        if (!on && board.power() == hal::stub::BoardStub::Power::On) {
+            ESP_LOGI(kTag, "Powering off, rebooting.");
+            board.set_power(hal::stub::BoardStub::Power::Off);
+            std::fprintf(stdout, "MODEL %s\n", snapshot(board).dump().c_str());
+            std::fflush(stdout);
+            thermo::logic::reboot();
+        }
+        board.set_power(on ? hal::stub::BoardStub::Power::On
+                           : hal::stub::BoardStub::Power::Off);
+    }
+
     // Switches.
     for (const auto& [key, sw] :
          {std::pair{"user_switch", &board.user_switch()},
@@ -618,7 +643,7 @@ ConsoleRunner::ConsoleRunner(
         // driver must never take the task down.
         const json doc = json::parse(*line, nullptr, false);
         if (doc.is_discarded()) {
-            std::fprintf(stdout, "{\"error\":\"malformed JSON\"}\n");
+            std::fprintf(stdout, "MODEL {\"error\":\"malformed JSON\"}\n");
             std::fflush(stdout);
             continue;
         }
@@ -629,7 +654,7 @@ ConsoleRunner::ConsoleRunner(
         } else {
             response = snapshot(*board_);
         }
-        std::fprintf(stdout, "%s\n", response.dump().c_str());
+        std::fprintf(stdout, "MODEL %s\n", response.dump().c_str());
         std::fflush(stdout);
     }
 }
