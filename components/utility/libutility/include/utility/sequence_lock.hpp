@@ -86,6 +86,7 @@ class SequenceLock {
                 return snapshot;
             }
         }
+        std::unreachable();
     }
 
     // Single-writer form. The caller guarantees that no other task writes, so
@@ -119,7 +120,8 @@ class SequenceLock {
     //
     // The intended usage is to overwrite part of the model, even if other
     // writers have modified the model.
-    void overwrite(std::function<void(VersionedModel& model)> writer) noexcept {
+    void overwrite(
+        std::function<void(VersionedModel& model)> const& writer) noexcept {
         WriteResult result;
         do {
             VersionedModel model = read();
