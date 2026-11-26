@@ -65,8 +65,20 @@ constexpr bool static_string_constexpr_builds() {
 
     s.clear();
     const bool cleared = s.empty() && s.c_str()[0] == '\0';
+
+    s.assign("abc");
+    const bool back = s.back() == 'c';
+    s.back() = 'C';
+    const bool back_mutated = s.size() == 3 && s[2] == 'C';
+    s.pop_back();
+    const bool popped = s.size() == 2 && s.back() == 'b' && s[2] == '\0';
+    s.pop_back();
+    s.pop_back();
+    const bool emptied_by_pop = s.empty() && s.c_str()[0] == '\0';
+
     return built && pushed && filled && null_assign && null_append &&
-           null_construct && assigned && cleared;
+           null_construct && assigned && cleared && back && back_mutated &&
+           popped && emptied_by_pop;
 }
 
 }  // namespace
@@ -233,6 +245,39 @@ TEST_CASE("static_string: clear leaves an empty terminated string",
     s.clear();
     TEST_ASSERT_EQUAL_UINT(0, s.size());
     TEST_ASSERT_EQUAL_STRING("", s.c_str());
+}
+
+// --- back / pop_back --------------------------------------------------------
+
+TEST_CASE("static_string: back reads and mutates the last character",
+          "[static_string]") {
+    static_string<8> s("abc");
+    const auto& constant = s;
+
+    TEST_ASSERT_EQUAL_CHAR('c', s.back());
+    TEST_ASSERT_EQUAL_CHAR('c', constant.back());
+
+    s.back() = 'C';
+    TEST_ASSERT_EQUAL_CHAR('C', s.back());
+    TEST_ASSERT_EQUAL_STRING("abC", s.c_str());
+    TEST_ASSERT_EQUAL_UINT(3, s.size());
+}
+
+TEST_CASE("static_string: pop_back removes the last character",
+          "[static_string]") {
+    static_string<8> s("abc");
+
+    s.pop_back();
+    TEST_ASSERT_EQUAL_UINT(2, s.size());
+    TEST_ASSERT_EQUAL_STRING("ab", s.c_str());
+    TEST_ASSERT_EQUAL_CHAR('\0', s[2]);
+    TEST_ASSERT_EQUAL_UINT(6, s.remaining());
+
+    s.pop_back();
+    s.pop_back();
+    TEST_ASSERT_TRUE(s.empty());
+    TEST_ASSERT_EQUAL_STRING("", s.c_str());
+    TEST_ASSERT_EQUAL_CHAR('\0', s[0]);
 }
 
 // --- Element access and iteration -------------------------------------------
@@ -481,4 +526,15 @@ TEST_CASE("static_string: push_back when full aborts",
           "[static_string][assert]") {
     TEST_ASSERT_TRUE(assert_test_support::assert_program_aborted(
         assert_program(), "push_back_when_full"));
+}
+
+TEST_CASE("static_string: back when empty aborts", "[static_string][assert]") {
+    TEST_ASSERT_TRUE(assert_test_support::assert_program_aborted(
+        assert_program(), "back_when_empty"));
+}
+
+TEST_CASE("static_string: pop_back when empty aborts",
+          "[static_string][assert]") {
+    TEST_ASSERT_TRUE(assert_test_support::assert_program_aborted(
+        assert_program(), "pop_back_when_empty"));
 }

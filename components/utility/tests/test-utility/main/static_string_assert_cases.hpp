@@ -48,11 +48,25 @@ inline void push_back_when_full() {
     s.push_back('c');  // Full: remaining() == 0.
 }
 
-inline constexpr std::array<Case, 4> kCases = {{
+// back() has no character to return on an empty string.
+inline void back_when_empty() {
+    thermo::utility::static_string<4> s;
+    (void)s.back();
+}
+
+// pop_back() has no character to remove on an empty string.
+inline void pop_back_when_empty() {
+    thermo::utility::static_string<4> s;
+    s.pop_back();
+}
+
+inline constexpr std::array<Case, 6> kCases = {{
     {"construct_overflow", &construct_overflow},
     {"append_overflow", &append_overflow},
     {"assign_overflow", &assign_overflow},
     {"push_back_when_full", &push_back_when_full},
+    {"back_when_empty", &back_when_empty},
+    {"pop_back_when_empty", &pop_back_when_empty},
 }};
 
 // Read-only view over the case table.
