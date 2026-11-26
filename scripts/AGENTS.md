@@ -190,14 +190,15 @@ same `dev.py` command.
 `build`, `test-linux`, `test-esp32`, and `clang-tidy` fetch missing submodules
 first.
 
-Every `linux` project builds this repository's C++ components with UBSan
-(`cmake/ubsan.cmake`). Checks abort on the first finding; the `UBSAN_OPTIONS`
-entry in `docker/docker-compose.yml` also adds a stack trace and makes reports
-from code outside our targets fatal. Chip builds get neither. The standalone
-`test-utility` abort programs link the runtime explicitly, because they are
-plain executables rather than component libraries. `build --analyzer` skips the
-instrumentation: GCC's analyzer misreads UBSan's checks as uninitialised reads,
-so the two analysis modes are separate gates.
+Every `linux` project builds this repository's C++ components with UBSan and
+ASan (`cmake/ubsan.cmake`, `cmake/asan.cmake`). Checks abort on the first
+finding; the runtime entries in `docker/docker-compose.yml` also add stack
+traces and make reports from code outside our targets fatal. ASan pins `-g`
+and frame pointers for those stacks. Chip builds get neither. The standalone
+`test-utility` abort programs link both runtimes explicitly, because they are
+plain executables rather than component libraries. `build --analyzer` skips
+both: GCC's analyzer misreads the checks as uninitialised reads, so the two
+analysis modes are separate gates.
 
 `build` and the `linux` test commands run `idf.py set-target` only when a
 project's build tree is new or records a different target. `set-target`

@@ -148,6 +148,9 @@ services:
       # UBSan reports abort with a stack trace in the linux test suites, so a
       # finding cannot be printed and then lost in the rest of the output.
       UBSAN_OPTIONS: "halt_on_error=1:print_stacktrace=1"
+      # ASan likewise aborts instead of exiting quietly, and prints a stack.
+      # The host tests are the only consumers; chip builds are unaffected.
+      ASAN_OPTIONS: "halt_on_error=1:abort_on_error=1:print_stacktrace=1"
       # Pass through the host's ESP32_PORT (serial device) only when it is
       # actually set on the host, so the variable is absent (not empty) in
       # the container otherwise. A null value means "take from the host env".

@@ -190,10 +190,11 @@ in or under that directory, so one suite is
 `./scripts/dev.py test-linux components/utility/tests/test-utility`.
 
 Every `linux` build instruments this repository's C++ components with UBSan
-(`cmake/ubsan.cmake`): a finding aborts with a stack trace, and ESP32-S3 builds
-are unaffected. The runtime options in `docker/docker-compose.yml` make
-reports from code outside our targets fatal too. `build --analyzer` is a
-separate gate and skips the instrumentation: GCC's analyzer misreads UBSan's
+and ASan (`cmake/ubsan.cmake`, `cmake/asan.cmake`): a finding aborts with a
+stack trace, and ESP32-S3 builds are unaffected. ASan pins `-g` and frame
+pointers for symbolized reports. The runtime options in
+`docker/docker-compose.yml` make reports from code outside our targets fatal
+too. `build --analyzer` skips both runtimes: GCC's analyzer misreads their
 checks as uninitialised reads and would fail on correct code.
 
 The on-target `esp_timer` suite runs with `./scripts/dev.py test-esp32` (or

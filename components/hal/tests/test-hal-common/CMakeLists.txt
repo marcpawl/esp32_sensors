@@ -61,6 +61,10 @@ include("${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/gcc-analyzer.cmake")
 # module explains the target guard and why vendored code is excluded.
 include("${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/ubsan.cmake")
 
+# ASan adds heap and stack checks with pinned debug symbols; the module
+# explains the target guard and the runtime options.
+include("${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/asan.cmake")
+
 # Warnings are errors in this repository's own code; the module
 # explains the ESP-IDF defaults it overrides.
 include("${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/compiler-warnings.cmake")
@@ -69,8 +73,9 @@ include("${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/compiler-warnings.cmake")
 # esp32_sensors_hal_common_tests.
 project(esp32_sensors_hal_common_tests)
 
-# `BUILD_COMPONENTS` is populated by project(); all three flag helpers go
+# `BUILD_COMPONENTS` is populated by project(); all four flag helpers go
 # on this repository's component targets only.
 thermo_enable_gcc_analyzer()
 thermo_enable_compiler_warnings()
 thermo_enable_ubsan()
+thermo_enable_asan()
