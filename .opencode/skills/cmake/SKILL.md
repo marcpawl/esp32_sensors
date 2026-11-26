@@ -66,6 +66,38 @@ unrestricted it builds every default IDF component, which is slow and pulls
 in `esp_wifi` even for a test that never touches Wi-Fi — the on-target
 `esp_timer` tests did exactly that.
 
+## Sanitizers in linux builds
+
+Two helper modules instrument this repository's own C++ in `linux` projects:
+
+- `cmake/ubsan.cmake` — `-fsanitize=undefined` with
+  `-fno-sanitize-recover=all`, so the first finding aborts.
+- `cmake/asan.cmake` — `-fsanitize=address`, `-fno-omit-frame-pointer`
+  and `-g`, so a report has a walkable, symbolized stack.
+
+Both use `thermo_own_component_targets()` so ESP-IDF and `third_party/` keep
+their upstream flags: a report from code we do not own would drown out a
+finding in ours. Chip builds are untouched — the helpers check
+`CONFIG_IDF_TARGET_LINUX`, and Xtensa GCC has no matching runtimes.
+
+Call each helper once after `project()` in a linux project. Static component
+libraries cannot carry the runtime to the final ELF, so the helper also links
+it there. Plain executables, such as the standalone `test-utility` abort
+programs, are not component targets: pass their names to the helper so they
+get the flags and the runtime.
+
+`docker/docker-compose.yml` sets fatal runtime options:
+`UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1` and
+`ASAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_stacktrace=1`.
+
+`build --analyzer` is a separate gate: both helpers return early when
+`THERMO_GCC_ANALYZER` is on. GCC's analyzer misreads the checks inserted by
+the sanitizers as uninitialised reads and fails on correct code. CI runs
+`build --analyzer` first, then a plain `build` immediately before
+`test-linux`, so the suites execute instrumented code. `dev.py` passes the
+cache variable explicitly in both directions, so switching modes cannot
+leave stale flags.
+
 ## Adding a source
 
 A new `.cpp` file has to be listed wherever its target collects sources —
