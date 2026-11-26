@@ -529,7 +529,7 @@ FW_BINARY = "mcgowan.bin"
 
 # Host-side unit tests for this script itself (stdlib `unittest`), run by
 # `scripts/dev.py self-check`.
-SELF_CHECK_MODULE = "scripts.test_dev"
+SELF_CHECK_MODULES = ("scripts.test_dev", "scripts.test_pre_push_hook")
 
 # Source extensions clang-tidy analyzes. The compile database lists every
 # translation unit, including the generated C/assembly ESP-IDF compiles; only
@@ -1804,7 +1804,7 @@ def cmd_self_check() -> int:
             file=sys.stderr,
         )
         return 1
-    return run(["python3", "-m", "unittest", "-v", SELF_CHECK_MODULE])
+    return run(["python3", "-m", "unittest", "-v", *SELF_CHECK_MODULES])
 
 
 def _format_scopes(arguments: list[str]) -> list[Path] | None:
@@ -2462,16 +2462,24 @@ def _tidy_exclude_header_filter() -> str:
 
 
 def cmd_install_hooks() -> int:
-    """Activate the version-controlled git hooks (.githooks/pre-commit).
-
-    The hook rejects commits whose staged C/C++ files are not
-    clang-formatted.
-    """
+    """Activate the version-controlled git hooks in .githooks/."""
     rc = run([
         "git", "-C", str(REPO_ROOT), "config", "core.hooksPath", ".githooks"
     ])
     if rc == 0:
-        print("Installed git hooks: core.hooksPath -> .githooks")
+        hooks_dir = REPO_ROOT / ".githooks"
+        hooks = sorted(
+            p.name for p in hooks_dir.iterdir()
+            if p.is_file() and not p.name.startswith(".")
+        ) if hooks_dir.is_dir() else []
+        if hooks:
+            print(
+                "Installed git hooks: core.hooksPath -> .githooks ("
+                + ", ".join(hooks)
+                + ")"
+            )
+        else:
+            print("Installed git hooks: core.hooksPath -> .githooks")
     return rc
 
 
