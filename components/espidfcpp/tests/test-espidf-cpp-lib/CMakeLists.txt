@@ -24,6 +24,7 @@ idf_component_register(
         "src/test_http_server_types.cpp"
         "src/test_interrupt_handle.cpp"
         "src/test_mutex.cpp"
+        "src/test_nvs.cpp"
         "src/test_one_message_queue.cpp"
         "src/test_ring_buffer.cpp"
         "src/test_switch.cpp"

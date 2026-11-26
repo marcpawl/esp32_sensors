@@ -40,6 +40,7 @@ idf_component_register(
         esp_ringbuf
         esp_timer
         esp_hw_support
+	nvs_flash
         ${GPIO_DEPENDENCY}
 )
 
@@ -52,6 +53,7 @@ target_sources(${COMPONENT_LIB} PRIVATE
     "include/espidf_cpp/http_server_types.hpp"
     "include/espidf_cpp/interrupt_handle.hpp"
     "include/espidf_cpp/mutex.hpp"
+    "include/espidf_cpp/nvs.hpp"
     "include/espidf_cpp/one_message_queue.hpp"
     "include/espidf_cpp/ring_buffer.hpp"
     "include/espidf_cpp/switch.hpp"
