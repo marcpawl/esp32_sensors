@@ -3435,6 +3435,53 @@ class UbsanConfigurationTests(unittest.TestCase):
         self.assertIn("print_stacktrace=1", options)
 
 
+class AddressSanitizerTests(unittest.TestCase):
+    """Every linux project builds our C++ code with fatal ASan checks.
+
+    `-g` and frame pointers are pinned so a report has a usable stack,
+    and chip builds must see none of the sanitizer flags.
+    """
+
+    def test_every_linux_project_enables_asan(self):
+        projects = [p for p in dev._discover_projects(dev.REPO_ROOT)
+                    if p.target == "linux"]
+        self.assertGreater(len(projects), 1)
+        for project in projects:
+            cmake = (project.directory / "CMakeLists.txt").read_text()
+            with self.subTest(project=project.name):
+                self.assertIn("cmake/asan.cmake", cmake)
+                self.assertIn("thermo_enable_asan()", cmake)
+
+    def test_chip_projects_do_not_enable_asan(self):
+        for project in dev._discover_projects(dev.REPO_ROOT):
+            if project.target == "linux":
+                continue
+            cmake = (project.directory / "CMakeLists.txt").read_text()
+            with self.subTest(project=project.name):
+                self.assertNotIn("asan", cmake)
+
+    def test_helper_instruments_only_our_targets_with_debug_symbols(self):
+        helper = (dev.REPO_ROOT / "cmake" / "asan.cmake").read_text()
+        self.assertIn("-fsanitize=address", helper)
+        self.assertIn("-fno-omit-frame-pointer", helper)
+        self.assertIn("-g", helper)
+        self.assertIn("thermo_own_component_targets(targets)", helper)
+        self.assertIn("CONFIG_IDF_TARGET_LINUX", helper)
+
+    def test_helper_skips_instrumentation_for_the_analyzer_gate(self):
+        # The analyzer and the runtime sanitizers are separate gates; neither
+        # helper may instrument a translation unit that -fanalyzer reads.
+        helper = (dev.REPO_ROOT / "cmake" / "asan.cmake").read_text()
+        self.assertIn("THERMO_GCC_ANALYZER", helper)
+
+    def test_compose_sets_fatal_asan_runtime_options(self):
+        options = _compose_dev_environment().get("ASAN_OPTIONS", "")
+        options = options.strip('"')
+        self.assertIn("halt_on_error=1", options)
+        self.assertIn("abort_on_error=1", options)
+        self.assertIn("print_stacktrace=1", options)
+
+
 class SshMountTests(unittest.TestCase):
     """The host's `~/.ssh` is shared with the container, read-only.
 
