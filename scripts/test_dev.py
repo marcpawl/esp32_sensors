@@ -3422,6 +3422,12 @@ class UbsanConfigurationTests(unittest.TestCase):
         self.assertIn("thermo_own_component_targets(targets)", helper)
         self.assertIn("CONFIG_IDF_TARGET_LINUX", helper)
 
+    def test_helper_skips_instrumentation_for_the_analyzer_gate(self):
+        # GCC's analyzer reads UBSan instrumentation as uninitialised reads;
+        # running both in one translation unit fails on untouched code.
+        helper = (dev.REPO_ROOT / "cmake" / "ubsan.cmake").read_text()
+        self.assertIn("THERMO_GCC_ANALYZER", helper)
+
     def test_compose_sets_fatal_ubsan_runtime_options(self):
         options = _compose_dev_environment().get("UBSAN_OPTIONS", "")
         options = options.strip('"')

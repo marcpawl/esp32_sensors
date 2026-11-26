@@ -27,7 +27,13 @@ set(_thermo_ubsan_options
 )
 
 function(thermo_enable_ubsan)
-    if(NOT THERMO_UBSAN OR NOT CONFIG_IDF_TARGET_LINUX)
+    # GCC's static analyzer and UBSan instrumentation cannot share a build:
+    # -fanalyzer misreads the checks inserted by -fsanitize=undefined as
+    # uninitialised reads and fails with
+    # -Werror=analyzer-use-of-uninitialized-value, even on untouched, correct
+    # code. `scripts/dev.py build --analyzer` is a separate gate, so it runs
+    # without the runtime instrumentation.
+    if(NOT THERMO_UBSAN OR NOT CONFIG_IDF_TARGET_LINUX OR THERMO_GCC_ANALYZER)
         return()
     endif()
 
