@@ -3389,6 +3389,52 @@ def _compose_dev_environment() -> dict[str, str | None]:
     raise AssertionError("docker-compose.yml has no `environment:` block")
 
 
+class UbsanConfigurationTests(unittest.TestCase):
+    """Every linux project builds our C++ code with fatal UBSan checks.
+
+    This is a build-level gate rather than a `dev.py` option: all host
+    builds get it, chip builds get none of it, and the runtime options in
+    the container make a finding abort with a useful stack.
+    """
+
+    def test_every_linux_project_enables_ubsan(self):
+        projects = [p for p in dev._discover_projects(dev.REPO_ROOT)
+                    if p.target == "linux"]
+        self.assertGreater(len(projects), 1)
+        for project in projects:
+            cmake = (project.directory / "CMakeLists.txt").read_text()
+            with self.subTest(project=project.name):
+                self.assertIn("cmake/ubsan.cmake", cmake)
+                self.assertIn("thermo_enable_ubsan()", cmake)
+
+    def test_chip_projects_do_not_enable_ubsan(self):
+        for project in dev._discover_projects(dev.REPO_ROOT):
+            if project.target == "linux":
+                continue
+            cmake = (project.directory / "CMakeLists.txt").read_text()
+            with self.subTest(project=project.name):
+                self.assertNotIn("ubsan", cmake)
+
+    def test_helper_instruments_only_our_targets_and_aborts(self):
+        helper = (dev.REPO_ROOT / "cmake" / "ubsan.cmake").read_text()
+        self.assertIn("-fsanitize=undefined", helper)
+        self.assertIn("-fno-sanitize-recover=all", helper)
+        self.assertIn("thermo_own_component_targets(targets)", helper)
+        self.assertIn("CONFIG_IDF_TARGET_LINUX", helper)
+
+    def test_helper_skips_instrumentation_for_the_analyzer_gate(self):
+        # GCC's analyzer reads UBSan instrumentation as uninitialised reads;
+        # running both in one translation unit fails on untouched code.
+        helper = (dev.REPO_ROOT / "cmake" / "ubsan.cmake").read_text()
+        self.assertIn("THERMO_GCC_ANALYZER", helper)
+
+    def test_compose_sets_fatal_ubsan_runtime_options(self):
+        options = _compose_dev_environment().get("UBSAN_OPTIONS", "")
+        options = options.strip('"')
+        self.assertIn("halt_on_error=1", options)
+        self.assertIn("print_stacktrace=1", options)
+
+
 class SshMountTests(unittest.TestCase):
     """The host's `~/.ssh` is shared with the container, read-only.
 

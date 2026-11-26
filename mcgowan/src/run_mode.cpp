@@ -105,7 +105,7 @@ logic::payload::SensorNames names_for(const Config& cfg,
          i < logic::limits::kSensorCount && i < readings.size(); ++i) {
         logic::payload::SensorName name;
         for (const auto& mapping : cfg.mappings) {
-            if (mapping.rom == logic::rom_id_to_hex(readings[i].rom)) {
+            if (mapping.rom == logic::rom_id_to_hex(readings[i].rom).c_str()) {
                 name.assign(mapping.name.c_str());
                 break;
             }

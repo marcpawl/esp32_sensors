@@ -64,9 +64,14 @@ set(EXCLUDE_COMPONENTS
 )
 
 include("${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/gcc-analyzer.cmake")
+
+# UBSan instruments our linux C++ code and aborts on the first finding; the
+# module explains the target guard and why vendored code is excluded.
+include("${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/ubsan.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/compiler-warnings.cmake")
 
 project(test-espidf-cpp-linux)
 
 thermo_enable_gcc_analyzer()
 thermo_enable_compiler_warnings()
+thermo_enable_ubsan()

@@ -11,44 +11,44 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
-#include <string>
-
 #include <cerrno>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 #include <sys/wait.h>
 #include <unistd.h>
 
 #include "unity.h"
+#include "utility/static_string.hpp"
 
 namespace assert_test_support {
 
+// A `/proc/self/exe` path (at most 4095 bytes) plus an `_assert` program name.
+// Fixed capacity also keeps GCC's analyzer out of libstdc++'s std::string,
+// which it cannot model and where it reported a false uninitialised read.
+using AssertProgramPath = thermo::utility::static_string<4160>;
+
 // Absolute path to a sibling `_assert` program. The program is emitted next to
 // the test ELF, so resolve this process's own directory via /proc/self/exe.
-inline std::string assert_program_path(const char* program_name) {
+inline AssertProgramPath assert_program_path(const char* program_name) {
     char exe[4096];
     const ssize_t n = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
     TEST_ASSERT_TRUE_MESSAGE(n > 0, "readlink(/proc/self/exe) failed");
     exe[n] = '\0';
-    std::string path(exe);
-    const std::size_t slash = path.find_last_of('/');
-    path.resize(slash == std::string::npos ? 0 : slash + 1);
-    // GCC's analyzer cannot model libstdc++'s std::string concatenation and
-    // reports an uninitialised read here. The code is correct; keep the
-    // diagnostic fatal everywhere else.
-    // NOLINTBEGIN
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
-    return path + program_name;
-#pragma GCC diagnostic pop
-    // NOLINTEND
+    const char* slash = std::strrchr(exe, '/');
+    AssertProgramPath path;
+    if (slash != nullptr) {
+        path.append(exe, static_cast<std::size_t>(slash - exe) + 1);
+    }
+    path.append(program_name);
+    return path;
 }
 
 // Forks, execs `program` with `case_name`, and waits for it. Returns true iff
 // the child terminated abnormally, i.e. the assert fired.
-inline bool assert_program_aborted(const std::string& program,
+inline bool assert_program_aborted(const AssertProgramPath& program,
                                    const char* case_name) {
     const pid_t pid = fork();
     TEST_ASSERT_TRUE_MESSAGE(pid >= 0, "fork() failed");
