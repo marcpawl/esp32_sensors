@@ -35,6 +35,7 @@
 from __future__ import annotations
 
 import argparse
+import glob
 import hashlib
 import json
 import os
@@ -535,6 +536,17 @@ SELF_CHECK_MODULE = "scripts.test_dev"
 # C++ sources are ours to check.
 TIDY_EXTENSIONS = (".cpp", ".cc", ".cxx")
 
+# A named header is analyzed too, using the flags of a matching translation
+# unit (see `_tidy_entry_for_file`). Headers are not selected from databases
+# for directory scopes, so they stay separate from `TIDY_EXTENSIONS`.
+TIDY_HEADER_EXTENSIONS = (".hpp", ".hh", ".hxx", ".h")
+TIDY_FILE_EXTENSIONS = TIDY_EXTENSIONS + TIDY_HEADER_EXTENSIONS
+
+# Characters that make an argument a glob rather than a literal path. The
+# shell usually expands these first; quoting them leaves the expansion to
+# `_expand_path_scopes`, so both spellings work.
+GLOB_MAGIC = frozenset("*?[")
+
 # Build directories that hold the compile databases `build` writes. A
 # directory-scoped `clang-tidy` (`clang-tidy components/`) reads databases
 # under these names only, so CLion's `cmake-build-*` trees and stale copies of
@@ -637,20 +649,21 @@ def _select_sources(paths: list[str], root: Path = REPO_ROOT) -> list[str]:
     })
 
 
-def source_files(directories: list[Path] | None = None) -> list[str]:
-    """Every C/C++ source under `directories`, tracked or untracked.
+def source_files(scopes: list[Path] | None = None) -> list[str]:
+    """Every C/C++ source under `scopes`, tracked or untracked.
 
-    This is the file list `format` and `format-check` operate on. With no
-    `directories` the historical `ROOTS` trees are scanned; otherwise each
-    directory is a `git ls-files` pathspec (repo-relative), so a subdirectory
-    restricts the run and the repository root covers everything. Vendored trees
-    are always filtered out. It includes files that have not been `git add`ed
-    yet, so formatting a new source does not depend on staging it first;
-    ignored files (build output) are still excluded by `--exclude-standard`.
+    This is the file list the `format` commands operate on. With no `scopes`
+    the historical `ROOTS` trees are scanned; otherwise each scope is a
+    `git ls-files` pathspec (repo-relative), so a directory covers everything
+    below it, a file limits the run to that file, and the repository root
+    covers everything. Vendored trees are always filtered out. It includes
+    files that have not been `git add`ed yet, so formatting a new source does
+    not depend on staging it first; ignored files (build output) are still
+    excluded by `--exclude-standard`.
     """
     roots = (
-        tuple(_repo_relative(directory) for directory in directories)
-        if directories else ROOTS
+        tuple(_repo_relative(scope) for scope in scopes)
+        if scopes else ROOTS
     )
     try:
         result = subprocess.run(
@@ -685,7 +698,7 @@ def _cxx_sources_under(
     The `format`/`format-check`/`clang-tidy` notion of "this directory can run
     the command": a directory with no source has nothing for those commands to
     do, so the selection climbs to a parent that has some (see
-    `_escalated_directories`). `root` is unused; it keeps the
+    `_escalated_scopes`). `root` is unused; it keeps the
     `(directory, root)` signature the selection helpers take. Nearly pure
     (it shells out to git, like `source_files`).
     """
@@ -1012,30 +1025,144 @@ def _idf(directory: str, build_dir: str, *args: str) -> list[str]:
             *args]
 
 
-def _resolve_directory(
+def _path_pattern(
     argument: str, root: Path = REPO_ROOT, cwd: Path | None = None
-) -> Path | None:
-    """Resolve one `build`/`test`/`clang-tidy` argument to a directory.
+) -> Path:
+    """`argument` as a path under `root`, without requiring it to exist.
 
-    A relative path is resolved against `cwd` (the caller's working
-    directory). An absolute path under the repository is taken as given, and
-    `/project/...` is mapped onto `root`, so a command written for the
-    container also works from the host. Returns None for anything that is not
-    a directory inside the repository. Pure apart from `stat()`.
+    `/project/...` is the name the container gives the repository, so it maps
+    onto `root` on either side of the container hop. A relative argument is
+    resolved against the caller's working directory. Pure.
     """
     path = Path(argument)
     if path.is_absolute():
         try:
-            path = root / path.relative_to(CONTAINER_PROJECT_ROOT)
+            return root / path.relative_to(CONTAINER_PROJECT_ROOT)
         except ValueError:
-            pass
-    else:
-        path = (cwd or Path.cwd()) / path
+            return path
+    return (cwd or Path.cwd()) / path
 
-    path = path.resolve()
-    if path.is_dir() and (path == root or root in path.parents):
+
+def _resolve_path(
+    argument: str, root: Path = REPO_ROOT, cwd: Path | None = None
+) -> Path | None:
+    """Resolve one path argument, or None when it is outside `root`. Pure.
+
+    Existence is checked by the caller: directories, files, and glob matches
+    all use this mapping before their own validation.
+    """
+    path = _path_pattern(argument, root=root, cwd=cwd).resolve()
+    if path == root or root in path.parents:
         return path
     return None
+
+
+def _resolve_directory(
+    argument: str, root: Path = REPO_ROOT, cwd: Path | None = None
+) -> Path | None:
+    """Resolve one `build`/`test` argument to a directory.
+
+    Returns None for anything that is not a directory inside the repository.
+    Pure apart from `stat()`.
+    """
+    path = _resolve_path(argument, root=root, cwd=cwd)
+    return path if path is not None and path.is_dir() else None
+
+
+def _expand_path_scopes(
+    arguments: list[str], root: Path = REPO_ROOT, cwd: Path | None = None
+) -> list[Path] | None:
+    """Expand `clang-tidy`/`format` arguments into repository paths. Pure.
+
+    Each argument may name a directory or a file, or be a glob matching
+    either. The shell normally expands a glob, but a quoted one (e.g.
+    `'*/nvs.*'`) is expanded here so both spellings behave the same. Paths
+    are de-duplicated in argument order; an argument that matches nothing, or
+    anything outside the repository, is reported and rejected. Nearly pure
+    (globbing and `stat`, no subprocesses).
+    """
+    scopes: list[Path] = []
+    for argument in arguments:
+        pattern = _path_pattern(argument, root=root, cwd=cwd)
+        if any(magic in argument for magic in GLOB_MAGIC):
+            candidates = sorted(
+                Path(match).resolve()
+                for match in glob.glob(str(pattern), recursive=True)
+            )
+            if not candidates:
+                print(
+                    f"'{argument}' matches no files or directories inside "
+                    f"the repository '{root}'.",
+                    file=sys.stderr,
+                )
+                return None
+        else:
+            candidates = [pattern.resolve()]
+
+        for path in candidates:
+            if path != root and root not in path.parents:
+                print(
+                    f"'{argument}' is outside the repository '{root}' "
+                    "(paths outside it are rejected).",
+                    file=sys.stderr,
+                )
+                return None
+            if not path.is_dir() and not path.is_file():
+                print(
+                    f"'{argument}' does not exist inside the repository "
+                    f"'{root}'.",
+                    file=sys.stderr,
+                )
+                return None
+            if path not in scopes:
+                scopes.append(path)
+    return scopes
+
+
+def _parse_path_scopes(
+    arguments: list[str],
+    extensions: tuple[str, ...] = EXTENSIONS,
+    root: Path = REPO_ROOT,
+    cwd: Path | None = None,
+) -> list[Path] | None:
+    """The directories and source files named by `clang-tidy`/`format`.
+
+    Directory arguments keep their existing meaning: everything under them.
+    A file must have one of `extensions`, so a typo such as `nvs.md` fails
+    loudly instead of silently doing nothing. A scope inside a vendored tree
+    is rejected; glob matches inside one, and glob matches that are not
+    sources, are ignored instead.
+    """
+    scopes: list[Path] = []
+    for argument in arguments:
+        from_glob = any(magic in argument for magic in GLOB_MAGIC)
+        paths = _expand_path_scopes([argument], root=root, cwd=cwd)
+        if paths is None:
+            return None
+
+        for path in paths:
+            relative = _repo_relative(path, root)
+            if _is_vendored_path(relative):
+                if from_glob:
+                    continue
+                print(
+                    f"'{relative}' is vendored and cannot be checked; "
+                    "vendored sources are never changed.",
+                    file=sys.stderr,
+                )
+                return None
+            if path.is_file() and path.suffix not in extensions:
+                if from_glob:
+                    continue
+                print(
+                    f"'{relative}' is not a source file "
+                    f"({', '.join(extensions)}).",
+                    file=sys.stderr,
+                )
+                return None
+            if path not in scopes:
+                scopes.append(path)
+    return scopes
 
 
 def _start_directory(
@@ -1082,7 +1209,7 @@ def _start_directories(
 def _parse_directories(
     arguments: list[str], root: Path = REPO_ROOT, cwd: Path | None = None
 ) -> list[Path] | None:
-    """Resolve `build`/`test`/`clang-tidy` arguments to repository directories.
+    """Resolve `build`/`test` arguments to repository directories.
 
     No arguments means an empty list; `build` and `test` then use
     `_start_directory`. A path that is not a directory inside the repository
@@ -1160,6 +1287,33 @@ def _escalated_directories(
     escalated: list[Path] = []
     for directory in directories:
         chosen = _carrying_directory(directory, projects_at, description, root)
+        if chosen is None:
+            return None
+        if chosen not in escalated:
+            escalated.append(chosen)
+    return escalated
+
+
+def _escalated_scopes(
+    scopes: list[Path],
+    projects_at: Callable[[Path, Path], list[Project]],
+    description: str,
+    root: Path = REPO_ROOT,
+) -> list[Path] | None:
+    """Like `_escalated_directories`, but leaves named files alone.
+
+    A directory that cannot run the command climbs to a parent that can; an
+    explicit file already names exactly what the command operates on, so it
+    is never replaced by its parent. The result is de-duplicated, so naming
+    both a directory and a file below it does not run twice.
+    """
+    escalated: list[Path] = []
+    for scope in scopes:
+        if scope.is_file():
+            if scope not in escalated:
+                escalated.append(scope)
+            continue
+        chosen = _carrying_directory(scope, projects_at, description, root)
         if chosen is None:
             return None
         if chosen not in escalated:
@@ -1617,29 +1771,39 @@ def cmd_self_check() -> int:
     return run(["python3", "-m", "unittest", "-v", SELF_CHECK_MODULE])
 
 
-def _format_directories(arguments: list[str]) -> list[Path] | None:
-    """The directories a format command operates on, cwd by default. Pure."""
-    return _start_directories(arguments)
+def _format_scopes(arguments: list[str]) -> list[Path] | None:
+    """The directories or files a format command operates on, cwd by default.
+
+    No arguments keeps the historical behavior: start from the caller's
+    current directory. With arguments, each one is a directory, a C/C++
+    source, or a glob matching them (see `_parse_path_scopes`).
+    """
+    if arguments:
+        return _parse_path_scopes(arguments)
+    return _start_directories([])
 
 
 def cmd_format(arguments: list[str]) -> int:
     """Apply the committed .clang-format (Google base, 4-space, 80 cols).
 
-    With no directory, starts from the current directory; a caller outside the
-    repository is an error. `third_party/` is never formatted.
+    Each argument is a directory, a C/C++ source file, or a glob matching
+    them. Files are formatted directly; a directory with no source climbs to
+    its nearest parent that has one. With no argument, starts from the current
+    directory; a caller outside the repository is an error. `third_party/` is
+    never formatted.
     """
-    directories = _format_directories(arguments)
-    if directories is None:
+    scopes = _format_scopes(arguments)
+    if scopes is None:
         return 1
-    change_to_container(_project_container_arguments("format", directories))
-    escalated = _escalated_directories(
-        directories, _cxx_sources_under, "C/C++ sources"
+    change_to_container(_project_container_arguments("format", scopes))
+    escalated = _escalated_scopes(
+        scopes, _cxx_sources_under, "C/C++ sources"
     )
     if escalated is None:
         return 1
-    directories = escalated
+    scopes = escalated
 
-    for file in source_files(directories):
+    for file in source_files(scopes):
         cmd = ["clang-format", "-i", file]
         rc = run(cmd)
         if rc != 0:
@@ -1649,24 +1813,26 @@ def cmd_format(arguments: list[str]) -> int:
 
 
 def cmd_format_check(arguments: list[str]) -> int:
-    """CI-friendly check; non-zero exit if anything is unformatted.
+    """Non-zero exit if any selected C/C++ source is unformatted.
 
-    With no directory, starts from the current directory; a caller outside the
-    repository is an error. `third_party/` is never checked.
+    Each argument is a directory, a C/C++ source file, or a glob matching
+    them. Files are checked directly; a directory with no source climbs to
+    its nearest parent that has one. With no argument, starts from the current
+    directory; a caller outside the repository is an error. `third_party/` is
+    never checked.
     """
-    directories = _format_directories(arguments)
-    if directories is None:
+    scopes = _format_scopes(arguments)
+    if scopes is None:
         return 1
-    change_to_container(_project_container_arguments("format-check",
-                                                     directories))
-    escalated = _escalated_directories(
-        directories, _cxx_sources_under, "C/C++ sources"
+    change_to_container(_project_container_arguments("format-check", scopes))
+    escalated = _escalated_scopes(
+        scopes, _cxx_sources_under, "C/C++ sources"
     )
     if escalated is None:
         return 1
-    directories = escalated
+    scopes = escalated
 
-    for file in source_files(directories):
+    for file in source_files(scopes):
         cmd = ["clang-format", "--dry-run", "--Werror", file]
         rc = run(cmd)
         if rc != 0:
@@ -1784,7 +1950,9 @@ def _is_vendored(relative: Path) -> bool:
 
 
 def _unique_tidy_units(
-    compilations: list[dict], root: Path = REPO_ROOT
+    compilations: list[dict],
+    root: Path = REPO_ROOT,
+    allow_headers: bool = False,
 ) -> list[dict]:
     """The C++ compilation-database entries to analyze, one per source file.
 
@@ -1797,13 +1965,17 @@ def _unique_tidy_units(
 
     Entries outside `root` (ESP-IDF's own components, the generated
     `project_elf_src_*.c`), vendored submodule sources (see `_is_vendored`),
-    and non-C++ sources are skipped. Pure (no I/O), so it is unit-testable.
+    and non-C++ sources are skipped. `allow_headers` is for file scopes: an
+    explicitly named header gets a synthesized entry (see
+    `_tidy_entry_for_file`), while directory scopes still select only real
+    translation units. Pure (no I/O), so it is unit-testable.
     """
+    extensions = TIDY_FILE_EXTENSIONS if allow_headers else TIDY_EXTENSIONS
     seen = set()
     units = []
     for entry in compilations:
         source = Path(entry["file"])
-        if source.suffix not in TIDY_EXTENSIONS:
+        if source.suffix not in extensions:
             continue
         try:
             relative = source.relative_to(root)
@@ -1870,15 +2042,17 @@ def _tidy_units(directory: Path) -> list[dict] | None:
 
 
 def _parse_tidy_scopes(arguments: list[str]) -> list[Path] | None:
-    """Resolve `clang-tidy`'s directory arguments, cwd by default.
+    """Resolve `clang-tidy`'s directory/file arguments, cwd by default.
 
-    Invalid arguments, and a caller outside the repository, print an error and
-    return None so the caller can exit non-zero. From the repository root the
-    scope is every discovered project, so a missing compile database is named
-    per project; from a subdirectory it is that directory.
+    Each argument may be a directory, a C/C++ source or header, or a glob
+    matching them (see `_parse_path_scopes`). Invalid arguments, and a caller
+    outside the repository, print an error and return None so the caller can
+    exit non-zero. With no arguments the scope is every discovered project
+    from the repository root, or the caller's directory from a subdirectory,
+    as before.
     """
     if arguments:
-        return _parse_directories(arguments)
+        return _parse_path_scopes(arguments, extensions=TIDY_FILE_EXTENSIONS)
     directories = _start_directories([])
     if directories is None:
         return None
@@ -1957,6 +2131,97 @@ def _tidy_units_under(
     return _unique_tidy_units(compilations, root=root)
 
 
+def _tidy_compilations(databases: list[Path]) -> list[dict]:
+    """Every entry in `databases`, in database order. Pure apart from reads."""
+    return [
+        entry
+        for database in databases
+        for entry in json.loads(database.read_text())
+    ]
+
+
+def _retarget_tidy_entry(entry: dict, file: Path) -> dict:
+    """Copy `entry` so clang-tidy analyzes `file` with the same flags.
+
+    A header is not a translation unit, so it borrows a source file's compile
+    command. The trailing input in that command must be replaced by the
+    header, or clang-tidy would parse the source and discard the requested
+    file. Pure.
+    """
+    retargeted = dict(entry)
+    if "arguments" in entry:
+        argv = list(entry["arguments"])
+        args = _tidy_compile_arguments(argv)
+        if args:
+            args[-1] = str(file)
+        retargeted["arguments"] = [argv[0], *args]
+    else:
+        command = shlex.split(entry["command"])
+        args = _tidy_compile_arguments(command)
+        if args:
+            args[-1] = str(file)
+        retargeted["command"] = shlex.join([command[0], *args])
+    retargeted["file"] = str(file)
+    return retargeted
+
+
+def _tidy_entry_for_file(
+    file: Path, databases: list[Path], root: Path = REPO_ROOT
+) -> dict | None:
+    """The compile entry for an explicitly named source file or header.
+
+    A translation unit must appear in a compile database: that is the only
+    place its real flags, defines, and include paths are recorded. A header
+    borrows flags from the closest translation unit, preferring the one with
+    the same stem (e.g. `nvs.hpp` from `nvs.cpp`), then the same directory,
+    then the deepest shared path. The borrowed command is retargeted to the
+    header (see `_retarget_tidy_entry`).
+    """
+    compilations = _tidy_compilations(databases)
+    for entry in compilations:
+        if Path(entry["file"]).resolve() == file:
+            return dict(entry)
+
+    relative = _repo_relative(file, root)
+    if file.suffix in TIDY_EXTENSIONS:
+        print(
+            f"clang-tidy: '{relative}' has no compile database entry; "
+            "run `scripts/dev.py build` first.",
+            file=sys.stderr,
+        )
+        return None
+
+    candidates = [
+        entry
+        for entry in compilations
+        if Path(entry["file"]).is_file()
+        and Path(entry["file"]).suffix in TIDY_EXTENSIONS
+    ]
+    if not candidates:
+        print(
+            f"clang-tidy: no C++ compile database entry is available for "
+            f"'{relative}'; run `scripts/dev.py build` first.",
+            file=sys.stderr,
+        )
+        return None
+
+    def rank(entry: dict) -> tuple[bool, bool, int, str]:
+        source = Path(entry["file"]).resolve()
+        common = 0
+        for source_part, file_part in zip(source.parts, file.parts):
+            if source_part != file_part:
+                break
+            common += 1
+        return (
+            source.stem != file.stem,
+            source.parent != file.parent,
+            -common,
+            str(source),
+        )
+
+    return _retarget_tidy_entry(min(candidates, key=rank), file)
+
+
 def _container_path(path: Path, root: Path = REPO_ROOT) -> str:
     """`path` as the container sees it (`/project/...`). Pure."""
     try:
@@ -1967,30 +2232,31 @@ def _container_path(path: Path, root: Path = REPO_ROOT) -> str:
 
 
 def _project_container_arguments(
-    command: str, directories: list[Path], analyzer: bool = False
+    command: str, scopes: list[Path], analyzer: bool = False
 ) -> list[str]:
     """The `dev.py COMMAND` arguments to re-run inside the container. Pure.
 
-    Every directory becomes its container path, so a host path such as
-    `/home/me/esp32_sensors/components` re-executes as `/project/components`
-    whatever the caller's host working directory was.
+    Every directory or file becomes its container path, so a host path such
+    as `/home/me/esp32_sensors/components/nvs.cpp` re-executes as
+    `/project/components/nvs.cpp` whatever the caller's host working
+    directory was.
     """
     arguments = [command]
     if analyzer:
         arguments.append(f"{_ANALYZER_FLAG}=true")
-    arguments.extend(_container_path(directory) for directory in directories)
+    arguments.extend(_container_path(scope) for scope in scopes)
     return arguments
 
 
 def _tidy_container_arguments(
-    directories: list[Path], fix: bool = False
+    scopes: list[Path], fix: bool = False
 ) -> list[str]:
     """The `dev.py clang-tidy` arguments to re-run inside the container.
 
-    Directories become container paths (see `_project_container_arguments`).
-    Pure.
+    Directories and files become container paths (see
+    `_project_container_arguments`). Pure.
     """
-    arguments = _project_container_arguments("clang-tidy", directories)
+    arguments = _project_container_arguments("clang-tidy", scopes)
     if fix:
         arguments.insert(1, "--fix")
     return arguments
@@ -2041,15 +2307,18 @@ def _tidy_run_command(
     return command
 
 
-def cmd_clang_tidy(directories: list[Path], fix: bool = False) -> int:
-    """Static analysis (clang-tidy) over the C/C++ sources in directories.
+def cmd_clang_tidy(scopes: list[Path], fix: bool = False) -> int:
+    """Static analysis (clang-tidy) over sources in directories or files.
 
-    Every argument is a directory inside the repository
-    (`components/hal/`). A directory that is itself an ESP-IDF project is
-    analyzed from that project's compile database; any other covers every C++
-    source below it, including sources that belong to no analyzed project
-    (e.g. `components/hal/tests/esp_timer/board/`), and draws them from every
-    compile database under `TIDY_BUILD_DIRS`.
+    Every argument is a directory (`components/hal/`), a source or header
+    file (`nvs.hpp`), or a glob matching them (`*/nvs.*`). A directory that is
+    itself an ESP-IDF project is analyzed from that project's compile
+    database; any other covers every C++ source below it, including sources
+    that belong to no analyzed project (e.g.
+    `components/hal/tests/esp_timer/board/`), and draws them from every
+    compile database under `TIDY_BUILD_DIRS`. A named file is analyzed alone;
+    a header borrows the flags of its matching translation unit (see
+    `_tidy_entry_for_file`).
 
     Imports the ESP-IDF compile databases so clang-tidy sees the exact flags,
     defines, and include paths each file is really built with, including the
@@ -2076,14 +2345,14 @@ def cmd_clang_tidy(directories: list[Path], fix: bool = False) -> int:
     cannot be fixed still fail the run, and the rewritten code should be
     re-formatted (`scripts/dev.py format`).
     """
-    change_to_container(_tidy_container_arguments(directories, fix))
+    change_to_container(_tidy_container_arguments(scopes, fix))
 
-    escalated = _escalated_directories(
-        directories, _cxx_sources_under, "C/C++ sources"
+    escalated = _escalated_scopes(
+        scopes, _cxx_sources_under, "C/C++ sources"
     )
     if escalated is None:
         return 1
-    directories = escalated
+    scopes = escalated
 
     rc = _ensure_submodules()
     if rc != 0:
@@ -2091,17 +2360,27 @@ def cmd_clang_tidy(directories: list[Path], fix: bool = False) -> int:
 
     units: list[dict] = []
     databases: list[Path] | None = None
-    for directory in directories:
-        if _project_at(directory) is not None:
-            batch = _tidy_units(directory)
+    for scope in scopes:
+        if scope.is_file():
+            if databases is None:
+                databases = _discover_tidy_databases()
+            entry = _tidy_entry_for_file(scope, databases)
+            if entry is None:
+                return 1
+            units.append(entry)
+            continue
+        if _project_at(scope) is not None:
+            batch = _tidy_units(scope)
             if batch is None:
                 return 1
             units.extend(batch)
             continue
         if databases is None:
             databases = _discover_tidy_databases()
-        units.extend(_tidy_units_under(directory, databases))
-    units = _unique_tidy_units(units)
+        units.extend(_tidy_units_under(scope, databases))
+    units = _unique_tidy_units(
+        units, allow_headers=any(scope.is_file() for scope in scopes)
+    )
 
     if not units:
         print(
@@ -3236,18 +3515,18 @@ def cmd_complete() -> int:
 
 
 def _staged_files(
-    directories: list[Path] | None = None, root: Path = REPO_ROOT
+    scopes: list[Path] | None = None, root: Path = REPO_ROOT
 ) -> list[str]:
-    """Staged, added/copied/modified C/C++ files under `directories`.
+    """Staged, added/copied/modified C/C++ files under `scopes`.
 
-    With no `directories` the historical `ROOTS` trees are scanned. Deleted
-    files are skipped (`--diff-filter=ACMR`) and vendored paths are dropped.
-    `root` is a parameter so the directory filter can be unit-tested against a
-    scratch repository.
+    With no `scopes` the historical `ROOTS` trees are scanned. Deleted files
+    are skipped (`--diff-filter=ACMR`) and vendored paths are dropped. `root`
+    is a parameter so the scope filter can be unit-tested against a scratch
+    repository.
     """
     pathspecs = (
-        tuple(_repo_relative(directory, root) for directory in directories)
-        if directories else ROOTS
+        tuple(_repo_relative(scope, root) for scope in scopes)
+        if scopes else ROOTS
     )
     out = subprocess.run(
         (
@@ -3371,17 +3650,18 @@ def cmd_format_check_staged(arguments: list[str]) -> int:
 
     Unlike `format-check`, this inspects the *index* version of the staged
     files, so it never complains about unrelated working-tree edits and always
-    validates exactly what is about to be committed. A directory argument
-    narrows the check to the staged files under it; with none it starts from
-    the current directory (the repository root for the git hook).
+    validates exactly what is about to be committed. A directory or file
+    argument narrows the check to the staged files under it; globs work too.
+    With none it starts from the current directory (the repository root for
+    the git hook).
     """
-    directories = _format_directories(arguments)
-    if directories is None:
+    scopes = _format_scopes(arguments)
+    if scopes is None:
         return 1
     change_to_container(_project_container_arguments(
-        "format-check-staged", directories))
+        "format-check-staged", scopes))
 
-    files = _staged_files(directories)
+    files = _staged_files(scopes)
     if not files:
         return 0
 
@@ -3505,9 +3785,10 @@ def _build_parser() -> argparse.ArgumentParser:
              "directory",
     )
 
-    # `clang-tidy` analyzes every project by default; naming directories
-    # restricts the run (handy while working on one area). A directory covers
-    # every C++ source below it. `--fix` forwards to clang-tidy, which then
+    # `clang-tidy` analyzes every project by default; naming directories or
+    # files restricts the run (handy while working on one area). A directory
+    # covers every C++ source below it; a file stands alone, and quoted globs
+    # are expanded by dev.py. `--fix` forwards to clang-tidy, which then
     # rewrites the sources in place.
     tidy_parser = subparsers.choices["clang-tidy"]
     tidy_parser.add_argument(
@@ -3519,20 +3800,20 @@ def _build_parser() -> argparse.ArgumentParser:
     tidy_parser.add_argument(
         "directories",
         nargs="*",
-        metavar="DIRECTORY",
-        help="directories (every C++ source under one is analyzed); omit for "
-             "the current directory",
+        metavar="DIRECTORY|FILE",
+        help="directories or C/C++ files (globs allowed); omit for the "
+             "current directory",
     )
 
-    # The format commands take optional directories, defaulting to the current
-    # directory (see `_format_directories`).
+    # The format commands take optional directories or files, defaulting to
+    # the current directory (see `_format_scopes`).
     for name in ("format", "format-check", "format-check-staged"):
         subparsers.choices[name].add_argument(
             "directories",
             nargs="*",
-            metavar="DIRECTORY",
-            help="directories (every C/C++ source under one is used); omit "
-                 "for the current directory",
+            metavar="DIRECTORY|FILE",
+            help="directories or C/C++ files (globs allowed); omit for the "
+                 "current directory",
         )
 
     shell_parser = subparsers.choices["shell"]
@@ -3600,10 +3881,10 @@ def main(argv: list[str]) -> int:
     if args.command == "test-esp32":
         return cmd_test_esp32(args.directories)
     if args.command == "clang-tidy":
-        directories = _parse_tidy_scopes(args.directories)
-        if directories is None:
+        scopes = _parse_tidy_scopes(args.directories)
+        if scopes is None:
             return 1
-        return cmd_clang_tidy(directories, fix=args.fix)
+        return cmd_clang_tidy(scopes, fix=args.fix)
     if args.command == "format":
         return cmd_format(args.directories)
     if args.command == "format-check":
