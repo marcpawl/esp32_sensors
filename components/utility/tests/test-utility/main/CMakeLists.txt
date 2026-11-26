@@ -48,10 +48,12 @@ function(add_assert_program name)
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     )
     # These are plain executables, not component libraries, so the project's
-    # `thermo_enable_gcc_analyzer()` and `thermo_enable_compiler_warnings()`
-    # loops do not reach them.
+    # `thermo_enable_gcc_analyzer()`, `thermo_enable_compiler_warnings()`, and
+    # `thermo_enable_ubsan()` loops do not reach them. The UBSan call also puts
+    # the runtime on their link line: they link an instrumented component.
     thermo_enable_gcc_analyzer(${name})
     thermo_enable_compiler_warnings(${name})
+    thermo_enable_ubsan(${name})
 endfunction()
 
 add_assert_program(static_string_assert)
