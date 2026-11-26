@@ -3661,7 +3661,11 @@ class CleanCommandTests(unittest.TestCase):
         self.assertEqual(self.hops, [["clean", "/project"]])
         self.assertEqual(
             self.calls,
-            [["git", "clean", "-fdX", "--", "."]],
+            [[
+                "git", "clean", "-fdX",
+                "-e", ".clion/compile_commands.json",
+                "--", ".",
+            ]],
         )
 
     def test_cleans_the_selected_directory(self):
@@ -3670,7 +3674,11 @@ class CleanCommandTests(unittest.TestCase):
         self.assertEqual(self.hops, [["clean", "/project/mcgowan"]])
         self.assertEqual(
             self.calls,
-            [["git", "clean", "-fdX", "--", "mcgowan"]],
+            [[
+                "git", "clean", "-fdX",
+                "-e", ".clion/compile_commands.json",
+                "--", "mcgowan",
+            ]],
         )
 
     def test_cleans_a_selected_file(self):
@@ -3682,8 +3690,15 @@ class CleanCommandTests(unittest.TestCase):
         )
         self.assertEqual(
             self.calls,
-            [["git", "clean", "-fdX", "--", "mcgowan/sdkconfig.defaults"]],
+            [[
+                "git", "clean", "-fdX",
+                "-e", ".clion/compile_commands.json",
+                "--", "mcgowan/sdkconfig.defaults",
+            ]],
         )
+
+    def test_preserves_clion_generated_files(self):
+        self.assertIn(".clion/compile_commands.json", dev.CLEAN_EXCLUDES)
 
     def test_rejects_a_path_outside_the_repository(self):
         err = io.StringIO()

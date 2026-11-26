@@ -973,20 +973,29 @@ def _clean_scopes(arguments: list[str]) -> list[Path] | None:
     return [REPO_ROOT]
 
 
+# Ignored CLion-generated files that `clean` must preserve. The compilation
+# database is expensive to regenerate and run configs are user-facing project
+# state; tracked run configs are already safe from `git clean -fdX`, but the
+# compile database under `.clion/` is ignored.
+CLEAN_EXCLUDES = (".clion/compile_commands.json",)
+
+
 def cmd_clean(arguments: list[str]) -> int:
     """Remove ignored build products (git clean -fdX) in the selected paths.
 
     Removes files and directories ignored by git, such as idf.py build output,
-    without touching tracked files or untracked source files. With no
-    arguments the search starts at the repository root; otherwise each
-    argument is a directory or file inside the repository.
+    without touching tracked files or untracked source files. CLion's compile
+    database and run configurations are preserved. With no arguments the
+    search starts at the repository root; otherwise each argument is a
+    directory or file inside the repository.
     """
     scopes = _clean_scopes(arguments)
     if scopes is None:
         return 1
     change_to_container(_project_container_arguments("clean", scopes))
     paths = [_repo_relative(scope) for scope in scopes]
-    return run(["git", "clean", "-fdX", "--", *paths])
+    excludes = [arg for pattern in CLEAN_EXCLUDES for arg in ("-e", pattern)]
+    return run(["git", "clean", "-fdX", *excludes, "--", *paths])
 
 
 def cmd_pull() -> int:
