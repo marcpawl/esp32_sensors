@@ -28,16 +28,22 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
-#include <string>
 #include <type_traits>
 
 #include "unity.h"
 #include "utility/sequence_lock.hpp"
+#include "utility/static_string.hpp"
 
 namespace {
 
 using thermo::ConcurrentWriters;
 using thermo::SequenceLock;
+using thermo::utility::static_string;
+
+// A snapshot copies the whole model, so the overwrite tests use this
+// fixed-capacity string rather than `std::string`.
+using Text = static_string<8>;
+static_assert(std::is_trivially_copyable_v<Text>);
 
 // A model with mixed field sizes and trailing padding, so a snapshot copy is
 // exercised across more than one aligned word.
@@ -387,7 +393,7 @@ void wait_for_tasks(std::atomic<std::uint32_t>& finished,
 }
 
 struct OverwriteContext {
-    SequenceLock<std::string, ConcurrentWriters::Enabled>* lock = nullptr;
+    SequenceLock<Text, ConcurrentWriters::Enabled>* lock = nullptr;
     SemaphoreHandle_t from_b = nullptr;
     SemaphoreHandle_t from_a = nullptr;
     std::atomic<std::uint32_t>* attempts = nullptr;
@@ -497,16 +503,16 @@ TEST_CASE("sequence_lock: concurrent readers never see a torn model",
 }
 
 TEST_CASE("sequence_lock: uncontentious overwrite", "[sequence_lock]") {
-    SequenceLock<std::string, ConcurrentWriters::Enabled> lock;
+    SequenceLock<Text, ConcurrentWriters::Enabled> lock;
     lock.overwrite(
         [](auto& versioned_model) { versioned_model.model.push_back('A'); });
 
-    std::string const actual = lock.read().model;
+    Text const actual = lock.read().model;
     TEST_ASSERT_EQUAL_STRING("A", actual.c_str());
 }
 
 TEST_CASE("sequence_lock: contentious overwrite", "[sequence_lock]") {
-    SequenceLock<std::string, ConcurrentWriters::Enabled> lock;
+    SequenceLock<Text, ConcurrentWriters::Enabled> lock;
     std::atomic<std::uint32_t> attempts{0};
     std::atomic<std::uint32_t> finished{0};
 
@@ -524,7 +530,7 @@ TEST_CASE("sequence_lock: contentious overwrite", "[sequence_lock]") {
 
     wait_for_tasks(finished, 2);
 
-    std::string const actual = lock.read().model;
+    Text const actual = lock.read().model;
     TEST_ASSERT_EQUAL_STRING("AB", actual.c_str());
     TEST_ASSERT_TRUE_MESSAGE(attempts.load(std::memory_order_relaxed) > 1,
                              "B should have retried after a stale write");

@@ -51,6 +51,8 @@ template<typename Model, ConcurrentWriters concurrent_writers>
 class SequenceLock {
     static_assert(std::is_default_constructible_v<Model>,
                   "SequenceLock<Model> requires a default-constructible Model");
+    static_assert(std::is_trivially_copyable_v<Model>,
+                  "SequenceLock<Model> requires a trivially copyable Model");
 
   public:
     // The outcome of a write: only a current version is stored.
