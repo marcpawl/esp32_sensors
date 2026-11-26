@@ -195,7 +195,9 @@ stack trace, and ESP32-S3 builds are unaffected. ASan pins `-g` and frame
 pointers for symbolized reports. The runtime options in
 `docker/docker-compose.yml` make reports from code outside our targets fatal
 too. `build --analyzer` skips both runtimes: GCC's analyzer misreads their
-checks as uninitialised reads and would fail on correct code.
+checks as uninitialised reads and would fail on correct code. CI runs both
+gates: the analyzer build, then a plain build immediately before the tests so
+they execute instrumented code.
 
 The on-target `esp_timer` suite runs with `./scripts/dev.py test-esp32` (or
 `./scripts/dev.py test-esp32 components/hal/tests/esp_timer/board`): it builds

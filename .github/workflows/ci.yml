@@ -116,7 +116,10 @@ jobs:
         run: |
           python3 ./scripts/dev.py format-check
 
-      - name: build
+      # GCC's analyzer and the runtime sanitizers cannot share a translation
+      # unit: the analyzer reads the checks they insert as uninitialised reads.
+      # This gate builds with --analyzer, so nothing is instrumented at runtime.
+      - name: build with analyzer
         if: steps.changes.outputs.docs_only != 'true'
         run: |
           python3 ./scripts/dev.py build --analyzer
@@ -127,6 +130,14 @@ jobs:
         if: steps.changes.outputs.docs_only != 'true'
         run: |
           python3 ./scripts/dev.py clang-tidy /project
+
+      # Rebuild without --analyzer immediately before the tests: that is how
+      # the ELFs they run get UBSan and ASan. dev.py passes the cache variable
+      # explicitly in both directions, so the switch cannot leave stale flags.
+      - name: build with sanitizers
+        if: steps.changes.outputs.docs_only != 'true'
+        run: |
+          python3 ./scripts/dev.py build
 
       - name: tests
         if: steps.changes.outputs.docs_only != 'true'
