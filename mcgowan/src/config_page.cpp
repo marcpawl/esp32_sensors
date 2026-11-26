@@ -109,7 +109,7 @@ std::string render_scan_json(const Config& cfg, const ScanSnapshot& scan) {
 
     for (std::size_t i = 0; i < scan.sensors.size(); ++i) {
         const auto& reading = scan.sensors[i];
-        const std::string rom = logic::rom_id_to_hex(reading.rom);
+        const std::string rom = logic::rom_id_to_hex(reading.rom).c_str();
 
         // Resolve the friendly name from the mapping, defaulting to the ROM.
         std::string name = rom;
@@ -211,7 +211,7 @@ std::string render_form(const Config& cfg, const ScanSnapshot& scan,
         "<table><tr><th>ROM ID</th><th>Friendly Name</th>"
         "<th>Current Temp</th></tr>";
     for (const auto& reading : scan.sensors) {
-        const std::string rom = logic::rom_id_to_hex(reading.rom);
+        const std::string rom = logic::rom_id_to_hex(reading.rom).c_str();
         std::string name = rom;
         for (const auto& m : cfg.mappings) {
             if (m.rom == rom) {

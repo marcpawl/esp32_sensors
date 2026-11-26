@@ -11,13 +11,6 @@
 // exercise exact-fit operations only. The asserting overflow paths are verified
 // in forked children that exec the standalone `static_string_assert` program
 // (see the [assert] cases at the end).
-// NOLINTBEGIN
-#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
-#pragma GCC diagnostic ignored "-Wanalyzer-malloc-leak"
-#include <string>
-#pragma GCC diagnostic pop
-// NOLINTEND
-
 #include <compare>
 #include <cstddef>
 #include <cstring>
@@ -496,8 +489,8 @@ TEST_CASE("static_string: an embedded NUL is an ordinary character",
 namespace {
 
 // Path to the sibling static_string_assert program (shared by the cases below).
-const std::string& assert_program() {
-    static const std::string path =
+const assert_test_support::AssertProgramPath& assert_program() {
+    static const auto path =
         assert_test_support::assert_program_path("static_string_assert");
     return path;
 }

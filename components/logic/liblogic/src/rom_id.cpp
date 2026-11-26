@@ -13,26 +13,20 @@
 #pragma GCC diagnostic pop
 // NOLINTEND
 
-#include <cstdio>
+#include <cstdint>
 
 namespace thermo::logic {
 
-std::string rom_id_to_hex(const hal::RomId& rom) {
-    // 8 bytes -> 16 uppercase hex chars, no separator.
-    char buf[2 * hal::kRomIdBytes + 1];
-    for (std::size_t i = 0; i < rom.bytes.size(); ++i) {
-        std::snprintf(buf + i * 2, 3, "%02X", rom.bytes[i]);
+RomIdHex rom_id_to_hex(const hal::RomId& rom) {
+    // 8 bytes -> 16 uppercase hex chars, no separator. Writing each nibble
+    // explicitly also keeps the buffer fully initialised for GCC's analyzer.
+    constexpr char digits[] = "0123456789ABCDEF";
+    RomIdHex hex;
+    for (const std::uint8_t byte : rom.bytes) {
+        hex.push_back(digits[byte >> 4]);
+        hex.push_back(digits[byte & 0x0F]);
     }
-    buf[2 * hal::kRomIdBytes] = '\0';
-    // GCC's analyzer does not model std::snprintf's writes and reports the
-    // buffer as uninitialised. The code is correct; keep the diagnostic fatal
-    // everywhere else.
-    // NOLINTBEGIN
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
-    return buf;
-#pragma GCC diagnostic pop
-    // NOLINTEND
+    return hex;
 }
 
 std::optional<hal::RomId> rom_id_from_hex(std::string_view hex) {

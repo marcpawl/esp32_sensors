@@ -18,15 +18,20 @@
 // NOLINTEND
 
 #include <optional>
-#include <string>
 #include <string_view>
 
 #include "hal/ds18b20_types.hpp"  // RomId
+#include "utility/static_string.hpp"
 
 namespace thermo::logic {
 
+// The canonical text form of a ROM ID: 16 uppercase hex characters, no
+// separator (§5.1.3, §6.1). Fixed capacity, because the length is fixed by
+// `hal::kRomIdBytes`; no heap is needed to format an identity.
+using RomIdHex = thermo::utility::static_string<2 * hal::kRomIdBytes>;
+
 // Renders `rom` as 16 uppercase hex characters, no separator (§5.1.3, §6.1).
-std::string rom_id_to_hex(const hal::RomId& rom);
+RomIdHex rom_id_to_hex(const hal::RomId& rom);
 
 // Parses exactly 16 hex characters (case-insensitive) into a ROM ID. Returns
 // `std::nullopt` for a wrong length or a non-hex character; it never silently
