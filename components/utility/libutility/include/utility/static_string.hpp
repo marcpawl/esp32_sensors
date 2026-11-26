@@ -148,6 +148,25 @@ class static_string {
         return buf_[i];
     }
 
+    // Last character. Asserts on an empty string.
+    constexpr char& back() noexcept {
+        assert(!empty());
+        return buf_[size_ - 1];
+    }
+
+    constexpr const char& back() const noexcept {
+        assert(!empty());
+        return buf_[size_ - 1];
+    }
+
+    // Removes the last character and restores the terminator.
+    // Asserts on an empty string.
+    constexpr void pop_back() noexcept {
+        assert(!empty());
+        --size_;
+        buf_[size_] = '\0';
+    }
+
     constexpr const char* begin() const noexcept { return buf_.begin(); }
 
     constexpr const char* end() const noexcept { return buf_.begin() + size(); }
