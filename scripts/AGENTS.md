@@ -34,7 +34,7 @@ invoked from the host.
 | both | `format-check [DIRECTORY...]` | Non-zero exit if any such source is unformatted |
 | both | `format-check-staged [DIRECTORY...]` | Same, for the staged content of those directories only |
 | both | `pycodestyle` | PEP 8 (79 columns) over all Python sources |
-| both | `clang-tidy [DIRECTORY...] [--fix]` | Static analysis over every source under the directories (default: the current directory; a project directory uses its own compile database, any other draws from all databases below it); `--fix` applies fixes in place |
+| both | `clang-tidy [DIRECTORY...] [--fix]` | Static analysis over every source under the directories (default: the current directory; a project directory uses its own compile database, any other draws from all databases below it); `run-clang-tidy` shards the rewritten database across CPUs and may interleave output; `--fix` applies fixes in place serially |
 | both | `shell [CMD...]` | Run a command in the container; no arguments = login shell |
 | host | `ssh [CMD...]` | SSH into the running dev container; no arguments = interactive login shell |
 | host | `clion-archive [ARCHIVE]` | Copy a local `CLion-*.tar.gz` into the container's Toolbox download cache |

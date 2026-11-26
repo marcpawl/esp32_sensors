@@ -4217,43 +4217,84 @@ class TidyConfigurationTests(unittest.TestCase):
 
 
 class TidyCommandTests(unittest.TestCase):
-    """`_tidy_command` — the argv `cmd_clang_tidy` hands to `run()`."""
+    """`_tidy_run_command` — runner argv `cmd_clang_tidy` hands to `run()`."""
 
-    def _units(self):
-        return [
-            {"file": "/project/components/a.cpp"},
-            {"file": "/project/components/b.cpp"},
-        ]
+    def test_default_run_does_not_ask_for_fixes(self):
+        command = dev._tidy_run_command(Path("/tmp/db"), 4)
+        self.assertNotIn("-fix", command)
 
-    def test_default_run_does_not_ask_clang_tidy_to_fix(self):
-        command = dev._tidy_command(self._units(), Path("/tmp/db"))
-        self.assertNotIn("--fix", command)
-
-    def test_fix_is_forwarded_to_clang_tidy(self):
-        command = dev._tidy_command(self._units(), Path("/tmp/db"), fix=True)
-        self.assertIn("--fix", command)
+    def test_fix_is_forwarded_to_the_runner(self):
+        command = dev._tidy_run_command(Path("/tmp/db"), 1, fix=True)
+        self.assertIn("-fix", command)
 
     def test_analysis_flags_and_build_path(self):
-        command = dev._tidy_command(self._units(), Path("/tmp/db"))
-        self.assertEqual(command[0], "clang-tidy")
+        command = dev._tidy_run_command(Path("/tmp/db"), 4)
+        self.assertEqual(command[0], "run-clang-tidy")
         # `-p` names the directory holding the compile database, not the file.
         self.assertEqual(command[command.index("-p") + 1], "/tmp/db")
-        self.assertIn("--warnings-as-errors=*", command)
+        self.assertEqual(command[command.index("-j") + 1], "4")
         self.assertEqual(
-            command[command.index("--header-filter") + 1],
+            command[command.index("-clang-tidy-binary") + 1],
+            "clang-tidy",
+        )
+        self.assertIn("-warnings-as-errors=*", command)
+        self.assertEqual(
+            command[command.index("-header-filter") + 1],
             dev._tidy_header_filter(),
         )
         self.assertEqual(
-            command[command.index("--exclude-header-filter") + 1],
+            command[command.index("-exclude-header-filter") + 1],
             dev._tidy_exclude_header_filter(),
         )
+        self.assertIn("-quiet", command)
 
-    def test_files_come_last_in_database_order(self):
-        command = dev._tidy_command(self._units(), Path("/tmp/db"), fix=True)
-        self.assertEqual(
-            command[-2:],
-            ["/project/components/a.cpp", "/project/components/b.cpp"],
-        )
+    def test_no_file_arguments_are_appended(self):
+        # The temporary database already holds exactly the selected units.
+        command = dev._tidy_run_command(Path("/tmp/db"), 4)
+        self.assertFalse(any(arg.endswith(".cpp") for arg in command))
+
+    def test_jobs_default_to_cpu_count_capped_by_unit_count(self):
+        with mock.patch.object(dev.os, "cpu_count", return_value=8):
+            self.assertEqual(dev._tidy_jobs(20), 8)
+            self.assertEqual(dev._tidy_jobs(3), 3)
+            self.assertEqual(dev._tidy_jobs(0), 1)
+
+    def test_jobs_fall_back_to_one_when_cpu_count_is_unknown(self):
+        with mock.patch.object(dev.os, "cpu_count", return_value=None):
+            self.assertEqual(dev._tidy_jobs(5), 1)
+
+    def test_fix_mode_is_serialized(self):
+        with mock.patch.object(dev.os, "cpu_count", return_value=8):
+            self.assertEqual(dev._tidy_jobs(20, fix=True), 1)
+
+    def test_cmd_clang_tidy_runs_the_parallel_runner(self):
+        units = [{"file": "/project/components/a.cpp"}]
+        directories = [dev.REPO_ROOT / "components"]
+        with (
+            mock.patch.object(dev, "change_to_container"),
+            mock.patch.object(
+                dev, "_escalated_directories", return_value=directories
+            ),
+            mock.patch.object(dev, "_ensure_submodules", return_value=0),
+            mock.patch.object(dev, "_project_at", return_value=None),
+            mock.patch.object(
+                dev, "_discover_tidy_databases", return_value=[]
+            ),
+            mock.patch.object(dev, "_tidy_units_under", return_value=units),
+            mock.patch.object(dev, "_unique_tidy_units", return_value=units),
+            mock.patch.object(dev, "_tidy_database"),
+            mock.patch.object(dev, "_tidy_jobs", return_value=3) as jobs,
+            mock.patch.object(
+                dev, "_tidy_run_command", return_value=["runner"]
+            ) as runner,
+            mock.patch.object(dev, "run", return_value=0) as run,
+        ):
+            rc = dev.cmd_clang_tidy(directories)
+        self.assertEqual(rc, 0)
+        jobs.assert_called_once_with(1, False)
+        runner.assert_called_once()
+        self.assertEqual(runner.call_args.args[1:], (3, False))
+        run.assert_called_once_with(["runner"])
 
     def test_parser_accepts_fix_before_or_after_directories(self):
         parser = dev._build_parser()
