@@ -52,9 +52,8 @@
 
 #include "hal/ds18b20_types.hpp"
 #include "hal/led_types.hpp"
-#include "hal/switch_types.hpp"
 #include "hal/wifi_types.hpp"
-#include "hal_stub/board_stub.hpp"
+#include "logic/board.hpp"
 #include "logic/reboot.hpp"
 #include "logic/rom_id.hpp"
 
@@ -70,6 +69,8 @@
 #pragma GCC diagnostic pop
 
 // NOLINTEND
+
+#include "espidf_cpp/switch.hpp"
 
 namespace thermo {
 namespace {
@@ -159,16 +160,16 @@ std::optional<std::string> read_line(std::array<char, kLineCapacity>& buffer) {
 
 // --- Small value helpers ---------------------------------------------------
 
-constexpr const char* to_text(hal::SwitchState state) noexcept {
-    return state == hal::SwitchState::kOn ? "on" : "off";
+constexpr const char* to_text(espidf_cpp::SwitchState state) noexcept {
+    return state == espidf_cpp::SwitchState::kOn ? "on" : "off";
 }
 
 constexpr const char* to_text(hal::LedState state) noexcept {
     return state == hal::LedState::kOn ? "on" : "off";
 }
 
-constexpr const char* to_text(hal::stub::BoardStub::Power state) {
-    return state == hal::stub::BoardStub::Power::On ? "on" : "off";
+constexpr const char* to_text(logic::Board::Power state) {
+    return state == logic::Board::Power::On ? "on" : "off";
 }
 
 // Parses "on" / "off" (or a JSON boolean). Returns `std::nullopt` for anything
@@ -276,7 +277,7 @@ std::optional<std::string> find_switch(const json& object, const char* key,
 
 // --- Snapshot: the board's state as JSON -----------------------------------
 
-json sensors_json(const hal::stub::BoardStub& board) {
+json sensors_json(const logic::Board& board) {
     json sensors = json::array();
     for (const hal::DS18B20Reading& reading : board.one_wire().read()) {
         // `null` for a missing reading, matching the §9.3 sentinel's meaning.
@@ -293,7 +294,7 @@ json sensors_json(const hal::stub::BoardStub& board) {
 // The WiFi state. A configuration is reported only while its interface is
 // running: the HAL can only record one by starting it, so that is the only
 // state a driver can round-trip back in.
-json wifi_json(const hal::stub::BoardStub& board) {
+json wifi_json(const logic::Board& board) {
     const hal::stub::WifiRadio& wifi = board.wifi();
 
     json ap = nullptr;
@@ -323,7 +324,7 @@ json wifi_json(const hal::stub::BoardStub& board) {
 }
 
 // The complete board state. Every field is always present.
-json snapshot(const hal::stub::BoardStub& board) {
+json snapshot(const logic::Board& board) {
     json deep_sleep = nullptr;
     if (const auto& slept = board.last_deep_sleep(); slept.has_value()) {
         deep_sleep = json{{"last_s", slept->count()}};
@@ -331,7 +332,8 @@ json snapshot(const hal::stub::BoardStub& board) {
 
     return json{
         {"power", to_text(board.power())},
-        {"user_switch", to_text(board.user_switch().read())},
+        // TODO reset switch        {"user_switch",
+        // to_text(board.user_switch().read())},
         {"config_switch", to_text(board.config_switch().read())},
         {"run_switch", to_text(board.run_switch().read())},
         {"leds", json{{"green", to_text(board.green().state())},
@@ -408,8 +410,7 @@ std::optional<std::string> apply_station(const json& doc,
 // starts or stops it with the configuration already recorded. Resolving each
 // configuration before its running state keeps the result independent of the
 // order the driver wrote the keys in.
-std::optional<std::string> apply_wifi(const json& wifi,
-                                      hal::stub::BoardStub& board) {
+std::optional<std::string> apply_wifi(const json& wifi, logic::Board& board) {
     if (!wifi.is_object()) {
         return "wifi must be an object";
     }
@@ -495,7 +496,7 @@ std::optional<std::string> apply_wifi(const json& wifi,
 // one at a time, so a rejected document takes effect partially; the caller
 // reports the error and still echoes the resulting state, letting the driver
 // see what did take effect.
-std::optional<std::string> apply(const json& doc, hal::stub::BoardStub& board) {
+std::optional<std::string> apply(const json& doc, logic::Board& board) {
     if (!doc.is_object()) {
         return "document must be a JSON object";
     }
@@ -506,22 +507,22 @@ std::optional<std::string> apply(const json& doc, hal::stub::BoardStub& board) {
             return "power must be \"on\" or \"off\"";
         }
         const bool on = *power;
-        if (!on && board.power() == hal::stub::BoardStub::Power::On) {
+        if (!on && board.power() == logic::Board::Power::On) {
             ESP_LOGI(kTag, "Powering off, rebooting.");
-            board.set_power(hal::stub::BoardStub::Power::Off);
+            board.set_power(logic::Board::Power::Off);
             std::fprintf(stdout, "MODEL %s\n", snapshot(board).dump().c_str());
             std::fflush(stdout);
             thermo::logic::reboot();
         }
-        board.set_power(on ? hal::stub::BoardStub::Power::On
-                           : hal::stub::BoardStub::Power::Off);
+        board.set_power(on ? logic::Board::Power::On
+                           : logic::Board::Power::Off);
     }
 
     // Switches.
-    for (const auto& [key, sw] :
-         {std::pair{"user_switch", &board.user_switch()},
-          std::pair{"config_switch", &board.config_switch()},
-          std::pair{"run_switch", &board.run_switch()}}) {
+    auto config_switch = std::pair{"config_switch", &board.config_switch()};
+    auto run_switch = std::pair{"run_switch", &board.run_switch()};
+    auto switches = {config_switch, run_switch};
+    for (const auto& [key, sw] : switches) {
         const auto it = doc.find(key);
         if (it == doc.end()) {
             continue;
@@ -530,7 +531,10 @@ std::optional<std::string> apply(const json& doc, hal::stub::BoardStub& board) {
         if (!pressed.has_value()) {
             return std::string{key} + " must be \"on\" or \"off\"";
         }
-        sw->set(*pressed ? hal::SwitchState::kOn : hal::SwitchState::kOff);
+        // TODO espidf_cpp::SwitchState switch_state = (*pressed ?
+        // espidf_cpp::SwitchState::kOn : espidf_cpp::SwitchState::kOff);
+        // TODO sw->set(*pressed ? logic::SwitchState::kOn :
+        // logic::SwitchState::kOff); When using a stub: set(sw, switch_state);
     }
 
     // LEDs. `write()` is the only mutator the HAL offers (and it logs).
@@ -613,8 +617,7 @@ std::optional<std::string> apply(const json& doc, hal::stub::BoardStub& board) {
 
 }  // namespace
 
-ConsoleRunner::ConsoleRunner(
-    std::shared_ptr<hal::stub::BoardStub> board) noexcept
+ConsoleRunner::ConsoleRunner(std::shared_ptr<logic::Board> board) noexcept
     : board_(std::move(board)) {}
 
 // `[[noreturn]]`, as required by `espidf_cpp::Task<Runner>`.
@@ -659,7 +662,7 @@ ConsoleRunner::ConsoleRunner(
     }
 }
 
-ConsoleTask::ConsoleTask(std::shared_ptr<hal::stub::BoardStub> board)
+ConsoleTask::ConsoleTask(std::shared_ptr<logic::Board> board)
     : espidf_cpp::Task<ConsoleRunner>(
           ConsoleRunner(std::move(board)),
           espidf_cpp::TaskParams{.name = "console"}) {}

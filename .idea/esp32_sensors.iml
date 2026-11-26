@@ -20,8 +20,9 @@
     <content url="file://$MODULE_DIR$">
       <!-- Generated build output (git-ignored). -->
       <excludeFolder url="file://$MODULE_DIR$/build_root" />
-      <excludeFolder url="file://$MODULE_DIR$/components/espidfcpp/tests/test-espidf-cpp/build_linux" />
-      <excludeFolder url="file://$MODULE_DIR$/components/espidfcpp/tests/test-espidf-cpp/cmake-build-linux-test-espidf-cpp" />
+      <excludeFolder url="file://$MODULE_DIR$/components/espidfcpp/tests/test-espidf-cpp-linux/build_linux" />
+      <excludeFolder url="file://$MODULE_DIR$/components/espidfcpp/tests/test-espidf-cpp-linux/cmake-build-linux-test-espidf-cpp-linux" />
+      <excludeFolder url="file://$MODULE_DIR$/components/espidfcpp/tests/test-espidf-cpp-esp32/build_esp32s3" />
       <excludeFolder url="file://$MODULE_DIR$/components/hal/tests/esp_timer/board/build_esp32s3" />
       <excludeFolder url="file://$MODULE_DIR$/components/hal/tests/esp_timer/stub/build_linux" />
       <excludeFolder url="file://$MODULE_DIR$/components/hal/tests/esp_timer/stub/cmake-build-linux-esp-timer-stub" />

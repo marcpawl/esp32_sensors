@@ -43,7 +43,6 @@
 #include "hal_stub/chip_temperature.hpp"
 #include "hal_stub/led.hpp"
 #include "hal_stub/onewire.hpp"
-#include "hal_stub/switch.hpp"
 #include "hal_stub/wifi.hpp"
 
 namespace thermo::hal::stub {
@@ -54,7 +53,6 @@ class BoardStub {
     // The concrete device types a template derives from the board
     // (`BoardLike` requires both).
     using LedType = Led;
-    using SwitchType = Switch;
 
     enum class Power : std::uint8_t { Off = 0, On };
 
@@ -114,27 +112,6 @@ class BoardStub {
 
     [[nodiscard]] Led const& red() const noexcept { return red_; }
 
-    // The plain (user) switch (stub; state via set()).
-    [[nodiscard]] Switch& user_switch() noexcept { return user_switch_; }
-
-    [[nodiscard]] Switch const& user_switch() const noexcept {
-        return user_switch_;
-    }
-
-    // The Configure-mode sense switch (stub; state via set()).
-    [[nodiscard]] Switch& config_switch() noexcept { return config_switch_; }
-
-    [[nodiscard]] Switch const& config_switch() const noexcept {
-        return config_switch_;
-    }
-
-    // The Run-mode sense switch (stub; state via set()).
-    [[nodiscard]] Switch& run_switch() noexcept { return run_switch_; }
-
-    [[nodiscard]] Switch const& run_switch() const noexcept {
-        return run_switch_;
-    }
-
     // The WiFi radio (stub; state via ap_running() / station_running(),
     // configuration via ap_config() / station_config()).
     [[nodiscard]] WifiRadio& wifi() noexcept { return wifi_; }
@@ -183,9 +160,6 @@ class BoardStub {
     OneWire one_wire_;
     Led green_;
     Led red_;
-    Switch user_switch_;
-    Switch config_switch_;
-    Switch run_switch_;
     WifiRadio wifi_;
     // Wake causes reported by `sleep_get_wakeup_causes()`. A fresh stub
     // models a cold boot, which is what the real board reports while running

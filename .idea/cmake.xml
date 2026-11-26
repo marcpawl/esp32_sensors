@@ -51,7 +51,7 @@
       Host tests (test-hal-stub)    components/hal/tests/test-hal-stub/
       Host tests (test-hal-common)  components/hal/tests/test-hal-common/
       Host tests (test-logic)       components/logic/tests/test-logic/
-      Host tests (test-espidf-cpp)  components/espidfcpp/tests/test-espidf-cpp/
+      Host tests (test-espidf-cpp-linux)  components/espidfcpp/tests/test-espidf-cpp-linux/
       Host tests (test-simulator)   components/simulator/tests/test-simulator/
       Host tests (esp_timer stub)   components/hal/tests/esp_timer/stub/
       Linux app (donny)             components/simulator/exe/donny/
@@ -107,7 +107,7 @@
   <component name="CMakeSharedSettings">
     <configurations>
       <configuration PROFILE_NAME="Espressif ESP32-S3" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/mcgowan/cmake-build-esp32s3" GENERATION_OPTIONS="-DIDF_TARGET=esp32s3 -DCMAKE_BUILD_TYPE=Debug" />
-      <configuration PROFILE_NAME="Host tests (test-espidf-cpp)" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/components/espidfcpp/tests/test-espidf-cpp/cmake-build-linux-test-espidf-cpp" GENERATION_OPTIONS="-DIDF_TARGET=linux -DCMAKE_BUILD_TYPE=Debug" />
+      <configuration PROFILE_NAME="Host tests (test-espidf-cpp-linux)" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/components/espidfcpp/tests/test-espidf-cpp-linux/cmake-build-linux-test-espidf-cpp-linux" GENERATION_OPTIONS="-DIDF_TARGET=linux -DCMAKE_BUILD_TYPE=Debug" />
       <configuration PROFILE_NAME="Host tests (esp_timer stub)" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/components/hal/tests/esp_timer/stub/cmake-build-linux-esp-timer-stub" GENERATION_OPTIONS="-DIDF_TARGET=linux -DCMAKE_BUILD_TYPE=Debug" />
       <configuration PROFILE_NAME="Host tests (test-hal-common)" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/components/hal/tests/test-hal-common/cmake-build-linux-test-hal-common" GENERATION_OPTIONS="-DIDF_TARGET=linux -DCMAKE_BUILD_TYPE=Debug" />
       <configuration PROFILE_NAME="Host tests (test-hal-stub)" ENABLED="true" CONFIG_NAME="Debug" TOOLCHAIN_NAME="Default" GENERATION_DIR="$PROJECT_DIR$/components/hal/tests/test-hal-stub/cmake-build-linux-test-hal-stub" GENERATION_OPTIONS="-DIDF_TARGET=linux -DCMAKE_BUILD_TYPE=Debug" />

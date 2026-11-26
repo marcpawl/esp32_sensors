@@ -29,6 +29,5 @@ target_sources(${COMPONENT_LIB} PRIVATE
     "include/hal/onewire_types.hpp"
     "include/hal/pin_map.hpp"
     "include/hal/sleep_types.hpp"
-    "include/hal/switch_types.hpp"
     "include/hal/wifi_types.hpp"
 )

@@ -38,7 +38,6 @@
 #include "hal/onewire_types.hpp"
 #include "hal/pin_map.hpp"
 #include "hal/sleep_types.hpp"
-#include "hal/switch_types.hpp"
 #include "hal/wifi_types.hpp"
 
 namespace thermo::hal {
@@ -83,10 +82,7 @@ struct BoardPins {
 // can reach a device's `read()` (and, for stubs, its `set_*()`) through either.
 //
 // A board also names its concrete device types: `T::LedType` (the type of
-// `green()`) and `T::SwitchType` (the type of `config_switch()`, which is also
-// the type of the other two switches). A board-independent template such as
-// `logic::ToggleSwitch<Board>` derives the device type it needs without naming
-// either HAL implementation.
+// `green()`).
 //
 // Deep sleep (§3.8) is part of the contract, not a device accessor: it is the
 // board that powers down, so the board owns both halves of it — sleeping for a
@@ -113,12 +109,11 @@ concept BoardLike = std::is_class_v<T> && requires(
     // (all three switch accessors return the same type).
     requires std::same_as<typename T::LedType,
                           std::remove_cvref_t<decltype(board.green())>>;
-    requires std::same_as<typename T::SwitchType,
-                          std::remove_cvref_t<decltype(board.config_switch())>>;
 
-    // Every accessor returns a type satisfying the matching `hal_common`
-    // device concept. Naming only the concepts keeps this header free of
-    // either implementation: `hal_board` and `hal_stub` both depend on
+    // The chip-temperature, 1-Wire, LED and WiFi accessors return types
+    // satisfying the matching `hal_common` device concept. Naming only the
+    // concepts keeps this header free of either implementation: `hal_board`
+    // and `hal_stub` both depend on
     // `hal_common`, never the other way round.
     requires ChipTemperatureLike<
         std::remove_cvref_t<decltype(board.chip_temperature())>>;
@@ -130,15 +125,6 @@ concept BoardLike = std::is_class_v<T> && requires(
     requires LedLike<std::remove_cvref_t<decltype(const_board.green())>>;
     requires LedLike<std::remove_cvref_t<decltype(board.red())>>;
     requires LedLike<std::remove_cvref_t<decltype(const_board.red())>>;
-    requires SwitchLike<std::remove_cvref_t<decltype(board.user_switch())>>;
-    requires SwitchLike<
-        std::remove_cvref_t<decltype(const_board.user_switch())>>;
-    requires SwitchLike<std::remove_cvref_t<decltype(board.config_switch())>>;
-    requires SwitchLike<
-        std::remove_cvref_t<decltype(const_board.config_switch())>>;
-    requires SwitchLike<std::remove_cvref_t<decltype(board.run_switch())>>;
-    requires SwitchLike<
-        std::remove_cvref_t<decltype(const_board.run_switch())>>;
     requires WifiRadioLike<std::remove_cvref_t<decltype(board.wifi())>>;
     requires WifiRadioLike<std::remove_cvref_t<decltype(const_board.wifi())>>;
 };

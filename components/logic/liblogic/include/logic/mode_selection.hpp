@@ -18,7 +18,7 @@
 
 #include <optional>
 
-#include "hal/switch_types.hpp"
+#include "espidf_cpp/switch.hpp"
 
 #include "logic/mode.hpp"
 
@@ -42,9 +42,9 @@ using ModeSelection = std::optional<Mode>;
 // parameters are the two poles in the switch's own order (§3.1-§3.3):
 // Configure pole, then Run pole.
 [[nodiscard]] constexpr ModeSelection mode_from_switches(
-    hal::SwitchState config, hal::SwitchState run) noexcept {
-    const bool config_on = config == hal::SwitchState::kOn;
-    const bool run_on = run == hal::SwitchState::kOn;
+    espidf_cpp::SwitchState config, espidf_cpp::SwitchState run) noexcept {
+    const bool config_on = config == espidf_cpp::SwitchState::kOn;
+    const bool run_on = run == espidf_cpp::SwitchState::kOn;
     if (config_on && !run_on) {
         return Mode::kConfigure;
     }

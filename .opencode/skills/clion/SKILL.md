@@ -117,7 +117,7 @@ One configuration exists per `linux` project:
 - `test-hal-stub (linux ELF, container)`
 - `test-hal-common (linux ELF, container)`
 - `test-logic (linux ELF, container)`
-- `test-espidf-cpp (linux ELF, container)`
+- `test-espidf-cpp-linux (linux ELF, container)`
 - `test-simulator (linux ELF, container)`
 - `test-esp_timer-stub (linux ELF, container)`
 - `donny (linux ELF, container)`

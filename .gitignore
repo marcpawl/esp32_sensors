@@ -9,7 +9,7 @@
 #   components/hal/tests/test-hal-common/build_linux/  host tests for hal/hal_common
 #   components/logic/tests/test-logic/build_linux/
 #                                 host unit tests for components/logic/liblogic
-#   components/espidfcpp/tests/test-espidf-cpp/build_linux/
+#   components/espidfcpp/tests/test-espidf-cpp-linux/build_linux/
 #                                 host tests for components/espidfcpp/libespidfcpp
 #   components/simulator/tests/test-simulator/build_linux/
 #                                 host tests for components/simulator/libsimulator
@@ -27,7 +27,7 @@ components/hal/tests/test-hal-stub/build_linux/
 components/hal/tests/test-hal-common/build_linux/
 components/hal/tests/esp_timer/board/build_esp32s3/
 components/hal/tests/esp_timer/stub/build_linux/
-components/espidfcpp/tests/test-espidf-cpp/build_linux/
+components/espidfcpp/tests/test-espidf-cpp-linux/build_linux/
 components/simulator/tests/test-simulator/build_linux/
 components/simulator/exe/donny/build_linux/
 managed_components/
@@ -47,7 +47,7 @@ mcgowan/sdkconfig
 components/hal/tests/test-hal-stub/sdkconfig
 components/hal/tests/test-hal-common/sdkconfig
 components/logic/tests/test-logic/sdkconfig
-components/espidfcpp/tests/test-espidf-cpp/sdkconfig
+components/espidfcpp/tests/test-espidf-cpp-linux/sdkconfig
 components/simulator/tests/test-simulator/sdkconfig
 components/simulator/exe/donny/sdkconfig
 sdkconfig.old
@@ -55,7 +55,7 @@ mcgowan/sdkconfig.old
 components/hal/tests/test-hal-stub/sdkconfig.old
 components/hal/tests/test-hal-common/sdkconfig.old
 components/logic/tests/test-logic/sdkconfig.old
-components/espidfcpp/tests/test-espidf-cpp/sdkconfig.old
+components/espidfcpp/tests/test-espidf-cpp-linux/sdkconfig.old
 components/simulator/tests/test-simulator/sdkconfig.old
 components/simulator/exe/donny/sdkconfig.old
 

@@ -15,8 +15,8 @@
 //   * the compile-time contract (trivially copyable element, non-copyable
 //     buffer).
 //
-// ESP-IDF's linux FreeRTOS port runs on POSIX threads, so blocking calls and
-// ISR-style calls are exercised in their task-context form here.
+// Blocking calls and ISR-style calls are exercised in their
+// task-context form on both targets.
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "freertos/FreeRTOS.h"

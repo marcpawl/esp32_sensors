@@ -1,8 +1,8 @@
 // Tests for the `espidf_cpp::vTaskDelay` wrapper.
 //
 // The wrapper converts a `std::chrono::milliseconds` duration to FreeRTOS
-// ticks and forwards it to FreeRTOS's `vTaskDelay()`. On the ESP-IDF `linux`
-// target this exercises the real scheduling wrapper, so the cases use short
+// ticks and forwards it to FreeRTOS's `vTaskDelay()`. On both targets this
+// exercises the real scheduling wrapper, so the cases use short
 // delays.
 
 #include <chrono>

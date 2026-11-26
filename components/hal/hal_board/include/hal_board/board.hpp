@@ -28,7 +28,6 @@
 #include "hal_board/chip_temperature.hpp"
 #include "hal_board/led.hpp"
 #include "hal_board/onewire.hpp"
-#include "hal_board/switch.hpp"
 #include "hal_board/wifi.hpp"
 
 namespace thermo::hal::board {
@@ -39,7 +38,6 @@ class Board {
     // The concrete device types a template derives from the board
     // (`BoardLike` requires both).
     using LedType = Led;
-    using SwitchType = Switch;
 
     // `pins` describes the wiring; see `BoardPins`. Constructs the devices but
     // does not touch any hardware — call init_all() for that.
@@ -87,27 +85,6 @@ class Board {
 
     [[nodiscard]] Led const& red() const noexcept { return red_; }
 
-    // The plain (user) switch.
-    [[nodiscard]] Switch& user_switch() noexcept { return user_switch_; }
-
-    [[nodiscard]] Switch const& user_switch() const noexcept {
-        return user_switch_;
-    }
-
-    // The Configure-mode sense switch (one pole of the 3-position switch).
-    [[nodiscard]] Switch& config_switch() noexcept { return config_switch_; }
-
-    [[nodiscard]] Switch const& config_switch() const noexcept {
-        return config_switch_;
-    }
-
-    // The Run-mode sense switch (one pole of the 3-position switch).
-    [[nodiscard]] Switch& run_switch() noexcept { return run_switch_; }
-
-    [[nodiscard]] Switch const& run_switch() const noexcept {
-        return run_switch_;
-    }
-
     // The WiFi radio (§3.2, §3.9). Initialized by init_all(), but neither
     // interface is started: the caller decides when to bring the AP (§3.2) or
     // the station (§3.9) up.
@@ -134,9 +111,6 @@ class Board {
     OneWire one_wire_;
     Led green_;
     Led red_;
-    Switch user_switch_;
-    Switch config_switch_;
-    Switch run_switch_;
     WifiRadio wifi_;
 };
 

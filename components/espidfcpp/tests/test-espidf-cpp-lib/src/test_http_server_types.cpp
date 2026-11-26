@@ -4,8 +4,8 @@
 // These types carry no ESP-IDF dependency and no server state: the request
 // method, the fixed-capacity form fields, the response status, and the
 // `parse_int()` / `normalize_url()` helpers the server uses to turn a raw URI
-// into a route key. Everything here is pure logic and is exercised on the
-// host. The server itself is covered by test_http_server.cpp.
+// into a route key. Everything here is pure logic and is exercised on both
+// targets. The server itself is covered by test_http_server.cpp.
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #pragma GCC diagnostic pop

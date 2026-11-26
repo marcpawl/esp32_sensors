@@ -23,7 +23,7 @@ invoked from the host.
 | host | `down` | Stop/remove the dev containers with `docker compose down --remove-orphans` |
 | both | `submodules` | Fetch the pinned git submodules (`third_party/sml`) |
 | both | `build [--analyzer[=BOOL]] [DIRECTORY...]` | Build every project in/under the directories (from the root, the root aggregator builds everything); the analyzer is off by default, `--analyzer` enables it |
-| both | `build-test-espidf-cpp` | Build the `libespidfcpp` unit tests for `linux` |
+| both | `build-test-espidf-cpp-linux` | Build the `libespidfcpp` unit tests for `linux` |
 | both | `test-linux [DIRECTORY...]` | Build and run every discovered host (`linux`) suite in path order, or those in/under the directories |
 | both | `test-esp32 [DIRECTORY...]` | Build, flash, and run every discovered on-target test project through its `test.py` driver |
 | both | `self-check` | Run the host unit tests for `dev.py` itself (host only; its image probes need Docker and the image fetched by `pull`, and fail without them) |
@@ -169,7 +169,7 @@ The wizard prints three manual steps and asks for `y` or `n` after each one:
 
 1. Connect CLion to the remote project.
 2. Verify the ESP-IDF tooltip, directly after the connection.
-3. Run the `test-espidf-cpp` linux ELF run/debug configuration.
+3. Run the `test-espidf-cpp-linux` linux ELF run/debug configuration.
 
 The compilation-database checks are the tooltip step's fallback, numbered
 2.1, 2.2, and 2.3: open the database, check path settings, and check the

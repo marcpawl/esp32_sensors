@@ -10,7 +10,6 @@ idf_component_register(
     SRCS
         "interrupt_handle.cpp"
         "led.cpp"
-        "switch.cpp"
         "onewire.cpp"
         "chip_temperature.cpp"
         "wifi.cpp"
@@ -38,6 +37,5 @@ target_sources(${COMPONENT_LIB} PRIVATE
     "include/hal_board/interrupt_handle.hpp"
     "include/hal_board/led.hpp"
     "include/hal_board/onewire.hpp"
-    "include/hal_board/switch.hpp"
     "include/hal_board/wifi.hpp"
 )

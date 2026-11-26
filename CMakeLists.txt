@@ -20,9 +20,12 @@ cmake_minimum_required(VERSION 3.22)
 #   components/logic/tests/test-logic/
 #                    host unit tests, `linux` target (hal_stub)
 #                                                -> .../test-logic/build_linux/
-#   components/espidfcpp/tests/test-espidf-cpp/
+#   components/espidfcpp/tests/test-espidf-cpp-linux/
 #                    host tests for components/espidfcpp/libespidfcpp, `linux`
-#                                                -> .../test-espidf-cpp/build_linux/
+#                                        -> .../test-espidf-cpp-linux/build_linux/
+#   components/espidfcpp/tests/test-espidf-cpp-esp32/
+#                    on-target tests for the same wrappers, ESP32-S3
+#                                        -> .../test-espidf-cpp-esp32/build_esp32s3/
 #   components/simulator/tests/test-simulator/
 #                    host tests for components/simulator/libsimulator, `linux`
 #                                             -> .../test-simulator/build_linux/
@@ -52,7 +55,7 @@ cmake_minimum_required(VERSION 3.22)
 #
 # Every target in this file is prefixed with its subproject name (e.g.
 # mcgowan_build, test-hal-stub_build, test-hal-common_build, test-logic_build,
-# test-espidf-cpp_build, test-simulator_build, donny_build) so it cannot collide
+# test-espidf-cpp-linux_build, test-simulator_build, donny_build) so it cannot collide
 # with another target in this project,
 # with names CMake / ESP-IDF define for themselves (test, build_test, ...), or
 # with a subproject directory name.
@@ -95,12 +98,13 @@ project(esp32_sensors_subprojects NONE)
 
 # Which subprojects to build. Default: all of them.
 set(SUBPROJECTS
-    "mcgowan;test-utility;test-hal-stub;test-hal-common;test-logic;test-espidf-cpp;test-simulator;donny;test-esp_timer-stub;test-esp_timer-board"
+    "mcgowan;test-utility;test-hal-stub;test-hal-common;test-logic;test-espidf-cpp-linux;test-espidf-cpp-esp32;test-simulator;donny;test-esp_timer-stub;test-esp_timer-board"
     CACHE STRING
-    "Subprojects to build: mcgowan, test-utility, test-hal-stub, test-hal-common, test-logic, test-espidf-cpp, test-simulator, donny, test-esp_timer-stub, test-esp_timer-board")
+    "Subprojects to build: mcgowan, test-utility, test-hal-stub, test-hal-common, test-logic, test-espidf-cpp-linux, test-espidf-cpp-esp32, test-simulator, donny, test-esp_timer-stub, test-esp_timer-board")
 set_property(CACHE SUBPROJECTS PROPERTY STRINGS
     mcgowan test-utility test-hal-stub test-hal-common test-logic
-    test-espidf-cpp test-simulator donny test-esp_timer-stub
+    test-espidf-cpp-linux test-espidf-cpp-esp32 test-simulator donny
+    test-esp_timer-stub
     test-esp_timer-board)
 
 # GCC static analyzer for the C++ subprojects. Off by default; pass
@@ -111,7 +115,8 @@ option(THERMO_GCC_ANALYZER
 
 set(KNOWN_SUBPROJECTS
     mcgowan test-utility test-hal-stub test-hal-common test-logic
-    test-espidf-cpp test-simulator donny test-esp_timer-stub
+    test-espidf-cpp-linux test-espidf-cpp-esp32 test-simulator donny
+    test-esp_timer-stub
     test-esp_timer-board)
 foreach(sub IN LISTS SUBPROJECTS)
     if(NOT sub IN_LIST KNOWN_SUBPROJECTS)
@@ -224,12 +229,20 @@ if(test-logic IN_LIST SUBPROJECTS)
         build_linux "--preview|set-target|linux" "build")
 endif()
 
-# --- test-espidf-cpp: host tests for libespidfcpp (linux) -> *_build ------
+# --- test-espidf-cpp-linux: host tests for libespidfcpp (linux) -> *_build ------
 # Same `linux` target rules as `test-logic/`; built (not run) here, since running is
-# `scripts/dev.py test-espidf-cpp`'s job (`test` runs every host suite).
-if(test-espidf-cpp IN_LIST SUBPROJECTS)
-    _idf_subproject(test-espidf-cpp components/espidfcpp/tests/test-espidf-cpp
+# `scripts/dev.py test-linux components/espidfcpp/tests/test-espidf-cpp-linux`'s
+# job (`test-linux` with no directory runs every host suite).
+if(test-espidf-cpp-linux IN_LIST SUBPROJECTS)
+    _idf_subproject(test-espidf-cpp-linux components/espidfcpp/tests/test-espidf-cpp-linux
         build_linux "--preview|set-target|linux" "build")
+endif()
+
+# --- test-espidf-cpp-esp32: shared wrapper cases on ESP32-S3 -> *_build ----
+if(test-espidf-cpp-esp32 IN_LIST SUBPROJECTS)
+    _idf_subproject(test-espidf-cpp-esp32
+        components/espidfcpp/tests/test-espidf-cpp-esp32
+        build_esp32s3 "build")
 endif()
 
 # --- test-simulator: simulator component tests (linux) -> *_build ---------
