@@ -1996,30 +1996,48 @@ def _tidy_container_arguments(
     return arguments
 
 
-def _tidy_command(
-    units: list[dict], build_path: Path, fix: bool = False
+def _tidy_jobs(unit_count: int, fix: bool = False) -> int:
+    """Number of parallel `run-clang-tidy` workers. Pure.
+
+    Fix mode stays serialized: two translation units can propose edits to
+    the same shared header, so parallel `-fix` runs would race on that
+    file. Otherwise use one worker per available CPU, capped by the unit
+    count so a small analysis does not start idle processes.
+    """
+    if fix:
+        return 1
+    return max(1, min(os.cpu_count() or 1, unit_count))
+
+
+def _tidy_run_command(
+    build_path: Path, jobs: int, fix: bool = False
 ) -> list[str]:
-    """The clang-tidy argv `cmd_clang_tidy` hands to `run()`. Pure.
+    """The `run-clang-tidy` argv `cmd_clang_tidy` hands to `run()`. Pure.
 
-    `build_path` is the directory holding the `compile_commands.json` that
-    seeds the analysis (clang-tidy's `-p`), not the file itself.
+    `build_path` holds the rewritten `compile_commands.json`, which already
+    contains exactly the deduped units to analyze, so no file arguments are
+    needed: `-p` makes the tool analyze every entry in that database.
 
-    `--fix` applies clang-tidy's suggested fixes in place, so the files it
-    rewrites are the ones in the compile database (inside the container, the
-    bind-mounted working tree). Fixes are not necessarily clang-formatted:
+    Its own sharding (`-j`) is used instead of a pool in `dev.py`. The tool
+    already fans compile-database entries out, and the diagnostics of
+    separate workers may be interleaved; that is expected.
+
+    `-fix` applies suggested fixes in place. Callers pass `jobs=1` in that
+    mode (see `_tidy_jobs`); fixes are not necessarily clang-formatted, so
     run `scripts/dev.py format` afterwards.
     """
     command = [
-        "clang-tidy",
+        "run-clang-tidy",
         "-p", str(build_path),
-        "--header-filter", _tidy_header_filter(),
-        "--exclude-header-filter", _tidy_exclude_header_filter(),
-        "--warnings-as-errors=*",
-        "--quiet",
+        "-j", str(jobs),
+        "-clang-tidy-binary", "clang-tidy",
+        "-header-filter", _tidy_header_filter(),
+        "-exclude-header-filter", _tidy_exclude_header_filter(),
+        "-warnings-as-errors=*",
+        "-quiet",
     ]
     if fix:
-        command.append("--fix")
-    command.extend(unit["file"] for unit in units)
+        command.append("-fix")
     return command
 
 
@@ -2035,20 +2053,28 @@ def cmd_clang_tidy(directories: list[Path], fix: bool = False) -> int:
 
     Imports the ESP-IDF compile databases so clang-tidy sees the exact flags,
     defines, and include paths each file is really built with, including the
-    `hal_board`/`hal_stub` split that differs per project.
+    `hal_board`/`hal_stub` split that differs per project. Those databases
+    record GCC/Xtensa flags clang cannot consume, so the entries are rewritten
+    into a clang-compatible temporary database (see `_tidy_database`) before
+    `run-clang-tidy` analyzes them. An in-CMake analyzer is not used: it would
+    need the same rewrite on every build and would slow normal builds.
 
-    Nothing is auto-built: a project with no compile database is reported and
-    the run fails, so CI cannot quietly analyze stale or partial input. Use
-    `scripts/dev.py build` first.
+    `run-clang-tidy` shards the database entries across `-j` workers. Its
+    output may be interleaved because workers write to the same terminal;
+    that is expected. Nothing is auto-built: a project with no compile
+    database is reported and the run fails, so CI cannot quietly analyze
+    stale or partial input. Use `scripts/dev.py build` first.
 
     Uses the repository's `.clang-tidy`, which opts in to the check set this
     repository enforces (merged with clang-tidy's default set), and reports
     only diagnostics in this repository's own headers, not ESP-IDF's or
-    libstdc++'s. Any finding is an error (`--warnings-as-errors=*`).
+    libstdc++'s. Any finding is an error (`-warnings-as-errors=*`).
 
-    With `fix`, `--fix` is passed to clang-tidy so its suggested fixes are
-    applied in place. Findings that cannot be fixed still fail the run, and
-    the rewritten code should be re-formatted (`scripts/dev.py format`).
+    With `fix`, `-fix` is passed to `run-clang-tidy` and the job count is one
+    (see `_tidy_jobs`): two translation units can propose fixes to the same
+    shared header, so the edits must be applied serially. Findings that
+    cannot be fixed still fail the run, and the rewritten code should be
+    re-formatted (`scripts/dev.py format`).
     """
     change_to_container(_tidy_container_arguments(directories, fix))
 
@@ -2088,9 +2114,12 @@ def cmd_clang_tidy(directories: list[Path], fix: bool = False) -> int:
     with tempfile.TemporaryDirectory() as tmp:
         tmp_dir = Path(tmp)
         _tidy_database(units, tmp_dir / "compile_commands.json")
-        suffix = " (applying fixes)" if fix else ""
+        jobs = _tidy_jobs(len(units), fix)
+        suffix = (
+            " (applying fixes, serialized)" if fix else f" with {jobs} jobs"
+        )
         print(f"clang-tidy: analyzing {len(units)} C++ sources{suffix}")
-        return run(_tidy_command(units, tmp_dir, fix))
+        return run(_tidy_run_command(tmp_dir, jobs, fix))
 
 
 def _tidy_header_filter() -> str:
