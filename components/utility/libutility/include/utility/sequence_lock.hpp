@@ -36,6 +36,7 @@
 // NOLINTEND
 
 #include <atomic>
+#include <functional>
 #include <type_traits>
 #include <utility>
 
@@ -50,6 +51,8 @@ template<typename Model, ConcurrentWriters concurrent_writers>
 class SequenceLock {
     static_assert(std::is_default_constructible_v<Model>,
                   "SequenceLock<Model> requires a default-constructible Model");
+    static_assert(std::is_trivially_copyable_v<Model>,
+                  "SequenceLock<Model> requires a trivially copyable Model");
 
   public:
     // The outcome of a write: only a current version is stored.
@@ -85,6 +88,7 @@ class SequenceLock {
                 return snapshot;
             }
         }
+        std::unreachable();
     }
 
     // Single-writer form. The caller guarantees that no other task writes, so
@@ -109,6 +113,23 @@ class SequenceLock {
         requires(concurrent_writers == ConcurrentWriters::Enabled)
     {
         return do_write(versioned_model);
+    }
+
+    // Repeatedly retry try updating the model until it succeeds.
+    //
+    // @param writer Function that will modify the model so it
+    // can be updated.
+    //
+    // The intended usage is to overwrite part of the model, even if other
+    // writers have modified the model.
+    void overwrite(
+        std::function<void(VersionedModel& model)> const& writer) noexcept {
+        WriteResult result;
+        do {
+            VersionedModel model = read();
+            writer(model);
+            result = do_write(model);
+        } while (result != WriteResult::kStored);
     }
 
   private:

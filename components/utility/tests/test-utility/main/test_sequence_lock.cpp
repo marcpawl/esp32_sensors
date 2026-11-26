@@ -18,6 +18,7 @@
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 #pragma GCC diagnostic pop
 
@@ -31,11 +32,18 @@
 
 #include "unity.h"
 #include "utility/sequence_lock.hpp"
+#include "utility/static_string.hpp"
 
 namespace {
 
 using thermo::ConcurrentWriters;
 using thermo::SequenceLock;
+using thermo::utility::static_string;
+
+// A snapshot copies the whole model, so the overwrite tests use this
+// fixed-capacity string rather than `std::string`.
+using Text = static_string<8>;
+static_assert(std::is_trivially_copyable_v<Text>);
 
 // A model with mixed field sizes and trailing padding, so a snapshot copy is
 // exercised across more than one aligned word.
@@ -384,6 +392,53 @@ void wait_for_tasks(std::atomic<std::uint32_t>& finished,
     }
 }
 
+struct OverwriteContext {
+    SequenceLock<Text, ConcurrentWriters::Enabled>* lock = nullptr;
+    SemaphoreHandle_t from_b = nullptr;
+    SemaphoreHandle_t from_a = nullptr;
+    std::atomic<std::uint32_t>* attempts = nullptr;
+    std::atomic<std::uint32_t>* finished = nullptr;
+};
+
+// A reads the initial model and waits for B to enter its writer before it
+// appends 'A'. B waits until A's overwrite has published before it tries its
+// stale write, so B is forced to retry against the model A stored.
+void overwrite_task_a(void* arg) {
+    auto& context = *static_cast<OverwriteContext*>(arg);
+    bool waited = false;
+    context.lock->overwrite([&](auto& versioned_model) {
+        if (!waited) {
+            TEST_ASSERT_EQUAL(pdTRUE,
+                              xSemaphoreTake(context.from_b, portMAX_DELAY));
+            waited = true;
+        }
+        versioned_model.model.push_back('A');
+    });
+
+    // Give only after the write is published: B must not win the first CAS.
+    TEST_ASSERT_EQUAL(pdTRUE, xSemaphoreGive(context.from_a));
+    context.finished->fetch_add(1, std::memory_order_relaxed);
+    vTaskDelete(nullptr);
+}
+
+void overwrite_task_b(void* arg) {
+    auto& context = *static_cast<OverwriteContext*>(arg);
+    bool signaled = false;
+    context.lock->overwrite([&](auto& versioned_model) {
+        if (!signaled) {
+            TEST_ASSERT_EQUAL(pdTRUE, xSemaphoreGive(context.from_b));
+            TEST_ASSERT_EQUAL(pdTRUE,
+                              xSemaphoreTake(context.from_a, portMAX_DELAY));
+            signaled = true;
+        }
+        versioned_model.model.push_back('B');
+        context.attempts->fetch_add(1, std::memory_order_relaxed);
+    });
+
+    context.finished->fetch_add(1, std::memory_order_relaxed);
+    vTaskDelete(nullptr);
+}
+
 }  // namespace
 
 TEST_CASE("sequence_lock: concurrent writers do not lose an update",
@@ -445,4 +500,41 @@ TEST_CASE("sequence_lock: concurrent readers never see a torn model",
     for (std::size_t i = 1; i < Block::kWords; ++i) {
         TEST_ASSERT_EQUAL_UINT32(pattern, final.model.words[i]);
     }
+}
+
+TEST_CASE("sequence_lock: uncontentious overwrite", "[sequence_lock]") {
+    SequenceLock<Text, ConcurrentWriters::Enabled> lock;
+    lock.overwrite(
+        [](auto& versioned_model) { versioned_model.model.push_back('A'); });
+
+    Text const actual = lock.read().model;
+    TEST_ASSERT_EQUAL_STRING("A", actual.c_str());
+}
+
+TEST_CASE("sequence_lock: contentious overwrite", "[sequence_lock]") {
+    SequenceLock<Text, ConcurrentWriters::Enabled> lock;
+    std::atomic<std::uint32_t> attempts{0};
+    std::atomic<std::uint32_t> finished{0};
+
+    SemaphoreHandle_t from_b = xSemaphoreCreateBinary();
+    SemaphoreHandle_t from_a = xSemaphoreCreateBinary();
+    TEST_ASSERT_NOT_NULL(from_b);
+    TEST_ASSERT_NOT_NULL(from_a);
+
+    OverwriteContext context{&lock, from_b, from_a, &attempts, &finished};
+
+    TaskHandle_t first_handle = nullptr;
+    TaskHandle_t second_handle = nullptr;
+    create_task(overwrite_task_a, "seq-overwrite-a", &context, &first_handle);
+    create_task(overwrite_task_b, "seq-overwrite-b", &context, &second_handle);
+
+    wait_for_tasks(finished, 2);
+
+    Text const actual = lock.read().model;
+    TEST_ASSERT_EQUAL_STRING("AB", actual.c_str());
+    TEST_ASSERT_TRUE_MESSAGE(attempts.load(std::memory_order_relaxed) > 1,
+                             "B should have retried after a stale write");
+
+    vSemaphoreDelete(from_a);
+    vSemaphoreDelete(from_b);
 }
