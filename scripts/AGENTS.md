@@ -30,11 +30,11 @@ invoked from the host.
 | both | `flash` | `idf.py flash monitor` |
 | both | `monitor` | `idf.py monitor` |
 | both | `menuconfig` | `idf.py menuconfig` |
-| both | `format [DIRECTORY...]` | clang-format the C/C++ sources in or under the directories (tracked and untracked); default: the current directory |
-| both | `format-check [DIRECTORY...]` | Non-zero exit if any such source is unformatted |
-| both | `format-check-staged [DIRECTORY...]` | Same, for the staged content of those directories only |
+| both | `format [<DIRECTORY>\|<FILE>]...` | clang-format the named C/C++ files and every source under the named directories (tracked and untracked); default: the current directory |
+| both | `format-check [<DIRECTORY>\|<FILE>]...` | Non-zero exit if any such source is unformatted |
+| both | `format-check-staged [<DIRECTORY>\|<FILE>]...` | Same, for the staged content of those scopes only |
 | both | `pycodestyle` | PEP 8 (79 columns) over all Python sources |
-| both | `clang-tidy [DIRECTORY...] [--fix]` | Static analysis over every source under the directories (default: the current directory; a project directory uses its own compile database, any other draws from all databases below it); `run-clang-tidy` shards the rewritten database across CPUs and may interleave output; `--fix` applies fixes in place serially |
+| both | `clang-tidy [<DIRECTORY>\|<FILE>]... [--fix]` | Static analysis over the named files and every source under the named directories (default: the current directory; a project directory uses its own compile database, any other draws from all databases below it); `run-clang-tidy` shards the rewritten database across CPUs and may interleave output; `--fix` applies fixes in place serially |
 | both | `shell [CMD...]` | Run a command in the container; no arguments = login shell |
 | host | `ssh [CMD...]` | SSH into the running dev container; no arguments = interactive login shell |
 | host | `clion-archive [ARCHIVE]` | Copy a local `CLion-*.tar.gz` into the container's Toolbox download cache |
@@ -194,12 +194,25 @@ project's build tree is new or records a different target. `set-target`
 deletes ninja's dependency log, so running it before every build recompiles
 every translation unit; a second, unchanged build now does no work.
 
-`format`, `format-check`, `format-check-staged`, `build`, `test-linux`,
-`test-esp32`, and `clang-tidy` all take directory arguments (a host absolute
-path or `/project/...` works too) and start from the current directory when
-given none, so a subset can be worked on from inside it. A directory outside
-the repository, or a caller outside it, is rejected; `third_party/` is never
-formatted or checked.
+`format`, `format-check`, `format-check-staged`, and `clang-tidy` take
+directory or file arguments:
+
+- A directory selects every C/C++ source under it.
+- A file selects only that source; `clang-tidy` also accepts headers, which
+  borrow the compile flags of their matching translation unit.
+- A glob such as `*/nvs.*` expands to files or directories. The shell may
+  expand it, or it may be quoted to let `dev.py` expand it.
+
+Several directories and files may be named in one command; host absolute
+paths and `/project/...` paths work too. With no argument, these commands
+start from the current directory. An explicit file must be a C/C++ source;
+an explicit scope inside a vendored tree is rejected. Glob matches that are
+not sources, or that are vendored, are ignored. A scope outside the
+repository, or a caller outside it, is rejected.
+
+`build`, `test-linux`, and `test-esp32` still take directories only: an
+individual `.cpp` is not a build target, so compiling one source to a `.o`
+would not produce a usable firmware or library.
 
 `build` and the test commands discover ESP-IDF projects on disk: a project is
 a directory whose `CMakeLists.txt` includes ESP-IDF's `project.cmake`, so a new
@@ -213,12 +226,12 @@ means the `mcgowan/` directory relative to the current directory. A
 
 Stdlib-`unittest` tests for `dev.py` itself, run by
 `scripts/dev.py self-check`. It pins the format/pycodestyle source discovery,
-directory scoping for build/test-linux/test-esp32/format/tidy, the staged
-format check, the run-configuration invariants, the test commands, clang-tidy
-wiring, the `sml` submodule pin, the `clion-compdb` merge order and atomic
-write, that `dev.py` is on the PATH of the pinned image for every kind of
-shell, and that `self-check` is host-only. Add coverage there when changing
-`dev.py`.
+directory and file scoping for build/test-linux/test-esp32/format/tidy, the
+staged format check, the run-configuration invariants, the test commands,
+clang-tidy wiring, the `sml` submodule pin, the `clion-compdb` merge order
+and atomic write, that `dev.py` is on the PATH of the pinned image for every
+kind of shell, and that `self-check` is host-only. Add coverage there when
+changing `dev.py`.
 
 ## Shell completion
 

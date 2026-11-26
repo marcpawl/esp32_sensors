@@ -4273,7 +4273,7 @@ class TidyCommandTests(unittest.TestCase):
         with (
             mock.patch.object(dev, "change_to_container"),
             mock.patch.object(
-                dev, "_escalated_directories", return_value=directories
+                dev, "_escalated_scopes", return_value=directories
             ),
             mock.patch.object(dev, "_ensure_submodules", return_value=0),
             mock.patch.object(dev, "_project_at", return_value=None),
@@ -4296,6 +4296,39 @@ class TidyCommandTests(unittest.TestCase):
         self.assertEqual(runner.call_args.args[1:], (3, False))
         run.assert_called_once_with(["runner"])
 
+    def test_cmd_clang_tidy_analyzes_a_named_file(self):
+        header = (
+            dev.REPO_ROOT / "components" / "espidfcpp" / "libespidfcpp"
+            / "include" / "espidf_cpp" / "nvs.hpp"
+        )
+        unit = {"file": str(header)}
+        databases = [
+            dev.REPO_ROOT / "build_linux" / "compile_commands.json"
+        ]
+        with (
+            mock.patch.object(dev, "change_to_container"),
+            mock.patch.object(dev, "_ensure_submodules", return_value=0),
+            mock.patch.object(
+                dev, "_discover_tidy_databases", return_value=databases
+            ),
+            mock.patch.object(
+                dev, "_tidy_entry_for_file", return_value=unit
+            ) as entry,
+            mock.patch.object(
+                dev, "_unique_tidy_units", return_value=[unit]
+            ) as unique,
+            mock.patch.object(dev, "_tidy_database"),
+            mock.patch.object(dev, "_tidy_jobs", return_value=1),
+            mock.patch.object(
+                dev, "_tidy_run_command", return_value=["runner"]
+            ),
+            mock.patch.object(dev, "run", return_value=0),
+        ):
+            rc = dev.cmd_clang_tidy([header])
+        self.assertEqual(rc, 0)
+        entry.assert_called_once_with(header, databases)
+        unique.assert_called_once_with([unit], allow_headers=True)
+
     def test_parser_accepts_fix_before_or_after_directories(self):
         parser = dev._build_parser()
         for argv in (
@@ -4311,6 +4344,32 @@ class TidyCommandTests(unittest.TestCase):
         args = dev._build_parser().parse_args(["clang-tidy", "components"])
         self.assertFalse(args.fix)
 
+    def test_parser_accepts_files_and_globs(self):
+        args = dev._build_parser().parse_args([
+            "clang-tidy", "*/nvs.*", "components/hal"
+        ])
+        self.assertEqual(args.directories, ["*/nvs.*", "components/hal"])
+
+    def test_main_resolves_and_forwards_tidy_files(self):
+        prog = str(dev.REPO_ROOT / "scripts" / "dev.py")
+        relative = (
+            "components/espidfcpp/libespidfcpp/include/espidf_cpp/nvs.hpp"
+        )
+        header = dev.REPO_ROOT / relative
+        with (
+            mock.patch.object(
+                dev, "_parse_tidy_scopes", return_value=[header]
+            ) as parse,
+            mock.patch.object(
+                dev, "cmd_clang_tidy", return_value=0
+            ) as command,
+        ):
+            self.assertEqual(
+                dev.main([prog, "clang-tidy", "--fix", str(header)]), 0
+            )
+        parse.assert_called_once_with([str(header)])
+        command.assert_called_once_with([header], fix=True)
+
     def test_container_arguments_map_directories_into_the_project_mount(self):
         directories = [
             dev.REPO_ROOT / "components" / "hal",
@@ -4324,6 +4383,20 @@ class TidyCommandTests(unittest.TestCase):
                 "/project/components/hal",
                 "/project/mcgowan",
             ],
+        )
+
+    def test_container_arguments_map_files_into_the_project_mount(self):
+        header = (
+            dev.REPO_ROOT / "components" / "espidfcpp" / "libespidfcpp"
+            / "include" / "espidf_cpp" / "nvs.hpp"
+        )
+        container_path = (
+            "/project/components/espidfcpp/libespidfcpp/include/"
+            "espidf_cpp/nvs.hpp"
+        )
+        self.assertEqual(
+            dev._tidy_container_arguments([header], fix=True),
+            ["clang-tidy", "--fix", container_path],
         )
 
     def test_resolved_directories_survive_the_container_hop(self):
@@ -4345,7 +4418,7 @@ class TidyCommandTests(unittest.TestCase):
 
 
 class TidyDirectoryTests(unittest.TestCase):
-    """`clang-tidy` arguments are repository directories."""
+    """`clang-tidy` arguments are repository directories or files."""
 
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -4373,6 +4446,47 @@ class TidyDirectoryTests(unittest.TestCase):
         source.write_text("")
         self.assertIsNone(
             dev._parse_directories([str(source)], root=self.root)
+        )
+
+    def test_a_source_file_is_a_valid_tidy_scope(self):
+        source = self.root / "components" / "hal" / "x.cpp"
+        source.write_text("")
+        self.assertEqual(
+            dev._parse_path_scopes(
+                [str(source)],
+                extensions=dev.TIDY_FILE_EXTENSIONS,
+                root=self.root,
+            ),
+            [source],
+        )
+
+    def test_a_header_is_a_valid_tidy_scope(self):
+        header = self.root / "components" / "hal" / "x.hpp"
+        header.write_text("")
+        self.assertEqual(
+            dev._parse_path_scopes(
+                [str(header)],
+                extensions=dev.TIDY_FILE_EXTENSIONS,
+                root=self.root,
+            ),
+            [header],
+        )
+
+    def test_a_quoted_glob_expands_to_tidy_scopes(self):
+        directory = self.root / "components" / "hal"
+        source = directory / "x.cpp"
+        header = directory / "x.hpp"
+        note = directory / "x.txt"
+        for path in (source, header, note):
+            path.write_text("")
+        pattern = str(directory / "x.*")
+        self.assertEqual(
+            dev._parse_path_scopes(
+                [pattern],
+                extensions=dev.TIDY_FILE_EXTENSIONS,
+                root=self.root,
+            ),
+            [source, header],
         )
 
     def test_a_missing_directory_is_rejected(self):
@@ -4499,6 +4613,105 @@ class TidyUnitsUnderTests(unittest.TestCase):
             self.hal, [self.database], root=self.root
         )
         self.assertNotIn({"file": str(self.missing)}, units)
+
+
+class TidyFileScopeTests(unittest.TestCase):
+    """Explicit files get a compile entry, including headers."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name).resolve()
+        self.component = self.root / "components" / "espidfcpp"
+        self.component.mkdir(parents=True)
+        self.source = self.component / "nvs.cpp"
+        self.header = self.component / "nvs.hpp"
+        self.other = self.component / "other.cpp"
+        for path in (self.source, self.header, self.other):
+            path.write_text("")
+        self.database = self.root / "build_linux" / "compile_commands.json"
+        self.database.parent.mkdir()
+        self.entries = [
+            {
+                "directory": str(self.root),
+                "file": str(self.other),
+                "command": f"g++ -c {self.other}",
+            },
+            {
+                "directory": str(self.root),
+                "file": str(self.source),
+                "command": f"g++ -c {self.source}",
+            },
+        ]
+        self.database.write_text(json.dumps(self.entries))
+
+    def test_an_explicit_translation_unit_uses_its_own_entry(self):
+        self.assertEqual(
+            dev._tidy_entry_for_file(
+                self.source, [self.database], root=self.root
+            ),
+            self.entries[1],
+        )
+
+    def test_a_header_borrows_the_matching_translation_unit_flags(self):
+        entry = dev._tidy_entry_for_file(
+            self.header, [self.database], root=self.root
+        )
+        self.assertEqual(entry["file"], str(self.header))
+        self.assertIn(str(self.header), entry["command"])
+        self.assertNotIn(str(self.source), entry["command"])
+
+    def test_argument_lists_are_retargeted_too(self):
+        database = self.root / "build_args" / "compile_commands.json"
+        database.parent.mkdir()
+        database.write_text(json.dumps([
+            {
+                "directory": str(self.root),
+                "file": str(self.source),
+                "arguments": ["g++", "-c", str(self.source)],
+            }
+        ]))
+        entry = dev._tidy_entry_for_file(
+            self.header, [database], root=self.root
+        )
+        self.assertEqual(entry["arguments"][-1], str(self.header))
+
+    def test_a_source_without_a_database_entry_is_reported(self):
+        missing = self.component / "missing.cpp"
+        missing.write_text("")
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertIsNone(
+                dev._tidy_entry_for_file(
+                    missing, [self.database], root=self.root
+                )
+            )
+        self.assertIn("no compile database entry", err.getvalue())
+
+    def test_a_header_without_any_candidates_is_reported(self):
+        empty = self.root / "empty" / "compile_commands.json"
+        empty.parent.mkdir()
+        empty.write_text("[]")
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertIsNone(
+                dev._tidy_entry_for_file(
+                    self.header, [empty], root=self.root
+                )
+            )
+        self.assertIn("no C++ compile database entry", err.getvalue())
+
+    def test_directory_scopes_still_exclude_headers(self):
+        units = dev._unique_tidy_units(
+            [{"file": str(self.header)}], root=self.root
+        )
+        self.assertEqual(units, [])
+
+    def test_explicit_file_scopes_keep_headers(self):
+        units = dev._unique_tidy_units(
+            [{"file": str(self.header)}], root=self.root, allow_headers=True
+        )
+        self.assertEqual(len(units), 1)
 
 
 class TidyGateTests(unittest.TestCase):
@@ -4865,6 +5078,43 @@ class FormatCommandTests(unittest.TestCase):
             [["format-check-staged", "/project/components/utility"]],
         )
 
+    def test_format_accepts_a_file_argument(self):
+        relative = (
+            "components/espidfcpp/libespidfcpp/include/espidf_cpp/nvs.hpp"
+        )
+        source = dev.REPO_ROOT / relative
+        with mock.patch.object(
+            dev, "source_files", return_value=[relative]
+        ) as files:
+            self.assertEqual(dev.cmd_format([str(source)]), 0)
+        files.assert_called_once_with([source])
+        self.assertEqual(self.calls, [["clang-format", "-i", relative]])
+        self.assertEqual(self.hops, [["format", f"/project/{relative}"]])
+
+    def test_format_check_accepts_mixed_directories_and_files(self):
+        components = dev.REPO_ROOT / "components"
+        relative = (
+            "components/espidfcpp/libespidfcpp/include/espidf_cpp/nvs.hpp"
+        )
+        source = dev.REPO_ROOT / relative
+        with mock.patch.object(
+            dev, "source_files", return_value=[relative]
+        ) as files:
+            self.assertEqual(
+                dev.cmd_format_check([str(components), str(source)]), 0
+            )
+        files.assert_any_call([components, source])
+        self.assertEqual(
+            self.hops,
+            [["format-check", "/project/components", f"/project/{relative}"]],
+        )
+
+    def test_format_parser_accepts_files_and_globs(self):
+        args = dev._build_parser().parse_args([
+            "format-check", "*/nvs.*", "components"
+        ])
+        self.assertEqual(args.directories, ["*/nvs.*", "components"])
+
     def test_main_forwards_directories_to_the_command(self):
         prog = str(dev.REPO_ROOT / "scripts" / "dev.py")
         components = str(dev.REPO_ROOT / "components")
@@ -4875,6 +5125,135 @@ class FormatCommandTests(unittest.TestCase):
                 dev.main([prog, "format-check", components]), 0
             )
         command.assert_called_once_with([components])
+
+
+class PathScopeTests(unittest.TestCase):
+    """`clang-tidy` and `format` accept directories, files, and globs."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name).resolve()
+        self.component = self.root / "components" / "hal"
+        self.component.mkdir(parents=True)
+        self.source = self.component / "x.cpp"
+        self.header = self.component / "x.hpp"
+        self.note = self.component / "x.txt"
+        for path in (self.source, self.header, self.note):
+            path.write_text("")
+
+    def test_literal_directories_and_files_are_expanded_in_order(self):
+        self.assertEqual(
+            dev._expand_path_scopes(
+                ["components/hal/x.cpp", "components/hal"],
+                root=self.root,
+                cwd=self.root,
+            ),
+            [self.source, self.component],
+        )
+
+    def test_a_quoted_glob_is_expanded_by_dev_py(self):
+        self.assertEqual(
+            dev._expand_path_scopes(
+                ["components/hal/x.*"], root=self.root, cwd=self.root
+            ),
+            [self.source, self.header, self.note],
+        )
+
+    def test_a_container_path_is_mapped_before_expansion(self):
+        self.assertEqual(
+            dev._expand_path_scopes(
+                ["/project/components/hal/x.hpp"], root=self.root
+            ),
+            [self.header],
+        )
+
+    def test_a_glob_with_no_matches_is_rejected(self):
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertIsNone(
+                dev._expand_path_scopes(
+                    ["components/hal/*.xyz"], root=self.root, cwd=self.root
+                )
+            )
+        self.assertIn("matches no files", err.getvalue())
+
+    def test_a_path_outside_the_repository_is_rejected(self):
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertIsNone(
+                dev._expand_path_scopes(
+                    [str(self.root.parent)], root=self.root
+                )
+            )
+        self.assertIn("outside", err.getvalue())
+
+    def test_a_non_source_file_is_rejected_explicitly(self):
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertIsNone(
+                dev._parse_path_scopes(
+                    ["components/hal/x.txt"], root=self.root, cwd=self.root
+                )
+            )
+        self.assertIn("not a source file", err.getvalue())
+
+    def test_a_glob_ignores_its_non_source_matches(self):
+        self.assertEqual(
+            dev._parse_path_scopes(
+                ["components/hal/x.*"], root=self.root, cwd=self.root
+            ),
+            [self.source, self.header],
+        )
+
+    def test_a_vendored_file_is_rejected_explicitly(self):
+        vendored = self.root / "third_party" / "sml" / "x.hpp"
+        vendored.parent.mkdir(parents=True)
+        vendored.write_text("")
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertIsNone(
+                dev._parse_path_scopes(
+                    [str(vendored)], root=self.root, cwd=self.root
+                )
+            )
+        self.assertIn("vendored", err.getvalue())
+
+    def test_a_vendored_directory_is_rejected_explicitly(self):
+        vendored = self.root / "third_party" / "sml"
+        vendored.mkdir(parents=True)
+        err = io.StringIO()
+        with redirect_stderr(err):
+            self.assertIsNone(
+                dev._parse_path_scopes(
+                    [str(vendored)], root=self.root, cwd=self.root
+                )
+            )
+        self.assertIn("vendored", err.getvalue())
+
+    def test_a_glob_ignores_vendored_matches(self):
+        vendored = self.root / "third_party" / "sml" / "x.hpp"
+        vendored.parent.mkdir(parents=True)
+        vendored.write_text("")
+        self.assertEqual(
+            dev._parse_path_scopes(
+                ["third_party/sml/*"], root=self.root, cwd=self.root
+            ),
+            [],
+        )
+
+    def test_escalation_keeps_files_and_climbs_directories(self):
+        empty = self.root / "docker"
+        empty.mkdir()
+
+        def projects_at(directory, root):
+            return [directory] if directory == root else []
+
+        with redirect_stderr(io.StringIO()):
+            scopes = dev._escalated_scopes(
+                [self.source, empty], projects_at, "sources", root=self.root
+            )
+        self.assertEqual(scopes, [self.source, self.root])
 
 
 class SourceFileDiscoveryTests(unittest.TestCase):
@@ -4976,6 +5355,15 @@ class SourceFileDiscoveryTests(unittest.TestCase):
                 path.startswith("components/utility/"), path
             )
             self.assertFalse(dev._is_vendored_path(path), path)
+
+    def test_source_files_can_be_scoped_to_a_file(self):
+        # A file scope is a git pathspec too, so `format x.hpp` selects only x.
+        relative = (
+            "components/espidfcpp/libespidfcpp/include/espidf_cpp/nvs.hpp"
+        )
+        self.assertEqual(
+            dev.source_files([dev.REPO_ROOT / relative]), [relative]
+        )
 
     def test_selection_drops_paths_that_are_not_files(self):
         # A tracked-but-deleted file is still in the index; handing it to
