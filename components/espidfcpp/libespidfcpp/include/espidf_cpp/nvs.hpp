@@ -2,10 +2,12 @@
 
 #pragma once
 
+#include <cassert>
 #include <concepts>
 #include <cstdint>
 #include <string_view>
 
+// NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "nvs.h"
 #include "nvs_flash.h"
@@ -16,7 +18,10 @@
 
 namespace thermo::espidf_cpp {
 
-enum class NvsMode { Read = ESP_ERR_NVS_READ_ONLY, ReadWrite = NVS_READWRITE };
+enum class NvsMode : std::uint8_t {
+    Read = NVS_READONLY,
+    ReadWrite = NVS_READWRITE
+};
 
 template<NvsMode mode>
 class Nvs {
@@ -41,26 +46,22 @@ class Nvs {
     template<size_t max_length>
     thermo::utility::static_string<max_length> read_str(
         char const* key, std::string_view const& default_value) {
-        // Get the length o the stored string.
+        // nvs_get_str reports the length including the NUL terminator.
         std::size_t len = 0;
         esp_err_t error = nvs_get_str(handle_, key, nullptr, &len);
         if (error == ESP_ERR_NVS_NOT_FOUND) {
-            // Key not found
-            return default_value;
+            thermo::utility::static_string<max_length> out;
+            out.append(default_value.data(), default_value.size());
+            return out;
         }
         ESP_ERROR_CHECK(error);
-        assert(len > 0);  //  null terminator is stored in the string.
-        assert(len <= max_length);
+        assert(len > 0);
+        assert(len <= max_length + 1);
 
-        thermo::utility::static_string<max_length> out;
-        error = nvs_get_str(handle_, key, out.data(), &len);
+        char buffer[max_length + 1] = {};
+        error = nvs_get_str(handle_, key, buffer, &len);
         ESP_ERROR_CHECK(error);
-
-        // nvs_get_str writes a trailing NUL inside len; drop it.
-        if (!out.empty() && out.back() == '\0') {
-            out.pop_back();
-        }
-        return out;
+        return thermo::utility::static_string<max_length>{buffer};
     }
 
     // Retrieve a number from the NVS storage.
@@ -69,23 +70,22 @@ class Nvs {
     // TODO(AI!) constrain T to an integer
     template<std::integral T>
     T read(const char* key, T default_value) {
-        T v;
+        T v{};
         esp_err_t error;
-        if constexpr (std::is_same_v<decltype(v), std::uint8_t>) {
+        if constexpr (std::is_same_v<T, std::uint8_t>) {
             error = nvs_get_u8(handle_, key, &v);
-        } else if constexpr (std::is_same_v<decltype(v), std::uint16_t>) {
+        } else if constexpr (std::is_same_v<T, std::uint16_t>) {
             error = nvs_get_u16(handle_, key, &v);
-        } else if constexpr (std::is_same_v<decltype(v), std::uint32_t>) {
+        } else if constexpr (std::is_same_v<T, std::uint32_t>) {
             error = nvs_get_u32(handle_, key, &v);
-        }
-        if constexpr (std::is_same_v<decltype(v), std::int8_t>) {
+        } else if constexpr (std::is_same_v<T, std::int8_t>) {
             error = nvs_get_i8(handle_, key, &v);
-        } else if constexpr (std::is_same_v<decltype(v), std::int16_t>) {
+        } else if constexpr (std::is_same_v<T, std::int16_t>) {
             error = nvs_get_i16(handle_, key, &v);
-        } else if constexpr (std::is_same_v<decltype(v), std::int32_t>) {
+        } else if constexpr (std::is_same_v<T, std::int32_t>) {
             error = nvs_get_i32(handle_, key, &v);
         } else {
-            static_assert("false", "Unexpected numeric type");
+            static_assert(std::is_same_v<T, void>, "Unexpected numeric type");
         }
         if (error == ESP_ERR_NVS_NOT_FOUND) {
             return default_value;
@@ -132,8 +132,15 @@ class Nvs {
             error = nvs_set_u16(handle_, key, value);
         } else if constexpr (std::is_same_v<decltype(value), std::uint32_t>) {
             error = nvs_set_u32(handle_, key, value);
+        } else if constexpr (std::is_same_v<decltype(value), std::int8_t>) {
+            error = nvs_set_i8(handle_, key, value);
+        } else if constexpr (std::is_same_v<decltype(value), std::int16_t>) {
+            error = nvs_set_i16(handle_, key, value);
+        } else if constexpr (std::is_same_v<decltype(value), std::int32_t>) {
+            error = nvs_set_i32(handle_, key, value);
         } else {
-            static_assert("false", "Unexpected numeric type");
+            static_assert(std::is_same_v<decltype(value), void>,
+                          "Unexpected numeric type");
         }
         ESP_ERROR_CHECK(error);
     }
