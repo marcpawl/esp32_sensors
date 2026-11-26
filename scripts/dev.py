@@ -9,7 +9,7 @@
 # specifics live in one place.
 #
 # Usage:
-#   scripts/dev.py [pull|image|up|down|submodules|build|\
+#   scripts/dev.py [pull|image|up|down|submodules|clean|build|\
 #                   build-test-espidf-cpp-linux|\
 #                   build-test-espidf-cpp-esp32|\
 #                   flash|monitor|menuconfig|test-linux|test-esp32|self-check|\
@@ -960,6 +960,42 @@ def cmd_submodules() -> int:
         print("Submodules: already checked out")
         return 0
     return run(_submodule_update_command(missing))
+
+
+def _clean_scopes(arguments: list[str]) -> list[Path] | None:
+    """The paths a clean command operates on, repo root by default.
+
+    Each argument is a directory, file, or glob inside the repository. With no
+    arguments the whole repository is cleaned (`/project` in the container).
+    """
+    if arguments:
+        return _expand_path_scopes(arguments)
+    return [REPO_ROOT]
+
+
+# Ignored CLion-generated files that `clean` must preserve. The compilation
+# database is expensive to regenerate and run configs are user-facing project
+# state; tracked run configs are already safe from `git clean -fdX`, but the
+# compile database under `.clion/` is ignored.
+CLEAN_EXCLUDES = (".clion/compile_commands.json",)
+
+
+def cmd_clean(arguments: list[str]) -> int:
+    """Remove ignored build products (git clean -fdX) in the selected paths.
+
+    Removes files and directories ignored by git, such as idf.py build output,
+    without touching tracked files or untracked source files. CLion's compile
+    database and run configurations are preserved. With no arguments the
+    search starts at the repository root; otherwise each argument is a
+    directory or file inside the repository.
+    """
+    scopes = _clean_scopes(arguments)
+    if scopes is None:
+        return 1
+    change_to_container(_project_container_arguments("clean", scopes))
+    paths = [_repo_relative(scope) for scope in scopes]
+    excludes = [arg for pattern in CLEAN_EXCLUDES for arg in ("-e", pattern)]
+    return run(["git", "clean", "-fdX", *excludes, "--", *paths])
 
 
 def cmd_pull() -> int:
@@ -3694,6 +3730,7 @@ COMMANDS = {
     "up": cmd_up,
     "down": cmd_down,
     "submodules": cmd_submodules,
+    "clean": cmd_clean,
     "build": cmd_build,
     "build-test-espidf-cpp-linux": cmd_build_test_espidf_cpp_linux,
     "build-test-espidf-cpp-esp32": cmd_build_test_espidf_cpp_esp32,
@@ -3816,6 +3853,15 @@ def _build_parser() -> argparse.ArgumentParser:
                  "current directory",
         )
 
+    clean_parser = subparsers.choices["clean"]
+    clean_parser.add_argument(
+        "directories",
+        nargs="*",
+        metavar="DIRECTORY|FILE",
+        help="directories or files to clean; omit to clean from the "
+             "repository root",
+    )
+
     shell_parser = subparsers.choices["shell"]
     shell_parser.add_argument(
         "-C",
@@ -3891,6 +3937,8 @@ def main(argv: list[str]) -> int:
         return cmd_format_check(args.directories)
     if args.command == "format-check-staged":
         return cmd_format_check_staged(args.directories)
+    if args.command == "clean":
+        return cmd_clean(args.directories)
     return args.handler()
 
 

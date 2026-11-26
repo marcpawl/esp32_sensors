@@ -22,6 +22,7 @@ invoked from the host.
 | host | `up` | Start the `dev` service with `docker compose up -d` |
 | host | `down` | Stop/remove the dev containers with `docker compose down --remove-orphans` |
 | both | `submodules` | Fetch the pinned git submodules (`third_party/sml`) |
+| both | `clean [DIRECTORY\|FILE...]` | Remove git-ignored build products (`git clean -fdX`) from the selected paths, preserving CLion compile database and run configs; default: the repository root |
 | both | `build [--analyzer[=BOOL]] [DIRECTORY...]` | Build every project in/under the directories (from the root, the root aggregator builds everything); the analyzer is off by default, `--analyzer` enables it |
 | both | `build-test-espidf-cpp-linux` | Build the `libespidfcpp` unit tests for `linux` |
 | both | `test-linux [DIRECTORY...]` | Build and run every discovered host (`linux`) suite in path order, or those in/under the directories |

@@ -3618,6 +3618,10 @@ class CommandRegistryTests(unittest.TestCase):
         self.assertNotIn("complete", names)
         self.assertIn("self-check", names)
 
+    def test_clean_is_registered(self):
+        self.assertIn("clean", dev.COMMANDS)
+        self.assertIs(dev.COMMANDS["clean"], dev.cmd_clean)
+
     def test_every_registered_command_has_a_docstring(self):
         # argparse uses the first docstring line as the command's help text.
         for name, handler in dev.COMMANDS.items():
@@ -3627,6 +3631,82 @@ class CommandRegistryTests(unittest.TestCase):
                 (handler.__doc__ or "").strip(),
                 f"command {name!r} has no docstring",
             )
+
+
+class CleanCommandTests(unittest.TestCase):
+    """`clean` removes ignored build products without touching source."""
+
+    def setUp(self):
+        self.calls = []
+        self.hops = []
+        self._original_run = dev.run
+        self._original_change_to_container = dev.change_to_container
+
+        def fake_run(cmd, cwd=dev.REPO_ROOT):
+            self.calls.append(list(cmd))
+            return 0
+
+        def fake_change_to_container(trailing=None):
+            self.hops.append(trailing)
+
+        dev.run = fake_run
+        dev.change_to_container = fake_change_to_container
+
+    def tearDown(self):
+        dev.run = self._original_run
+        dev.change_to_container = self._original_change_to_container
+
+    def test_default_cleans_the_repository_root(self):
+        self.assertEqual(dev.cmd_clean([]), 0)
+        self.assertEqual(self.hops, [["clean", "/project"]])
+        self.assertEqual(
+            self.calls,
+            [[
+                "git", "clean", "-fdX",
+                "-e", ".clion/compile_commands.json",
+                "--", ".",
+            ]],
+        )
+
+    def test_cleans_the_selected_directory(self):
+        directory = dev.REPO_ROOT / "mcgowan"
+        self.assertEqual(dev.cmd_clean([str(directory)]), 0)
+        self.assertEqual(self.hops, [["clean", "/project/mcgowan"]])
+        self.assertEqual(
+            self.calls,
+            [[
+                "git", "clean", "-fdX",
+                "-e", ".clion/compile_commands.json",
+                "--", "mcgowan",
+            ]],
+        )
+
+    def test_cleans_a_selected_file(self):
+        source = dev.REPO_ROOT / "mcgowan" / "sdkconfig.defaults"
+        self.assertEqual(dev.cmd_clean([str(source)]), 0)
+        self.assertEqual(
+            self.hops,
+            [["clean", "/project/mcgowan/sdkconfig.defaults"]],
+        )
+        self.assertEqual(
+            self.calls,
+            [[
+                "git", "clean", "-fdX",
+                "-e", ".clion/compile_commands.json",
+                "--", "mcgowan/sdkconfig.defaults",
+            ]],
+        )
+
+    def test_preserves_clion_generated_files(self):
+        self.assertIn(".clion/compile_commands.json", dev.CLEAN_EXCLUDES)
+
+    def test_rejects_a_path_outside_the_repository(self):
+        err = io.StringIO()
+        with redirect_stderr(err):
+            rc = dev.cmd_clean(["/etc"])
+        self.assertEqual(rc, 1)
+        self.assertEqual(self.calls, [])
+        self.assertIn("outside the repository", err.getvalue())
 
 
 class HostTestCommandTests(unittest.TestCase):
