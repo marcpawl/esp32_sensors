@@ -5880,20 +5880,22 @@ class PythonSourceDiscoveryTests(unittest.TestCase):
     # -- the real repository ------------------------------------------------
 
     def test_the_repository_enumerates_its_expected_python_sources(self):
-        # Pins the actual set: the two dev.py scripts, the manual CLion
-        # wizard, and both on-target test drivers. A new Python source is meant
-        # to be noticed here, so this list is a deliberate tripwire rather
-        # than an over-broad assertion.
+        # Pins the actual set. A new Python source is meant to be noticed
+        # here, so this list is a deliberate tripwire rather than an
+        # over-broad assertion.
         self.assertEqual(
             dev.python_sources(),
             [
+                ".githooks/pre-push",
                 "components/espidfcpp/tests/test-espidf-cpp-esp32/test.py",
                 "components/hal/tests/esp_timer/board/test.py",
                 "scripts/clion_manual_test.py",
                 "scripts/dev.py",
                 "scripts/donny.py",
+                "scripts/pre_push_hook.py",
                 "scripts/test_dev.py",
                 "scripts/test_donny.py",
+                "scripts/test_pre_push_hook.py",
             ],
         )
 
@@ -5946,17 +5948,22 @@ class SelfCheckModuleTests(unittest.TestCase):
     re-execs itself), so a run there would pass vacuously.
     """
 
-    def test_self_check_module_points_at_this_file(self):
-        # `SELF_CHECK_MODULE` is dotted (`scripts.test_dev`); its final
-        # component must name this test module so `python3 -m unittest` runs
-        # these tests.
-        self.assertEqual(dev.SELF_CHECK_MODULE, "scripts.test_dev")
-        self.assertEqual(dev.SELF_CHECK_MODULE.split(".")[-1], "test_dev")
+    def test_self_check_modules_include_this_file(self):
+        # `SELF_CHECK_MODULES` are dotted module names; they must include
+        # this test module so `python3 -m unittest` runs these tests.
+        self.assertIn("scripts.test_dev", dev.SELF_CHECK_MODULES)
+        self.assertIn(
+            "scripts.test_pre_push_hook", dev.SELF_CHECK_MODULES
+        )
 
-    def test_self_check_module_file_exists(self):
-        # From the repo root, `scripts/test_dev.py` must exist.
-        expected = dev.REPO_ROOT / "scripts" / "test_dev.py"
-        self.assertTrue(os.path.isfile(expected))
+    def test_self_check_module_files_exist(self):
+        for module in dev.SELF_CHECK_MODULES:
+            expected = dev.REPO_ROOT / (
+                module.replace(".", os.sep) + ".py"
+            )
+            self.assertTrue(
+                os.path.isfile(expected), f"missing {expected}"
+            )
 
     # -- host-only ----------------------------------------------------------
 
@@ -5994,7 +6001,7 @@ class SelfCheckModuleTests(unittest.TestCase):
             dev.run, dev.is_in_container = original_run, original_in_container
         self.assertEqual(
             calls,
-            [["python3", "-m", "unittest", "-v", dev.SELF_CHECK_MODULE]],
+            [["python3", "-m", "unittest", "-v", *dev.SELF_CHECK_MODULES]],
         )
 
     def test_self_check_never_hops_into_the_container(self):

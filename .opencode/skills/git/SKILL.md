@@ -67,6 +67,20 @@ changes have been made  when the user has asked
 for a code change.
 
 
+## Pre-push hook
+
+A version-controlled pre-push hook lives at `.githooks/pre-push`. Activate
+it with `./scripts/dev.py install-hooks`, which sets
+`core.hooksPath=.githooks`.
+
+For pushes to recognized GitHub remotes, the hook checks open pull requests
+for pushed branches and disables auto-merge (`gh pr merge --disable-auto`)
+when it is enabled. It is a safety gate: if the destination is GitHub and
+any required `gh` interaction fails (missing `gh`, bad auth, API/JSON
+error, or an unparseable GitHub remote), the hook blocks the push. Fix the
+reported issue and retry; in the dev container, pass `GH_TOKEN` as described
+above.
+
 ## Commit Message
 
 **Never pass the commit message on the command line.** Write it to a temporary

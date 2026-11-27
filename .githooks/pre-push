@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+"""Thin wrapper: disable auto-merge on GitHub PRs before push.
+
+The implementation lives in scripts/pre_push_hook.py so it can be
+tested as a normal Python module.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.pre_push_hook import main  # noqa: E402
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
