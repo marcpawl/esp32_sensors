@@ -31,24 +31,28 @@ endif()
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
-# Reusable components live in the repo-root `components/` (the sml wrapper) and
-# the simulator's own components in `components/simulator/`. Neither is on this
-# project's default search path (that would be
+# Reusable components live in the repo-root `components/` (the sml wrapper),
+# with the wrapper, HAL, and logic components in their own grouping directories.
+# None is on this project's default search path (that would be
 # `components/simulator/tests/test-simulator/components/`), and each needs its
 # own entry: ESP-IDF scans a component directory one level deep, so a grouping
 # directory is not descended into.
 set(EXTRA_COMPONENT_DIRS
     "${CMAKE_CURRENT_LIST_DIR}/../../.."
     "${CMAKE_CURRENT_LIST_DIR}/../../../utility"
+    "${CMAKE_CURRENT_LIST_DIR}/../../../espidfcpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../../../hal"
+    "${CMAKE_CURRENT_LIST_DIR}/../../../logic"
     "${CMAKE_CURRENT_LIST_DIR}/../.."
 )
 
-# Restrict the component set to `main` and the simulator component under test.
-# Without this the `linux` target also tries to build chip-specific components
-# such as esp_driver_ana_cmpr, which have no linux implementation and fail to
-# resolve. `hal_board` is deliberately excluded (the two HAL implementations
-# are mutually exclusive, and the GPIO-backed drivers have no `linux` target).
-set(COMPONENTS main libsimulator)
+# `hal_stub` supplies the GPIO mock used by libespidfcpp on this target, so the
+# tests can observe the restored switch levels. `liblogic` supplies the pin map
+# used by both the component and the cases. Restricting the set keeps the linux
+# build from pulling in chip-only components. `hal_board` is deliberately
+# excluded: the two HAL implementations are mutually exclusive, and the
+# GPIO-backed drivers have no `linux` target.
+set(COMPONENTS main libsimulator liblogic hal_stub)
 set(EXCLUDE_COMPONENTS hal_board)
 
 # GCC's static analyzer for this repository's C++ code only; the module

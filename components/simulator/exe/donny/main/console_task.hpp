@@ -30,8 +30,9 @@
 
 #include "espidf_cpp/task.hpp"
 #include "logic/board.hpp"
+#include "simulator/board_simulator.hpp"
 
-namespace thermo {
+namespace thermo::simulator {
 
 /** Reads JSON lines from stdin, applies them to the board, and echoes the
  * board's state back as one JSON line.
@@ -44,7 +45,7 @@ class ConsoleRunner {
   public:
     // Shares `board` with the caller (never null): the task mutates the same
     // board the application reads from.
-    explicit ConsoleRunner(std::shared_ptr<logic::Board> board) noexcept;
+    explicit ConsoleRunner(BoardSimulator& board) noexcept;
 
     ConsoleRunner(ConsoleRunner const&) = delete;
     ConsoleRunner(ConsoleRunner&&) = default;
@@ -56,7 +57,7 @@ class ConsoleRunner {
     [[noreturn]] void run() noexcept;
 
   private:
-    std::shared_ptr<logic::Board> board_;
+    BoardSimulator& board_;
 };
 
 /** FreeRTOS task that runs a `ConsoleRunner` against the stub board.
@@ -67,7 +68,7 @@ class ConsoleRunner {
 class ConsoleTask : public espidf_cpp::Task<ConsoleRunner> {
   public:
     // Shares `board` with the caller and starts the task.
-    explicit ConsoleTask(std::shared_ptr<logic::Board> board);
+    explicit ConsoleTask(BoardSimulator& board);
 
     ConsoleTask(ConsoleTask const&) = delete;
     ConsoleTask(ConsoleTask&&) = delete;
@@ -76,4 +77,4 @@ class ConsoleTask : public espidf_cpp::Task<ConsoleRunner> {
     ConsoleTask& operator=(ConsoleTask&&) = delete;
 };
 
-}  // namespace thermo
+}  // namespace thermo::simulator

@@ -1,8 +1,7 @@
 // Host-based unit-test entry point for the simulator components.
 //
 // Built for the ESP-IDF `linux` target and executed natively (no hardware).
-// `libsimulator` is empty for now, so no `TEST_CASE` is registered yet; the
-// runner still links the component, and Unity handles the empty set.
+// The `TEST_CASE`s in `test_restore_hardware.cpp` exercise the component.
 //
 // Run with:
 //   scripts/dev.py test-simulator     (or `test`, which runs every suite)

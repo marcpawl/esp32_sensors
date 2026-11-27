@@ -10,28 +10,30 @@
 
 #include "hal/board_types.hpp"
 
-#if defined(CONFIG_IDF_TARGET_LINUX)
-#include "hal_stub/board_stub.hpp"
-#else
-#include "hal_board/board.hpp"
-#endif
+// #if defined(CONFIG_IDF_TARGET_LINUX)
+// #include "hal_stub/board_stub.hpp"
+// #else
+// #include "hal_board/board.hpp"
+// #endif
 
 namespace thermo::logic {
 
-#if defined(CONFIG_IDF_TARGET_LINUX)
-using BoardBase = thermo::hal::stub::BoardStub;
-#else
-using BoardBase = thermo::hal::board::Board;
-#endif
+// #if defined(CONFIG_IDF_TARGET_LINUX)
+// using BoardBase = thermo::hal::stub::BoardStub;
+// #else
+// using BoardBase = thermo::hal::board::Board;
+// #endif
 
 // TODO BoardBase is being defined while we are in transition,
 // it will be removed.
 // TODO unit test
-class Board : public BoardBase {
+class Board
+// : public BoardBase
+{
   public:
     Board()
-        : BoardBase({}),
-          config_switch_(espidf_cpp::Gpio{GPIO_NUM_1}),
+        // : BoardBase({}),
+        : config_switch_(espidf_cpp::Gpio{GPIO_NUM_1}),
           run_switch_(espidf_cpp::Gpio{GPIO_NUM_2}) {
         (void)gpio_install_isr_service(0);
     }

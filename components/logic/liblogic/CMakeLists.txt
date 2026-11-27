@@ -21,6 +21,7 @@ endif()
 
 idf_component_register(
     SRCS
+        "src/application.cpp"
         "src/temp_format.cpp"
         "src/rtc_buffer.cpp"
         "src/self_signed_cert.cpp"
@@ -58,6 +59,7 @@ target_sources(${COMPONENT_LIB} PRIVATE
     "include/logic/mode.hpp"
     "include/logic/mode_selection.hpp"
     "include/logic/payload.hpp"
+    "include/logic/pin_map.hpp"
     "include/logic/reboot.hpp"
     "include/logic/rom_id.hpp"
     "include/logic/rtc_state.hpp"

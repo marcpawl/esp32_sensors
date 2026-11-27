@@ -50,12 +50,14 @@
 #include <errno.h>
 #include <unistd.h>
 
+#include "espidf_cpp/nvs.hpp"
 #include "hal/ds18b20_types.hpp"
 #include "hal/led_types.hpp"
 #include "hal/wifi_types.hpp"
 #include "logic/board.hpp"
 #include "logic/reboot.hpp"
 #include "logic/rom_id.hpp"
+#include "simulator/restore_hardware.hpp"
 
 // The vendored JSON library is not analyzed. `-fanalyzer` reports findings
 // inside it (its `construct_at` path and standard-container internals) that
@@ -70,9 +72,12 @@
 
 // NOLINTEND
 
+#include "../../../../espidfcpp/libespidfcpp/include/espidf_cpp/softswitch.hpp"
+#include "../../../../espidfcpp/libespidfcpp/include/espidf_cpp/switch.hpp"
+#include "../../../../logic/liblogic/include/logic/pin_map.hpp"
 #include "espidf_cpp/switch.hpp"
 
-namespace thermo {
+namespace thermo::simulator {
 namespace {
 
 using json = nlohmann::json;
@@ -164,12 +169,8 @@ constexpr const char* to_text(espidf_cpp::SwitchState state) noexcept {
     return state == espidf_cpp::SwitchState::kOn ? "on" : "off";
 }
 
-constexpr const char* to_text(hal::LedState state) noexcept {
-    return state == hal::LedState::kOn ? "on" : "off";
-}
-
-constexpr const char* to_text(logic::Board::Power state) {
-    return state == logic::Board::Power::On ? "on" : "off";
+constexpr const char* to_text(BoardSimulator::Power state) {
+    return state == BoardSimulator::Power::On ? "on" : "off";
 }
 
 // Parses "on" / "off" (or a JSON boolean). Returns `std::nullopt` for anything
@@ -190,35 +191,6 @@ std::optional<bool> parse_switch(const json& value) {
     return std::nullopt;
 }
 
-// Parses a 16-bit temperature in hundredths of a degree. Rejects anything that
-// is not an integer in range, so a driver cannot quietly wrap a value around.
-std::optional<std::int16_t> parse_int16(const json& value) {
-    if (!value.is_number_integer()) {  // signed or unsigned
-        return std::nullopt;
-    }
-    if (value.is_number_unsigned()) {
-        const auto number = value.get<std::uint64_t>();
-        if (number > static_cast<std::uint64_t>(INT16_MAX)) {
-            return std::nullopt;
-        }
-        return static_cast<std::int16_t>(number);
-    }
-    const auto number = value.get<std::int64_t>();
-    if (number < INT16_MIN || number > INT16_MAX) {
-        return std::nullopt;
-    }
-    return static_cast<std::int16_t>(number);
-}
-
-// Parses an unsigned byte (0-255) from a JSON integer.
-std::optional<std::uint8_t> parse_u8(const json& value) {
-    const auto number = parse_int16(value);
-    if (!number.has_value() || *number < 0 || *number > 255) {
-        return std::nullopt;
-    }
-    return static_cast<std::uint8_t>(*number);
-}
-
 // Copies a JSON string into a fixed HAL credential buffer, keeping it
 // NUL-terminated. Text longer than the field allows is a protocol error and is
 // rejected (rather than truncated, which would silently change the credential).
@@ -237,378 +209,84 @@ bool assign_text(std::array<char, Capacity>& buffer, const json& value,
     return true;
 }
 
-// Looks up the optional object field `key` inside `object`. A missing key and
-// an explicit `null` both leave `out` null; anything that is not an object is
-// an error, returned as the message to report. `key` is the field name to look
-// for and `label` is how the error names it (the fully qualified path, e.g.
-// "wifi.ap"), so the two are separate: the `wifi` object's keys are `ap` and
-// `station`, not `wifi.ap` and `wifi.station`.
-std::optional<std::string> find_object(const json& object, const char* key,
-                                       std::string_view label,
-                                       const json*& out) {
-    out = nullptr;
-    const auto it = object.find(key);
-    if (it == object.end() || it->is_null()) {
-        return std::nullopt;
-    }
-    if (!it->is_object()) {
-        return std::string{label} + " must be an object or null";
-    }
-    out = &*it;
-    return std::nullopt;
-}
-
-// Looks up the optional "on"/"off" field `key` inside `object`, following the
-// same present/null/error rules as `find_object`.
-std::optional<std::string> find_switch(const json& object, const char* key,
-                                       std::string_view label,
-                                       std::optional<bool>& out) {
-    out.reset();
-    const auto it = object.find(key);
-    if (it == object.end() || it->is_null()) {
-        return std::nullopt;
-    }
-    out = parse_switch(*it);
-    if (!out.has_value()) {
-        return std::string{label} + " must be \"on\" or \"off\"";
-    }
-    return std::nullopt;
-}
-
 // --- Snapshot: the board's state as JSON -----------------------------------
 
-json sensors_json(const logic::Board& board) {
-    json sensors = json::array();
-    for (const hal::DS18B20Reading& reading : board.one_wire().read()) {
-        // `null` for a missing reading, matching the §9.3 sentinel's meaning.
-        json temp = nullptr;
-        if (reading.temp_c_x100.has_value()) {
-            temp = *reading.temp_c_x100;
-        }
-        sensors.push_back(
-            json{{"rom", logic::rom_id_to_hex(reading.rom).c_str()},
-                 {"temp_c_x100", temp}});
-    }
-    return sensors;
-}
-
-// The WiFi state. A configuration is reported only while its interface is
-// running: the HAL can only record one by starting it, so that is the only
-// state a driver can round-trip back in.
-json wifi_json(const logic::Board& board) {
-    const hal::stub::WifiRadio& wifi = board.wifi();
-
-    json ap = nullptr;
-    if (wifi.ap_running()) {
-        if (const auto& cfg = wifi.ap_config(); cfg.has_value()) {
-            ap = json{{"ssid", cfg->ssid.data()},
-                      {"password", cfg->password.data()},
-                      {"channel", cfg->channel},
-                      {"max_connections", cfg->max_connections},
-                      {"hidden", cfg->hidden}};
-        }
-    }
-
-    json station = nullptr;
-    if (wifi.station_running()) {
-        if (const auto& cfg = wifi.station_config(); cfg.has_value()) {
-            station = json{{"ssid", cfg->ssid.data()},
-                           {"password", cfg->password.data()}};
-        }
-    }
-
-    return json{{"initialized", wifi.initialized()},
-                {"ap_running", wifi.ap_running()},
-                {"station_running", wifi.station_running()},
-                {"ap", std::move(ap)},
-                {"station", std::move(station)}};
-}
-
 // The complete board state. Every field is always present.
-json snapshot(const logic::Board& board) {
-    json deep_sleep = nullptr;
-    if (const auto& slept = board.last_deep_sleep(); slept.has_value()) {
-        deep_sleep = json{{"last_s", slept->count()}};
-    }
-
+json snapshot(const simulator::BoardSimulator& board) {
     return json{
-        {"power", to_text(board.power())},
-        // TODO reset switch        {"user_switch",
-        // to_text(board.user_switch().read())},
+        {"power", to_text(board.power_)},
         {"switch_config", to_text(board.config_switch().read())},
         {"switch_run", to_text(board.run_switch().read())},
-        {"leds", json{{"green", to_text(board.green().state())},
-                      {"red", to_text(board.red().state())}}},
-        {"chip_temp_c_x100", board.chip_temperature().read()},
-        {"sensors", sensors_json(board)},
-        {"wifi", wifi_json(board)},
-        {"deep_sleep", std::move(deep_sleep)},
     };
 }
 
+espidf_cpp::SwitchState switch_state_from_bool(bool b) {
+    if (b) {
+        return espidf_cpp::SwitchState::kOn;
+    } else {
+        return espidf_cpp::SwitchState::kOff;
+    }
+}
+
 // --- Applying a document to the board --------------------------------------
-
-// Overlays the `wifi.ap` fields present in `doc` onto `cfg`.
-std::optional<std::string> apply_ap(const json& doc,
-                                    hal::AccessPointConfig& cfg) {
-    if (const auto it = doc.find("ssid");
-        it != doc.end() && !assign_text(cfg.ssid, *it, hal::kMaxSsidLength)) {
-        return "wifi.ap.ssid must be a string of at most 32 characters";
-    }
-    if (const auto it = doc.find("password");
-        it != doc.end() &&
-        !assign_text(cfg.password, *it, hal::kMaxPasswordLength)) {
-        return "wifi.ap.password must be a string of at most 63 characters";
-    }
-    if (const auto it = doc.find("channel"); it != doc.end()) {
-        const auto channel = parse_u8(*it);
-        if (!channel.has_value()) {
-            return "wifi.ap.channel must be an integer 0-255";
-        }
-        cfg.channel = *channel;
-    }
-    if (const auto it = doc.find("max_connections"); it != doc.end()) {
-        const auto max_connections = parse_u8(*it);
-        if (!max_connections.has_value()) {
-            return "wifi.ap.max_connections must be an integer 0-255";
-        }
-        cfg.max_connections = *max_connections;
-    }
-    if (const auto it = doc.find("hidden"); it != doc.end()) {
-        if (!it->is_boolean()) {
-            return "wifi.ap.hidden must be a boolean";
-        }
-        cfg.hidden = it->get<bool>();
-    }
-    return std::nullopt;
-}
-
-// Overlays the `wifi.station` fields present in `doc` onto `cfg`.
-std::optional<std::string> apply_station(const json& doc,
-                                         hal::StationConfig& cfg) {
-    if (const auto it = doc.find("ssid");
-        it != doc.end() && !assign_text(cfg.ssid, *it, hal::kMaxSsidLength)) {
-        return "wifi.station.ssid must be a string of at most 32 characters";
-    }
-    if (const auto it = doc.find("password");
-        it != doc.end() &&
-        !assign_text(cfg.password, *it, hal::kMaxPasswordLength)) {
-        return "wifi.station.password must be a string of at most 63 "
-               "characters";
-    }
-    if (!cfg.has_ssid()) {
-        return "wifi.station needs an ssid";
-    }
-    return std::nullopt;
-}
-
-// Applies the `wifi` object. `initialized` is reported but ignored (only
-// `init()` sets it).
-//
-// A configuration can only be applied *by starting* the interface, because that
-// is the only operation the HAL offers that records one. Naming a
-// configuration therefore brings the interface up; `*_running` on its own
-// starts or stops it with the configuration already recorded. Resolving each
-// configuration before its running state keeps the result independent of the
-// order the driver wrote the keys in.
-std::optional<std::string> apply_wifi(const json& wifi, logic::Board& board) {
-    if (!wifi.is_object()) {
-        return "wifi must be an object";
-    }
-
-    // --- Access point ---
-    const json* ap = nullptr;
-    if (auto error = find_object(wifi, "ap", "wifi.ap", ap);
-        error.has_value()) {
-        return error;
-    }
-    std::optional<bool> ap_running;
-    if (auto error =
-            find_switch(wifi, "ap_running", "wifi.ap_running", ap_running);
-        error.has_value()) {
-        return error;
-    }
-    if (ap != nullptr) {
-        if (ap_running.has_value() && !*ap_running) {
-            return "wifi.ap cannot be applied while wifi.ap_running is off";
-        }
-        hal::AccessPointConfig cfg =
-            board.wifi().ap_config().value_or(hal::AccessPointConfig{});
-        if (auto error = apply_ap(*ap, cfg); error.has_value()) {
-            return error;
-        }
-        if (board.wifi().start_ap(cfg) != ESP_OK) {
-            return "wifi.ap could not be applied";
-        }
-    } else if (ap_running.has_value()) {
-        if (*ap_running) {
-            const hal::AccessPointConfig cfg =
-                board.wifi().ap_config().value_or(hal::AccessPointConfig{});
-            if (board.wifi().start_ap(cfg) != ESP_OK) {
-                return "wifi.ap_running could not be applied";
-            }
-        } else if (board.wifi().stop_ap() != ESP_OK) {
-            return "wifi.ap_running could not be applied";
-        }
-    }
-
-    // --- Station ---
-    const json* station = nullptr;
-    if (auto error = find_object(wifi, "station", "wifi.station", station);
-        error.has_value()) {
-        return error;
-    }
-    std::optional<bool> station_running;
-    if (auto error = find_switch(wifi, "station_running",
-                                 "wifi.station_running", station_running);
-        error.has_value()) {
-        return error;
-    }
-    if (station != nullptr) {
-        if (station_running.has_value() && !*station_running) {
-            return "wifi.station cannot be applied while wifi.station_running "
-                   "is off";
-        }
-        hal::StationConfig cfg =
-            board.wifi().station_config().value_or(hal::StationConfig{});
-        if (auto error = apply_station(*station, cfg); error.has_value()) {
-            return error;
-        }
-        if (board.wifi().start_station(cfg) != ESP_OK) {
-            return "wifi.station could not be applied";
-        }
-    } else if (station_running.has_value()) {
-        if (*station_running) {
-            const hal::StationConfig cfg =
-                board.wifi().station_config().value_or(hal::StationConfig{});
-            if (board.wifi().start_station(cfg) != ESP_OK) {
-                return "wifi.station_running could not be applied";
-            }
-        } else if (board.wifi().stop_station() != ESP_OK) {
-            return "wifi.station_running could not be applied";
-        }
-    }
-
-    return std::nullopt;
-}
 
 // Applies the fields present in `doc`. Returns `std::nullopt` on success, or a
 // message naming the first field that could not be applied. Fields are applied
 // one at a time, so a rejected document takes effect partially; the caller
 // reports the error and still echoes the resulting state, letting the driver
 // see what did take effect.
-std::optional<std::string> apply(const json& doc, logic::Board& board) {
+std::optional<std::string> apply(const json& doc, BoardSimulator& board) {
     if (!doc.is_object()) {
         return "document must be a JSON object";
     }
+
+    espidf_cpp::Nvs<espidf_cpp::NvsMode::ReadWrite> nvs(
+        simulator::kSwitchNamespace);
+    bool reboot_needed = false;
 
     if (const auto it = doc.find("power"); it != doc.end()) {
         const auto power = parse_switch(*it);
         if (!power.has_value()) {
             return "power must be \"on\" or \"off\"";
         }
-        const bool on = *power;
-        if (!on && board.power() == logic::Board::Power::On) {
-            ESP_LOGI(kTag, "Powering off, rebooting.");
-            board.set_power(logic::Board::Power::Off);
-            std::fprintf(stdout, "MODEL %s\n", snapshot(board).dump().c_str());
-            std::fflush(stdout);
-            thermo::logic::reboot();
+        const bool power_on = *power;
+        if ((!power_on) && board.power_ == BoardSimulator::Power::On) {
+            reboot_needed = true;
         }
-        board.set_power(on ? logic::Board::Power::On
-                           : logic::Board::Power::Off);
+        board.power_ =
+            power_on ? BoardSimulator::Power::On : BoardSimulator::Power::Off;
+        ESP_LOGI(kTag, "board_power %d", board.power_);
     }
 
-    // Switches.
-    auto config_switch = std::pair{"switch_config", &board.config_switch()};
-    auto run_switch = std::pair{"switch_run", &board.run_switch()};
-    auto switches = {config_switch, run_switch};
-    for (const auto& [key, sw] : switches) {
-        const auto it = doc.find(key);
-        if (it == doc.end()) {
-            continue;
+    // Save the hardware state
+    if (const auto it = doc.find("switch_config"); it != doc.end()) {
+        const auto switch_opt = parse_switch(*it);
+        if (switch_opt.has_value()) {
+            espidf_cpp::SoftSwitch config(thermo::logic::pins::kSwitchConfig);
+            espidf_cpp::SwitchState switch_state =
+                switch_state_from_bool(switch_opt.value());
+            config.set(switch_state);
+            nvs.write(simulator::kConfigSwitchKey, switch_opt.value());
+            ESP_LOGI(kTag, "switch_config %d", switch_opt.value());
         }
-        const auto pressed = parse_switch(*it);
-        if (!pressed.has_value()) {
-            return std::string{key} + " must be \"on\" or \"off\"";
-        }
-        // TODO espidf_cpp::SwitchState switch_state = (*pressed ?
-        // espidf_cpp::SwitchState::kOn : espidf_cpp::SwitchState::kOff);
-        // TODO sw->set(*pressed ? logic::SwitchState::kOn :
-        // logic::SwitchState::kOff); When using a stub: set(sw, switch_state);
     }
-
-    // LEDs. `write()` is the only mutator the HAL offers (and it logs).
-    if (const auto leds = doc.find("leds"); leds != doc.end()) {
-        if (!leds->is_object()) {
-            return "leds must be an object";
-        }
-        for (const auto& [key, led] : {std::pair{"green", &board.green()},
-                                       std::pair{"red", &board.red()}}) {
-            const auto it = leds->find(key);
-            if (it == leds->end()) {
-                continue;
-            }
-            const auto lit = parse_switch(*it);
-            if (!lit.has_value()) {
-                return std::string{"leds."} + key +
-                       " must be \"on\" or \"off\"";
-            }
-            led->write(*lit ? hal::LedState::kOn : hal::LedState::kOff);
+    if (const auto it = doc.find("switch_run"); it != doc.end()) {
+        const auto switch_opt = parse_switch(*it);
+        if (switch_opt.has_value()) {
+            espidf_cpp::SoftSwitch run(thermo::logic::pins::kSwitchRun);
+            espidf_cpp::SwitchState switch_state =
+                switch_state_from_bool(switch_opt.value());
+            run.set(switch_state);
+            nvs.write(simulator::kRunSwitchKey, switch_opt.value());
+            ESP_LOGI(kTag, "switch_run %d", switch_opt.value());
         }
     }
 
-    // Chip temperature.
-    if (const auto it = doc.find("chip_temp_c_x100"); it != doc.end()) {
-        const auto value = parse_int16(*it);
-        if (!value.has_value()) {
-            return "chip_temp_c_x100 must be an integer in int16 range";
-        }
-        board.chip_temperature().set_celsius(*value);
-    }
-
-    // Sensors: a complete replacement of the bus contents.
-    if (const auto it = doc.find("sensors"); it != doc.end()) {
-        if (!it->is_array()) {
-            return "sensors must be an array";
-        }
-        hal::ReadingList readings;
-        for (const json& entry : *it) {
-            if (!entry.is_object()) {
-                return "each sensor must be an object";
-            }
-            const auto rom_field = entry.find("rom");
-            if (rom_field == entry.end() || !rom_field->is_string()) {
-                return "each sensor needs a string \"rom\"";
-            }
-            const auto rom =
-                logic::rom_id_from_hex(rom_field->get<std::string>());
-            if (!rom.has_value()) {
-                return "sensor \"rom\" must be 16 hex characters";
-            }
-            hal::DS18B20Reading reading{};
-            reading.rom = *rom;
-            if (const auto temp = entry.find("temp_c_x100");
-                temp != entry.end() && !temp->is_null()) {
-                const auto value = parse_int16(*temp);
-                if (!value.has_value()) {
-                    return "sensor \"temp_c_x100\" must be an integer in int16 "
-                           "range or null";
-                }
-                reading.temp_c_x100 = value;
-            }
-            if (!readings.try_push_back(reading)) {
-                return "sensors must hold at most three entries";
-            }
-        }
-        board.one_wire().set_sensors(readings);
-    }
-
-    // WiFi.
-    if (const auto wifi = doc.find("wifi"); wifi != doc.end()) {
-        if (auto error = apply_wifi(*wifi, board); error.has_value()) {
-            return error;
-        }
+    if (reboot_needed) {
+        ESP_LOGI(kTag, "Powering off, rebooting.");
+        std::fprintf(stdout, "MODEL %s\n", snapshot(board).dump().c_str());
+        std::fflush(stdout);
+        thermo::logic::reboot();
     }
 
     // `deep_sleep.last_s` is reported but ignored: the only way to set it is to
@@ -618,8 +296,7 @@ std::optional<std::string> apply(const json& doc, logic::Board& board) {
 
 }  // namespace
 
-ConsoleRunner::ConsoleRunner(std::shared_ptr<logic::Board> board) noexcept
-    : board_(std::move(board)) {}
+ConsoleRunner::ConsoleRunner(BoardSimulator& board) noexcept : board_(board) {}
 
 // `[[noreturn]]`, as required by `espidf_cpp::Task<Runner>`.
 [[noreturn]] void ConsoleRunner::run() noexcept {
@@ -653,19 +330,18 @@ ConsoleRunner::ConsoleRunner(std::shared_ptr<logic::Board> board) noexcept
         }
 
         json response;
-        if (const auto error = apply(doc, *board_); error.has_value()) {
-            response = json{{"error", *error}, {"state", snapshot(*board_)}};
+        if (const auto error = apply(doc, board_); error.has_value()) {
+            response = json{{"error", *error}, {"state", snapshot(board_)}};
         } else {
-            response = snapshot(*board_);
+            response = snapshot(board_);
         }
         std::fprintf(stdout, "MODEL %s\n", response.dump().c_str());
         std::fflush(stdout);
     }
 }
 
-ConsoleTask::ConsoleTask(std::shared_ptr<logic::Board> board)
+ConsoleTask::ConsoleTask(simulator::BoardSimulator& board)
     : espidf_cpp::Task<ConsoleRunner>(
-          ConsoleRunner(std::move(board)),
-          espidf_cpp::TaskParams{.name = "console"}) {}
+          ConsoleRunner(board), espidf_cpp::TaskParams{.name = "console"}) {}
 
-}  // namespace thermo
+}  // namespace thermo::simulator
