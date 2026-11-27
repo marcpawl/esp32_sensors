@@ -3,7 +3,7 @@
 // The switch is an ESP-IDF GPIO wrapper: it reads an active-low pin
 // (level 0 == closed/on, level != 0 == open/off). On the chip the GPIO driver
 // provides the pin; on `linux` `hal_stub` supplies the same API, so the cases
-// run on both targets. `SwitchSimulator` closes and opens a switch by driving
+// run on both targets. `SoftSwitch` closes and opens a switch by driving
 // that pin level, which `read()` observes on either target.
 
 #include <cstdint>
@@ -12,8 +12,8 @@
 #include "driver/gpio.h"
 #include "esp_err.h"
 #include "espidf_cpp/gpio.hpp"
+#include "espidf_cpp/softswitch.hpp"
 #include "espidf_cpp/switch.hpp"
-#include "espidf_cpp/testutil/switchsimulator.hpp"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "unity.h"
@@ -95,10 +95,10 @@ void expect_no_switch_isr(SwitchIsrState& state) {
 
 TEST_CASE("espidf_cpp Switch: read reflects pin level", "[espidf_cpp_switch]") {
     using thermo::espidf_cpp::Gpio;
+    using thermo::espidf_cpp::SoftSwitch;
     using thermo::espidf_cpp::SwitchState;
-    using thermo::espidf_cpp::testutil::SwitchSimulator;
 
-    SwitchSimulator sw{Gpio{kTestGpio}};
+    SoftSwitch sw{Gpio{kTestGpio}};
     make_pin_drivable(kTestGpio);
 
     TEST_ASSERT_EQUAL_INT(static_cast<int>(kTestGpio),
@@ -122,11 +122,11 @@ TEST_CASE("espidf_cpp Switch: read reflects pin level", "[espidf_cpp_switch]") {
 TEST_CASE("espidf_cpp Switch: two switches on different pins are independent",
           "[espidf_cpp_switch]") {
     using thermo::espidf_cpp::Gpio;
+    using thermo::espidf_cpp::SoftSwitch;
     using thermo::espidf_cpp::SwitchState;
-    using thermo::espidf_cpp::testutil::SwitchSimulator;
 
-    SwitchSimulator first{Gpio{kTestGpio}};
-    SwitchSimulator second{Gpio{kTestGpio2}};
+    SoftSwitch first{Gpio{kTestGpio}};
+    SoftSwitch second{Gpio{kTestGpio2}};
     make_pin_drivable(kTestGpio);
     make_pin_drivable(kTestGpio2);
 

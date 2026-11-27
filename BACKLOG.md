@@ -2,10 +2,10 @@
 
 Is .dockerignore still needed?
 
-SwitchSimulator should be in its own library
+SoftSwitch should be in its own library
 
 Add test for espidf_cpp::Switch
-SwitchSimulator should be used in Switch tests.
+SoftSwitch should be used in Switch tests.
 
 Move Board to logic
 
