@@ -115,7 +115,7 @@ class ConsoleCommandTests(unittest.TestCase):
         self.console.handle_command("switch run off")
         self.assertEqual(
             self.console.pending,
-            {"config_switch": "on", "run_switch": "off"},
+            {"switch_config": "on", "switch_run": "off"},
         )
         self.assertEqual(self.sent, [])
 
@@ -123,7 +123,7 @@ class ConsoleCommandTests(unittest.TestCase):
         self.console.handle_command("power on")
         self.console.handle_command("switch config on")
         self.console.handle_command("no power")
-        self.assertEqual(self.console.pending, {"config_switch": "on"})
+        self.assertEqual(self.console.pending, {"switch_config": "on"})
         self.console.handle_command("no switch config")
         self.assertEqual(self.console.pending, {})
 
@@ -133,7 +133,7 @@ class ConsoleCommandTests(unittest.TestCase):
         keep_running = self.console.handle_command("send")
         self.assertTrue(keep_running)
         self.assertEqual(
-            self.sent, [{"power": "on", "run_switch": "on"}]
+            self.sent, [{"power": "on", "switch_run": "on"}]
         )
 
     def test_show_requests_snapshot(self):
@@ -202,7 +202,7 @@ class ModelParsingTests(unittest.TestCase):
 
     def test_model_line_updates_current_model(self):
         console = donny.DonnyConsole(Path("/tmp/donny.elf"))
-        payload = {"run_switch": "off", "config_switch": "off"}
+        payload = {"switch_run": "off", "switch_config": "off"}
         line = donny.MODEL_PREFIX + json.dumps(payload)
 
         out = io.StringIO()
@@ -212,7 +212,7 @@ class ModelParsingTests(unittest.TestCase):
         self.assertEqual(console.model, payload)
         text = out.getvalue()
         self.assertIn("MODEL", text)
-        self.assertIn('"run_switch": "off"', text)
+        self.assertIn('"switch_run": "off"', text)
 
     def test_non_model_lines_are_ignored(self):
         console = donny.DonnyConsole(Path("/tmp/donny.elf"))
@@ -243,8 +243,8 @@ class SendTests(unittest.TestCase):
         process.stdin = stdin
         process.poll.return_value = None
         console.process = process
-        console.send({"run_switch": "on"})
-        self.assertEqual(stdin.getvalue(), '{"run_switch":"on"}\n')
+        console.send({"switch_run": "on"})
+        self.assertEqual(stdin.getvalue(), '{"switch_run":"on"}\n')
 
     def test_send_echoes_json_as_sent(self):
         console = donny.DonnyConsole(Path("/tmp/donny.elf"))
@@ -252,10 +252,10 @@ class SendTests(unittest.TestCase):
         process.stdin = io.StringIO()
         process.poll.return_value = None
         console.process = process
-        console.send({"run_switch": "on"})
+        console.send({"switch_run": "on"})
         self.assertEqual(
             console.console_snapshot(),
-            (('{"run_switch":"on"}', True),),
+            (('{"switch_run":"on"}', True),),
         )
 
     def test_failed_send_is_not_echoed(self):
@@ -264,7 +264,7 @@ class SendTests(unittest.TestCase):
         process.stdin.write.side_effect = BrokenPipeError
         process.poll.return_value = None
         console.process = process
-        console.send({"run_switch": "on"})
+        console.send({"switch_run": "on"})
         self.assertEqual(console.console_snapshot(), ())
 
 

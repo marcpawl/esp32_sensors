@@ -4,7 +4,7 @@
 // --------
 // One JSON *object* per line, in both directions. Every field is optional on
 // input: a missing field leaves that piece of board state alone, which lets a
-// driver send `{"config_switch":"on"}` to close a switch without touching
+// driver send `{"switch_config":"on"}` to close a switch without touching
 // anything else. On output every field is always present, so the document is a
 // complete snapshot of the board.
 //
@@ -335,8 +335,8 @@ json snapshot(const logic::Board& board) {
         {"power", to_text(board.power())},
         // TODO reset switch        {"user_switch",
         // to_text(board.user_switch().read())},
-        {"config_switch", to_text(board.config_switch().read())},
-        {"run_switch", to_text(board.run_switch().read())},
+        {"switch_config", to_text(board.config_switch().read())},
+        {"switch_run", to_text(board.run_switch().read())},
         {"leds", json{{"green", to_text(board.green().state())},
                       {"red", to_text(board.red().state())}}},
         {"chip_temp_c_x100", board.chip_temperature().read()},
@@ -520,8 +520,8 @@ std::optional<std::string> apply(const json& doc, logic::Board& board) {
     }
 
     // Switches.
-    auto config_switch = std::pair{"config_switch", &board.config_switch()};
-    auto run_switch = std::pair{"run_switch", &board.run_switch()};
+    auto config_switch = std::pair{"switch_config", &board.config_switch()};
+    auto run_switch = std::pair{"switch_run", &board.run_switch()};
     auto switches = {config_switch, run_switch};
     for (const auto& [key, sw] : switches) {
         const auto it = doc.find(key);

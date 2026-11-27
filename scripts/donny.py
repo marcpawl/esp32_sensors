@@ -111,8 +111,8 @@ def render_model(payload: dict) -> str:
     ordered: dict[str, object] = {}
     preferred = (
         "power",
-        "config_switch",
-        "run_switch",
+        "switch_config",
+        "switch_run",
         "leds",
         "sensors",
         "wifi",
@@ -269,7 +269,7 @@ class DonnyConsole:
         """Return model fields to restore on simulator restart."""
         model = self.model or {}
         preserved = {}
-        for key in ("power", "config_switch", "run_switch"):
+        for key in ("power", "switch_config", "switch_run"):
             if key in model:
                 preserved[key] = model[key]
         return preserved
@@ -353,7 +353,7 @@ class DonnyConsole:
             self.last_message = "sent"
             return True
         if command == "switch":
-            key = f"{args.name}_switch"
+            key = f"switch_{args.name}"
             self.pending[key] = args.state
             return True
         if command == "no":
@@ -361,7 +361,7 @@ class DonnyConsole:
             if target == "power":
                 self.pending.pop("power", None)
             elif target == "switch":
-                key = f"{args.name}_switch"
+                key = f"switch_{args.name}"
                 self.pending.pop(key, None)
             else:
                 self.last_message = (
