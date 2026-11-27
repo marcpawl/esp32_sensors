@@ -21,6 +21,14 @@
 
 namespace thermo::espidf_cpp {
 
+namespace detail {
+
+// Implemented in nvs.cpp so all Nvs modes share one non-template guard.
+void init_nvs_flash_once();
+void deinit_nvs_flash_once();
+
+}  // namespace detail
+
 enum class NvsMode : std::uint8_t {
     Read = NVS_READONLY,
     ReadWrite = NVS_READWRITE
@@ -29,8 +37,15 @@ enum class NvsMode : std::uint8_t {
 template<NvsMode mode>
 class Nvs {
   public:
+    // Initialize NVS flash once for every Nvs specialization.
+    static void init_nvs_flash() { detail::init_nvs_flash_once(); }
+
+    // Deinitialize NVS flash so a later init starts with a fresh guard.
+    static void deinit_nvs_flash() { detail::deinit_nvs_flash_once(); }
+
     // @param storge_namespace Location in NVS where the data is stored.
     Nvs(char const* storage_namespace) {
+        init_nvs_flash();
         ESP_ERROR_CHECK(nvs_open(storage_namespace,
                                  static_cast<nvs_open_mode_t>(mode), &handle_));
     }
