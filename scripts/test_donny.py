@@ -246,6 +246,139 @@ class SendTests(unittest.TestCase):
         console.send({"run_switch": "on"})
         self.assertEqual(stdin.getvalue(), '{"run_switch":"on"}\n')
 
+    def test_send_echoes_json_as_sent(self):
+        console = donny.DonnyConsole(Path("/tmp/donny.elf"))
+        process = mock.Mock()
+        process.stdin = io.StringIO()
+        process.poll.return_value = None
+        console.process = process
+        console.send({"run_switch": "on"})
+        self.assertEqual(
+            console.console_snapshot(),
+            (('{"run_switch":"on"}', True),),
+        )
+
+    def test_failed_send_is_not_echoed(self):
+        console = donny.DonnyConsole(Path("/tmp/donny.elf"))
+        process = mock.Mock()
+        process.stdin.write.side_effect = BrokenPipeError
+        process.poll.return_value = None
+        console.process = process
+        console.send({"run_switch": "on"})
+        self.assertEqual(console.console_snapshot(), ())
+
+
+class ConsoleTranscriptTests(unittest.TestCase):
+    """Simulator output and sent text share a bounded transcript."""
+
+    def test_stdout_lines_are_recorded_as_received(self):
+        console = donny.DonnyConsole(Path("/tmp/donny.elf"))
+        received = [
+            donny.MODEL_PREFIX + '{"power":"on"}',
+            "unsolicited simulator text",
+        ]
+        with mock.patch.object(console, "_prompt_hint"), \
+                redirect_stdout(io.StringIO()):
+            console._read_stdout(io.StringIO("\n".join(received) + "\n"))
+        self.assertEqual(
+            console.console_snapshot(),
+            tuple((line, False) for line in received),
+        )
+
+    def test_stderr_logs_are_recorded_as_received(self):
+        console = donny.DonnyConsole(Path("/tmp/donny.elf"))
+        console._read_stderr(io.StringIO("I (1) console: hello\n"))
+        self.assertEqual(
+            console.console_snapshot(),
+            (("I (1) console: hello", False),),
+        )
+        self.assertEqual(
+            console.events.get_nowait(), ("log", "I (1) console: hello")
+        )
+
+    def test_history_keeps_only_the_most_recent_lines(self):
+        console = donny.DonnyConsole(Path("/tmp/donny.elf"))
+        for index in range(donny.CONSOLE_HISTORY + 3):
+            console._record_console(str(index))
+        snapshot = console.console_snapshot()
+        self.assertEqual(len(snapshot), donny.CONSOLE_HISTORY)
+        self.assertEqual(snapshot[0], ("3", False))
+        self.assertEqual(
+            snapshot[-1], (str(donny.CONSOLE_HISTORY + 2), False))
+
+    def test_snapshot_does_not_expose_internal_list(self):
+        console = donny.DonnyConsole(Path("/tmp/donny.elf"))
+        console._record_console("first")
+        snapshot = console.console_snapshot()
+        console._record_console("second")
+        self.assertEqual(snapshot, (("first", False),))
+
+
+class TUILayoutTests(unittest.TestCase):
+    """The top row is split 25% / 25% / 50%, above a 5-line prompt."""
+
+    def setUp(self):
+        self.stdscr = mock.Mock()
+        self.stdscr.getmaxyx.return_value = (30, 80)
+        console = donny.DonnyConsole(Path("/tmp/donny.elf"))
+        self.tui = donny.DonnyTUI(self.stdscr, console)
+        self.windows = []
+
+        def newwin(height, width, top, left):
+            win = mock.Mock()
+            win.getmaxyx.return_value = (height, width)
+            self.windows.append((height, width, top, left, win))
+            return win
+
+        self.patches = [
+            mock.patch.object(donny.curses, "newwin", side_effect=newwin),
+            mock.patch.object(donny.curses, "curs_set"),
+            mock.patch.object(donny.curses, "doupdate"),
+        ]
+        for patcher in self.patches:
+            patcher.start()
+
+    def tearDown(self):
+        for patcher in reversed(self.patches):
+            patcher.stop()
+
+    def test_layout_uses_quarter_quarter_half_widths(self):
+        self.assertEqual(
+            self.tui._layout(),
+            (30, 80, 25, 20, 20, 40, 5),
+        )
+
+    def test_draw_creates_board_settings_console_and_commands(self):
+        self.tui._draw(force=True)
+        self.assertEqual(
+            [(height, width, top, left)
+             for height, width, top, left, _ in self.windows],
+            [
+                (25, 20, 0, 0),
+                (25, 20, 0, 20),
+                (25, 40, 0, 40),
+                (5, 80, 25, 0),
+            ],
+        )
+
+    def test_console_pane_reverses_sent_lines(self):
+        self.tui.console._record_console("received from simulator")
+        self.tui.console._record_console('{"power":"on"}', sent=True)
+        self.tui._draw(force=True)
+        console_window = self.windows[2][4]
+        titles = []
+        content = {}
+        for call in console_window.addnstr.call_args_list:
+            row, column, text = call.args[:3]
+            if row == 0:
+                titles.append(text)
+            else:
+                content[text] = call.args[4]
+        self.assertIn(" Console ", titles)
+        self.assertEqual(content["received from simulator"],
+                         donny.curses.A_NORMAL)
+        self.assertEqual(content['{"power":"on"}'], donny.curses.A_REVERSE)
+
 
 if __name__ == "__main__":
     unittest.main()

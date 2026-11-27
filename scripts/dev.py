@@ -529,7 +529,7 @@ FW_BINARY = "mcgowan.bin"
 
 # Host-side unit tests for this script itself (stdlib `unittest`), run by
 # `scripts/dev.py self-check`.
-SELF_CHECK_MODULE = "scripts.test_dev"
+SELF_CHECK_MODULES = ("scripts.test_dev", "scripts.test_pre_push_hook")
 
 # Source extensions clang-tidy analyzes. The compile database lists every
 # translation unit, including the generated C/assembly ESP-IDF compiles; only
@@ -1358,6 +1358,7 @@ def _escalated_scopes(
 
 
 _ANALYZER_FLAG = "--analyzer"
+ANALYZER_SCRIPT = "scripts/gcc_analyzer.py"
 _TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
 _FALSE_VALUES = frozenset({"0", "false", "no", "off"})
 
@@ -1395,44 +1396,49 @@ def _analyzer_define(analyzer: bool) -> str:
     return f"-DTHERMO_GCC_ANALYZER={'ON' if analyzer else 'OFF'}"
 
 
-def _root_build_commands(analyzer: bool = False) -> list[list[str]]:
+def _analyzer_command(build_dir: Path) -> list[str]:
+    """The driver argv that analyzes one configured build tree. Pure."""
+    return [sys.executable, str(REPO_ROOT / ANALYZER_SCRIPT), str(build_dir)]
+
+
+def _root_build_commands() -> list[list[str]]:
     """Configure and build the root aggregator project. Pure (testable).
 
     The root project is plain CMake (not ESP-IDF); its `SUBPROJECTS` cache
     variable defaults to every aggregate target, so `dev.py` passes no list
-    and keeps no copy of one. `THERMO_GCC_ANALYZER` is passed on the configure
-    command line and forwarded to each subproject's `idf.py`. Returns the
-    configure command followed by the build command.
+    and keeps no copy of one. `THERMO_GCC_ANALYZER` is always passed as OFF:
+    `build --analyzer` is a static check driven by `gcc_analyzer.py`, not a
+    build. Returns the configure command followed by the build command.
     """
     return [
         [
             "cmake",
             "-S", ".",
             "-B", ROOT_BUILD_DIR,
-            _analyzer_define(analyzer),
+            _analyzer_define(False),
         ],
         ["cmake", "--build", ROOT_BUILD_DIR],
     ]
 
 
-def _build_all(analyzer: bool = False) -> int:
+def _build_all() -> int:
     """Build every subproject through the root aggregator. No container hop."""
-    for cmd in _root_build_commands(analyzer):
+    for cmd in _root_build_commands():
         rc = run(cmd)
         if rc != 0:
             return rc
     return 0
 
 
-def _build_project_directory(directory: Path, analyzer: bool = False) -> int:
+def _build_project_directory(directory: Path) -> int:
     """Build one project directory, pinning the target its defaults select.
 
     A `linux` project is pinned to the `linux` target and builds into
     `build_linux`; everything else builds into `build_esp32s3`. The analyzer
-    define is passed explicitly so a previous `--analyzer=false` cannot stick
-    in the CMake cache.
+    define is passed explicitly so a previous analyzer run cannot stick in
+    the CMake cache.
     """
-    define = _analyzer_define(analyzer)
+    define = _analyzer_define(False)
     target = _project_target(directory)
     relative = _repo_relative(directory)
     build_dir = TEST_BUILD_DIR if target == "linux" else FW_BUILD_DIR
@@ -1444,17 +1450,48 @@ def _build_project_directory(directory: Path, analyzer: bool = False) -> int:
     return run(_idf(relative, build_dir, define, "build"))
 
 
-def _build_project(directory: str, analyzer: bool = False) -> int:
+def _analyze_project_directory(directory: Path) -> int:
+    """Analyze one project directory without building or linking it.
+
+    `reconfigure` refreshes `compile_commands.json` with
+    `-DTHERMO_GCC_ANALYZER=ON`; the driver then replays only the analyzer's
+    compile commands with their output redirected to the null device. A
+    `linux` project still needs its target pinned first, just as a build
+    does.
+    """
+    target = _project_target(directory)
+    relative = _repo_relative(directory)
+    build_dir = TEST_BUILD_DIR if target == "linux" else FW_BUILD_DIR
+    define = _analyzer_define(True)
+    if target == "linux" and _needs_set_target(directory / build_dir, target):
+        rc = run(_idf(relative, build_dir, define, "--preview",
+                      "set-target", "linux"))
+        if rc != 0:
+            return rc
+    rc = run(_idf(relative, build_dir, define, "reconfigure"))
+    if rc != 0:
+        return rc
+    return run(_analyzer_command(directory / build_dir))
+
+
+def _build_project(directory: str) -> int:
     """Build the project at a repo-relative `directory`. No container hop."""
-    return _build_project_directory(REPO_ROOT / directory, analyzer)
+    return _build_project_directory(REPO_ROOT / directory)
 
 
-def _build_project_directories(
-    directories: list[Path], analyzer: bool = False
-) -> int:
+def _build_project_directories(directories: list[Path]) -> int:
     """Build the project directories in order. No container hop."""
     for directory in directories:
-        rc = _build_project_directory(directory, analyzer)
+        rc = _build_project_directory(directory)
+        if rc != 0:
+            return rc
+    return 0
+
+
+def _analyze_project_directories(directories: list[Path]) -> int:
+    """Analyze the project directories in order. No container hop."""
+    for directory in directories:
+        rc = _analyze_project_directory(directory)
         if rc != 0:
             return rc
     return 0
@@ -1491,7 +1528,7 @@ def cmd_build(arguments: list[str], analyzer: bool = False) -> int:
     `build .`                  → the same, spelled explicitly
     `build mcgowan`            → just the ESP32-S3 firmware, analyzer off
     `build components/utility` → every project in or under that directory
-    `build --analyzer`         → any of the above, analyzer on
+    `build --analyzer`         → analyze every selected project statically
     `build --analyzer=false`   → explicitly off (the default)
 
     With no directory, the current directory is used; a caller outside the
@@ -1505,6 +1542,11 @@ def cmd_build(arguments: list[str], analyzer: bool = False) -> int:
     `dev.py build .` in a component directory therefore builds the closest
     enclosing tree that does have a project, and the climb ends at the
     repository root; a root with no project at all is a bug in this script.
+
+    With `--analyzer`, the selected projects are configured with the analyzer
+    flag and their compile databases are replayed through `gcc_analyzer.py`:
+    GCC runs to assembly in `/dev/null`, so the check produces no objects and
+    never links. It does not use the root aggregator; normal builds still do.
     """
     directories = _start_directories(arguments)
     if directories is None:
@@ -1520,14 +1562,16 @@ def cmd_build(arguments: list[str], analyzer: bool = False) -> int:
     rc = _ensure_submodules()
     if rc != 0:
         return rc
-    if directories == [REPO_ROOT]:
-        # The whole tree, however it was reached: one CMake build over the
-        # root aggregator.
-        return _build_all(analyzer)
     projects = _build_directories(directories)
     if projects is None:
         return 1
-    return _build_project_directories(projects, analyzer)
+    if analyzer:
+        return _analyze_project_directories(projects)
+    if directories == [REPO_ROOT]:
+        # The whole tree, however it was reached: one CMake build over the
+        # root aggregator.
+        return _build_all()
+    return _build_project_directories(projects)
 
 
 def cmd_build_test_espidf_cpp_linux() -> int:
@@ -1804,7 +1848,7 @@ def cmd_self_check() -> int:
             file=sys.stderr,
         )
         return 1
-    return run(["python3", "-m", "unittest", "-v", SELF_CHECK_MODULE])
+    return run(["python3", "-m", "unittest", "-v", *SELF_CHECK_MODULES])
 
 
 def _format_scopes(arguments: list[str]) -> list[Path] | None:
@@ -2462,16 +2506,24 @@ def _tidy_exclude_header_filter() -> str:
 
 
 def cmd_install_hooks() -> int:
-    """Activate the version-controlled git hooks (.githooks/pre-commit).
-
-    The hook rejects commits whose staged C/C++ files are not
-    clang-formatted.
-    """
+    """Activate the version-controlled git hooks in .githooks/."""
     rc = run([
         "git", "-C", str(REPO_ROOT), "config", "core.hooksPath", ".githooks"
     ])
     if rc == 0:
-        print("Installed git hooks: core.hooksPath -> .githooks")
+        hooks_dir = REPO_ROOT / ".githooks"
+        hooks = sorted(
+            p.name for p in hooks_dir.iterdir()
+            if p.is_file() and not p.name.startswith(".")
+        ) if hooks_dir.is_dir() else []
+        if hooks:
+            print(
+                "Installed git hooks: core.hooksPath -> .githooks ("
+                + ", ".join(hooks)
+                + ")"
+            )
+        else:
+            print("Installed git hooks: core.hooksPath -> .githooks")
     return rc
 
 
@@ -3789,10 +3841,10 @@ def _build_parser() -> argparse.ArgumentParser:
         type=_bool_value,
         default=False,
         metavar="BOOL",
-        help="enable GCC's static analyzer (-fanalyzer); off by default. Use "
-             "`--analyzer` for on, or `--analyzer=false` for off (the value "
-             "must be attached with `=`, so a following directory is not "
-             "consumed)",
+        help="run GCC's analyzer (-fanalyzer) as a static check, with no "
+             "object files or linking; off by default. Use `--analyzer` for "
+             "on, or `--analyzer=false` for off (the value must be attached "
+             "with `=`, so a following directory is not consumed)",
     )
     build_parser.add_argument(
         "directories",

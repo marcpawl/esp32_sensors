@@ -189,6 +189,11 @@ first failure; `./scripts/dev.py test-linux <directory>` runs only the suites
 in or under that directory, so one suite is
 `./scripts/dev.py test-linux components/utility/tests/test-utility`.
 
+Linux builds run this repository's C++ with UBSan and ASan. See the `cmake`
+skill for the helper modules, target filtering, runtime linking, and why
+`build --analyzer` skips instrumentation. CI keeps the two builds separate so
+the host suites execute instrumented code.
+
 The on-target `esp_timer` suite runs with `./scripts/dev.py test-esp32` (or
 `./scripts/dev.py test-esp32 components/hal/tests/esp_timer/board`): it builds
 the ESP32-S3 project, flashes it, and waits up to 120 seconds for the suite's

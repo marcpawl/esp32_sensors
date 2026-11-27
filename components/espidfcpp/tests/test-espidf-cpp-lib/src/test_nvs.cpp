@@ -11,7 +11,7 @@
 //   * missing keys returning the caller's default;
 //   * empty strings, strings at the maximum length, and the length reported
 //     when a stored string is longer than the caller's buffer;
-//   * two handles open at the same time;
+//   * two handles open at the same time, including two writers;
 //   * the compile-time contract that `Nvs<NvsMode::Read>` has no writes.
 
 #include "espidf_cpp/nvs.hpp"
@@ -155,7 +155,7 @@ TEST_CASE("nvs: a missing numeric key returns the default", "[nvs]") {
 TEST_CASE("nvs: a missing string key returns the default", "[nvs]") {
     clear_namespace();
     Nvs<NvsMode::ReadWrite> nvs{kNamespace};
-    const auto value = nvs.read_str<16>("absent_str", "fallback");
+    const auto value = nvs.read<16>("absent_str", "fallback");
     TEST_ASSERT_EQUAL_STRING("fallback", value.c_str());
     TEST_ASSERT_EQUAL_UINT(8, value.size());
 }
@@ -166,7 +166,7 @@ TEST_CASE("nvs: an empty string round trips", "[nvs]") {
     clear_namespace();
     Nvs<NvsMode::ReadWrite> nvs{kNamespace};
     nvs.write("empty", static_string<8>{""});
-    const auto value = nvs.read_str<8>("empty", "fallback");
+    const auto value = nvs.read<8>("empty", "fallback");
     TEST_ASSERT_TRUE(value.empty());
     TEST_ASSERT_EQUAL_STRING("", value.c_str());
 }
@@ -176,7 +176,7 @@ TEST_CASE("nvs: a string at maximum length round trips", "[nvs]") {
     Nvs<NvsMode::ReadWrite> nvs{kNamespace};
     constexpr char kMax[] = "12345678";
     nvs.write("max", static_string<8>{kMax});
-    const auto value = nvs.read_str<8>("max", "fallback");
+    const auto value = nvs.read<8>("max", "fallback");
     TEST_ASSERT_EQUAL_STRING(kMax, value.c_str());
     TEST_ASSERT_EQUAL_UINT(8, value.size());
 }
@@ -210,6 +210,36 @@ TEST_CASE("nvs: two handles opened at once see the same values", "[nvs]") {
     TEST_ASSERT_EQUAL_HEX32(0x12345678U,
                             reader.read("shared", std::uint32_t{0}));
     writer.write("shared_str", static_string<8>{"visible"});
-    TEST_ASSERT_EQUAL_STRING(
-        "visible", reader.read_str<8>("shared_str", "fallback").c_str());
+    TEST_ASSERT_EQUAL_STRING("visible",
+                             reader.read<8>("shared_str", "fallback").c_str());
+}
+
+TEST_CASE("nvs: two writers opened at once see each other's writes", "[nvs]") {
+    clear_namespace();
+    Nvs<NvsMode::ReadWrite> first{kNamespace};
+    Nvs<NvsMode::ReadWrite> second{kNamespace};
+
+    // Distinct keys keep the test independent of last-writer-wins behavior.
+    first.write("first_u32", std::uint32_t{0xA5A5A5A5U});
+    first.write("first_str", static_string<8>{"one"});
+    second.write("second_u32", std::uint32_t{0x5A5A5A5AU});
+    second.write("second_str", static_string<8>{"two"});
+
+    TEST_ASSERT_EQUAL_HEX32(0xA5A5A5A5U,
+                            first.read("first_u32", std::uint32_t{0}));
+    TEST_ASSERT_EQUAL_HEX32(0xA5A5A5A5U,
+                            second.read("first_u32", std::uint32_t{0}));
+    TEST_ASSERT_EQUAL_HEX32(0x5A5A5A5AU,
+                            first.read("second_u32", std::uint32_t{0}));
+    TEST_ASSERT_EQUAL_HEX32(0x5A5A5A5AU,
+                            second.read("second_u32", std::uint32_t{0}));
+
+    TEST_ASSERT_EQUAL_STRING("one",
+                             first.read<8>("first_str", "fallback").c_str());
+    TEST_ASSERT_EQUAL_STRING("one",
+                             second.read<8>("first_str", "fallback").c_str());
+    TEST_ASSERT_EQUAL_STRING("two",
+                             first.read<8>("second_str", "fallback").c_str());
+    TEST_ASSERT_EQUAL_STRING("two",
+                             second.read<8>("second_str", "fallback").c_str());
 }

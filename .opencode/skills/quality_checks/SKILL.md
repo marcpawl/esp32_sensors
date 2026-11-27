@@ -19,6 +19,7 @@ commands with ad-hoc `docker compose run`.
 |---|---|---|
 | Python style | `./scripts/dev.py pycodestyle` | PEP 8 with pycodestyle's defaults (79 columns). Every `*.py` file **and** every extensionless Python shebang script; `third_party/` is excluded. |
 | Build | `./scripts/dev.py build [DIRECTORY...]` | Every discovered ESP-IDF project in/under the directories (from the repository root, all of them through the root aggregator). Fetches the pinned submodules first. Warnings are errors in this repository's own code (`cmake/compiler-warnings.cmake`); ESP-IDF and `third_party/` keep their upstream defaults. |
+| GCC analyzer | `./scripts/dev.py build --analyzer [DIRECTORY...]` | Reconfigures the selected projects with `-fanalyzer` and replays only this repository's compile commands with `-S -o /dev/null`. It is a static check: no objects are written and nothing is linked. Findings are errors under `-Werror`. |
 | Static analysis | `./scripts/dev.py clang-tidy [<DIRECTORY>\|<FILE>]... [--fix]` | The repository's `.clang-tidy` check set plus clang-tidy's defaults (`clang-diagnostic-*`, `clang-analyzer-*`) over the named files and every source under the named directories (default: the current directory); a directory that is itself an ESP-IDF project uses that project's compile database, any other draws from every database below it. A named header borrows a matching translation unit's flags. Quoted globs are expanded by `dev.py`. `--fix` applies the suggested fixes in place (re-run `format` afterwards). **Reads the compile databases; it never builds them**, so `build` must have run first. Vendored code is excluded. |
 | Formatting (apply) | `./scripts/dev.py format [<DIRECTORY>\|<FILE>]...` | clang-format over the named files and the tracked **and untracked** C/C++ sources under the named directories (default: the current directory; from the repository root that is `mcgowan/` and `components/`). Quoted globs are expanded by `dev.py`. |
 | Formatting (check) | `./scripts/dev.py format-check [<DIRECTORY>\|<FILE>]...` | Same file set as `format`, fails instead of editing. |
@@ -39,12 +40,17 @@ Cheapest first:
 2. `./scripts/dev.py format-check-staged` (or `format-check` for the whole
    tree)
 3. `./scripts/dev.py build`
-4. `./scripts/dev.py clang-tidy`
-5. `./scripts/dev.py test-linux`
+4. `./scripts/dev.py build --analyzer`
+5. `./scripts/dev.py clang-tidy`
+6. `./scripts/dev.py test-linux`
 
 CI (`build-and-test` in `.github/workflows/ci.yml`) adds
 `./scripts/dev.py self-check` before them and runs `format-check` (not the
-staged variant) at the end.
+staged variant) at the end. It runs the analyzer as a separate static gate,
+then `clean`, then a plain `build` immediately before `test-linux` so the
+suites execute with UBSan and ASan. The clean makes the switch explicit;
+`dev.py` also passes the cache variable in both directions, so no stale
+analyzer flags survive.
 
 `format` is the exception to the ordering: run it **before** the checks when
 sources changed, so `format-check` verifies rather than reports.

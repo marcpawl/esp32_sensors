@@ -23,7 +23,7 @@ invoked from the host.
 | host | `down` | Stop/remove the dev containers with `docker compose down --remove-orphans` |
 | both | `submodules` | Fetch the pinned git submodules (`third_party/sml`) |
 | both | `clean [DIRECTORY\|FILE...]` | Remove git-ignored build products (`git clean -fdX`) from the selected paths, preserving CLion compile database and run configs; default: the repository root |
-| both | `build [--analyzer[=BOOL]] [DIRECTORY...]` | Build every project in/under the directories (from the root, the root aggregator builds everything); the analyzer is off by default, `--analyzer` enables it |
+| both | `build [--analyzer[=BOOL]] [DIRECTORY...]` | Build every project in/under the directories (from the root, the root aggregator builds everything); with `--analyzer`, reconfigure each project and run GCC's analyzer as a static check instead — no objects, no linking |
 | both | `build-test-espidf-cpp-linux` | Build the `libespidfcpp` unit tests for `linux` |
 | both | `test-linux [DIRECTORY...]` | Build and run every discovered host (`linux`) suite in path order, or those in/under the directories |
 | both | `test-esp32 [DIRECTORY...]` | Build, flash, and run every discovered on-target test project through its `test.py` driver |
@@ -52,11 +52,17 @@ Set `ESP32_PORT` (e.g. `/dev/ttyACM0`) to target another serial device.
 `dev.py shell` joins its arguments with spaces and runs the result through
 `bash -c`; it does not quote them. An argument containing spaces therefore
 splits into several words, which a command such as `gh pr create --title`
-reports as `unknown arguments`. Quote the whole command as one argument:
+reports as `unknown arguments`. Pass `dev.py shell` one quoted command, not
+several arguments that only look quoted:
 
 ```bash
 ./scripts/dev.py shell "gh pr create --title 'A multi-word title' --body-file .git/pr.md"
 ```
+
+Quoting just the value on the host, as in
+`./scripts/dev.py shell gh pr create --title "A multi-word title" ...`, does
+not help: `dev.py shell` drops those quotes while joining the words, so
+`--analyzer` or `multi-word` becomes a separate option.
 
 Prefer a `--body-file`/`-F` flag over inline text for anything long, and put
 the file inside the repository: the container cannot see the host's `/tmp`.
@@ -190,8 +196,23 @@ same `dev.py` command.
 `build`, `test-linux`, `test-esp32`, and `clang-tidy` fetch missing submodules
 first.
 
-`build` and the `linux` test commands run `idf.py set-target` only when a
-project's build tree is new or records a different target. `set-target`
+Every `linux` project builds this repository's C++ components with UBSan and
+ASan (`cmake/ubsan.cmake`, `cmake/asan.cmake`). Checks abort on the first
+finding; the runtime entries in `docker/docker-compose.yml` also add stack
+traces and make reports from code outside our targets fatal. ASan pins `-g`
+and frame pointers for those stacks. Chip builds get neither. The standalone
+`test-utility` abort programs link both runtimes explicitly, because they are
+plain executables rather than component libraries. `build --analyzer` is a
+separate static check: it reconfigures each selected project, replays the
+analyzer's compile commands with `-S -o /dev/null`, and never produces objects
+or links an ELF. GCC's analyzer misreads the runtime checks as uninitialised
+reads, so the two modes cannot share a translation unit. In analyzer mode
+`dev.py` visits the discovered projects directly; the root aggregator is used
+only for normal builds.
+
+`build`, `build --analyzer`, and the `linux` test commands run `idf.py`
+`set-target` only when a project's build tree is new or records a different
+target. `set-target`
 deletes ninja's dependency log, so running it before every build recompiles
 every translation unit; a second, unchanged build now does no work.
 

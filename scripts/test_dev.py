@@ -38,6 +38,7 @@ if str(SCRIPTS_DIR) not in sys.path:
 
 import clion_manual_test  # noqa: E402
 import dev  # noqa: E402  (import after sys.path is prepared)
+import gcc_analyzer  # noqa: E402
 
 
 class BuildShellCommandTests(unittest.TestCase):
@@ -1889,10 +1890,6 @@ class SubprojectBuildTests(unittest.TestCase):
             ],
         )
 
-    def test_root_build_can_enable_the_analyzer(self):
-        commands = dev._root_build_commands(analyzer=True)
-        self.assertIn("-DTHERMO_GCC_ANALYZER=ON", commands[0])
-
     def test_build_parser_defaults_the_analyzer_off(self):
         args = dev._build_parser().parse_args(["build", "mcgowan"])
         self.assertFalse(args.analyzer)
@@ -1930,6 +1927,70 @@ class SubprojectBuildTests(unittest.TestCase):
             ["build", "--analyzer=true", "--analyzer=false"]
         )).analyzer)
 
+    def test_analyzer_command_runs_the_driver_on_the_build_tree(self):
+        build_dir = dev.REPO_ROOT / "mcgowan" / dev.FW_BUILD_DIR
+        self.assertEqual(
+            dev._analyzer_command(build_dir),
+            [
+                sys.executable,
+                str(dev.REPO_ROOT / dev.ANALYZER_SCRIPT),
+                str(build_dir),
+            ],
+        )
+
+    def test_analyzer_build_reconfigures_then_runs_only_the_driver(self):
+        calls = []
+
+        def fake_run(cmd, cwd=dev.REPO_ROOT):
+            calls.append(list(cmd))
+            return 0
+
+        with (
+            mock.patch.object(dev, "change_to_container"),
+            mock.patch.object(dev, "_ensure_submodules", return_value=0),
+            mock.patch.object(dev, "run", fake_run),
+        ):
+            self.assertEqual(
+                dev.cmd_build([str(dev.REPO_ROOT / "mcgowan")],
+                              analyzer=True),
+                0,
+            )
+        build_dir = dev.REPO_ROOT / "mcgowan" / dev.FW_BUILD_DIR
+        self.assertEqual(
+            calls,
+            [
+                dev._idf(
+                    "mcgowan", dev.FW_BUILD_DIR,
+                    "-DTHERMO_GCC_ANALYZER=ON", "reconfigure",
+                ),
+                dev._analyzer_command(build_dir),
+            ],
+        )
+        self.assertFalse(any("build" in cmd for cmd in calls))
+
+    def test_root_analyzer_visits_every_discovered_project(self):
+        calls = []
+
+        def fake_run(cmd, cwd=dev.REPO_ROOT):
+            calls.append(list(cmd))
+            return 0
+
+        with (
+            mock.patch.object(dev, "change_to_container"),
+            mock.patch.object(dev, "_ensure_submodules", return_value=0),
+            mock.patch.object(dev, "run", fake_run),
+        ):
+            self.assertEqual(dev.cmd_build([], analyzer=True), 0)
+        projects = dev._discover_projects(dev.REPO_ROOT)
+        reconfigures = [cmd for cmd in calls if "reconfigure" in cmd]
+        drivers = [
+            cmd for cmd in calls
+            if any(dev.ANALYZER_SCRIPT in word for word in cmd)
+        ]
+        self.assertEqual(len(reconfigures), len(projects))
+        self.assertEqual(len(drivers), len(projects))
+        self.assertFalse(any("build" in cmd for cmd in calls))
+
     def test_firmware_binary_is_named_after_the_project(self):
         # The ESP-IDF project name (mcgowan/) determines the app binary name.
         self.assertEqual(dev.FW_BINARY, "mcgowan.bin")
@@ -1958,6 +2019,45 @@ class SubprojectBuildTests(unittest.TestCase):
             for project in dev._discover_projects(dev.REPO_ROOT)
         }
         self.assertNotIn(dev.REPO_ROOT, directories)
+
+
+class GccAnalyzerDriverTests(unittest.TestCase):
+    """Pure command rewriting in `scripts/gcc_analyzer.py`."""
+
+    def test_only_entries_with_the_analyzer_flag_are_selected(self):
+        analyzed = {"command": "g++ -fanalyzer -o a.obj -c a.cpp"}
+        ordinary = {"command": "gcc -o b.o -c b.c"}
+        self.assertEqual(
+            gcc_analyzer._analyzer_entries([analyzed, ordinary]),
+            [analyzed],
+        )
+
+    def test_arguments_arrays_are_supported(self):
+        entry = {
+            "arguments": ["g++", "-fanalyzer", "-o", "a.obj", "-c",
+                          "a.cpp"],
+        }
+        self.assertEqual(gcc_analyzer._analyzer_entries([entry]), [entry])
+
+    def test_analysis_command_redirects_the_object_output_to_devnull(self):
+        tokens = [
+            "g++", "-Wall", "-fanalyzer", "-o", "a.obj", "-c", "a.cpp",
+        ]
+        self.assertEqual(
+            gcc_analyzer._analysis_command(tokens),
+            [
+                "g++", "-Wall", "-fanalyzer", "-S", "-o", os.devnull,
+                "a.cpp",
+            ],
+        )
+        self.assertEqual(
+            tokens,
+            ["g++", "-Wall", "-fanalyzer", "-o", "a.obj", "-c", "a.cpp"],
+        )
+
+    def test_analysis_command_rejects_an_unexpected_command_shape(self):
+        with self.assertRaises(ValueError):
+            gcc_analyzer._analysis_command(["g++", "-c", "a.cpp"])
 
 
 class ProjectDiscoveryTests(unittest.TestCase):
@@ -3387,6 +3487,99 @@ def _compose_dev_environment() -> dict[str, str | None]:
             environment[name] = value.strip() or None
         return environment
     raise AssertionError("docker-compose.yml has no `environment:` block")
+
+
+class UbsanConfigurationTests(unittest.TestCase):
+    """Every linux project builds our C++ code with fatal UBSan checks.
+
+    This is a build-level gate rather than a `dev.py` option: all host
+    builds get it, chip builds get none of it, and the runtime options in
+    the container make a finding abort with a useful stack.
+    """
+
+    def test_every_linux_project_enables_ubsan(self):
+        projects = [p for p in dev._discover_projects(dev.REPO_ROOT)
+                    if p.target == "linux"]
+        self.assertGreater(len(projects), 1)
+        for project in projects:
+            cmake = (project.directory / "CMakeLists.txt").read_text()
+            with self.subTest(project=project.name):
+                self.assertIn("cmake/ubsan.cmake", cmake)
+                self.assertIn("thermo_enable_ubsan()", cmake)
+
+    def test_chip_projects_do_not_enable_ubsan(self):
+        for project in dev._discover_projects(dev.REPO_ROOT):
+            if project.target == "linux":
+                continue
+            cmake = (project.directory / "CMakeLists.txt").read_text()
+            with self.subTest(project=project.name):
+                self.assertNotIn("ubsan", cmake)
+
+    def test_helper_instruments_only_our_targets_and_aborts(self):
+        helper = (dev.REPO_ROOT / "cmake" / "ubsan.cmake").read_text()
+        self.assertIn("-fsanitize=undefined", helper)
+        self.assertIn("-fno-sanitize-recover=all", helper)
+        self.assertIn("thermo_own_component_targets(targets)", helper)
+        self.assertIn("CONFIG_IDF_TARGET_LINUX", helper)
+
+    def test_helper_skips_instrumentation_for_the_analyzer_gate(self):
+        # GCC's analyzer reads UBSan instrumentation as uninitialised reads;
+        # running both in one translation unit fails on untouched code.
+        helper = (dev.REPO_ROOT / "cmake" / "ubsan.cmake").read_text()
+        self.assertIn("THERMO_GCC_ANALYZER", helper)
+
+    def test_compose_sets_fatal_ubsan_runtime_options(self):
+        options = _compose_dev_environment().get("UBSAN_OPTIONS", "")
+        options = options.strip('"')
+        self.assertIn("halt_on_error=1", options)
+        self.assertIn("print_stacktrace=1", options)
+
+
+class AddressSanitizerTests(unittest.TestCase):
+    """Every linux project builds our C++ code with fatal ASan checks.
+
+    `-g` and frame pointers are pinned so a report has a usable stack,
+    and chip builds must see none of the sanitizer flags.
+    """
+
+    def test_every_linux_project_enables_asan(self):
+        projects = [p for p in dev._discover_projects(dev.REPO_ROOT)
+                    if p.target == "linux"]
+        self.assertGreater(len(projects), 1)
+        for project in projects:
+            cmake = (project.directory / "CMakeLists.txt").read_text()
+            with self.subTest(project=project.name):
+                self.assertIn("cmake/asan.cmake", cmake)
+                self.assertIn("thermo_enable_asan()", cmake)
+
+    def test_chip_projects_do_not_enable_asan(self):
+        for project in dev._discover_projects(dev.REPO_ROOT):
+            if project.target == "linux":
+                continue
+            cmake = (project.directory / "CMakeLists.txt").read_text()
+            with self.subTest(project=project.name):
+                self.assertNotIn("asan", cmake)
+
+    def test_helper_instruments_only_our_targets_with_debug_symbols(self):
+        helper = (dev.REPO_ROOT / "cmake" / "asan.cmake").read_text()
+        self.assertIn("-fsanitize=address", helper)
+        self.assertIn("-fno-omit-frame-pointer", helper)
+        self.assertIn("-g", helper)
+        self.assertIn("thermo_own_component_targets(targets)", helper)
+        self.assertIn("CONFIG_IDF_TARGET_LINUX", helper)
+
+    def test_helper_skips_instrumentation_for_the_analyzer_gate(self):
+        # The analyzer and the runtime sanitizers are separate gates; neither
+        # helper may instrument a translation unit that -fanalyzer reads.
+        helper = (dev.REPO_ROOT / "cmake" / "asan.cmake").read_text()
+        self.assertIn("THERMO_GCC_ANALYZER", helper)
+
+    def test_compose_sets_fatal_asan_runtime_options(self):
+        options = _compose_dev_environment().get("ASAN_OPTIONS", "")
+        options = options.strip('"')
+        self.assertIn("halt_on_error=1", options)
+        self.assertIn("abort_on_error=1", options)
+        self.assertIn("print_stacktrace=1", options)
 
 
 class SshMountTests(unittest.TestCase):
@@ -5787,20 +5980,23 @@ class PythonSourceDiscoveryTests(unittest.TestCase):
     # -- the real repository ------------------------------------------------
 
     def test_the_repository_enumerates_its_expected_python_sources(self):
-        # Pins the actual set: the two dev.py scripts, the manual CLion
-        # wizard, and both on-target test drivers. A new Python source is meant
-        # to be noticed here, so this list is a deliberate tripwire rather
-        # than an over-broad assertion.
+        # Pins the actual set. A new Python source is meant to be noticed
+        # here, so this list is a deliberate tripwire rather than an
+        # over-broad assertion.
         self.assertEqual(
             dev.python_sources(),
             [
+                ".githooks/pre-push",
                 "components/espidfcpp/tests/test-espidf-cpp-esp32/test.py",
                 "components/hal/tests/esp_timer/board/test.py",
                 "scripts/clion_manual_test.py",
                 "scripts/dev.py",
                 "scripts/donny.py",
+                "scripts/gcc_analyzer.py",
+                "scripts/pre_push_hook.py",
                 "scripts/test_dev.py",
                 "scripts/test_donny.py",
+                "scripts/test_pre_push_hook.py",
             ],
         )
 
@@ -5853,17 +6049,22 @@ class SelfCheckModuleTests(unittest.TestCase):
     re-execs itself), so a run there would pass vacuously.
     """
 
-    def test_self_check_module_points_at_this_file(self):
-        # `SELF_CHECK_MODULE` is dotted (`scripts.test_dev`); its final
-        # component must name this test module so `python3 -m unittest` runs
-        # these tests.
-        self.assertEqual(dev.SELF_CHECK_MODULE, "scripts.test_dev")
-        self.assertEqual(dev.SELF_CHECK_MODULE.split(".")[-1], "test_dev")
+    def test_self_check_modules_include_this_file(self):
+        # `SELF_CHECK_MODULES` are dotted module names; they must include
+        # this test module so `python3 -m unittest` runs these tests.
+        self.assertIn("scripts.test_dev", dev.SELF_CHECK_MODULES)
+        self.assertIn(
+            "scripts.test_pre_push_hook", dev.SELF_CHECK_MODULES
+        )
 
-    def test_self_check_module_file_exists(self):
-        # From the repo root, `scripts/test_dev.py` must exist.
-        expected = dev.REPO_ROOT / "scripts" / "test_dev.py"
-        self.assertTrue(os.path.isfile(expected))
+    def test_self_check_module_files_exist(self):
+        for module in dev.SELF_CHECK_MODULES:
+            expected = dev.REPO_ROOT / (
+                module.replace(".", os.sep) + ".py"
+            )
+            self.assertTrue(
+                os.path.isfile(expected), f"missing {expected}"
+            )
 
     # -- host-only ----------------------------------------------------------
 
@@ -5901,7 +6102,7 @@ class SelfCheckModuleTests(unittest.TestCase):
             dev.run, dev.is_in_container = original_run, original_in_container
         self.assertEqual(
             calls,
-            [["python3", "-m", "unittest", "-v", dev.SELF_CHECK_MODULE]],
+            [["python3", "-m", "unittest", "-v", *dev.SELF_CHECK_MODULES]],
         )
 
     def test_self_check_never_hops_into_the_container(self):

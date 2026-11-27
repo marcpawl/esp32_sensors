@@ -57,7 +57,8 @@ ScanSnapshot make_snapshot(Config& cfg, SensorManager& sensors,
     if (roms.empty() && !discovered.empty()) {
         for (const auto& rom : discovered) {
             cfg.mappings.push_back(
-                {logic::rom_id_to_hex(rom), logic::rom_id_to_hex(rom)});
+                {std::string{logic::rom_id_to_hex(rom).c_str()},
+                 std::string{logic::rom_id_to_hex(rom).c_str()}});
         }
     }
     return snap;

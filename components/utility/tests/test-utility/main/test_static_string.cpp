@@ -11,22 +11,21 @@
 // exercise exact-fit operations only. The asserting overflow paths are verified
 // in forked children that exec the standalone `static_string_assert` program
 // (see the [assert] cases at the end).
-// NOLINTBEGIN
-#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
-#pragma GCC diagnostic ignored "-Wanalyzer-malloc-leak"
-#include <string>
-#pragma GCC diagnostic pop
-// NOLINTEND
-
 #include <compare>
 #include <cstddef>
 #include <cstring>
+#include <string_view>
+#include <type_traits>
+#include <utility>
 
 #include "assert_unity_support.hpp"
 #include "unity.h"
 #include "utility/static_string.hpp"
 
 using thermo::utility::static_string;
+
+static_assert(std::is_constructible_v<static_string<8>, std::string_view>);
+static_assert(!std::is_convertible_v<std::string_view, static_string<8>>);
 
 // --- constexpr usability ----------------------------------------------------
 //
@@ -60,6 +59,49 @@ constexpr bool static_string_constexpr_builds() {
     s = static_string<8>(static_cast<const char*>(nullptr));
     const bool null_construct = s.empty();
 
+    // A string view keeps its full bounded length, including embedded NULs.
+    const static_string<8> from_view(std::string_view("view"));
+    constexpr char view_raw[] = {'a', '\0', 'b'};
+    const static_string<8> from_view_with_nul(
+        std::string_view(view_raw, sizeof(view_raw)));
+    const bool string_view_constructed =
+        from_view.size() == 4 && from_view.c_str()[4] == '\0' &&
+        from_view_with_nul.size() == 3 && from_view_with_nul[1] == '\0';
+
+    // std::move is deliberate here: it must select the rvalue overload, even
+    // though static_string is trivially copyable and clang-tidy treats the move
+    // as a no-op. Reading a moved-from source is the behavior under test.
+    // NOLINTBEGIN(performance-move-const-arg,bugprone-use-after-move,clang-analyzer-cplusplus.Move)
+    // Cross-capacity operations stay usable in constant expressions.
+    static_string<3> source("abc");
+    const static_string<8> copied(source);
+    static_string<8> copy_assigned;
+    copy_assigned = source;
+    const static_string<8> moved(std::move(source));
+    static_string<3> move_source("abc");
+    static_string<8> move_assigned;
+    move_assigned = std::move(move_source);
+    const bool cross_capacity =
+        copied.size() == 3 && copy_assigned.size() == 3 && moved.size() == 3 &&
+        source.empty() && move_assigned.size() == 3 && move_source.empty();
+
+    // The explicit same-capacity special members stay constexpr too.
+    static_string<8> same_source("xyz");
+    const static_string<8> same_copied(same_source);
+    static_string<8> same_copy_assigned;
+    same_copy_assigned = same_source;
+    static_string<8> same_move_source("xyz");
+    const static_string<8> same_moved(std::move(same_move_source));
+    static_string<8> same_move_source_2("xyz");
+    static_string<8> same_move_assigned;
+    same_move_assigned = std::move(same_move_source_2);
+    const bool same_capacity =
+        same_copied.size() == 3 && same_copy_assigned.size() == 3 &&
+        same_moved.size() == 3 && same_move_assigned.size() == 3 &&
+        same_source.size() == 3 && same_move_source.size() == 3 &&
+        same_move_source_2.size() == 3;
+    // NOLINTEND(performance-move-const-arg,bugprone-use-after-move,clang-analyzer-cplusplus.Move)
+
     s.assign("abc");
     const bool assigned = s.size() == 3 && s.c_str()[0] == 'a';
 
@@ -77,7 +119,8 @@ constexpr bool static_string_constexpr_builds() {
     const bool emptied_by_pop = s.empty() && s.c_str()[0] == '\0';
 
     return built && pushed && filled && null_assign && null_append &&
-           null_construct && assigned && cleared && back && back_mutated &&
+           null_construct && string_view_constructed && cross_capacity &&
+           same_capacity && assigned && cleared && back && back_mutated &&
            popped && emptied_by_pop;
 }
 
@@ -145,6 +188,167 @@ TEST_CASE("static_string: a null C string yields an empty string",
     static_string<8> s(static_cast<const char*>(nullptr));
     TEST_ASSERT_EQUAL_UINT(0, s.size());
     TEST_ASSERT_EQUAL_STRING("", s.c_str());
+}
+
+TEST_CASE("static_string: construct from a string_view", "[static_string]") {
+    constexpr std::string_view view("hello");
+    const static_string<8> s(view);
+    TEST_ASSERT_EQUAL_UINT(5, s.size());
+    TEST_ASSERT_FALSE(s.empty());
+    TEST_ASSERT_EQUAL_STRING("hello", s.c_str());
+}
+
+TEST_CASE("static_string: an empty string_view yields an empty string",
+          "[static_string]") {
+    const static_string<8> s(std::string_view{});
+    TEST_ASSERT_EQUAL_UINT(0, s.size());
+    TEST_ASSERT_EQUAL_STRING("", s.c_str());
+}
+
+TEST_CASE("static_string: construct from an exactly-capacity string_view",
+          "[static_string]") {
+    constexpr std::string_view view("12345678");
+    const static_string<8> s(view);
+    TEST_ASSERT_EQUAL_UINT(8, s.size());
+    TEST_ASSERT_EQUAL_STRING("12345678", s.c_str());
+}
+
+TEST_CASE("static_string: string_view construction preserves embedded NULs",
+          "[static_string]") {
+    constexpr char raw[] = {'a', '\0', 'b'};
+    const static_string<8> s(std::string_view(raw, sizeof(raw)));
+    TEST_ASSERT_EQUAL_UINT(3, s.size());
+    TEST_ASSERT_EQUAL_CHAR('a', s[0]);
+    TEST_ASSERT_EQUAL_CHAR('\0', s[1]);
+    TEST_ASSERT_EQUAL_CHAR('b', s[2]);
+    TEST_ASSERT_EQUAL_CHAR('\0', s.c_str()[3]);
+}
+
+TEST_CASE("static_string: copy-construct across capacities when the value fits",
+          "[static_string]") {
+    const static_string<3> source("abc");
+    const static_string<8> destination(source);
+    TEST_ASSERT_EQUAL_STRING("abc", destination.c_str());
+    TEST_ASSERT_EQUAL_UINT(3, destination.size());
+    TEST_ASSERT_EQUAL_STRING("abc", source.c_str());
+}
+
+TEST_CASE("static_string: move-construct across capacities empties the source",
+          "[static_string]") {
+    static_string<3> source("abc");
+    // The rvalue overload is selected deliberately; inspecting the source
+    // afterward verifies that this overload empties it.
+    // NOLINTBEGIN(performance-move-const-arg,bugprone-use-after-move,clang-analyzer-cplusplus.Move)
+    const static_string<8> destination(std::move(source));
+    TEST_ASSERT_EQUAL_STRING("abc", destination.c_str());
+    TEST_ASSERT_EQUAL_UINT(3, destination.size());
+    TEST_ASSERT_TRUE(source.empty());
+    // NOLINTEND(performance-move-const-arg,bugprone-use-after-move,clang-analyzer-cplusplus.Move)
+}
+
+TEST_CASE("static_string: copy-assign across capacities when the value fits",
+          "[static_string]") {
+    static_string<8> destination("original");
+    const static_string<3> source("abc");
+    destination = source;
+    TEST_ASSERT_EQUAL_STRING("abc", destination.c_str());
+    TEST_ASSERT_EQUAL_UINT(3, destination.size());
+    TEST_ASSERT_EQUAL_STRING("abc", source.c_str());
+}
+
+TEST_CASE("static_string: move-assign across capacities empties the source",
+          "[static_string]") {
+    static_string<8> destination("original");
+    static_string<3> source("abc");
+    // The rvalue overload is selected deliberately; inspecting the source
+    // afterward verifies that this overload empties it.
+    // NOLINTBEGIN(performance-move-const-arg,bugprone-use-after-move,clang-analyzer-cplusplus.Move)
+    destination = std::move(source);
+    TEST_ASSERT_EQUAL_STRING("abc", destination.c_str());
+    TEST_ASSERT_EQUAL_UINT(3, destination.size());
+    TEST_ASSERT_TRUE(source.empty());
+    // NOLINTEND(performance-move-const-arg,bugprone-use-after-move,clang-analyzer-cplusplus.Move)
+}
+
+TEST_CASE("static_string: cross-capacity copy preserves embedded NULs",
+          "[static_string]") {
+    static_string<5> source;
+    constexpr char raw[] = {'a', '\0', 'b'};
+    source.append(raw, sizeof(raw));
+
+    static_string<8> destination(source);
+    TEST_ASSERT_EQUAL_UINT(3, destination.size());
+    TEST_ASSERT_EQUAL_CHAR('a', destination[0]);
+    TEST_ASSERT_EQUAL_CHAR('\0', destination[1]);
+    TEST_ASSERT_EQUAL_CHAR('b', destination[2]);
+    TEST_ASSERT_EQUAL_CHAR('\0', destination.c_str()[3]);
+}
+
+TEST_CASE("static_string: copy-construct same capacity preserves both values",
+          "[static_string]") {
+    const static_string<8> source("abc");
+    const static_string<8> destination(source);
+    TEST_ASSERT_EQUAL_STRING("abc", destination.c_str());
+    TEST_ASSERT_EQUAL_UINT(3, destination.size());
+    TEST_ASSERT_EQUAL_STRING("abc", source.c_str());
+}
+
+TEST_CASE("static_string: move-construct same capacity copies the value",
+          "[static_string]") {
+    static_string<8> source("abc");
+    // The rvalue overload is selected deliberately; the defaulted move is a
+    // byte copy, so the source is unchanged and static_string stays trivially
+    // copyable for SequenceLock.
+    // NOLINTBEGIN(performance-move-const-arg,bugprone-use-after-move,clang-analyzer-cplusplus.Move)
+    const static_string<8> destination(std::move(source));
+    TEST_ASSERT_EQUAL_STRING("abc", destination.c_str());
+    TEST_ASSERT_EQUAL_UINT(3, destination.size());
+    TEST_ASSERT_EQUAL_STRING("abc", source.c_str());
+    // NOLINTEND(performance-move-const-arg,bugprone-use-after-move,clang-analyzer-cplusplus.Move)
+}
+
+TEST_CASE("static_string: copy-assign same capacity preserves both values",
+          "[static_string]") {
+    static_string<8> destination("original");
+    const static_string<8> source("abc");
+    destination = source;
+    TEST_ASSERT_EQUAL_STRING("abc", destination.c_str());
+    TEST_ASSERT_EQUAL_UINT(3, destination.size());
+    TEST_ASSERT_EQUAL_STRING("abc", source.c_str());
+}
+
+TEST_CASE("static_string: copy-assign to self keeps the value",
+          "[static_string]") {
+    static_string<8> s("abc");
+    static_string<8>& alias = s;
+    s = alias;
+    TEST_ASSERT_EQUAL_STRING("abc", s.c_str());
+    TEST_ASSERT_EQUAL_UINT(3, s.size());
+}
+
+TEST_CASE("static_string: move-assign same capacity copies the value",
+          "[static_string]") {
+    static_string<8> destination("original");
+    static_string<8> source("abc");
+    // The rvalue overload is selected deliberately; the defaulted move is a
+    // byte copy, so the source is unchanged and static_string stays trivially
+    // copyable for SequenceLock.
+    // NOLINTBEGIN(performance-move-const-arg,bugprone-use-after-move,clang-analyzer-cplusplus.Move)
+    destination = std::move(source);
+    TEST_ASSERT_EQUAL_STRING("abc", destination.c_str());
+    TEST_ASSERT_EQUAL_UINT(3, destination.size());
+    TEST_ASSERT_EQUAL_STRING("abc", source.c_str());
+    // NOLINTEND(performance-move-const-arg,bugprone-use-after-move,clang-analyzer-cplusplus.Move)
+}
+
+TEST_CASE("static_string: move-assign to self keeps the value",
+          "[static_string]") {
+    static_string<8> s("abc");
+    static_string<8>& alias = s;
+    // NOLINTNEXTLINE(performance-move-const-arg)
+    s = std::move(alias);
+    TEST_ASSERT_EQUAL_STRING("abc", s.c_str());
+    TEST_ASSERT_EQUAL_UINT(3, s.size());
 }
 
 // --- c_str always NUL-terminated --------------------------------------------
@@ -496,8 +700,8 @@ TEST_CASE("static_string: an embedded NUL is an ordinary character",
 namespace {
 
 // Path to the sibling static_string_assert program (shared by the cases below).
-const std::string& assert_program() {
-    static const std::string path =
+const assert_test_support::AssertProgramPath& assert_program() {
+    static const auto path =
         assert_test_support::assert_program_path("static_string_assert");
     return path;
 }
@@ -508,6 +712,12 @@ TEST_CASE("static_string: constructing past capacity aborts",
           "[static_string][assert]") {
     TEST_ASSERT_TRUE(assert_test_support::assert_program_aborted(
         assert_program(), "construct_overflow"));
+}
+
+TEST_CASE("static_string: string_view construction past capacity aborts",
+          "[static_string][assert]") {
+    TEST_ASSERT_TRUE(assert_test_support::assert_program_aborted(
+        assert_program(), "construct_string_view_overflow"));
 }
 
 TEST_CASE("static_string: append past capacity aborts",

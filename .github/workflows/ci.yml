@@ -116,17 +116,38 @@ jobs:
         run: |
           python3 ./scripts/dev.py format-check
 
-      - name: build
+      # GCC's analyzer and the runtime sanitizers cannot share a translation
+      # unit: the analyzer reads the checks they insert as uninitialised reads.
+      # This gate only analyzes: dev.py reconfigures and replays the compile
+      # commands with output to /dev/null, building no objects or ELFs.
+      - name: static analysis with GCC analyzer
         if: steps.changes.outputs.docs_only != 'true'
         run: |
           python3 ./scripts/dev.py build --analyzer
 
-      # Static analysis reads the compile databases the build just produced, so
-      # it must run after `build` (it never builds anything itself).
+      # Static analysis reads the compile databases the reconfigure just
+      # produced, so it must run after the analyzer gate (it never builds).
       - name: clang-tidy
         if: steps.changes.outputs.docs_only != 'true'
         run: |
           python3 ./scripts/dev.py clang-tidy /project
+
+      # Start the sanitizer build from a clean tree: it makes the switch from
+      # analysis to instrumented compilation explicit. The analyzer emitted no
+      # objects and dev.py resets the cache flag itself, so this is clarity
+      # rather than stale-state repair.
+      - name: clean before sanitizer build
+        if: steps.changes.outputs.docs_only != 'true'
+        run: |
+          python3 ./scripts/dev.py clean
+
+      # Rebuild without --analyzer immediately before the tests: that is how
+      # the ELFs they run get UBSan and ASan. dev.py passes the cache variable
+      # explicitly in both directions, so the switch cannot leave stale flags.
+      - name: build with sanitizers
+        if: steps.changes.outputs.docs_only != 'true'
+        run: |
+          python3 ./scripts/dev.py build
 
       - name: tests
         if: steps.changes.outputs.docs_only != 'true'

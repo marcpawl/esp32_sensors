@@ -108,8 +108,9 @@ set_property(CACHE SUBPROJECTS PROPERTY STRINGS
     test-esp_timer-board)
 
 # GCC static analyzer for the C++ subprojects. Off by default; pass
-# `-DTHERMO_GCC_ANALYZER=ON` (or `scripts/dev.py build --analyzer`) to turn it
-# on.
+# `-DTHERMO_GCC_ANALYZER=ON` to put the flags in the compile databases.
+# `scripts/dev.py build --analyzer` reconfigures with this option and runs the
+# analyzer as a static check, without building or linking.
 option(THERMO_GCC_ANALYZER
     "Enable GCC's static analyzer for the C++ subprojects" OFF)
 

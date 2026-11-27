@@ -40,7 +40,7 @@ RomId make_rom(std::initializer_list<unsigned> bytes) {
 
 TEST_CASE("rom: to_hex emits 16 uppercase characters", "[rom_id]") {
     const RomId id = make_rom({0x28, 0xFF, 0x64, 0x1D, 0x00, 0x00, 0x00, 0x7A});
-    const std::string hex = rom_id_to_hex(id);
+    const auto hex = rom_id_to_hex(id);
     TEST_ASSERT_EQUAL_UINT(16, hex.size());
     TEST_ASSERT_EQUAL_STRING("28FF641D0000007A", hex.c_str());
 }
