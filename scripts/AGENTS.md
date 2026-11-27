@@ -52,11 +52,17 @@ Set `ESP32_PORT` (e.g. `/dev/ttyACM0`) to target another serial device.
 `dev.py shell` joins its arguments with spaces and runs the result through
 `bash -c`; it does not quote them. An argument containing spaces therefore
 splits into several words, which a command such as `gh pr create --title`
-reports as `unknown arguments`. Quote the whole command as one argument:
+reports as `unknown arguments`. Pass `dev.py shell` one quoted command, not
+several arguments that only look quoted:
 
 ```bash
 ./scripts/dev.py shell "gh pr create --title 'A multi-word title' --body-file .git/pr.md"
 ```
+
+Quoting just the value on the host, as in
+`./scripts/dev.py shell gh pr create --title "A multi-word title" ...`, does
+not help: `dev.py shell` drops those quotes while joining the words, so
+`--analyzer` or `multi-word` becomes a separate option.
 
 Prefer a `--body-file`/`-F` flag over inline text for anything long, and put
 the file inside the repository: the container cannot see the host's `/tmp`.
