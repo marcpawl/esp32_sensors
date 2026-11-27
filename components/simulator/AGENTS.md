@@ -78,7 +78,7 @@ resulting state back as one JSON line on stdout.
   is started in `app_main` **before** the `Application` is constructed, so a
   driver can already drive the board while the application boots.
 - **Partial documents.** Every input field is optional; a missing field leaves
-  that piece of board state alone, so `{"config_switch":"on"}` closes one pole
+  that piece of board state alone, so `{"switch_config":"on"}` closes one pole
   without touching anything else. Output is always a complete snapshot.
 - **Idempotent round trip.** Feeding the task's own output back in changes
   nothing and yields byte-identical output, so a driver can read the state,
@@ -87,7 +87,7 @@ resulting state back as one JSON line on stdout.
   board's interface can set them: `wifi.initialized` (only `init()` sets it),
   `deep_sleep.last_s` (the only way to sleep is to end the process), and — see
   below — `wifi.ap` / `wifi.station` when the interface is down.
-- **Fields.** `user_switch`, `config_switch`, `run_switch` (`"on"`/`"off"`);
+- **Fields.** `user_switch`, `switch_config`, `switch_run` (`"on"`/`"off"`);
   `leds.{green,red}` (`"on"`/`"off"`, a JSON bool is accepted on input);
   `chip_temp_c_x100` (int16); `sensors` (an array of at most three
   `{rom, temp_c_x100}`, a complete replacement of the bus, `null` temperature
