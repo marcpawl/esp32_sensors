@@ -7,7 +7,7 @@
 // Coverage:
 //
 //   * write/read round trips for uint8/uint16/uint32, int8/int16/int32,
-//     float, and static_string;
+//     float, static_string, and bool;
 //   * missing keys returning the caller's default;
 //   * empty strings, strings at the maximum length, and the length reported
 //     when a stored string is longer than the caller's buffer;
@@ -52,6 +52,7 @@ static_assert(!HasNumericWrite<NvsMode::Read, std::uint8_t>);
 static_assert(!HasNumericWrite<NvsMode::Read, float>);
 static_assert(!HasStringWrite<NvsMode::Read, 8>);
 static_assert(HasNumericWrite<NvsMode::ReadWrite, std::uint8_t>);
+static_assert(HasNumericWrite<NvsMode::ReadWrite, bool>);
 static_assert(HasNumericWrite<NvsMode::ReadWrite, float>);
 static_assert(HasStringWrite<NvsMode::ReadWrite, 8>);
 
@@ -86,6 +87,20 @@ TEST_CASE("nvs: deinit_nvs_flash allows a fresh init", "[nvs]") {
     Nvs<NvsMode::ReadWrite> nvs{kNamespace};
     nvs.write("after_deinit", std::uint8_t{0x5AU});
     TEST_ASSERT_EQUAL_HEX8(0x5AU, nvs.read("after_deinit", std::uint8_t{0}));
+}
+
+// --- Boolean ----------------------------------------------------------------
+
+TEST_CASE("nvs: bool write and read round trip", "[nvs]") {
+    clear_namespace();
+    Nvs<NvsMode::ReadWrite> nvs{kNamespace};
+    nvs.write("true", true);
+    nvs.write("false", false);
+
+    TEST_ASSERT_TRUE(nvs.read("true", false));
+    TEST_ASSERT_FALSE(nvs.read("false", true));
+    TEST_ASSERT_TRUE(nvs.read("absent_true", true));
+    TEST_ASSERT_FALSE(nvs.read("absent_false", false));
 }
 
 // --- Unsigned integers ------------------------------------------------------
