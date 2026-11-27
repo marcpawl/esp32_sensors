@@ -24,6 +24,7 @@
 #include <compare>
 #include <cstddef>
 #include <cstring>
+#include <string_view>
 #include <type_traits>
 
 #include "utility/static_vector.hpp"
@@ -124,6 +125,42 @@ class static_string {
     constexpr static_string(const char* s) {
         buf_[0] = '\0';  // Guarantee a terminator before any copy.
         assign(s);
+    }
+
+    // Copy from a string view. Asserts if `s` does not fit (size() exceeds
+    // capacity()). Explicit because a view is not implicitly a fixed-capacity
+    // string. Unlike the C-string overload, embedded NULs are preserved because
+    // the full bounded length is copied.
+    explicit constexpr static_string(std::string_view const& s) {
+        buf_[0] = '\0';  // Guarantee a terminator before any copy.
+        append(s.data(), s.size());
+    }
+
+    // Same-capacity copy/move are defaulted, not implicit: naming them makes
+    // the interface explicit while keeping the type trivially copyable, which
+    // SequenceLock<static_string<N>> requires. Storage is inline, so the
+    // defaulted move copies the characters and leaves the source unchanged;
+    // only the cross-capacity move overload empties its source.
+    constexpr static_string(const static_string&) = default;
+    constexpr static_string(static_string&&) = default;
+
+    // Copy from a smaller capacity. M < N guarantees
+    // the source value fits without a runtime check.
+    template<std::size_t M>
+    constexpr static_string(const static_string<M>& other) {
+        static_assert(M < N, "source capacity exceeds destination capacity");
+        buf_[0] = '\0';  // Guarantee a terminator before any copy.
+        append(other.data(), other.size());
+    }
+
+    // Move from a smaller capacity by copying the characters (inline storage
+    // has a different capacity) and emptying the source.
+    template<std::size_t M>
+    constexpr static_string(static_string<M>&& other) {
+        static_assert(M < N, "source capacity exceeds destination capacity");
+        buf_[0] = '\0';  // Guarantee a terminator before any copy.
+        append(other.data(), other.size());
+        other.clear();
     }
 
     // Number of characters, excluding the terminating NUL.
@@ -251,6 +288,33 @@ class static_string {
     constexpr void clear() noexcept {
         size_ = 0;
         buf_[0] = '\0';
+    }
+
+    // Same-capacity copy/move assignment, defaulted for the same reason as the
+    // constructors: they are explicitly part of the interface but keep the type
+    // trivially copyable. The defaulted move is a byte copy; the cross-capacity
+    // move assignment below empties its source.
+    constexpr static_string& operator=(const static_string&) = default;
+    constexpr static_string& operator=(static_string&&) = default;
+
+    // Copy-assign from a smaller capacity.
+    template<std::size_t M>
+    constexpr static_string& operator=(const static_string<M>& other) {
+        static_assert(M < N, "source capacity exceeds destination capacity");
+        clear();
+        append(other.data(), other.size());
+        return *this;
+    }
+
+    // Move-assign from a smaller capacity by copying the characters and
+    // emptying the source.
+    template<std::size_t M>
+    constexpr static_string& operator=(static_string<M>&& other) {
+        static_assert(M < N, "source capacity exceeds destination capacity");
+        clear();
+        append(other.data(), other.size());
+        other.clear();
+        return *this;
     }
 
     // --- Comparison ---------------------------------------------------------

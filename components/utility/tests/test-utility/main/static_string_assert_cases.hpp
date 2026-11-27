@@ -14,6 +14,7 @@
 
 #include <array>
 #include <span>
+#include <string_view>
 
 #include "assert_test_support.hpp"
 #include "utility/static_string.hpp"
@@ -25,6 +26,13 @@ using assert_test_support::Case;
 // Constructing past capacity: strlen("abcdefgh") == 8 > capacity() == 4.
 inline void construct_overflow() {
     thermo::utility::static_string<4> s("abcdefgh");
+    (void)s;
+}
+
+// Constructing from a view past capacity: size() == 8 > capacity() == 4.
+inline void construct_string_view_overflow() {
+    constexpr std::string_view view("abcdefgh");
+    thermo::utility::static_string<4> s(view);
     (void)s;
 }
 
@@ -60,8 +68,9 @@ inline void pop_back_when_empty() {
     s.pop_back();
 }
 
-inline constexpr std::array<Case, 6> kCases = {{
+inline constexpr std::array<Case, 7> kCases = {{
     {"construct_overflow", &construct_overflow},
+    {"construct_string_view_overflow", &construct_string_view_overflow},
     {"append_overflow", &append_overflow},
     {"assign_overflow", &assign_overflow},
     {"push_back_when_full", &push_back_when_full},
