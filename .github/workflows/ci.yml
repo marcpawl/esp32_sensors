@@ -132,6 +132,15 @@ jobs:
         run: |
           python3 ./scripts/dev.py clang-tidy /project
 
+      # Start the sanitizer build from a clean tree: it makes the switch from
+      # analysis to instrumented compilation explicit. The analyzer emitted no
+      # objects and dev.py resets the cache flag itself, so this is clarity
+      # rather than stale-state repair.
+      - name: clean before sanitizer build
+        if: steps.changes.outputs.docs_only != 'true'
+        run: |
+          python3 ./scripts/dev.py clean
+
       # Rebuild without --analyzer immediately before the tests: that is how
       # the ELFs they run get UBSan and ASan. dev.py passes the cache variable
       # explicitly in both directions, so the switch cannot leave stale flags.

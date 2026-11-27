@@ -47,8 +47,10 @@ Cheapest first:
 CI (`build-and-test` in `.github/workflows/ci.yml`) adds
 `./scripts/dev.py self-check` before them and runs `format-check` (not the
 staged variant) at the end. It runs the analyzer as a separate static gate,
-then a plain `build` immediately before `test-linux` so the suites execute
-with UBSan and ASan.
+then `clean`, then a plain `build` immediately before `test-linux` so the
+suites execute with UBSan and ASan. The clean makes the switch explicit;
+`dev.py` also passes the cache variable in both directions, so no stale
+analyzer flags survive.
 
 `format` is the exception to the ordering: run it **before** the checks when
 sources changed, so `format-check` verifies rather than reports.

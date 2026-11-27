@@ -95,10 +95,10 @@ return early when `THERMO_GCC_ANALYZER` is on, and `dev.py` replays the
 compile database through `scripts/gcc_analyzer.py` with `-S -o /dev/null`, so
 GCC stops before object emission and linking. GCC's analyzer misreads the
 checks inserted by the sanitizers as uninitialised reads and fails on correct
-code. CI runs `build --analyzer` first, then a plain `build` immediately
-before `test-linux`, so the suites execute instrumented code. `dev.py` passes
-the cache variable explicitly in both directions, so switching modes cannot
-leave stale flags.
+code. CI runs `build --analyzer` first, then `clean` and a plain `build`
+immediately before `test-linux`, so the suites execute instrumented code.
+`dev.py` passes the cache variable explicitly in both directions, so switching
+modes cannot leave stale flags.
 
 ## Adding a source
 
