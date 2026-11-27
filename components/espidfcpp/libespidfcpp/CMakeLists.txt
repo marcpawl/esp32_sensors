@@ -56,8 +56,8 @@ target_sources(${COMPONENT_LIB} PRIVATE
     "include/espidf_cpp/nvs.hpp"
     "include/espidf_cpp/one_message_queue.hpp"
     "include/espidf_cpp/ring_buffer.hpp"
+    "include/espidf_cpp/softswitch.hpp"
     "include/espidf_cpp/switch.hpp"
-    "include/espidf_cpp/testutil/switchsimulator.hpp"
     "include/espidf_cpp/task.hpp"
     "include/espidf_cpp/timer.hpp"
 )

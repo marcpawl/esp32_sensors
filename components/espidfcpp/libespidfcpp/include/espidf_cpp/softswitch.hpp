@@ -8,21 +8,21 @@
 
 #include "espidf_cpp/switch.hpp"
 
-namespace thermo::espidf_cpp::testutil {
+namespace thermo::espidf_cpp {
 
-// Simulate an hardware input switch, by having a set method that will
-// change the value.
-class SwitchSimulator : public thermo::espidf_cpp::Switch {
+// A soft switch is not physically connected to the board: software sets it
+// on or off by driving the GPIO pin it is built for.
+class SoftSwitch : public Switch {
   public:
     // `gpio` is the input pin.
-    explicit SwitchSimulator(Gpio gpio) noexcept : Switch(gpio) {}
+    explicit SoftSwitch(Gpio gpio) noexcept : Switch(gpio) {}
 
     // Drives the pin to `new_state`: closed (`kOn`) pulls the active-low line
     // low, open (`kOff`) lets it read high. `read()` reports the new state
     // immediately, and a registered handler sees the edge just as it would
     // from hardware. Re-setting the current state is a no-op; no other setting
     // (pin config, interrupt registration, handler) is touched either way.
-    void set(thermo::espidf_cpp::SwitchState new_state) noexcept {
+    void set(SwitchState new_state) noexcept {
         if (read() == new_state) {
             return;
         }
@@ -31,4 +31,4 @@ class SwitchSimulator : public thermo::espidf_cpp::Switch {
     }
 };
 
-}  // namespace thermo::espidf_cpp::testutil
+}  // namespace thermo::espidf_cpp
