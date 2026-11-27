@@ -90,12 +90,14 @@ get the flags and the runtime.
 `UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1` and
 `ASAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_stacktrace=1`.
 
-`build --analyzer` is a separate gate: both helpers return early when
-`THERMO_GCC_ANALYZER` is on. GCC's analyzer misreads the checks inserted by
-the sanitizers as uninitialised reads and fails on correct code. CI runs
-`build --analyzer` first, then a plain `build` immediately before
-`test-linux`, so the suites execute instrumented code. `dev.py` passes the
-cache variable explicitly in both directions, so switching modes cannot
+`build --analyzer` is a separate static check, not a build: both helpers
+return early when `THERMO_GCC_ANALYZER` is on, and `dev.py` replays the
+compile database through `scripts/gcc_analyzer.py` with `-S -o /dev/null`, so
+GCC stops before object emission and linking. GCC's analyzer misreads the
+checks inserted by the sanitizers as uninitialised reads and fails on correct
+code. CI runs `build --analyzer` first, then a plain `build` immediately
+before `test-linux`, so the suites execute instrumented code. `dev.py` passes
+the cache variable explicitly in both directions, so switching modes cannot
 leave stale flags.
 
 ## Adding a source
