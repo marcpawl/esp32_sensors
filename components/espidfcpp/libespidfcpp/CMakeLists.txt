@@ -14,6 +14,9 @@
 #
 # `hal_common` is public because `interrupt_handle.hpp` names `hal::Gpio`.
 #
+# `nvs_flash` is public because `nvs.hpp` includes `nvs_flash.h` and
+# `nvs.cpp` calls the flash initialization API.
+#
 # `gpio.hpp` includes the GPIO driver header. On the chip it needs
 # `esp_driver_gpio`; on `linux` that component is empty, so the mock header
 # and definitions come from `hal_stub`.
@@ -29,6 +32,7 @@ idf_component_register(
         "src/http_server.cpp"
         "src/interrupt_handle.cpp"
         "src/mutex.cpp"
+        "src/nvs.cpp"
         "src/switch.cpp"
         "src/task.cpp"
     INCLUDE_DIRS

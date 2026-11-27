@@ -12,6 +12,8 @@
 //   * empty strings, strings at the maximum length, and the length reported
 //     when a stored string is longer than the caller's buffer;
 //   * two handles open at the same time, including two writers;
+//   * the static `init_nvs_flash()` and `deinit_nvs_flash()` entry points
+//     for both modes;
 //   * the compile-time contract that `Nvs<NvsMode::Read>` has no writes.
 
 #include "espidf_cpp/nvs.hpp"
@@ -19,7 +21,6 @@
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "nvs.h"
-#include "nvs_flash.h"
 #pragma GCC diagnostic pop
 // NOLINTEND
 
@@ -54,23 +55,11 @@ static_assert(HasNumericWrite<NvsMode::ReadWrite, std::uint8_t>);
 static_assert(HasNumericWrite<NvsMode::ReadWrite, float>);
 static_assert(HasStringWrite<NvsMode::ReadWrite, 8>);
 
-void init_nvs_once() {
-    static bool initialized = false;
-    if (initialized) {
-        return;
-    }
-    esp_err_t err = nvs_flash_init();
-    if (err == ESP_ERR_NVS_NO_FREE_PAGES ||
-        err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        err = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(err);
-    initialized = true;
-}
-
 void clear_namespace() {
-    init_nvs_once();
+    // Constructing an Nvs initializes flash before opening the namespace.
+    {
+        Nvs<NvsMode::ReadWrite> init{kNamespace};
+    }
     nvs_handle_t handle = 0;
     ESP_ERROR_CHECK(nvs_open(kNamespace, NVS_READWRITE, &handle));
     ESP_ERROR_CHECK(nvs_erase_all(handle));
@@ -79,6 +68,25 @@ void clear_namespace() {
 }
 
 }  // namespace
+
+// --- Initialization ---------------------------------------------------------
+
+TEST_CASE("nvs: init and deinit are available for both modes", "[nvs]") {
+    Nvs<NvsMode::Read>::init_nvs_flash();
+    Nvs<NvsMode::ReadWrite>::init_nvs_flash();
+    Nvs<NvsMode::Read>::deinit_nvs_flash();
+    Nvs<NvsMode::ReadWrite>::deinit_nvs_flash();
+}
+
+TEST_CASE("nvs: deinit_nvs_flash allows a fresh init", "[nvs]") {
+    Nvs<NvsMode::ReadWrite>::init_nvs_flash();
+    Nvs<NvsMode::ReadWrite>::deinit_nvs_flash();
+
+    clear_namespace();
+    Nvs<NvsMode::ReadWrite> nvs{kNamespace};
+    nvs.write("after_deinit", std::uint8_t{0x5AU});
+    TEST_ASSERT_EQUAL_HEX8(0x5AU, nvs.read("after_deinit", std::uint8_t{0}));
+}
 
 // --- Unsigned integers ------------------------------------------------------
 
