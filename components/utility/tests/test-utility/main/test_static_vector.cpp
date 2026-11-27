@@ -7,20 +7,15 @@
 // (aborts) and is verified in forked children that exec the standalone
 // `static_vector_assert` program (see the [assert] cases at the end);
 // try_push_back reports overflow via a return value and is tested inline.
-// NOLINTBEGIN
-#pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
-#pragma GCC diagnostic ignored "-Wanalyzer-malloc-leak"
-#include <string>
-#pragma GCC diagnostic pop
-// NOLINTEND
-
 #include <cstddef>
 #include <cstdint>
 
 #include "assert_unity_support.hpp"
 #include "unity.h"
+#include "utility/static_string.hpp"
 #include "utility/static_vector.hpp"
 
+using thermo::utility::static_string;
 using thermo::utility::static_vector;
 
 // --- constexpr usability ----------------------------------------------------
@@ -116,10 +111,10 @@ TEST_CASE("static_vector: try_push_back succeeds until full then fails",
 }
 
 TEST_CASE("static_vector: try_push_back accepts rvalues", "[static_vector]") {
-    static_vector<std::string, 2> v;
-    TEST_ASSERT_TRUE(v.try_push_back(std::string("hello")));
-    TEST_ASSERT_TRUE(v.try_push_back(std::string("world")));
-    TEST_ASSERT_FALSE(v.try_push_back(std::string("nope")));
+    static_vector<static_string<8>, 2> v;
+    TEST_ASSERT_TRUE(v.try_push_back(static_string<8>("hello")));
+    TEST_ASSERT_TRUE(v.try_push_back(static_string<8>("world")));
+    TEST_ASSERT_FALSE(v.try_push_back(static_string<8>("nope")));
 
     TEST_ASSERT_EQUAL_UINT(2, v.size());
     TEST_ASSERT_EQUAL_STRING("hello", v[0].c_str());
@@ -130,9 +125,9 @@ TEST_CASE("static_vector: try_push_back accepts rvalues", "[static_vector]") {
 
 TEST_CASE("static_vector: emplace_back constructs in place",
           "[static_vector]") {
-    static_vector<std::string, 3> v;
+    static_vector<static_string<8>, 3> v;
     v.emplace_back("first");
-    v.emplace_back(5, 'x');  // std::string(5, 'x')
+    v.emplace_back("xxxxx");
 
     TEST_ASSERT_EQUAL_UINT(2, v.size());
     TEST_ASSERT_EQUAL_STRING("first", v[0].c_str());
@@ -224,8 +219,8 @@ TEST_CASE("static_vector: empty data pointer is valid", "[static_vector]") {
 namespace {
 
 // Path to the sibling static_vector_assert program (shared by the cases below).
-const std::string& assert_program() {
-    static const std::string path =
+const assert_test_support::AssertProgramPath& assert_program() {
+    static const auto path =
         assert_test_support::assert_program_path("static_vector_assert");
     return path;
 }

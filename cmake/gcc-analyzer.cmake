@@ -17,8 +17,10 @@
 # target names to cover non-component executables a component creates.
 #
 # The analyzer is off by default. `scripts/dev.py build --analyzer` passes
-# `-DTHERMO_GCC_ANALYZER=ON` to the subprojects; a manual `idf.py` build can do
-# the same.
+# `-DTHERMO_GCC_ANALYZER=ON` to reconfigure the subprojects, then
+# `scripts/gcc_analyzer.py` replays these commands with `-S -o /dev/null`, so
+# the check emits no objects and never links. A manual `idf.py` build with the
+# option on still analyzes while building normally.
 
 option(THERMO_GCC_ANALYZER
     "Enable GCC's static analyzer for this repository's C++ code" OFF)

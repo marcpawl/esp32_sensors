@@ -285,8 +285,9 @@ json sensors_json(const logic::Board& board) {
         if (reading.temp_c_x100.has_value()) {
             temp = *reading.temp_c_x100;
         }
-        sensors.push_back(json{{"rom", logic::rom_id_to_hex(reading.rom)},
-                               {"temp_c_x100", temp}});
+        sensors.push_back(
+            json{{"rom", logic::rom_id_to_hex(reading.rom).c_str()},
+                 {"temp_c_x100", temp}});
     }
     return sensors;
 }

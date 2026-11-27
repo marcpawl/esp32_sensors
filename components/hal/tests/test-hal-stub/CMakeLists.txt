@@ -52,6 +52,14 @@ set(EXCLUDE_COMPONENTS hal_board)
 # explains why ESP-IDF and vendored components are excluded.
 include("${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/gcc-analyzer.cmake")
 
+# UBSan instruments our linux C++ code and aborts on the first finding; the
+# module explains the target guard and why vendored code is excluded.
+include("${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/ubsan.cmake")
+
+# ASan adds heap and stack checks with pinned debug symbols; the module
+# explains the target guard and the runtime options.
+include("${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/asan.cmake")
+
 # Warnings are errors in this repository's own code; the module
 # explains the ESP-IDF defaults it overrides.
 include("${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/compiler-warnings.cmake")
@@ -59,7 +67,9 @@ include("${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/compiler-warnings.cmake")
 # The test ELF is named after this project: esp32_sensors_hal_stub_tests.
 project(esp32_sensors_hal_stub_tests)
 
-# `BUILD_COMPONENTS` is populated by project(); both flag helpers go on
-# this repository's component targets only.
+# `BUILD_COMPONENTS` is populated by project(); all four flag helpers go
+# on this repository's component targets only.
 thermo_enable_gcc_analyzer()
 thermo_enable_compiler_warnings()
+thermo_enable_ubsan()
+thermo_enable_asan()
