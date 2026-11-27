@@ -10,9 +10,11 @@ Usage:
 
 The simulator prints each state response as `MODEL <json>` on stdout.
 
-The console is a curses-based TUI with three panes:
-  - Board (left, top): live view of the most recent simulator model.
-  - Settings (right, top): formatted JSON staged for `send`.
+The console is a curses-based TUI with four panes:
+  - Board (left, top, 25%): live view of the most recent simulator model.
+  - Settings (middle, top, 25%): formatted JSON staged for `send`.
+  - Console (right, top, 50%): text received from the simulator, with JSON
+    sent to it echoed in reverse video.
   - Commands (bottom, 5 lines): prompt `] ` and command/status messages.
 
 """
@@ -36,6 +38,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DONNY_ELF = REPO_ROOT / "components/simulator/exe/donny/build_linux/donny.elf"
 DEV_CONTAINER_MARKER = Path("/etc/esp32-sensors-dev-container")
 MODEL_PREFIX = "MODEL "
+CONSOLE_HISTORY = 200
 
 
 def in_container() -> bool:
@@ -139,6 +142,21 @@ class DonnyConsole:
         self._closing = False
         self._lock = threading.Lock()
         self.auto_restart = False
+        # (text, sent) pairs: sent lines are echoed in reverse video.
+        self.console_lines: list[tuple[str, bool]] = []
+        self._console_lock = threading.Lock()
+
+    def _record_console(self, text: str, sent: bool = False) -> None:
+        """Append one console line, trimming the oldest beyond the limit."""
+        with self._console_lock:
+            self.console_lines.append((text, sent))
+            if len(self.console_lines) > CONSOLE_HISTORY:
+                del self.console_lines[:-CONSOLE_HISTORY]
+
+    def console_snapshot(self) -> tuple[tuple[str, bool], ...]:
+        """Return a stable copy of the transcript for the TUI to render."""
+        with self._console_lock:
+            return tuple(self.console_lines)
 
     def start(self) -> None:
         """Start donny and background I/O readers."""
@@ -174,6 +192,7 @@ class DonnyConsole:
         """Consume protocol output from donny."""
         for raw in stream:
             line = raw.rstrip("\n")
+            self._record_console(line)
             if not line.startswith(MODEL_PREFIX):
                 continue
             payload_text = line[len(MODEL_PREFIX):]
@@ -211,6 +230,7 @@ class DonnyConsole:
         for raw in stream:
             line = raw.rstrip("\n")
             if line:
+                self._record_console(line)
                 self.events.put(("log", line))
 
     def send(self, document: dict) -> None:
@@ -221,14 +241,14 @@ class DonnyConsole:
             return
         if process.poll() is not None:
             return
+        text = json.dumps(document, separators=(",", ":"))
         try:
-            process.stdin.write(
-                json.dumps(document, separators=(",", ":"))
-            )
+            process.stdin.write(text)
             process.stdin.write("\n")
             process.stdin.flush()
         except (BrokenPipeError, OSError, ValueError):
             return
+        self._record_console(text, sent=True)
 
     def close(self) -> None:
         """Terminate donny and release resources."""
@@ -364,14 +384,17 @@ class DonnyTUI:
         self.running = True
         self.model_dirty = True
         self.settings_dirty = True
+        self.console_dirty = True
         self.command_dirty = True
         self.all_dirty = True
         self._last_model = None
         self._last_pending = None
+        self._last_console = None
         self._last_cmd = None
         self._cursor = None
 
-    def _draw_pane(self, win, title: str, lines: list[str]) -> None:
+    def _draw_pane(self, win, title: str, lines: list[str],
+                   attributes: list[int] | None = None) -> None:
         """Draw a bordered pane with title and content lines."""
         win.erase()
         h, w = win.getmaxyx()
@@ -385,25 +408,31 @@ class DonnyTUI:
         max_lines = h - 2
         max_width = max(0, w - 2)
         for i, line in enumerate(lines[:max_lines]):
-            win.addnstr(1 + i, 1, line, max_width)
+            if attributes is None:
+                win.addnstr(1 + i, 1, line, max_width)
+            else:
+                win.addnstr(1 + i, 1, line, max_width, attributes[i])
         win.noutrefresh()
 
     def _layout(self):
         h, w = self.stdscr.getmaxyx()
         bottom_h = 5
         top_h = max(3, h - bottom_h)
-        left_w = max(10, w // 2)
-        right_w = max(10, w - left_w)
-        return h, w, top_h, left_w, right_w, bottom_h
+        model_w = max(1, w // 4)
+        settings_w = max(1, w // 4)
+        console_w = max(1, w - model_w - settings_w)
+        return (h, w, top_h, model_w, settings_w, console_w, bottom_h)
 
     def _draw(self, force: bool = False) -> None:
         """Render panes only when their content changes."""
-        h, w, top_h, left_w, right_w, bottom_h = self._layout()
+        (h, w, top_h, model_w, settings_w, console_w,
+         bottom_h) = self._layout()
         if self.all_dirty or force:
             self.stdscr.clear()
             self.stdscr.noutrefresh()
             self.model_dirty = True
             self.settings_dirty = True
+            self.console_dirty = True
             self.command_dirty = True
             self.all_dirty = False
             self._cursor = None
@@ -411,11 +440,14 @@ class DonnyTUI:
         model_text = render_model(self.console.model) if self.console.model \
             is not None else "(no model yet)"
         pending_text = json.dumps(self.console.pending, indent=2)
+        console_state = self.console.console_snapshot()
 
         if model_text != self._last_model:
             self.model_dirty = True
         if pending_text != self._last_pending:
             self.settings_dirty = True
+        if console_state != self._last_console:
+            self.console_dirty = True
         cmd_state = (self.input_buf, self.status)
         if cmd_state != self._last_cmd:
             self.command_dirty = True
@@ -423,16 +455,30 @@ class DonnyTUI:
         updated = False
         try:
             if self.model_dirty:
-                left = curses.newwin(top_h, left_w, 0, 0)
-                self._draw_pane(left, "Board", model_text.splitlines())
+                model = curses.newwin(top_h, model_w, 0, 0)
+                self._draw_pane(model, "Board", model_text.splitlines())
                 self._last_model = model_text
                 self.model_dirty = False
                 updated = True
             if self.settings_dirty:
-                right = curses.newwin(top_h, right_w, 0, left_w)
-                self._draw_pane(right, "Settings", pending_text.splitlines())
+                settings = curses.newwin(top_h, settings_w, 0, model_w)
+                self._draw_pane(
+                    settings, "Settings", pending_text.splitlines())
                 self._last_pending = pending_text
                 self.settings_dirty = False
+                updated = True
+            if self.console_dirty:
+                console = curses.newwin(
+                    top_h, console_w, 0, model_w + settings_w)
+                visible = console_state[-(top_h - 2):]
+                self._draw_pane(
+                    console, "Console",
+                    [text for text, _ in visible],
+                    [curses.A_REVERSE if sent else curses.A_NORMAL
+                     for _, sent in visible],
+                )
+                self._last_console = console_state
+                self.console_dirty = False
                 updated = True
             if self.command_dirty:
                 bottom = curses.newwin(bottom_h, w, top_h, 0)
@@ -483,7 +529,7 @@ class DonnyTUI:
                 self.status = "donny exited."
                 self.running = False
                 self.command_dirty = True
-            # "log" events are ignored in TUI.
+            # "log" events need no flag: their text is in the transcript.
 
     def _handle_key(self, ch: int) -> None:
         """Handle one keypress."""
