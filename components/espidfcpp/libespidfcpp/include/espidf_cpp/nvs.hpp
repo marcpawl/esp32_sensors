@@ -87,11 +87,20 @@ class Nvs {
     // Retrieve a number from the NVS storage.
     // @param key Name of the key that is stored.
     // @param default_value Value to use if there is no entry with the key.
+    // Booleans are stored as uint8 0/1.
     template<std::integral T>
     T read(const char* key, T default_value) {
         T v{};
         esp_err_t error;
-        if constexpr (std::is_same_v<T, std::uint8_t>) {
+        if constexpr (std::is_same_v<T, bool>) {
+            std::uint8_t raw = default_value ? 1U : 0U;
+            error = nvs_get_u8(handle_, key, &raw);
+            if (error == ESP_ERR_NVS_NOT_FOUND) {
+                return default_value;
+            }
+            ESP_ERROR_CHECK(error);
+            return raw != 0U;
+        } else if constexpr (std::is_same_v<T, std::uint8_t>) {
             error = nvs_get_u8(handle_, key, &v);
         } else if constexpr (std::is_same_v<T, std::uint16_t>) {
             error = nvs_get_u16(handle_, key, &v);
@@ -140,12 +149,16 @@ class Nvs {
         ESP_ERROR_CHECK(error);
     }
 
+    // Booleans are stored as uint8 0/1.
     template<std::integral T>
     void write(char const* key, T value)
         requires(mode == NvsMode::ReadWrite)
     {
         esp_err_t error;
-        if constexpr (std::is_same_v<T, std::uint8_t>) {
+        if constexpr (std::is_same_v<T, bool>) {
+            const std::uint8_t raw = value ? 1U : 0U;
+            error = nvs_set_u8(handle_, key, raw);
+        } else if constexpr (std::is_same_v<T, std::uint8_t>) {
             error = nvs_set_u8(handle_, key, value);
         } else if constexpr (std::is_same_v<T, std::uint16_t>) {
             error = nvs_set_u16(handle_, key, value);
