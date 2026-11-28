@@ -46,10 +46,15 @@ $ esptool --port /dev/ttyACM0
 ## Docker environment setup
 
 The development container uses the **prebuilt** image
-`marcpawl/esp-idf:20261119c` (ESP-IDF v6.1 plus the project tooling: `gh`,
-PyGithub, esp-clang, and `pycodestyle`). The tag is pinned in
-`docker-compose.yml`, never moves, and is used by CI, so there is nothing to
-build on a fresh machine — just pull it.
+`marcpawl/esp-idf:20261127a`. It carries ESP-IDF v6.1 and the project tooling:
+
+- `gh` and PyGithub for repository work
+- `esp-clang` for compiler checks
+- `pycodestyle` for Python checks
+- `gdb` for debugging the linux-target simulator inside the container
+
+The tag is pinned in `docker-compose.yml`, never moves, and is used by CI, so
+there is nothing to build on a fresh machine — just pull it.
 
 Pull the image and start the container:
 

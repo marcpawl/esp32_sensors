@@ -3,7 +3,7 @@
 # ESP32 Solar-Powered Thermometer Logger — development container.
 #
 # NOTE: this image is normally NOT built. `docker-compose.yml` pins the
-# prebuilt, published image `marcpawl/esp-idf:20261119c`, and both developers
+# prebuilt, published image `marcpawl/esp-idf:20261127a`, and both developers
 # and CI pull it. Build this Dockerfile only when changing it, then publish the
 # result under a NEW date-stamped tag (see Developer.md).
 #
@@ -60,6 +60,9 @@ RUN apt-get update \
         ca-certificates \
         curl \
         vim \
+        # gdb attaches to the linux-target simulator from inside the container;
+        # docker-compose.yml grants SYS_PTRACE for that.
+        gdb \
         netcat-openbsd screen \
         psmisc \
         # libbsd is required by the ESP-IDF `linux` target (host unit tests);

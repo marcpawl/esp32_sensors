@@ -2,16 +2,18 @@
 
 The dev container is defined by the committed `docker/Dockerfile` +
 `docker/docker-compose.yml`; the image itself is prebuilt and pulled
-(`marcpawl/esp-idf:20261119c`). Repository-wide guidance is in the root
+(`marcpawl/esp-idf:20261127a`). Repository-wide guidance is in the root
 `AGENTS.md`.
 
 ## Image
 
-The pinned image matches the host toolchain (ESP-IDF v6.1, Xtensa GCC 15.2.0)
-and is never moved. Pull it with `./scripts/dev.py pull`. Only rebuild when the
-`docker/Dockerfile` changes: rebuild, publish a **new** date-stamped tag, bump the
-pin in `docker/docker-compose.yml` and `scripts/dev.py` (`DEV_IMAGE`), and update the
-docs. See `Developer.md`.
+The pinned image matches the host toolchain (ESP-IDF v6.1, Xtensa GCC
+15.2.0) and is never moved. It also carries `gdb` for debugging the
+linux-target simulator inside the container. Pull it with
+`./scripts/dev.py pull`. Only rebuild when the `docker/Dockerfile` changes:
+rebuild, publish a **new** date-stamped tag, bump the pin in
+`docker/docker-compose.yml` and `scripts/dev.py` (`DEV_IMAGE`), and update
+the docs. See `Developer.md`.
 
 ## Running commands
 
