@@ -13,7 +13,8 @@
 
 namespace thermo::espidf_cpp {
 
-Mutex::Mutex(Kind kind) : recursive_{kind == Kind::recursive} {
+Mutex::Mutex(Kind kind) : recursive_{kind == Kind::recursive}
+{
     SemaphoreHandle_t const handle =
         recursive_ ? xSemaphoreCreateRecursiveMutex() : xSemaphoreCreateMutex();
     if (handle == nullptr) {
@@ -24,7 +25,8 @@ Mutex::Mutex(Kind kind) : recursive_{kind == Kind::recursive} {
     handle_.reset(handle);
 }
 
-void Mutex::unlock() noexcept {
+void Mutex::unlock() noexcept
+{
     BaseType_t const released = recursive_
                                     ? xSemaphoreGiveRecursive(handle_.get())
                                     : xSemaphoreGive(handle_.get());

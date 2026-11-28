@@ -36,7 +36,8 @@ class Led {
 
     // Builds an LED for the given output pin. Same signature for the hardware
     // and stub implementations; call init() before write().
-    [[nodiscard]] static Led create(Gpio gpio, const char* name) noexcept {
+    [[nodiscard]] static Led create(Gpio gpio, const char* name) noexcept
+    {
         return Led(gpio, name);
     }
 

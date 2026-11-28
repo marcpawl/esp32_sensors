@@ -51,7 +51,8 @@ class OneMessageQueue {
     // Creates the single-slot queue. Aborts if FreeRTOS cannot allocate it:
     // without storage the queue could never deliver a message, so there is no
     // useful way to continue.
-    OneMessageQueue() {
+    OneMessageQueue()
+    {
         QueueHandle_t queue = xQueueCreate(1, sizeof(MessageType));
         if (queue == nullptr) {
             ESP_LOGE(kTag, "xQueueCreate failed");
@@ -68,13 +69,15 @@ class OneMessageQueue {
 
     // Publishes `message`, overwriting any message not yet received. Never
     // blocks (the single slot can always be overwritten).
-    void send(MessageType const& message) noexcept {
+    void send(MessageType const& message) noexcept
+    {
         xQueueOverwrite(queue_.get(), &message);
     }
 
     // ISR-safe variant of send(). May be called from an interrupt handler
     // (e.g. a GPIO ISR). Overwrites any unread message, matching send().
-    void send_from_isr(MessageType const& message) noexcept {
+    void send_from_isr(MessageType const& message) noexcept
+    {
         BaseType_t higher_priority_task_woken = pdFALSE;
         xQueueOverwriteFromISR(queue_.get(), &message,
                                &higher_priority_task_woken);
@@ -85,7 +88,8 @@ class OneMessageQueue {
 
     // Receives, blocking up to `timeout` ticks. Returns the message when one
     // was dequeued, or `std::nullopt` on timeout.
-    std::optional<MessageType> receive(TickType_t timeout) noexcept {
+    std::optional<MessageType> receive(TickType_t timeout) noexcept
+    {
         MessageType out;
         if (xQueueReceive(queue_.get(), &out, timeout) == pdTRUE) {
             return std::optional<MessageType>{out};
@@ -96,7 +100,8 @@ class OneMessageQueue {
     // Receives, blocking up to `timeout` milliseconds. Convenience overload for
     // callers that prefer a `std::chrono` duration over raw FreeRTOS ticks.
     std::optional<MessageType> receive(
-        std::chrono::milliseconds timeout) noexcept {
+        std::chrono::milliseconds timeout) noexcept
+    {
         auto ticks = pdMS_TO_TICKS(static_cast<std::uint32_t>(timeout.count()));
         return receive(ticks);
     }

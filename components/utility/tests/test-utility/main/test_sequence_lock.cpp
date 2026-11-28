@@ -59,7 +59,8 @@ constexpr ReadingLock::WriteResult kStored = ReadingLock::WriteResult::kStored;
 constexpr ReadingLock::WriteResult kRejected =
     ReadingLock::WriteResult::kRejected;
 
-void assert_readings_equal(Reading const& expected, Reading const& actual) {
+void assert_readings_equal(Reading const& expected, Reading const& actual)
+{
     TEST_ASSERT_EQUAL_UINT32(expected.id, actual.id);
     TEST_ASSERT_EQUAL_INT32(expected.temperature_c_x100,
                             actual.temperature_c_x100);
@@ -91,15 +92,16 @@ static_assert(!std::is_assignable_v<
 // --- Single-threaded round trips --------------------------------------------
 
 TEST_CASE("sequence_lock: a default-constructed lock reads version zero",
-          "[sequence_lock]") {
+          "[sequence_lock]")
+{
     const ReadingLock lock;
     const auto reading = lock.read();
     TEST_ASSERT_EQUAL_UINT32(0, reading.version);
     assert_readings_equal(Reading{}, reading.model);
 }
 
-TEST_CASE("sequence_lock: constructs with an initial model",
-          "[sequence_lock]") {
+TEST_CASE("sequence_lock: constructs with an initial model", "[sequence_lock]")
+{
     const Reading initial{5, 500, {5, 5, 5, 5, 5}};
     const ReadingLock lock(initial);
 
@@ -109,7 +111,8 @@ TEST_CASE("sequence_lock: constructs with an initial model",
 }
 
 TEST_CASE("sequence_lock: a fresh version publishes the model",
-          "[sequence_lock]") {
+          "[sequence_lock]")
+{
     ReadingLock lock;
     const Reading expected{7, 2150, {1, 2, 3, 4, 5}};
 
@@ -123,7 +126,8 @@ TEST_CASE("sequence_lock: a fresh version publishes the model",
 }
 
 TEST_CASE("sequence_lock: each successful write advances the version by two",
-          "[sequence_lock]") {
+          "[sequence_lock]")
+{
     ReadingLock lock;
 
     auto first = lock.read();
@@ -142,7 +146,8 @@ TEST_CASE("sequence_lock: each successful write advances the version by two",
 }
 
 TEST_CASE("sequence_lock: a stale version cannot overwrite a newer model",
-          "[sequence_lock]") {
+          "[sequence_lock]")
+{
     ReadingLock lock;
     auto first = lock.read();
     auto second = lock.read();
@@ -161,7 +166,8 @@ TEST_CASE("sequence_lock: a stale version cannot overwrite a newer model",
 }
 
 TEST_CASE("sequence_lock: a version that is not current is rejected",
-          "[sequence_lock]") {
+          "[sequence_lock]")
+{
     ReadingLock lock;
     const Reading model{9, 900, {9, 9, 9, 9, 9}};
 
@@ -175,8 +181,8 @@ TEST_CASE("sequence_lock: a version that is not current is rejected",
     assert_readings_equal(Reading{}, actual.model);
 }
 
-TEST_CASE("sequence_lock: a re-read version can write again",
-          "[sequence_lock]") {
+TEST_CASE("sequence_lock: a re-read version can write again", "[sequence_lock]")
+{
     ReadingLock lock;
 
     auto snapshot = lock.read();
@@ -195,7 +201,8 @@ TEST_CASE("sequence_lock: a re-read version can write again",
 }
 
 TEST_CASE("sequence_lock: read leaves the stored model in place",
-          "[sequence_lock]") {
+          "[sequence_lock]")
+{
     ReadingLock lock;
     const Reading expected{4, 400, {4, 4, 4, 4, 4}};
 
@@ -210,7 +217,8 @@ TEST_CASE("sequence_lock: read leaves the stored model in place",
     }
 }
 
-TEST_CASE("sequence_lock: works with a scalar model", "[sequence_lock]") {
+TEST_CASE("sequence_lock: works with a scalar model", "[sequence_lock]")
+{
     using ScalarLock = SequenceLock<std::uint64_t, ConcurrentWriters::Enabled>;
     ScalarLock lock;
     auto snapshot = lock.read();
@@ -224,7 +232,8 @@ TEST_CASE("sequence_lock: works with a scalar model", "[sequence_lock]") {
 // --- Single-writer form -----------------------------------------------------
 
 TEST_CASE("sequence_lock: the single-writer form writes without rejecting",
-          "[sequence_lock]") {
+          "[sequence_lock]")
+{
     SequenceLock<Reading, ConcurrentWriters::Disable> lock;
     auto snapshot = lock.read();
     snapshot.model.id = 7;
@@ -238,7 +247,8 @@ TEST_CASE("sequence_lock: the single-writer form writes without rejecting",
 }
 
 TEST_CASE("sequence_lock: the single-writer form advances each write by two",
-          "[sequence_lock]") {
+          "[sequence_lock]")
+{
     SequenceLock<Reading, ConcurrentWriters::Disable> lock;
 
     auto first = lock.read();
@@ -256,7 +266,8 @@ TEST_CASE("sequence_lock: the single-writer form advances each write by two",
 }
 
 TEST_CASE("sequence_lock: the single-writer form accepts an initial model",
-          "[sequence_lock]") {
+          "[sequence_lock]")
+{
     const Reading initial{9, 900, {9, 9, 9, 9, 9}};
     SequenceLock<Reading, ConcurrentWriters::Disable> lock(initial);
 
@@ -271,7 +282,8 @@ TEST_CASE("sequence_lock: the single-writer form accepts an initial model",
 }
 
 TEST_CASE("sequence_lock: the multi-writer form stores a current version",
-          "[sequence_lock]") {
+          "[sequence_lock]")
+{
     ReadingLock lock;
     auto snapshot = lock.read();
     snapshot.model.id = 3;
@@ -287,7 +299,8 @@ TEST_CASE("sequence_lock: the multi-writer form stores a current version",
 }
 
 TEST_CASE("sequence_lock: each write form is enabled by ConcurrentWriters",
-          "[sequence_lock]") {
+          "[sequence_lock]")
+{
     using Single = SequenceLock<Reading, ConcurrentWriters::Disable>;
     using Multi = SequenceLock<Reading, ConcurrentWriters::Enabled>;
 
@@ -315,7 +328,8 @@ struct IncrementContext {
 // Read, increment, and write back. A rejected write means another writer
 // published first, so the snapshot must be re-read and the increment
 // re-applied to the newer value.
-void increment_task(void* arg) {
+void increment_task(void* arg)
+{
     auto& context = *static_cast<IncrementContext*>(arg);
     for (std::uint32_t i = 0; i < context.iterations; ++i) {
         for (;;) {
@@ -349,7 +363,8 @@ struct BlockContext {
 
 // Keep replacing the whole block with one repeated value. Every consistent
 // snapshot must therefore have all words equal.
-void block_writer_task(void* arg) {
+void block_writer_task(void* arg)
+{
     auto& context = *static_cast<BlockContext*>(arg);
     std::uint32_t value = context.pattern;
 
@@ -374,7 +389,8 @@ void block_writer_task(void* arg) {
 }
 
 void create_task(TaskFunction_t entry, const char* name, void* arg,
-                 TaskHandle_t* handle) {
+                 TaskHandle_t* handle)
+{
     const UBaseType_t priority = uxTaskPriorityGet(nullptr);
     TEST_ASSERT_EQUAL(pdPASS,
                       xTaskCreate(entry, name, 4096, arg, priority, handle));
@@ -382,7 +398,8 @@ void create_task(TaskFunction_t entry, const char* name, void* arg,
 
 // Wait until every task has reported completion, failing after ten seconds.
 void wait_for_tasks(std::atomic<std::uint32_t>& finished,
-                    std::uint32_t expected) {
+                    std::uint32_t expected)
+{
     const TickType_t start = xTaskGetTickCount();
     while (finished.load(std::memory_order_relaxed) < expected) {
         TEST_ASSERT_TRUE_MESSAGE(
@@ -403,7 +420,8 @@ struct OverwriteContext {
 // A reads the initial model and waits for B to enter its writer before it
 // appends 'A'. B waits until A's overwrite has published before it tries its
 // stale write, so B is forced to retry against the model A stored.
-void overwrite_task_a(void* arg) {
+void overwrite_task_a(void* arg)
+{
     auto& context = *static_cast<OverwriteContext*>(arg);
     bool waited = false;
     context.lock->overwrite([&](auto& versioned_model) {
@@ -421,7 +439,8 @@ void overwrite_task_a(void* arg) {
     vTaskDelete(nullptr);
 }
 
-void overwrite_task_b(void* arg) {
+void overwrite_task_b(void* arg)
+{
     auto& context = *static_cast<OverwriteContext*>(arg);
     bool signaled = false;
     context.lock->overwrite([&](auto& versioned_model) {
@@ -442,7 +461,8 @@ void overwrite_task_b(void* arg) {
 }  // namespace
 
 TEST_CASE("sequence_lock: concurrent writers do not lose an update",
-          "[sequence_lock]") {
+          "[sequence_lock]")
+{
     SequenceLock<Counter, ConcurrentWriters::Enabled> lock;
     std::atomic<std::uint32_t> finished{0};
 
@@ -464,7 +484,8 @@ TEST_CASE("sequence_lock: concurrent writers do not lose an update",
 }
 
 TEST_CASE("sequence_lock: concurrent readers never see a torn model",
-          "[sequence_lock]") {
+          "[sequence_lock]")
+{
     SequenceLock<Block, ConcurrentWriters::Enabled> lock;
     std::atomic<bool> stop{false};
     std::atomic<std::uint32_t> finished{0};
@@ -502,7 +523,8 @@ TEST_CASE("sequence_lock: concurrent readers never see a torn model",
     }
 }
 
-TEST_CASE("sequence_lock: uncontentious overwrite", "[sequence_lock]") {
+TEST_CASE("sequence_lock: uncontentious overwrite", "[sequence_lock]")
+{
     SequenceLock<Text, ConcurrentWriters::Enabled> lock;
     lock.overwrite(
         [](auto& versioned_model) { versioned_model.model.push_back('A'); });
@@ -511,7 +533,8 @@ TEST_CASE("sequence_lock: uncontentious overwrite", "[sequence_lock]") {
     TEST_ASSERT_EQUAL_STRING("A", actual.c_str());
 }
 
-TEST_CASE("sequence_lock: contentious overwrite", "[sequence_lock]") {
+TEST_CASE("sequence_lock: contentious overwrite", "[sequence_lock]")
+{
     SequenceLock<Text, ConcurrentWriters::Enabled> lock;
     std::atomic<std::uint32_t> attempts{0};
     std::atomic<std::uint32_t> finished{0};

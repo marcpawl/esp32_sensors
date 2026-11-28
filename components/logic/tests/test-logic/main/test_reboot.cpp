@@ -26,7 +26,8 @@ bool g_shutdown_handler_ran = false;
 
 // Registered as a shutdown handler: `esp_restart()` calls it before tearing
 // the system down, and the longjmp returns control to the test case.
-void jump_back_from_restart() {
+void jump_back_from_restart()
+{
     g_shutdown_handler_ran = true;
     std::longjmp(g_reboot_jump, 1);
 }
@@ -34,7 +35,8 @@ void jump_back_from_restart() {
 }  // namespace
 
 TEST_CASE("reboot: waits for the log flush, then enters the restart path",
-          "[reboot]") {
+          "[reboot]")
+{
     TEST_ASSERT_EQUAL(ESP_OK,
                       esp_register_shutdown_handler(jump_back_from_restart));
 

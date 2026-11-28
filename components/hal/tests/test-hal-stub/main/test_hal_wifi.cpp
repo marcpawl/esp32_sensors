@@ -31,7 +31,8 @@ using thermo::hal::AccessPointConfig;
 using thermo::hal::copy_text;
 using thermo::hal::StationConfig;
 
-AccessPointConfig make_ap_config() {
+AccessPointConfig make_ap_config()
+{
     AccessPointConfig config;
     copy_text(config.ssid, "ESP32-Thermo-TEST");
     copy_text(config.password, "configme123");
@@ -41,7 +42,8 @@ AccessPointConfig make_ap_config() {
     return config;
 }
 
-StationConfig make_station_config() {
+StationConfig make_station_config()
+{
     StationConfig config;
     copy_text(config.ssid, "home-net");
     copy_text(config.password, "hunter2hunter2");
@@ -50,7 +52,8 @@ StationConfig make_station_config() {
 
 // A radio that has been through init(), the only state in which the
 // start/stop methods are allowed.
-Radio make_radio() {
+Radio make_radio()
+{
     Radio radio = Radio::create();
     radio.init();
     return radio;
@@ -60,19 +63,21 @@ Radio make_radio() {
 
 // --- Concept / alias --------------------------------------------------------
 
-TEST_CASE("hal wifi: WifiRadioStub models WifiRadioLike", "[hal_wifi]") {
+TEST_CASE("hal wifi: WifiRadioStub models WifiRadioLike", "[hal_wifi]")
+{
     static_assert(thermo::hal::WifiRadioLike<thermo::hal::stub::WifiRadioStub>);
 }
 
-TEST_CASE("hal wifi: WifiRadio alias is the stub in this project",
-          "[hal_wifi]") {
+TEST_CASE("hal wifi: WifiRadio alias is the stub in this project", "[hal_wifi]")
+{
     static_assert(std::same_as<Radio, thermo::hal::stub::WifiRadioStub>);
     static_assert(std::same_as<decltype(Radio::create()), Radio>);
 }
 
 // --- Construction / init gating --------------------------------------------
 
-TEST_CASE("hal wifi: init() succeeds and is idempotent", "[hal_wifi]") {
+TEST_CASE("hal wifi: init() succeeds and is idempotent", "[hal_wifi]")
+{
     Radio radio = Radio::create();
     TEST_ASSERT_FALSE(radio.initialized());
     TEST_ASSERT_EQUAL(ESP_OK, radio.init());
@@ -81,7 +86,8 @@ TEST_CASE("hal wifi: init() succeeds and is idempotent", "[hal_wifi]") {
 }
 
 TEST_CASE("hal wifi: methods before init() return ESP_ERR_INVALID_STATE",
-          "[hal_wifi]") {
+          "[hal_wifi]")
+{
     Radio radio = Radio::create();
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, radio.start_ap(make_ap_config()));
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, radio.stop_ap());
@@ -95,7 +101,8 @@ TEST_CASE("hal wifi: methods before init() return ESP_ERR_INVALID_STATE",
 // --- Access point -----------------------------------------------------------
 
 TEST_CASE("hal wifi: start_ap() brings the AP up and records its config",
-          "[hal_wifi]") {
+          "[hal_wifi]")
+{
     Radio radio = make_radio();
     AccessPointConfig const config = make_ap_config();
     TEST_ASSERT_EQUAL(ESP_OK, radio.start_ap(config));
@@ -106,7 +113,8 @@ TEST_CASE("hal wifi: start_ap() brings the AP up and records its config",
 }
 
 TEST_CASE("hal wifi: restarting the AP replaces its configuration",
-          "[hal_wifi]") {
+          "[hal_wifi]")
+{
     Radio radio = make_radio();
     TEST_ASSERT_EQUAL(ESP_OK, radio.start_ap(make_ap_config()));
 
@@ -121,7 +129,8 @@ TEST_CASE("hal wifi: restarting the AP replaces its configuration",
 }
 
 TEST_CASE("hal wifi: stop_ap() succeeds whether or not the AP is up",
-          "[hal_wifi]") {
+          "[hal_wifi]")
+{
     Radio radio = make_radio();
     TEST_ASSERT_EQUAL(ESP_OK, radio.stop_ap());  // never started
     TEST_ASSERT_FALSE(radio.ap_running());
@@ -139,7 +148,8 @@ TEST_CASE("hal wifi: stop_ap() succeeds whether or not the AP is up",
 TEST_CASE(
     "hal wifi: start_station() brings the station up and records its "
     "config",
-    "[hal_wifi]") {
+    "[hal_wifi]")
+{
     Radio radio = make_radio();
     StationConfig const config = make_station_config();
     TEST_ASSERT_EQUAL(ESP_OK, radio.start_station(config));
@@ -149,7 +159,8 @@ TEST_CASE(
     TEST_ASSERT_FALSE(radio.ap_running());
 }
 
-TEST_CASE("hal wifi: start_station() rejects an empty SSID", "[hal_wifi]") {
+TEST_CASE("hal wifi: start_station() rejects an empty SSID", "[hal_wifi]")
+{
     Radio radio = make_radio();
     StationConfig const empty;
     TEST_ASSERT_FALSE(empty.has_ssid());
@@ -160,7 +171,8 @@ TEST_CASE("hal wifi: start_station() rejects an empty SSID", "[hal_wifi]") {
 }
 
 TEST_CASE("hal wifi: retrying the station join re-records the config",
-          "[hal_wifi]") {
+          "[hal_wifi]")
+{
     // Configure mode retries periodically (§3.2); the stub simply records the
     // most recent request.
     Radio radio = make_radio();
@@ -170,7 +182,8 @@ TEST_CASE("hal wifi: retrying the station join re-records the config",
 }
 
 TEST_CASE("hal wifi: stop_station() succeeds whether or not it is up",
-          "[hal_wifi]") {
+          "[hal_wifi]")
+{
     Radio radio = make_radio();
     TEST_ASSERT_EQUAL(ESP_OK, radio.stop_station());  // never started
 
@@ -182,8 +195,8 @@ TEST_CASE("hal wifi: stop_station() succeeds whether or not it is up",
 
 // --- Independence -----------------------------------------------------------
 
-TEST_CASE("hal wifi: the AP and the station run at the same time",
-          "[hal_wifi]") {
+TEST_CASE("hal wifi: the AP and the station run at the same time", "[hal_wifi]")
+{
     // Configure mode (§3.2) serves the config page over the AP while trying
     // to reach the configured network as a station.
     Radio radio = make_radio();
@@ -194,7 +207,8 @@ TEST_CASE("hal wifi: the AP and the station run at the same time",
 }
 
 TEST_CASE("hal wifi: stopping one interface leaves the other running",
-          "[hal_wifi]") {
+          "[hal_wifi]")
+{
     Radio radio = make_radio();
     TEST_ASSERT_EQUAL(ESP_OK, radio.start_ap(make_ap_config()));
     TEST_ASSERT_EQUAL(ESP_OK, radio.start_station(make_station_config()));

@@ -30,7 +30,8 @@ constexpr const char* kTag = "configure";
 
 // Builds a scan snapshot from live hardware for the /scan and / form routes.
 ScanSnapshot make_snapshot(Config& cfg, SensorManager& sensors,
-                           PowerManager& power_manager) {
+                           PowerManager& power_manager)
+{
     ScanSnapshot snap;
     snap.power_source = power_manager.source();
     snap.battery_mv = power_manager.read_mv();
@@ -65,7 +66,8 @@ ScanSnapshot make_snapshot(Config& cfg, SensorManager& sensors,
 }
 
 // Handles POST /save: NTP sync for saved_time (§5.3 step 4-6).
-std::optional<std::string> on_save(Config& cfg) {
+std::optional<std::string> on_save(Config& cfg)
+{
     // Only the NTP sync happens here; validation and persistence are done by
     // the HTTPS server before this callback runs.
     const auto epoch = ntp_get_utc_epoch(cfg.ntp_server);
@@ -84,7 +86,8 @@ std::optional<std::string> on_save(Config& cfg) {
 }  // namespace
 
 template<hal::BoardLike Board>
-[[noreturn]] void run_configure_mode(logic::LedTask<Board>& led_task) {
+[[noreturn]] void run_configure_mode(logic::LedTask<Board>& led_task)
+{
     ESP_LOGI(kTag, "entering Configure mode");
 
     Config cfg;
@@ -131,7 +134,8 @@ template<hal::BoardLike Board>
 }
 
 [[noreturn]] void run_configure_mode(
-    logic::LedTask<hal::board::Board>& led_task) {
+    logic::LedTask<hal::board::Board>& led_task)
+{
     run_configure_mode<hal::board::Board>(led_task);
 }
 

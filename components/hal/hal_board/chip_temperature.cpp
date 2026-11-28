@@ -24,7 +24,8 @@ constexpr int kRangeMinC = -10;
 constexpr int kRangeMaxC = 80;
 
 // Converts a float Celsius reading to hundredths, rounded to nearest.
-std::int16_t to_x100(float celsius) noexcept {
+std::int16_t to_x100(float celsius) noexcept
+{
     return static_cast<std::int16_t>(std::lround(celsius * 100.0f));
 }
 
@@ -32,7 +33,8 @@ std::int16_t to_x100(float celsius) noexcept {
 
 ChipTemperature::ChipTemperature() noexcept = default;
 
-ChipTemperature::~ChipTemperature() noexcept {
+ChipTemperature::~ChipTemperature() noexcept
+{
     if (sensor_ != nullptr) {
         temperature_sensor_disable(
             static_cast<temperature_sensor_handle_t>(sensor_));
@@ -42,7 +44,8 @@ ChipTemperature::~ChipTemperature() noexcept {
     }
 }
 
-esp_err_t ChipTemperature::init() noexcept {
+esp_err_t ChipTemperature::init() noexcept
+{
     temperature_sensor_config_t cfg =
         TEMPERATURE_SENSOR_CONFIG_DEFAULT(kRangeMinC, kRangeMaxC);
 
@@ -62,7 +65,8 @@ esp_err_t ChipTemperature::init() noexcept {
     return ESP_OK;
 }
 
-std::int16_t ChipTemperature::read() noexcept {
+std::int16_t ChipTemperature::read() noexcept
+{
     assert(sensor_ != nullptr &&
            "ChipTemperature::init() must be called before read()");
 

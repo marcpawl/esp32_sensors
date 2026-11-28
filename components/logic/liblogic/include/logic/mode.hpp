@@ -27,7 +27,8 @@ enum class Mode : std::uint8_t {
     kInvalid = 3,    // Both sense poles on: switch bouncing or a wiring fault.
 };
 
-constexpr const char* to_string(Mode mode) {
+constexpr const char* to_string(Mode mode)
+{
     switch (mode) {
         case Mode::kOff:
             return "Off";

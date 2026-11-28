@@ -25,11 +25,13 @@ struct esp_timer {
 
 namespace fake_esp_timer {
 
-State& state() {
+State& state()
+{
     return g_state;
 }
 
-void reset() {
+void reset()
+{
     g_state = State{};
 }
 
@@ -38,7 +40,8 @@ void reset() {
 extern "C" {
 
 esp_err_t esp_timer_create(const esp_timer_create_args_t* create_args,
-                           esp_timer_handle_t* out_handle) {
+                           esp_timer_handle_t* out_handle)
+{
     if (create_args == nullptr || create_args->callback == nullptr ||
         out_handle == nullptr) {
         return ESP_ERR_INVALID_ARG;
@@ -58,7 +61,8 @@ esp_err_t esp_timer_create(const esp_timer_create_args_t* create_args,
     return ESP_OK;
 }
 
-esp_err_t esp_timer_delete(esp_timer_handle_t timer) {
+esp_err_t esp_timer_delete(esp_timer_handle_t timer)
+{
     if (timer == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -70,7 +74,8 @@ esp_err_t esp_timer_delete(esp_timer_handle_t timer) {
     return ESP_OK;
 }
 
-esp_err_t esp_timer_start_once(esp_timer_handle_t timer, uint64_t timeout_us) {
+esp_err_t esp_timer_start_once(esp_timer_handle_t timer, uint64_t timeout_us)
+{
     if (timer == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -86,8 +91,8 @@ esp_err_t esp_timer_start_once(esp_timer_handle_t timer, uint64_t timeout_us) {
     return ESP_OK;
 }
 
-esp_err_t esp_timer_start_periodic(esp_timer_handle_t timer,
-                                   uint64_t period_us) {
+esp_err_t esp_timer_start_periodic(esp_timer_handle_t timer, uint64_t period_us)
+{
     if (timer == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -103,7 +108,8 @@ esp_err_t esp_timer_start_periodic(esp_timer_handle_t timer,
     return ESP_OK;
 }
 
-esp_err_t esp_timer_restart(esp_timer_handle_t timer, uint64_t timeout_us) {
+esp_err_t esp_timer_restart(esp_timer_handle_t timer, uint64_t timeout_us)
+{
     if (timer == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -119,7 +125,8 @@ esp_err_t esp_timer_restart(esp_timer_handle_t timer, uint64_t timeout_us) {
     return ESP_OK;
 }
 
-esp_err_t esp_timer_stop(esp_timer_handle_t timer) {
+esp_err_t esp_timer_stop(esp_timer_handle_t timer)
+{
     if (timer == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -132,7 +139,8 @@ esp_err_t esp_timer_stop(esp_timer_handle_t timer) {
 }
 
 esp_err_t esp_timer_stop_blocking(esp_timer_handle_t timer,
-                                  uint32_t timeout_ticks) {
+                                  uint32_t timeout_ticks)
+{
     if (timer == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -142,12 +150,14 @@ esp_err_t esp_timer_stop_blocking(esp_timer_handle_t timer,
     return ESP_OK;
 }
 
-bool esp_timer_is_active(esp_timer_handle_t timer) {
+bool esp_timer_is_active(esp_timer_handle_t timer)
+{
     ++g_state.is_active_calls;
     return timer != nullptr && g_state.active;
 }
 
-esp_err_t esp_timer_get_period(esp_timer_handle_t timer, uint64_t* period) {
+esp_err_t esp_timer_get_period(esp_timer_handle_t timer, uint64_t* period)
+{
     ++g_state.get_period_calls;
     if (timer == nullptr || period == nullptr) {
         return ESP_ERR_INVALID_ARG;
@@ -156,8 +166,8 @@ esp_err_t esp_timer_get_period(esp_timer_handle_t timer, uint64_t* period) {
     return ESP_OK;
 }
 
-esp_err_t esp_timer_get_expiry_time(esp_timer_handle_t timer,
-                                    uint64_t* expiry) {
+esp_err_t esp_timer_get_expiry_time(esp_timer_handle_t timer, uint64_t* expiry)
+{
     if (timer == nullptr || expiry == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }

@@ -17,7 +17,8 @@
 
 namespace thermo::logic {
 
-RomIdHex rom_id_to_hex(const hal::RomId& rom) {
+RomIdHex rom_id_to_hex(const hal::RomId& rom)
+{
     // 8 bytes -> 16 uppercase hex chars, no separator. Writing each nibble
     // explicitly also keeps the buffer fully initialised for GCC's analyzer.
     constexpr char digits[] = "0123456789ABCDEF";
@@ -29,7 +30,8 @@ RomIdHex rom_id_to_hex(const hal::RomId& rom) {
     return hex;
 }
 
-std::optional<hal::RomId> rom_id_from_hex(std::string_view hex) {
+std::optional<hal::RomId> rom_id_from_hex(std::string_view hex)
+{
     hal::RomId id{};
     // ROM IDs are always exactly 16 hex characters.
     if (hex.size() != 2 * hal::kRomIdBytes) {

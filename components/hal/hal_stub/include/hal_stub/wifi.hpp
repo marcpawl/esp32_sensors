@@ -50,7 +50,8 @@ class WifiRadioStub {
 
     // Builds a radio. Same signature for the hardware and stub
     // implementations; call init() before any other method.
-    [[nodiscard]] static WifiRadioStub create() noexcept {
+    [[nodiscard]] static WifiRadioStub create() noexcept
+    {
         return WifiRadioStub();
     }
 

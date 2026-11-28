@@ -40,7 +40,8 @@ constexpr char kTag[] = "donny";
 // stub devices log whenever they are written to. Without this, applying a line
 // that sets an LED would interleave a "Green: On" log line with the protocol
 // output. Diagnostics stay readable on stderr; the protocol stays parseable.
-int log_to_stderr(const char* format, va_list args) {
+int log_to_stderr(const char* format, va_list args)
+{
     return std::vfprintf(stderr, format, args);
 }
 
@@ -56,7 +57,8 @@ struct LogRedirect {
 
 }  // namespace
 
-extern "C" void app_main(void) {
+extern "C" void app_main(void)
+{
     ESP_LOGI(kTag, "donny running (linux emulation)");
 
     thermo::simulator::restore_hardware();

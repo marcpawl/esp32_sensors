@@ -23,7 +23,8 @@ namespace {
 // Appends `s` as a JSON string literal, escaping the characters JSON requires
 // and anything below U+0020. The device/network names come from the config
 // page, so they are untrusted input and must not break the document.
-void append_json_string(Payload& out, std::string_view s) {
+void append_json_string(Payload& out, std::string_view s)
+{
     out.push_back('"');
     for (const char c : s) {
         switch (c) {
@@ -66,7 +67,8 @@ void append_json_string(Payload& out, std::string_view s) {
 }
 
 // Appends `value` in decimal without a temporary string.
-void append_u32(Payload& out, std::uint32_t value) {
+void append_u32(Payload& out, std::uint32_t value)
+{
     char digits[10]{};
     std::size_t count = 0;
     do {
@@ -79,7 +81,8 @@ void append_u32(Payload& out, std::uint32_t value) {
 }
 
 // Appends a temperature x100 as a §9.3 one-decimal JSON number, or `null`.
-void append_temp(Payload& out, std::int16_t temp_c_x100) {
+void append_temp(Payload& out, std::int16_t temp_c_x100)
+{
     if (temp_c_x100 == kTempNull) {
         out += "null";
         return;
@@ -90,7 +93,8 @@ void append_temp(Payload& out, std::int16_t temp_c_x100) {
 }  // namespace
 
 Payload build_batch_json(const DeviceName& device, const SensorNames& names,
-                         const std::vector<NamedSample>& samples) {
+                         const std::vector<NamedSample>& samples)
+{
     // Fixed capacity: an over-long batch aborts here. That is a bad state,
     // because it means many samples are still buffered and untransmitted,
     // and the abort loses them with the RTC buffer.

@@ -16,7 +16,8 @@
 namespace thermo::validation {
 namespace {
 
-bool all_alnum_etc(std::string_view v) {
+bool all_alnum_etc(std::string_view v)
+{
     // Reject control characters and whitespace for credentials/SSIDs; allow a
     // broad set of printable ASCII.
     return std::all_of(v.begin(), v.end(),
@@ -24,7 +25,8 @@ bool all_alnum_etc(std::string_view v) {
 }
 
 std::optional<std::string> check_length(std::string_view v, std::size_t lo,
-                                        std::size_t hi, const char* what) {
+                                        std::size_t hi, const char* what)
+{
     if (v.size() < lo || v.size() > hi) {
         return std::string(what) + " must be " + std::to_string(lo) + "-" +
                std::to_string(hi) + " characters";
@@ -35,7 +37,8 @@ std::optional<std::string> check_length(std::string_view v, std::size_t lo,
     return std::nullopt;
 }
 
-std::optional<std::uint32_t> parse_u32(std::string_view v) {
+std::optional<std::uint32_t> parse_u32(std::string_view v)
+{
     std::uint32_t value = 0;
     const auto* begin = v.data();
     const auto* end = v.data() + v.size();
@@ -48,15 +51,18 @@ std::optional<std::uint32_t> parse_u32(std::string_view v) {
 
 }  // namespace
 
-std::optional<std::string> validate_ssid(const std::string& v) {
+std::optional<std::string> validate_ssid(const std::string& v)
+{
     return check_length(v, 1, 32, "SSID");
 }
 
-std::optional<std::string> validate_ap_password(const std::string& v) {
+std::optional<std::string> validate_ap_password(const std::string& v)
+{
     return check_length(v, 8, 63, "Password");
 }
 
-std::optional<std::string> validate_sta_password(const std::string& v) {
+std::optional<std::string> validate_sta_password(const std::string& v)
+{
     // Empty is allowed: an open network has no password.
     if (v.empty()) {
         return std::nullopt;
@@ -64,7 +70,8 @@ std::optional<std::string> validate_sta_password(const std::string& v) {
     return check_length(v, 8, 63, "Station password");
 }
 
-std::optional<std::string> validate_url(const std::string& v) {
+std::optional<std::string> validate_url(const std::string& v)
+{
     if (v.rfind("http://", 0) != 0 && v.rfind("https://", 0) != 0) {
         return std::string("URL must start with http:// or https://");
     }
@@ -74,7 +81,8 @@ std::optional<std::string> validate_url(const std::string& v) {
     return std::nullopt;
 }
 
-std::optional<std::string> validate_interval(std::string_view v) {
+std::optional<std::string> validate_interval(std::string_view v)
+{
     const auto parsed = parse_u32(v);
     if (!parsed || *parsed == 0) {
         return std::string("must be a positive integer");
@@ -82,12 +90,14 @@ std::optional<std::string> validate_interval(std::string_view v) {
     return std::nullopt;
 }
 
-std::optional<std::string> validate_device_name(const std::string& v) {
+std::optional<std::string> validate_device_name(const std::string& v)
+{
     return check_length(v, 1, logic::limits::kMaxDeviceNameLength,
                         "Device name");
 }
 
-std::optional<std::string> validate_ntp_server(const std::string& v) {
+std::optional<std::string> validate_ntp_server(const std::string& v)
+{
     if (v.empty()) {
         return std::string("NTP server must not be empty");
     }
@@ -106,7 +116,8 @@ std::optional<std::string> validate_ntp_server(const std::string& v) {
     return std::nullopt;
 }
 
-ValidationResult validate(const Config& cfg) {
+ValidationResult validate(const Config& cfg)
+{
     ValidationResult result{};
     auto add = [&result](const char* field, std::optional<std::string> msg) {
         if (msg) {

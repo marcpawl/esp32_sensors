@@ -16,7 +16,8 @@
 
 #include "static_vector_assert_cases.hpp"
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv)
+{
     return assert_test_support::run_assert_program(
         argc, argv, static_vector_assert_cases::cases());
 }

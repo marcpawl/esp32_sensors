@@ -43,7 +43,8 @@ class PowerManager {
 
     // Present only when the solar battery is installed and detected, i.e.
     // source() == PowerSource::kSolarBattery.
-    const std::optional<BatteryMonitor>& battery() const noexcept {
+    const std::optional<BatteryMonitor>& battery() const noexcept
+    {
         return battery_;
     }
 
@@ -51,7 +52,8 @@ class PowerManager {
     std::optional<uint32_t> read_mv() noexcept;
 
     // True when running from a USB port (either battery pack or computer).
-    bool on_usb() const noexcept {
+    bool on_usb() const noexcept
+    {
         return source_ != PowerSource::kSolarBattery;
     }
 

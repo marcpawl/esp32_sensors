@@ -19,7 +19,8 @@ namespace {
 constexpr const char* kTag = "ntp";
 
 // Waits for the system clock to be set, up to `timeout_ms`.
-bool wait_for_sync(std::uint32_t timeout_ms) {
+bool wait_for_sync(std::uint32_t timeout_ms)
+{
     const std::uint32_t start = xTaskGetTickCount() * portTICK_PERIOD_MS;
     while (true) {
         const std::time_t now = std::time(nullptr);
@@ -38,7 +39,8 @@ bool wait_for_sync(std::uint32_t timeout_ms) {
 
 }  // namespace
 
-std::optional<std::uint32_t> ntp_get_utc_epoch(const std::string& server) {
+std::optional<std::uint32_t> ntp_get_utc_epoch(const std::string& server)
+{
     // (Re)configure SNTP for the requested server. The Wi-Fi interface must
     // already be up; in Configure mode this relies on the connected station
     // being available, which for a first-boot AP-only device may fail — in

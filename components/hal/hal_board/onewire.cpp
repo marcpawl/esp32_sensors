@@ -32,7 +32,8 @@ constexpr std::uint8_t kFamilyDs18b20 = 0x28;
 constexpr std::uint32_t kConversionWaitUs = 800'000;
 
 // Microsecond spin using the ROM delay (accurate enough for 1-Wire slots).
-inline void delay_us(std::uint32_t us) noexcept {
+inline void delay_us(std::uint32_t us) noexcept
+{
     esp_rom_delay_us(us);
 }
 
@@ -50,20 +51,24 @@ class IrqGuard {
     portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
 };
 
-inline void drive_low(Gpio gpio) noexcept {
+inline void drive_low(Gpio gpio) noexcept
+{
     gpio_set_level(static_cast<gpio_num_t>(gpio.as_int()), 0);
 }
 
-inline void release(Gpio gpio) noexcept {
+inline void release(Gpio gpio) noexcept
+{
     gpio_set_level(static_cast<gpio_num_t>(gpio.as_int()), 1);
 }
 
-inline int sample(Gpio gpio) noexcept {
+inline int sample(Gpio gpio) noexcept
+{
     return gpio_get_level(static_cast<gpio_num_t>(gpio.as_int()));
 }
 
 // Dallas/Maxim CRC8, reflected polynomial 0x8C.
-std::uint8_t crc8(const std::uint8_t* data, std::size_t len) noexcept {
+std::uint8_t crc8(const std::uint8_t* data, std::size_t len) noexcept
+{
     std::uint8_t crc = 0;
     for (std::size_t i = 0; i < len; ++i) {
         std::uint8_t in = data[i];
@@ -83,13 +88,15 @@ std::uint8_t crc8(const std::uint8_t* data, std::size_t len) noexcept {
 
 OneWire::OneWire(Gpio gpio) noexcept : gpio_(gpio) {}
 
-OneWire::~OneWire() noexcept {
+OneWire::~OneWire() noexcept
+{
     if (initialized_) {
         gpio_reset_pin(static_cast<gpio_num_t>(gpio_.as_int()));
     }
 }
 
-esp_err_t OneWire::init() noexcept {
+esp_err_t OneWire::init() noexcept
+{
     gpio_config_t cfg = {};
     cfg.pin_bit_mask = 1ULL << gpio_.as_int();
     cfg.mode = GPIO_MODE_INPUT_OUTPUT_OD;  // Open-drain.
@@ -105,7 +112,8 @@ esp_err_t OneWire::init() noexcept {
     return ESP_OK;
 }
 
-bool OneWire::reset() noexcept {
+bool OneWire::reset() noexcept
+{
     IrqGuard guard;
     drive_low(gpio_);
     delay_us(480);
@@ -116,7 +124,8 @@ bool OneWire::reset() noexcept {
     return presence;
 }
 
-void OneWire::write_bit(bool bit) noexcept {
+void OneWire::write_bit(bool bit) noexcept
+{
     IrqGuard guard;
     if (bit) {
         drive_low(gpio_);
@@ -131,7 +140,8 @@ void OneWire::write_bit(bool bit) noexcept {
     }
 }
 
-bool OneWire::read_bit() noexcept {
+bool OneWire::read_bit() noexcept
+{
     IrqGuard guard;
     drive_low(gpio_);
     delay_us(6);
@@ -142,13 +152,15 @@ bool OneWire::read_bit() noexcept {
     return value;
 }
 
-void OneWire::write_byte(std::uint8_t value) noexcept {
+void OneWire::write_byte(std::uint8_t value) noexcept
+{
     for (int i = 0; i < 8; ++i) {
         write_bit((value >> i) & 0x01);
     }
 }
 
-std::uint8_t OneWire::read_byte() noexcept {
+std::uint8_t OneWire::read_byte() noexcept
+{
     std::uint8_t value = 0;
     for (int i = 0; i < 8; ++i) {
         if (read_bit()) {
@@ -158,7 +170,8 @@ std::uint8_t OneWire::read_byte() noexcept {
     return value;
 }
 
-RomIdList OneWire::discover_sensors() noexcept {
+RomIdList OneWire::discover_sensors() noexcept
+{
     // Standard 1-Wire search (Maxim AN187): a binary tree walk over the 64-bit
     // ROM space. `last_discrepancy` remembers where the previous pass chose the
     // '0' branch, so each pass enumerates one device until none remain.
@@ -232,8 +245,8 @@ RomIdList OneWire::discover_sensors() noexcept {
     return found;
 }
 
-std::optional<std::int16_t> OneWire::read_temperature(
-    const RomId& rom) noexcept {
+std::optional<std::int16_t> OneWire::read_temperature(const RomId& rom) noexcept
+{
     if (!reset()) {
         return std::nullopt;
     }
@@ -257,7 +270,8 @@ std::optional<std::int16_t> OneWire::read_temperature(
     return static_cast<std::int16_t>(raw * 100 / 16);
 }
 
-ReadingList OneWire::read() noexcept {
+ReadingList OneWire::read() noexcept
+{
     const RomIdList roms = discover_sensors();
 
     ReadingList readings;

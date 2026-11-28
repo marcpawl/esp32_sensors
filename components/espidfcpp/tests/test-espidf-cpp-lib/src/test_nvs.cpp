@@ -56,7 +56,8 @@ static_assert(HasNumericWrite<NvsMode::ReadWrite, bool>);
 static_assert(HasNumericWrite<NvsMode::ReadWrite, float>);
 static_assert(HasStringWrite<NvsMode::ReadWrite, 8>);
 
-void clear_namespace() {
+void clear_namespace()
+{
     // Constructing an Nvs initializes flash before opening the namespace.
     {
         Nvs<NvsMode::ReadWrite> init{kNamespace};
@@ -72,14 +73,16 @@ void clear_namespace() {
 
 // --- Initialization ---------------------------------------------------------
 
-TEST_CASE("nvs: init and deinit are available for both modes", "[nvs]") {
+TEST_CASE("nvs: init and deinit are available for both modes", "[nvs]")
+{
     Nvs<NvsMode::Read>::init_nvs_flash();
     Nvs<NvsMode::ReadWrite>::init_nvs_flash();
     Nvs<NvsMode::Read>::deinit_nvs_flash();
     Nvs<NvsMode::ReadWrite>::deinit_nvs_flash();
 }
 
-TEST_CASE("nvs: deinit_nvs_flash allows a fresh init", "[nvs]") {
+TEST_CASE("nvs: deinit_nvs_flash allows a fresh init", "[nvs]")
+{
     Nvs<NvsMode::ReadWrite>::init_nvs_flash();
     Nvs<NvsMode::ReadWrite>::deinit_nvs_flash();
 
@@ -91,7 +94,8 @@ TEST_CASE("nvs: deinit_nvs_flash allows a fresh init", "[nvs]") {
 
 // --- Boolean ----------------------------------------------------------------
 
-TEST_CASE("nvs: bool write and read round trip", "[nvs]") {
+TEST_CASE("nvs: bool write and read round trip", "[nvs]")
+{
     clear_namespace();
     Nvs<NvsMode::ReadWrite> nvs{kNamespace};
     nvs.write("true", true);
@@ -105,21 +109,24 @@ TEST_CASE("nvs: bool write and read round trip", "[nvs]") {
 
 // --- Unsigned integers ------------------------------------------------------
 
-TEST_CASE("nvs: uint8_t write and read round trip", "[nvs]") {
+TEST_CASE("nvs: uint8_t write and read round trip", "[nvs]")
+{
     clear_namespace();
     Nvs<NvsMode::ReadWrite> nvs{kNamespace};
     nvs.write("u8", std::uint8_t{0xA5U});
     TEST_ASSERT_EQUAL_HEX8(0xA5U, nvs.read("u8", std::uint8_t{0}));
 }
 
-TEST_CASE("nvs: uint16_t write and read round trip", "[nvs]") {
+TEST_CASE("nvs: uint16_t write and read round trip", "[nvs]")
+{
     clear_namespace();
     Nvs<NvsMode::ReadWrite> nvs{kNamespace};
     nvs.write("u16", std::uint16_t{0xBEEFU});
     TEST_ASSERT_EQUAL_HEX16(0xBEEFU, nvs.read("u16", std::uint16_t{0}));
 }
 
-TEST_CASE("nvs: uint32_t write and read round trip", "[nvs]") {
+TEST_CASE("nvs: uint32_t write and read round trip", "[nvs]")
+{
     clear_namespace();
     Nvs<NvsMode::ReadWrite> nvs{kNamespace};
     nvs.write("u32", std::uint32_t{0xDEADBEEFU});
@@ -128,21 +135,24 @@ TEST_CASE("nvs: uint32_t write and read round trip", "[nvs]") {
 
 // --- Signed integers --------------------------------------------------------
 
-TEST_CASE("nvs: int8_t write and read round trip", "[nvs]") {
+TEST_CASE("nvs: int8_t write and read round trip", "[nvs]")
+{
     clear_namespace();
     Nvs<NvsMode::ReadWrite> nvs{kNamespace};
     nvs.write("i8", std::int8_t{-42});
     TEST_ASSERT_EQUAL_INT8(-42, nvs.read("i8", std::int8_t{0}));
 }
 
-TEST_CASE("nvs: int16_t write and read round trip", "[nvs]") {
+TEST_CASE("nvs: int16_t write and read round trip", "[nvs]")
+{
     clear_namespace();
     Nvs<NvsMode::ReadWrite> nvs{kNamespace};
     nvs.write("i16", std::int16_t{-12345});
     TEST_ASSERT_EQUAL_INT16(-12345, nvs.read("i16", std::int16_t{0}));
 }
 
-TEST_CASE("nvs: int32_t write and read round trip", "[nvs]") {
+TEST_CASE("nvs: int32_t write and read round trip", "[nvs]")
+{
     clear_namespace();
     Nvs<NvsMode::ReadWrite> nvs{kNamespace};
     nvs.write("i32", std::int32_t{-123456789});
@@ -151,7 +161,8 @@ TEST_CASE("nvs: int32_t write and read round trip", "[nvs]") {
 
 // --- Float ------------------------------------------------------------------
 
-TEST_CASE("nvs: float write and read round trip", "[nvs]") {
+TEST_CASE("nvs: float write and read round trip", "[nvs]")
+{
     clear_namespace();
     Nvs<NvsMode::ReadWrite> nvs{kNamespace};
     nvs.write("f", -12.5F);
@@ -160,7 +171,8 @@ TEST_CASE("nvs: float write and read round trip", "[nvs]") {
 
 // --- Defaults for absent keys -----------------------------------------------
 
-TEST_CASE("nvs: a missing numeric key returns the default", "[nvs]") {
+TEST_CASE("nvs: a missing numeric key returns the default", "[nvs]")
+{
     clear_namespace();
     Nvs<NvsMode::ReadWrite> nvs{kNamespace};
     TEST_ASSERT_EQUAL_UINT8(11U, nvs.read("absent_u8", std::uint8_t{11}));
@@ -175,7 +187,8 @@ TEST_CASE("nvs: a missing numeric key returns the default", "[nvs]") {
     TEST_ASSERT_EQUAL_FLOAT(7.25F, nvs.read("absent_f", 7.25F));
 }
 
-TEST_CASE("nvs: a missing string key returns the default", "[nvs]") {
+TEST_CASE("nvs: a missing string key returns the default", "[nvs]")
+{
     clear_namespace();
     Nvs<NvsMode::ReadWrite> nvs{kNamespace};
     const auto value = nvs.read<16>("absent_str", "fallback");
@@ -185,7 +198,8 @@ TEST_CASE("nvs: a missing string key returns the default", "[nvs]") {
 
 // --- Strings ----------------------------------------------------------------
 
-TEST_CASE("nvs: an empty string round trips", "[nvs]") {
+TEST_CASE("nvs: an empty string round trips", "[nvs]")
+{
     clear_namespace();
     Nvs<NvsMode::ReadWrite> nvs{kNamespace};
     nvs.write("empty", static_string<8>{""});
@@ -194,7 +208,8 @@ TEST_CASE("nvs: an empty string round trips", "[nvs]") {
     TEST_ASSERT_EQUAL_STRING("", value.c_str());
 }
 
-TEST_CASE("nvs: a string at maximum length round trips", "[nvs]") {
+TEST_CASE("nvs: a string at maximum length round trips", "[nvs]")
+{
     clear_namespace();
     Nvs<NvsMode::ReadWrite> nvs{kNamespace};
     constexpr char kMax[] = "12345678";
@@ -205,7 +220,8 @@ TEST_CASE("nvs: a string at maximum length round trips", "[nvs]") {
 }
 
 TEST_CASE("nvs: a longer stored string reports the length needed to read it",
-          "[nvs]") {
+          "[nvs]")
+{
     clear_namespace();
     Nvs<NvsMode::ReadWrite> nvs{kNamespace};
     nvs.write("long", static_string<12>{"abcdefghijkl"});
@@ -225,7 +241,8 @@ TEST_CASE("nvs: a longer stored string reports the length needed to read it",
 
 // --- Two handles ------------------------------------------------------------
 
-TEST_CASE("nvs: two handles opened at once see the same values", "[nvs]") {
+TEST_CASE("nvs: two handles opened at once see the same values", "[nvs]")
+{
     clear_namespace();
     Nvs<NvsMode::ReadWrite> writer{kNamespace};
     Nvs<NvsMode::Read> reader{kNamespace};
@@ -237,7 +254,8 @@ TEST_CASE("nvs: two handles opened at once see the same values", "[nvs]") {
                              reader.read<8>("shared_str", "fallback").c_str());
 }
 
-TEST_CASE("nvs: two writers opened at once see each other's writes", "[nvs]") {
+TEST_CASE("nvs: two writers opened at once see each other's writes", "[nvs]")
+{
     clear_namespace();
     Nvs<NvsMode::ReadWrite> first{kNamespace};
     Nvs<NvsMode::ReadWrite> second{kNamespace};

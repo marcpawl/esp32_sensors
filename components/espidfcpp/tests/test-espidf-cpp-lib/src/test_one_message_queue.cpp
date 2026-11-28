@@ -45,7 +45,8 @@ struct Reading {
 };
 
 // Receives with no wait: a message, or `std::nullopt` if the queue is empty.
-std::optional<Reading> receive_now(OneMessageQueue<Reading>& queue) {
+std::optional<Reading> receive_now(OneMessageQueue<Reading>& queue)
+{
     return queue.receive(static_cast<TickType_t>(0));
 }
 
@@ -54,18 +55,21 @@ std::optional<Reading> receive_now(OneMessageQueue<Reading>& queue) {
 // --- Creation / destruction -------------------------------------------------
 
 TEST_CASE("one_message_queue: creation yields a valid handle",
-          "[one_message_queue]") {
+          "[one_message_queue]")
+{
     const OneMessageQueue<Reading> queue;
     TEST_ASSERT_NOT_NULL(queue.handle());
 }
 
-TEST_CASE("one_message_queue: a new queue is empty", "[one_message_queue]") {
+TEST_CASE("one_message_queue: a new queue is empty", "[one_message_queue]")
+{
     OneMessageQueue<Reading> queue;
     TEST_ASSERT_FALSE(receive_now(queue).has_value());
 }
 
 TEST_CASE("one_message_queue: destruction deletes the handle",
-          "[one_message_queue]") {
+          "[one_message_queue]")
+{
     // Unable to test.
     // Note: DeepSeek is wrong, handles can be reused.
     //    Queue handles are never reused once deleted,
@@ -79,7 +83,8 @@ TEST_CASE("one_message_queue: destruction deletes the handle",
 // --- Send / receive round-trips --------------------------------------------
 
 TEST_CASE("one_message_queue: a sent message is received unchanged",
-          "[one_message_queue]") {
+          "[one_message_queue]")
+{
     OneMessageQueue<Reading> queue;
     const Reading sent{2350, 2};
 
@@ -91,7 +96,8 @@ TEST_CASE("one_message_queue: a sent message is received unchanged",
 }
 
 TEST_CASE("one_message_queue: receiving empties the queue",
-          "[one_message_queue]") {
+          "[one_message_queue]")
+{
     OneMessageQueue<Reading> queue;
     queue.send(Reading{100, 0});
 
@@ -101,7 +107,8 @@ TEST_CASE("one_message_queue: receiving empties the queue",
 }
 
 TEST_CASE("one_message_queue: the tick-timeout receive overload works",
-          "[one_message_queue]") {
+          "[one_message_queue]")
+{
     OneMessageQueue<Reading> queue;
     queue.send(Reading{-500, 1});
 
@@ -113,7 +120,8 @@ TEST_CASE("one_message_queue: the tick-timeout receive overload works",
 }
 
 TEST_CASE("one_message_queue: the chrono-timeout receive overload works",
-          "[one_message_queue]") {
+          "[one_message_queue]")
+{
     OneMessageQueue<Reading> queue;
     queue.send(Reading{42, 3});
 
@@ -127,7 +135,8 @@ TEST_CASE("one_message_queue: the chrono-timeout receive overload works",
 // --- Overwrite semantics ----------------------------------------------------
 
 TEST_CASE("one_message_queue: a second send overwrites an unread message",
-          "[one_message_queue]") {
+          "[one_message_queue]")
+{
     OneMessageQueue<Reading> queue;
 
     queue.send(Reading{1111, 0});
@@ -142,7 +151,8 @@ TEST_CASE("one_message_queue: a second send overwrites an unread message",
 }
 
 TEST_CASE("one_message_queue: send overwrites after a receive too",
-          "[one_message_queue]") {
+          "[one_message_queue]")
+{
     OneMessageQueue<Reading> queue;
 
     queue.send(Reading{1, 0});
@@ -157,7 +167,8 @@ TEST_CASE("one_message_queue: send overwrites after a receive too",
 // --- Timeouts ---------------------------------------------------------------
 
 TEST_CASE("one_message_queue: a long receive times out on an empty queue",
-          "[one_message_queue]") {
+          "[one_message_queue]")
+{
     OneMessageQueue<Reading> queue;
 
     // A short, real wait (20 ms) with nothing to receive. This also checks
@@ -169,7 +180,8 @@ TEST_CASE("one_message_queue: a long receive times out on an empty queue",
 // --- ISR-safe send ----------------------------------------------------------
 
 TEST_CASE("one_message_queue: send_from_isr delivers like send",
-          "[one_message_queue]") {
+          "[one_message_queue]")
+{
     OneMessageQueue<Reading> queue;
 
     queue.send_from_isr(Reading{700, 2});
@@ -182,7 +194,8 @@ TEST_CASE("one_message_queue: send_from_isr delivers like send",
 // --- Move semantics ---------------------------------------------------------
 
 TEST_CASE("one_message_queue: move construction transfers the handle",
-          "[one_message_queue]") {
+          "[one_message_queue]")
+{
     OneMessageQueue<Reading> source;
     QueueHandle_t const original = source.handle();
     source.send(Reading{9, 1});
@@ -196,7 +209,8 @@ TEST_CASE("one_message_queue: move construction transfers the handle",
 }
 
 TEST_CASE("one_message_queue: move assignment transfers the handle",
-          "[one_message_queue]") {
+          "[one_message_queue]")
+{
     OneMessageQueue<Reading> source;
     QueueHandle_t const original = source.handle();
     source.send(Reading{4, 0});
@@ -213,7 +227,8 @@ TEST_CASE("one_message_queue: move assignment transfers the handle",
 // --- Compile-time contract --------------------------------------------------
 
 TEST_CASE("one_message_queue: copy is disabled, move is enabled",
-          "[one_message_queue]") {
+          "[one_message_queue]")
+{
     static_assert(!std::is_copy_constructible_v<OneMessageQueue<Reading>>);
     static_assert(!std::is_copy_assignable_v<OneMessageQueue<Reading>>);
     static_assert(std::is_move_constructible_v<OneMessageQueue<Reading>>);

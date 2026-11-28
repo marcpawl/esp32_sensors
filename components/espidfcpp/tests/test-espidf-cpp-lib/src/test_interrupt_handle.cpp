@@ -36,7 +36,8 @@ struct IsrState {
     gpio_num_t pin;
 };
 
-void isr(void* arg) {
+void isr(void* arg)
+{
     auto* state = static_cast<IsrState*>(arg);
     state->calls = state->calls + 1U;
     BaseType_t woken = pdFALSE;
@@ -46,13 +47,15 @@ void isr(void* arg) {
     }
 }
 
-void install_isr_service() {
+void install_isr_service()
+{
     // The service is process-wide, so a second test sees INVALID_STATE.
     const esp_err_t err = gpio_install_isr_service(0);
     TEST_ASSERT_TRUE(err == ESP_OK || err == ESP_ERR_INVALID_STATE);
 }
 
-void configure_pin(IsrState& state, gpio_num_t pin = kTestGpio) {
+void configure_pin(IsrState& state, gpio_num_t pin = kTestGpio)
+{
     state.calls = 0;
     state.level = false;
     state.pin = pin;
@@ -80,12 +83,14 @@ void configure_pin(IsrState& state, gpio_num_t pin = kTestGpio) {
     state.calls = 0;
 }
 
-void toggle(IsrState& state) {
+void toggle(IsrState& state)
+{
     state.level = !state.level;
     TEST_ASSERT_EQUAL(ESP_OK, gpio_set_level(state.pin, state.level ? 1 : 0));
 }
 
-void expect_isr(IsrState& state) {
+void expect_isr(IsrState& state)
+{
     // Drain a token left by an earlier edge.
     (void)xSemaphoreTake(state.semaphore, 0);
     state.calls = 0;
@@ -94,7 +99,8 @@ void expect_isr(IsrState& state) {
     TEST_ASSERT_EQUAL_UINT32(1U, state.calls);
 }
 
-void expect_no_isr(IsrState& state) {
+void expect_no_isr(IsrState& state)
+{
     // Drain a token left by an earlier assertion.
     (void)xSemaphoreTake(state.semaphore, 0);
     state.calls = 0;
@@ -104,7 +110,8 @@ void expect_no_isr(IsrState& state) {
     TEST_ASSERT_EQUAL_UINT32(0U, state.calls);
 }
 
-void cleanup(IsrState& state) {
+void cleanup(IsrState& state)
+{
     (void)gpio_set_intr_type(state.pin, GPIO_INTR_DISABLE);
     (void)gpio_reset_pin(state.pin);
     vSemaphoreDelete(state.semaphore);
@@ -113,7 +120,8 @@ void cleanup(IsrState& state) {
 }  // namespace
 
 TEST_CASE("espidf_cpp InterruptHandle: release removes the real ISR",
-          "[espidf_cpp_interrupt_handle]") {
+          "[espidf_cpp_interrupt_handle]")
+{
     using thermo::espidf_cpp::Gpio;
     using thermo::espidf_cpp::InterruptHandle;
 
@@ -140,7 +148,8 @@ TEST_CASE("espidf_cpp InterruptHandle: release removes the real ISR",
 }
 
 TEST_CASE("espidf_cpp InterruptHandle: destructor removes the real ISR",
-          "[espidf_cpp_interrupt_handle]") {
+          "[espidf_cpp_interrupt_handle]")
+{
     using thermo::espidf_cpp::Gpio;
     using thermo::espidf_cpp::InterruptHandle;
 
@@ -158,7 +167,8 @@ TEST_CASE("espidf_cpp InterruptHandle: destructor removes the real ISR",
 }
 
 TEST_CASE("espidf_cpp InterruptHandle: move keeps exactly one real ISR",
-          "[espidf_cpp_interrupt_handle]") {
+          "[espidf_cpp_interrupt_handle]")
+{
     using thermo::espidf_cpp::Gpio;
     using thermo::espidf_cpp::InterruptHandle;
 
@@ -191,7 +201,8 @@ TEST_CASE("espidf_cpp InterruptHandle: move keeps exactly one real ISR",
 
 TEST_CASE(
     "espidf_cpp InterruptHandle: handles on different pins are independent",
-    "[espidf_cpp_interrupt_handle]") {
+    "[espidf_cpp_interrupt_handle]")
+{
     using thermo::espidf_cpp::Gpio;
     using thermo::espidf_cpp::InterruptHandle;
 

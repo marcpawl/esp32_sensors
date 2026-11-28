@@ -48,7 +48,8 @@ class static_vector {
 
     // Constructs from an iterator range. Asserts if the range does not fit.
     template<typename It>
-    constexpr static_vector(It first, It last) {
+    constexpr static_vector(It first, It last)
+    {
         for (; first != last; ++first) {
             assert(size_ < N);
             data_[size_++] = *first;
@@ -66,7 +67,8 @@ class static_vector {
 
     constexpr T& operator[](size_type i) noexcept { return data_[i]; }
 
-    constexpr const T& operator[](size_type i) const noexcept {
+    constexpr const T& operator[](size_type i) const noexcept
+    {
         return data_[i];
     }
 
@@ -80,13 +82,15 @@ class static_vector {
 
     constexpr const_iterator begin() const noexcept { return data_.data(); }
 
-    constexpr const_iterator end() const noexcept {
+    constexpr const_iterator end() const noexcept
+    {
         return data_.data() + size_;
     }
 
     constexpr const_iterator cbegin() const noexcept { return data_.data(); }
 
-    constexpr const_iterator cend() const noexcept {
+    constexpr const_iterator cend() const noexcept
+    {
         return data_.data() + size_;
     }
 
@@ -95,13 +99,15 @@ class static_vector {
     constexpr const T& back() const noexcept { return data_[size_ - 1]; }
 
     // Appends a copy of `value`. Aborts when the vector is full.
-    constexpr void push_back(const T& value) {
+    constexpr void push_back(const T& value)
+    {
         if (!try_push_back(value)) {
             abort();
         }
     }
 
-    constexpr void push_back(T&& value) {
+    constexpr void push_back(T&& value)
+    {
         if (!try_push_back(std::move(value))) {
             abort();
         }
@@ -109,7 +115,8 @@ class static_vector {
 
     // Appends a value constructed in place. Aborts when the vector is full.
     template<typename... Args>
-    constexpr T& emplace_back(Args&&... args) {
+    constexpr T& emplace_back(Args&&... args)
+    {
         if (full()) {
             abort();
         }
@@ -119,7 +126,8 @@ class static_vector {
 
     // Grows/shrinks the logical size, value-initializing new elements.
     // Precondition: `count` <= capacity() (asserted).
-    constexpr void resize(size_type count) {
+    constexpr void resize(size_type count)
+    {
         assert(count <= N);
         for (size_type i = size_; i < count; ++i) {
             data_[i] = T{};
@@ -128,7 +136,8 @@ class static_vector {
     }
 
     // Non-aborting append: returns false (and stores nothing) when full.
-    constexpr bool try_push_back(const T& value) noexcept {
+    constexpr bool try_push_back(const T& value) noexcept
+    {
         if (full()) {
             return false;
         }
@@ -136,7 +145,8 @@ class static_vector {
         return true;
     }
 
-    constexpr bool try_push_back(T&& value) noexcept {
+    constexpr bool try_push_back(T&& value) noexcept
+    {
         if (full()) {
             return false;
         }

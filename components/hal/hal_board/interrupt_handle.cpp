@@ -19,9 +19,12 @@ namespace thermo::hal::board {
 InterruptHandle::InterruptHandle(Gpio gpio) noexcept : gpio_(gpio) {}
 
 InterruptHandle::InterruptHandle(InterruptHandle&& other) noexcept
-    : gpio_(std::exchange(other.gpio_, std::nullopt)) {}
+    : gpio_(std::exchange(other.gpio_, std::nullopt))
+{
+}
 
-InterruptHandle& InterruptHandle::operator=(InterruptHandle&& other) noexcept {
+InterruptHandle& InterruptHandle::operator=(InterruptHandle&& other) noexcept
+{
     if (this != &other) {
         // Release the pin this handle already owns before taking the source's,
         // or an overwritten handle would leave its registration behind.
@@ -31,15 +34,18 @@ InterruptHandle& InterruptHandle::operator=(InterruptHandle&& other) noexcept {
     return *this;
 }
 
-InterruptHandle::~InterruptHandle() noexcept {
+InterruptHandle::~InterruptHandle() noexcept
+{
     release();
 }
 
-InterruptHandle::Engaged InterruptHandle::engaged() const noexcept {
+InterruptHandle::Engaged InterruptHandle::engaged() const noexcept
+{
     return gpio_.has_value() ? Engaged::kEngaged : Engaged::kIdle;
 }
 
-void InterruptHandle::release() noexcept {
+void InterruptHandle::release() noexcept
+{
     if (!gpio_.has_value()) {
         return;
     }

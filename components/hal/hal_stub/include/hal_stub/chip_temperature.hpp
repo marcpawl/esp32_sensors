@@ -42,7 +42,8 @@ class ChipTemperature {
     // Builds a stub sensor. Takes no parameters: the internal sensor has no
     // pin. Same signature for the hardware and stub implementations; call
     // init() before read().
-    [[nodiscard]] static ChipTemperature create() noexcept {
+    [[nodiscard]] static ChipTemperature create() noexcept
+    {
         return ChipTemperature();
     }
 

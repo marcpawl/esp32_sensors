@@ -44,7 +44,8 @@ class Nvs {
     static void deinit_nvs_flash() { detail::deinit_nvs_flash_once(); }
 
     // @param storge_namespace Location in NVS where the data is stored.
-    Nvs(char const* storage_namespace) {
+    Nvs(char const* storage_namespace)
+    {
         init_nvs_flash();
         ESP_ERROR_CHECK(nvs_open(storage_namespace,
                                  static_cast<nvs_open_mode_t>(mode), &handle_));
@@ -63,7 +64,8 @@ class Nvs {
     // @param default_value Value to use if there is no entry with the key.
     template<std::size_t max_length>
     thermo::utility::static_string<max_length> read(
-        char const* key, std::string_view const& default_value) {
+        char const* key, std::string_view const& default_value)
+    {
         assert(default_value.size() <= max_length);
         // nvs_get_str reports the length including the NUL terminator.
         std::size_t len = 0;
@@ -89,7 +91,8 @@ class Nvs {
     // @param default_value Value to use if there is no entry with the key.
     // Booleans are stored as uint8 0/1.
     template<std::integral T>
-    T read(const char* key, T default_value) {
+    T read(const char* key, T default_value)
+    {
         T v{};
         esp_err_t error;
         if constexpr (std::is_same_v<T, bool>) {
@@ -125,7 +128,8 @@ class Nvs {
     // Retrieve a number from the NVS storage.
     // @param key Name of the key that is stored.
     // @param default_value Value to use if there is no entry with the key.
-    float read(const char* key, float default_value) {
+    float read(const char* key, float default_value)
+    {
         // std::start_lifetime_as is not available in either pinned container
         // toolchain (linux target GCC 13 with gnu++2b, Xtensa GCC 15), so
         // bit_cast gives the same object-representation result portably.

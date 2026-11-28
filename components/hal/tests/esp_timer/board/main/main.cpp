@@ -23,7 +23,8 @@ void setUp(void) {}
 
 void tearDown(void) {}
 
-extern "C" void app_main(void) {
+extern "C" void app_main(void)
+{
     // The system normally initializes esp_timer during startup; call it anyway
     // so the suite also states the intended precondition in one place.
     const esp_err_t early = esp_timer_early_init();

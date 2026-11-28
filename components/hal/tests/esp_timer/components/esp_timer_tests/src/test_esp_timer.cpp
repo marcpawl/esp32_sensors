@@ -45,7 +45,8 @@ constexpr Microseconds kLong{500'000};
 constexpr int kTimeoutMs = 3000;
 
 // The esp_timer API takes plain microseconds; convert at that boundary only.
-constexpr uint64_t us(Microseconds duration) {
+constexpr uint64_t us(Microseconds duration)
+{
     return static_cast<uint64_t>(duration.count());
 }
 
@@ -59,25 +60,29 @@ std::atomic<bool> g_callback_finished{false};
 std::atomic<int> g_stop_result{0};
 esp_timer_handle_t g_self_handle = nullptr;
 
-void count_cb(void* arg) {
+void count_cb(void* arg)
+{
     static_cast<std::atomic<int>*>(arg)->fetch_add(1);
 }
 
-void slow_cb(void* /*arg*/) {
+void slow_cb(void* /*arg*/)
+{
     g_callback_started.store(true);
     vTaskDelay(pdMS_TO_TICKS(100));
     g_callback_finished.store(true);
     g_calls.fetch_add(1);
 }
 
-void self_stop_cb(void* /*arg*/) {
+void self_stop_cb(void* /*arg*/)
+{
     // Stopping the timer from its own callback must not deadlock.
     g_stop_result.store(
         static_cast<int>(esp_timer_stop_blocking(g_self_handle, kForever)));
     g_calls.fetch_add(1);
 }
 
-void reset_calls() {
+void reset_calls()
+{
     g_calls.store(0);
     g_callback_started.store(false);
     g_callback_finished.store(false);
@@ -87,7 +92,8 @@ void reset_calls() {
 
 esp_timer_handle_t create_timer(esp_timer_cb_t callback = &count_cb,
                                 void* arg = &g_calls,
-                                bool skip_unhandled_events = false) {
+                                bool skip_unhandled_events = false)
+{
     esp_timer_create_args_t args = {};
     args.callback = callback;
     args.arg = arg;
@@ -102,7 +108,8 @@ esp_timer_handle_t create_timer(esp_timer_cb_t callback = &count_cb,
 }
 
 // Stops (if needed) and deletes a timer. Safe on an expired one-shot.
-void stop_and_delete(esp_timer_handle_t handle) {
+void stop_and_delete(esp_timer_handle_t handle)
+{
     if (handle == nullptr) {
         return;
     }
@@ -110,7 +117,8 @@ void stop_and_delete(esp_timer_handle_t handle) {
     TEST_ASSERT_EQUAL(ESP_OK, esp_timer_delete(handle));
 }
 
-bool wait_for_calls(int count) {
+bool wait_for_calls(int count)
+{
     for (int waited = 0; waited < kTimeoutMs; waited += 10) {
         if (g_calls.load() >= count) {
             return true;
@@ -120,7 +128,8 @@ bool wait_for_calls(int count) {
     return g_calls.load() >= count;
 }
 
-bool wait_for_inactive(esp_timer_handle_t handle) {
+bool wait_for_inactive(esp_timer_handle_t handle)
+{
     for (int waited = 0; waited < kTimeoutMs; waited += 10) {
         if (!esp_timer_is_active(handle)) {
             return true;
@@ -134,12 +143,14 @@ bool wait_for_inactive(esp_timer_handle_t handle) {
 
 // --- Initialization ---------------------------------------------------------
 
-TEST_CASE("esp_timer: early init returns ESP_OK", "[esp_timer]") {
+TEST_CASE("esp_timer: early init returns ESP_OK", "[esp_timer]")
+{
     TEST_ASSERT_EQUAL(ESP_OK, esp_timer_early_init());
 }
 
 TEST_CASE("esp_timer: init on an initialized library is harmless",
-          "[esp_timer]") {
+          "[esp_timer]")
+{
     // The executable initializes the library; the chip implementation reports
     // the duplicate, while a stub may accept it. Both outcomes are valid.
     const esp_err_t err = esp_timer_init();
@@ -148,7 +159,8 @@ TEST_CASE("esp_timer: init on an initialized library is harmless",
 
 // --- Creation ---------------------------------------------------------------
 
-TEST_CASE("esp_timer: create rejects null arguments", "[esp_timer]") {
+TEST_CASE("esp_timer: create rejects null arguments", "[esp_timer]")
+{
     esp_timer_handle_t handle = nullptr;
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, esp_timer_create(nullptr, &handle));
 
@@ -160,8 +172,8 @@ TEST_CASE("esp_timer: create rejects null arguments", "[esp_timer]") {
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, esp_timer_create(&args, &handle));
 }
 
-TEST_CASE("esp_timer: create returns a usable, inactive handle",
-          "[esp_timer]") {
+TEST_CASE("esp_timer: create returns a usable, inactive handle", "[esp_timer]")
+{
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
     TEST_ASSERT_FALSE(esp_timer_is_active(handle));
@@ -170,7 +182,8 @@ TEST_CASE("esp_timer: create returns a usable, inactive handle",
 
 // --- One-shot timers --------------------------------------------------------
 
-TEST_CASE("esp_timer: start_once fires exactly once", "[esp_timer]") {
+TEST_CASE("esp_timer: start_once fires exactly once", "[esp_timer]")
+{
     reset_calls();
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
@@ -186,7 +199,8 @@ TEST_CASE("esp_timer: start_once fires exactly once", "[esp_timer]") {
     stop_and_delete(handle);
 }
 
-TEST_CASE("esp_timer: start_once while armed is rejected", "[esp_timer]") {
+TEST_CASE("esp_timer: start_once while armed is rejected", "[esp_timer]")
+{
     reset_calls();
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
@@ -197,7 +211,8 @@ TEST_CASE("esp_timer: start_once while armed is rejected", "[esp_timer]") {
     stop_and_delete(handle);
 }
 
-TEST_CASE("esp_timer: start_once_at uses the absolute alarm", "[esp_timer]") {
+TEST_CASE("esp_timer: start_once_at uses the absolute alarm", "[esp_timer]")
+{
     reset_calls();
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
@@ -212,7 +227,8 @@ TEST_CASE("esp_timer: start_once_at uses the absolute alarm", "[esp_timer]") {
 }
 
 TEST_CASE("esp_timer: start_once_at rejects an alarm in the past",
-          "[esp_timer]") {
+          "[esp_timer]")
+{
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
 
@@ -223,7 +239,8 @@ TEST_CASE("esp_timer: start_once_at rejects an alarm in the past",
 
 // --- Periodic timers --------------------------------------------------------
 
-TEST_CASE("esp_timer: start_periodic fires repeatedly", "[esp_timer]") {
+TEST_CASE("esp_timer: start_periodic fires repeatedly", "[esp_timer]")
+{
     reset_calls();
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
@@ -239,7 +256,8 @@ TEST_CASE("esp_timer: start_periodic fires repeatedly", "[esp_timer]") {
     stop_and_delete(handle);
 }
 
-TEST_CASE("esp_timer: start_once accepts a zero timeout", "[esp_timer]") {
+TEST_CASE("esp_timer: start_once accepts a zero timeout", "[esp_timer]")
+{
     reset_calls();
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
@@ -248,8 +266,8 @@ TEST_CASE("esp_timer: start_once accepts a zero timeout", "[esp_timer]") {
     stop_and_delete(handle);
 }
 
-TEST_CASE("esp_timer: start_periodic_at honours the first alarm",
-          "[esp_timer]") {
+TEST_CASE("esp_timer: start_periodic_at honours the first alarm", "[esp_timer]")
+{
     reset_calls();
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
@@ -263,7 +281,8 @@ TEST_CASE("esp_timer: start_periodic_at honours the first alarm",
     stop_and_delete(handle);
 }
 
-TEST_CASE("esp_timer: restart changes a one-shot deadline", "[esp_timer]") {
+TEST_CASE("esp_timer: restart changes a one-shot deadline", "[esp_timer]")
+{
     reset_calls();
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
@@ -276,7 +295,8 @@ TEST_CASE("esp_timer: restart changes a one-shot deadline", "[esp_timer]") {
     stop_and_delete(handle);
 }
 
-TEST_CASE("esp_timer: restart changes a periodic period", "[esp_timer]") {
+TEST_CASE("esp_timer: restart changes a periodic period", "[esp_timer]")
+{
     reset_calls();
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
@@ -289,8 +309,8 @@ TEST_CASE("esp_timer: restart changes a periodic period", "[esp_timer]") {
     stop_and_delete(handle);
 }
 
-TEST_CASE("esp_timer: restart on an inactive timer is rejected",
-          "[esp_timer]") {
+TEST_CASE("esp_timer: restart on an inactive timer is rejected", "[esp_timer]")
+{
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE,
@@ -298,7 +318,8 @@ TEST_CASE("esp_timer: restart on an inactive timer is rejected",
     stop_and_delete(handle);
 }
 
-TEST_CASE("esp_timer: restart_at uses the absolute alarm", "[esp_timer]") {
+TEST_CASE("esp_timer: restart_at uses the absolute alarm", "[esp_timer]")
+{
     reset_calls();
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
@@ -316,7 +337,8 @@ TEST_CASE("esp_timer: restart_at uses the absolute alarm", "[esp_timer]") {
 
 // --- Stopping ---------------------------------------------------------------
 
-TEST_CASE("esp_timer: stop disarms a running timer", "[esp_timer]") {
+TEST_CASE("esp_timer: stop disarms a running timer", "[esp_timer]")
+{
     reset_calls();
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
@@ -330,7 +352,8 @@ TEST_CASE("esp_timer: stop disarms a running timer", "[esp_timer]") {
     stop_and_delete(handle);
 }
 
-TEST_CASE("esp_timer: stop on a stopped timer is rejected", "[esp_timer]") {
+TEST_CASE("esp_timer: stop on a stopped timer is rejected", "[esp_timer]")
+{
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, esp_timer_stop(handle));
@@ -338,7 +361,8 @@ TEST_CASE("esp_timer: stop on a stopped timer is rejected", "[esp_timer]") {
 }
 
 TEST_CASE("esp_timer: stop_blocking waits for a running callback",
-          "[esp_timer]") {
+          "[esp_timer]")
+{
     reset_calls();
     esp_timer_handle_t handle = create_timer(&slow_cb);
     TEST_ASSERT_NOT_NULL(handle);
@@ -358,7 +382,8 @@ TEST_CASE("esp_timer: stop_blocking waits for a running callback",
     stop_and_delete(handle);
 }
 
-TEST_CASE("esp_timer: stop_blocking can time out", "[esp_timer]") {
+TEST_CASE("esp_timer: stop_blocking can time out", "[esp_timer]")
+{
     reset_calls();
     esp_timer_handle_t handle = create_timer(&slow_cb);
     TEST_ASSERT_NOT_NULL(handle);
@@ -376,7 +401,8 @@ TEST_CASE("esp_timer: stop_blocking can time out", "[esp_timer]") {
     stop_and_delete(handle);
 }
 
-TEST_CASE("esp_timer: a callback can stop its own timer", "[esp_timer]") {
+TEST_CASE("esp_timer: a callback can stop its own timer", "[esp_timer]")
+{
     reset_calls();
     esp_timer_handle_t handle = create_timer(&self_stop_cb);
     TEST_ASSERT_NOT_NULL(handle);
@@ -390,7 +416,8 @@ TEST_CASE("esp_timer: a callback can stop its own timer", "[esp_timer]") {
 }
 
 TEST_CASE("esp_timer: a periodic callback can stop its own timer",
-          "[esp_timer]") {
+          "[esp_timer]")
+{
     reset_calls();
     esp_timer_handle_t handle = create_timer(&self_stop_cb);
     TEST_ASSERT_NOT_NULL(handle);
@@ -404,8 +431,8 @@ TEST_CASE("esp_timer: a periodic callback can stop its own timer",
     stop_and_delete(handle);
 }
 
-TEST_CASE("esp_timer: stop_blocking prevents a periodic re-arm",
-          "[esp_timer]") {
+TEST_CASE("esp_timer: stop_blocking prevents a periodic re-arm", "[esp_timer]")
+{
     reset_calls();
     esp_timer_handle_t handle = create_timer(&slow_cb);
     TEST_ASSERT_NOT_NULL(handle);
@@ -426,7 +453,8 @@ TEST_CASE("esp_timer: stop_blocking prevents a periodic re-arm",
 
 // --- Queries ----------------------------------------------------------------
 
-TEST_CASE("esp_timer: get_time advances monotonically", "[esp_timer]") {
+TEST_CASE("esp_timer: get_time advances monotonically", "[esp_timer]")
+{
     const int64_t first = esp_timer_get_time();
     vTaskDelay(pdMS_TO_TICKS(20));
     const int64_t second = esp_timer_get_time();
@@ -434,8 +462,8 @@ TEST_CASE("esp_timer: get_time advances monotonically", "[esp_timer]") {
     TEST_ASSERT_GREATER_THAN_INT64(first, second);
 }
 
-TEST_CASE("esp_timer: get_next_alarm reports the earliest alarm",
-          "[esp_timer]") {
+TEST_CASE("esp_timer: get_next_alarm reports the earliest alarm", "[esp_timer]")
+{
     reset_calls();
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
@@ -453,7 +481,8 @@ TEST_CASE("esp_timer: get_next_alarm reports the earliest alarm",
 }
 
 TEST_CASE("esp_timer: get_next_alarm_for_wake_up skips opted-out timers",
-          "[esp_timer]") {
+          "[esp_timer]")
+{
     reset_calls();
     esp_timer_handle_t skip = create_timer(&count_cb, &g_calls, true);
     esp_timer_handle_t wake = create_timer();
@@ -474,8 +503,8 @@ TEST_CASE("esp_timer: get_next_alarm_for_wake_up skips opted-out timers",
     stop_and_delete(wake);
 }
 
-TEST_CASE("esp_timer: get_period reports 0 for one-shot timers",
-          "[esp_timer]") {
+TEST_CASE("esp_timer: get_period reports 0 for one-shot timers", "[esp_timer]")
+{
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
     uint64_t period = 123;
@@ -488,7 +517,8 @@ TEST_CASE("esp_timer: get_period reports 0 for one-shot timers",
     stop_and_delete(handle);
 }
 
-TEST_CASE("esp_timer: get_period rejects null arguments", "[esp_timer]") {
+TEST_CASE("esp_timer: get_period rejects null arguments", "[esp_timer]")
+{
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
     uint64_t period = 0;
@@ -499,8 +529,8 @@ TEST_CASE("esp_timer: get_period rejects null arguments", "[esp_timer]") {
     stop_and_delete(handle);
 }
 
-TEST_CASE("esp_timer: get_expiry_time reports a one-shot alarm",
-          "[esp_timer]") {
+TEST_CASE("esp_timer: get_expiry_time reports a one-shot alarm", "[esp_timer]")
+{
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
     const int64_t before = esp_timer_get_time();
@@ -515,8 +545,8 @@ TEST_CASE("esp_timer: get_expiry_time reports a one-shot alarm",
     stop_and_delete(handle);
 }
 
-TEST_CASE("esp_timer: get_expiry_time rejects a periodic timer",
-          "[esp_timer]") {
+TEST_CASE("esp_timer: get_expiry_time rejects a periodic timer", "[esp_timer]")
+{
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
     TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_periodic(handle, us(kShort)));
@@ -528,7 +558,8 @@ TEST_CASE("esp_timer: get_expiry_time rejects a periodic timer",
 }
 
 TEST_CASE("esp_timer: is_active follows the armed and callback states",
-          "[esp_timer]") {
+          "[esp_timer]")
+{
     reset_calls();
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
@@ -542,7 +573,8 @@ TEST_CASE("esp_timer: is_active follows the armed and callback states",
     stop_and_delete(handle);
 }
 
-TEST_CASE("esp_timer: dump writes the active timers", "[esp_timer]") {
+TEST_CASE("esp_timer: dump writes the active timers", "[esp_timer]")
+{
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
     TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, us(kLong)));
@@ -580,7 +612,8 @@ TEST_CASE("esp_timer: dump writes the active timers", "[esp_timer]") {
 
 // --- Deleting ---------------------------------------------------------------
 
-TEST_CASE("esp_timer: delete refuses an armed timer", "[esp_timer]") {
+TEST_CASE("esp_timer: delete refuses an armed timer", "[esp_timer]")
+{
     reset_calls();
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
@@ -589,7 +622,8 @@ TEST_CASE("esp_timer: delete refuses an armed timer", "[esp_timer]") {
     stop_and_delete(handle);
 }
 
-TEST_CASE("esp_timer: delete accepts a stopped timer", "[esp_timer]") {
+TEST_CASE("esp_timer: delete accepts a stopped timer", "[esp_timer]")
+{
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
     TEST_ASSERT_EQUAL(ESP_OK, esp_timer_start_once(handle, us(kLong)));
@@ -601,7 +635,8 @@ TEST_CASE("esp_timer: delete accepts a stopped timer", "[esp_timer]") {
 
 #if defined(CONFIG_IDF_TARGET_LINUX)
 TEST_CASE("esp_timer: ETM alarm event is unsupported on the host",
-          "[esp_timer]") {
+          "[esp_timer]")
+{
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,
                       esp_timer_new_etm_alarm_event(nullptr));
 
@@ -611,8 +646,8 @@ TEST_CASE("esp_timer: ETM alarm event is unsupported on the host",
 }
 #elif defined(CONFIG_SOC_SYSTIMER_SUPPORT_ETM) && \
     CONFIG_SOC_SYSTIMER_SUPPORT_ETM
-TEST_CASE("esp_timer: ETM alarm event is created or unsupported",
-          "[esp_timer]") {
+TEST_CASE("esp_timer: ETM alarm event is created or unsupported", "[esp_timer]")
+{
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG,
                       esp_timer_new_etm_alarm_event(nullptr));
 
@@ -628,7 +663,8 @@ TEST_CASE("esp_timer: ETM alarm event is created or unsupported",
 
 // --- De-initialization (last: it changes global state) ----------------------
 
-TEST_CASE("esp_timer: deinit refuses while a timer is armed", "[esp_timer]") {
+TEST_CASE("esp_timer: deinit refuses while a timer is armed", "[esp_timer]")
+{
     reset_calls();
     esp_timer_handle_t handle = create_timer();
     TEST_ASSERT_NOT_NULL(handle);
@@ -637,8 +673,8 @@ TEST_CASE("esp_timer: deinit refuses while a timer is armed", "[esp_timer]") {
     stop_and_delete(handle);
 }
 
-TEST_CASE("esp_timer: deinit and re-init leave a usable library",
-          "[esp_timer]") {
+TEST_CASE("esp_timer: deinit and re-init leave a usable library", "[esp_timer]")
+{
     const esp_err_t err = esp_timer_deinit();
     if (err == ESP_OK) {
         TEST_ASSERT_EQUAL(ESP_OK, esp_timer_init());

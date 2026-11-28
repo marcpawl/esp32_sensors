@@ -29,7 +29,8 @@ adc_oneshot_unit_handle_t g_adc = nullptr;
 adc_cali_handle_t g_cali = nullptr;
 bool g_cali_enabled = false;
 
-void ensure_gate_gpio() {
+void ensure_gate_gpio()
+{
     gpio_config_t cfg = {};
     cfg.pin_bit_mask = 1ULL << pins::kDividerGate.as_int();
     cfg.mode = GPIO_MODE_OUTPUT;
@@ -39,7 +40,8 @@ void ensure_gate_gpio() {
     gpio_config(&cfg);
 }
 
-void gate_enable(bool on) {
+void gate_enable(bool on)
+{
     // P-MOSFET gate: driving the gate low energizes the divider; high
     // disconnects it (§2.5).
     //
@@ -57,7 +59,8 @@ void gate_enable(bool on) {
 }
 
 // Reads the median-ish value: average after discarding the extremes.
-std::optional<int> read_filtered_mv() {
+std::optional<int> read_filtered_mv()
+{
     int samples[kSampleCount];
     for (int i = 0; i < kSampleCount; ++i) {
         int raw = 0;
@@ -89,11 +92,13 @@ std::optional<int> read_filtered_mv() {
 
 }  // namespace
 
-BatteryMonitor::BatteryMonitor(Config const& config) : config_(config) {
+BatteryMonitor::BatteryMonitor(Config const& config) : config_(config)
+{
     init();
 }
 
-esp_err_t BatteryMonitor::init() noexcept {
+esp_err_t BatteryMonitor::init() noexcept
+{
     adc_oneshot_unit_init_cfg_t unit_cfg = {};
     unit_cfg.unit_id = ADC_UNIT_1;
     unit_cfg.clk_src = ADC_RTC_CLK_SRC_DEFAULT;
@@ -142,7 +147,8 @@ esp_err_t BatteryMonitor::init() noexcept {
     return ESP_OK;
 }
 
-std::optional<std::uint32_t> BatteryMonitor::read_mv() {
+std::optional<std::uint32_t> BatteryMonitor::read_mv()
+{
     if (!initialized_) {
         return std::nullopt;
     }
@@ -179,7 +185,8 @@ std::optional<std::uint32_t> BatteryMonitor::read_mv() {
 
 logic::TxState BatteryMonitor::evaluate_tx_state(std::uint32_t batt_mv,
                                                  const Config& cfg,
-                                                 logic::TxState current) {
+                                                 logic::TxState current)
+{
     // §3.6 hysteresis:
     //  - On boot the caller passes kTxInhibited when batt < high water, which
     //    this function then re-evaluates.

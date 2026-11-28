@@ -59,8 +59,10 @@ sources changed, so `format-check` verifies rather than reports.
 
 - **Formatting:** run `./scripts/dev.py format`, then re-check. Do not
   hand-format; the committed `.clang-format` (Google base, 4-space indent, 80
-  columns, `Standard: c++20`) is the authority. Nested style files are honoured
-  because clang-format searches upward from each source.
+  columns, `Standard: c++20`) is the authority. Function definitions whose body
+  does not fit on one line put the opening brace on its own line; short inline
+  functions stay on one line. Nested style files are honoured because
+  clang-format searches upward from each source.
 - **pycodestyle:** fix the source. No `--max-line-length` or other option is
   passed, so the gate and a bare `pycodestyle` run agree; the repository
   conforms to the tool, not the other way round.

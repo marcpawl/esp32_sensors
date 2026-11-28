@@ -28,7 +28,8 @@ constexpr std::uint32_t kBatteryPresentMv = 3000;
 }  // namespace
 
 PowerManager::PowerManager(Config const& config)
-    : config_(config), source_(detect()) {
+    : config_(config), source_(detect())
+{
     // Only the solar-battery path needs the (and can own) the ADC-backed
     // battery monitor. When running from USB there may be no battery at all,
     // so `battery_` stays empty.
@@ -38,7 +39,8 @@ PowerManager::PowerManager(Config const& config)
     ESP_LOGI(kTag, "power source: %s", to_string(source_));
 }
 
-PowerSource PowerManager::detect() const noexcept {
+PowerSource PowerManager::detect() const noexcept
+{
     if (solar_battery_installed()) {
         return PowerSource::kSolarBattery;
     }
@@ -51,7 +53,8 @@ PowerSource PowerManager::detect() const noexcept {
     return PowerSource::kUnknown;
 }
 
-bool PowerManager::usb_host_connected() noexcept {
+bool PowerManager::usb_host_connected() noexcept
+{
     // Ensure the driver is installed if not already used by the system console
     if (!usb_serial_jtag_is_driver_installed()) {
         usb_serial_jtag_driver_config_t cfg =
@@ -64,7 +67,8 @@ bool PowerManager::usb_host_connected() noexcept {
     return usb_serial_jtag_is_connected();
 }
 
-bool PowerManager::usb_vbus_present() noexcept {
+bool PowerManager::usb_vbus_present() noexcept
+{
     gpio_config_t cfg = {};
     cfg.pin_bit_mask = 1ULL << kUsbVbusDetect;
     cfg.mode = GPIO_MODE_INPUT;
@@ -75,7 +79,8 @@ bool PowerManager::usb_vbus_present() noexcept {
     return gpio_get_level(kUsbVbusDetect) != 0;
 }
 
-bool PowerManager::solar_battery_installed() const noexcept {
+bool PowerManager::solar_battery_installed() const noexcept
+{
     // Probe the divider with a throwaway monitor: an installed battery reads a
     // plausible voltage; an absent one floats near zero.
     BatteryMonitor probe(config_);
@@ -84,7 +89,8 @@ bool PowerManager::solar_battery_installed() const noexcept {
 }
 
 /** If we are on battery, return the strength of the battery. */
-std::optional<uint32_t> PowerManager::read_mv() noexcept {
+std::optional<uint32_t> PowerManager::read_mv() noexcept
+{
     if (!battery_.has_value()) {
         return std::nullopt;
     }

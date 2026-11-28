@@ -29,20 +29,23 @@ constexpr SwitchState kOff = SwitchState::kOff;
 
 // --- Healthy switch positions ------------------------------------------------
 
-TEST_CASE("mode: configure pole alone selects Configure", "[mode_selection]") {
+TEST_CASE("mode: configure pole alone selects Configure", "[mode_selection]")
+{
     const thermo::logic::Mode mode =
         thermo::logic::mode_from_switches(kOn, kOff);
     TEST_ASSERT_EQUAL(thermo::logic::Mode::kConfigure, mode);
 }
 
-TEST_CASE("mode: run pole alone selects Run", "[mode_selection]") {
+TEST_CASE("mode: run pole alone selects Run", "[mode_selection]")
+{
     const thermo::logic::Mode mode =
         thermo::logic::mode_from_switches(kOff, kOn);
     TEST_ASSERT_EQUAL(thermo::logic::Mode::kRun, mode);
 }
 
 TEST_CASE("mode: neither pole selects Off (center position)",
-          "[mode_selection]") {
+          "[mode_selection]")
+{
     // The center position cuts power, so firmware observes it only
     // transiently; it is a valid state, not an error.
     const thermo::logic::Mode mode =
@@ -52,7 +55,8 @@ TEST_CASE("mode: neither pole selects Off (center position)",
 
 // --- Invalid pole pair -------------------------------------------------------
 
-TEST_CASE("mode: both poles on reports Invalid", "[mode_selection]") {
+TEST_CASE("mode: both poles on reports Invalid", "[mode_selection]")
+{
     // A bouncing or miswired switch energizes both sense poles, so the mapping
     // reports an explicit invalid mode instead of guessing.
     TEST_ASSERT_EQUAL(thermo::logic::Mode::kInvalid,
@@ -61,7 +65,8 @@ TEST_CASE("mode: both poles on reports Invalid", "[mode_selection]") {
 
 // --- Contract ----------------------------------------------------------------
 
-TEST_CASE("mode: mapping is constexpr", "[mode_selection]") {
+TEST_CASE("mode: mapping is constexpr", "[mode_selection]")
+{
     // The mapping must stay usable at compile time (it is pure), which keeps
     // it free of logging, allocation, and reboot side effects.
     static_assert(thermo::logic::mode_from_switches(SwitchState::kOn,
@@ -79,7 +84,8 @@ TEST_CASE("mode: mapping is constexpr", "[mode_selection]") {
     TEST_ASSERT_TRUE(true);  // The assertions above are the test.
 }
 
-TEST_CASE("mode: to_string names every mode", "[mode_selection]") {
+TEST_CASE("mode: to_string names every mode", "[mode_selection]")
+{
     // `mode_from_switches()` returns these values, so each must be printable
     // for the boot log.
     TEST_ASSERT_EQUAL_STRING(

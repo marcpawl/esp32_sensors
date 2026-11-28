@@ -10,12 +10,14 @@
 
 namespace thermo::hal::board {
 
-Led::Led(Gpio gpio, const char* name) noexcept : gpio_(gpio) {
+Led::Led(Gpio gpio, const char* name) noexcept : gpio_(gpio)
+{
     // Accepted for interface parity with the stub implementation; unused.
     (void)name;
 }
 
-esp_err_t Led::init() noexcept {
+esp_err_t Led::init() noexcept
+{
     gpio_config_t cfg = {};
     cfg.pin_bit_mask = 1ULL << gpio_.as_int();
     cfg.mode = GPIO_MODE_OUTPUT;
@@ -29,7 +31,8 @@ esp_err_t Led::init() noexcept {
     return gpio_set_level(static_cast<gpio_num_t>(gpio_.as_int()), 0);
 }
 
-void Led::write(LedState state) noexcept {
+void Led::write(LedState state) noexcept
+{
     gpio_set_level(static_cast<gpio_num_t>(gpio_.as_int()),
                    state == LedState::kOn ? 1 : 0);
 }

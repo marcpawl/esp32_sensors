@@ -12,12 +12,14 @@
 namespace thermo::espidf_cpp::detail {
 namespace {
 
-std::atomic<bool>& nvs_initialized() {
+std::atomic<bool>& nvs_initialized()
+{
     static std::atomic<bool> initialized{false};
     return initialized;
 }
 
-std::mutex& nvs_init_mutex() {
+std::mutex& nvs_init_mutex()
+{
     static std::mutex mutex;
     return mutex;
 }
@@ -26,7 +28,8 @@ std::mutex& nvs_init_mutex() {
 
 // `nvs_flash_init()` is idempotent, but one successful initialization is
 // shared by every Nvs mode so callers never repeat the recovery decision.
-void init_nvs_flash_once() {
+void init_nvs_flash_once()
+{
     std::lock_guard<std::mutex> lock{nvs_init_mutex()};
     if (nvs_initialized().load(std::memory_order_acquire)) {
         return;
@@ -44,7 +47,8 @@ void init_nvs_flash_once() {
 
 // Tests use deinitialization to start from a fresh flash state. Clearing the
 // guard makes the next init call perform the real initialization again.
-void deinit_nvs_flash_once() {
+void deinit_nvs_flash_once()
+{
     std::lock_guard<std::mutex> lock{nvs_init_mutex()};
     if (!nvs_initialized().load(std::memory_order_acquire)) {
         return;

@@ -24,7 +24,8 @@ using thermo::utility::static_vector;
 // of the exercised operations stops being constexpr.
 namespace {
 
-constexpr bool static_vector_constexpr_builds() {
+constexpr bool static_vector_constexpr_builds()
+{
     static_vector<int, 4> v;
     v.push_back(1);
     v.push_back(2);
@@ -51,7 +52,8 @@ static_assert(static_vector_constexpr_builds(),
 // --- Capacity and size ------------------------------------------------------
 
 TEST_CASE("static_vector: default is empty with full capacity",
-          "[static_vector]") {
+          "[static_vector]")
+{
     static_vector<int, 4> v;
     TEST_ASSERT_EQUAL_UINT(0, v.size());
     TEST_ASSERT_TRUE(v.empty());
@@ -59,8 +61,8 @@ TEST_CASE("static_vector: default is empty with full capacity",
     TEST_ASSERT_EQUAL_UINT(4, v.capacity());
 }
 
-TEST_CASE("static_vector: constructs from an iterator range",
-          "[static_vector]") {
+TEST_CASE("static_vector: constructs from an iterator range", "[static_vector]")
+{
     const int values[] = {7, 8};
     const static_vector<int, 3> v(values, values + 2);
     TEST_ASSERT_EQUAL_UINT(2, v.size());
@@ -69,7 +71,8 @@ TEST_CASE("static_vector: constructs from an iterator range",
 }
 
 TEST_CASE("static_vector: push_back grows size and reaches full",
-          "[static_vector]") {
+          "[static_vector]")
+{
     static_vector<int, 3> v;
     v.push_back(10);
     v.push_back(20);
@@ -85,7 +88,8 @@ TEST_CASE("static_vector: push_back grows size and reaches full",
 }
 
 TEST_CASE("static_vector: clear empties without changing capacity",
-          "[static_vector]") {
+          "[static_vector]")
+{
     static_vector<int, 3> v;
     v.push_back(1);
     v.push_back(2);
@@ -100,7 +104,8 @@ TEST_CASE("static_vector: clear empties without changing capacity",
 // --- try_push_back reports overflow instead of aborting ----------------------
 
 TEST_CASE("static_vector: try_push_back succeeds until full then fails",
-          "[static_vector]") {
+          "[static_vector]")
+{
     static_vector<int, 2> v;
     TEST_ASSERT_TRUE(v.try_push_back(1));
     TEST_ASSERT_TRUE(v.try_push_back(2));
@@ -110,7 +115,8 @@ TEST_CASE("static_vector: try_push_back succeeds until full then fails",
     TEST_ASSERT_EQUAL_INT(2, v[1]);  // The rejected value did not overwrite.
 }
 
-TEST_CASE("static_vector: try_push_back accepts rvalues", "[static_vector]") {
+TEST_CASE("static_vector: try_push_back accepts rvalues", "[static_vector]")
+{
     static_vector<static_string<8>, 2> v;
     TEST_ASSERT_TRUE(v.try_push_back(static_string<8>("hello")));
     TEST_ASSERT_TRUE(v.try_push_back(static_string<8>("world")));
@@ -123,8 +129,8 @@ TEST_CASE("static_vector: try_push_back accepts rvalues", "[static_vector]") {
 
 // --- emplace_back constructs in place ---------------------------------------
 
-TEST_CASE("static_vector: emplace_back constructs in place",
-          "[static_vector]") {
+TEST_CASE("static_vector: emplace_back constructs in place", "[static_vector]")
+{
     static_vector<static_string<8>, 3> v;
     v.emplace_back("first");
     v.emplace_back("xxxxx");
@@ -137,7 +143,8 @@ TEST_CASE("static_vector: emplace_back constructs in place",
 // --- resize ----------------------------------------------------------------
 
 TEST_CASE("static_vector: resize grows with value-initialized elements",
-          "[static_vector]") {
+          "[static_vector]")
+{
     static_vector<int, 4> v;
     v.push_back(7);
     v.resize(3);
@@ -148,7 +155,8 @@ TEST_CASE("static_vector: resize grows with value-initialized elements",
     TEST_ASSERT_EQUAL_INT(0, v[2]);
 }
 
-TEST_CASE("static_vector: resize shrinks", "[static_vector]") {
+TEST_CASE("static_vector: resize shrinks", "[static_vector]")
+{
     static_vector<int, 4> v;
     v.push_back(1);
     v.push_back(2);
@@ -159,7 +167,8 @@ TEST_CASE("static_vector: resize shrinks", "[static_vector]") {
     TEST_ASSERT_EQUAL_INT(1, v[0]);
 }
 
-TEST_CASE("static_vector: resize to capacity is allowed", "[static_vector]") {
+TEST_CASE("static_vector: resize to capacity is allowed", "[static_vector]")
+{
     static_vector<int, 2> v;
     v.resize(2);
     TEST_ASSERT_TRUE(v.full());
@@ -169,7 +178,8 @@ TEST_CASE("static_vector: resize to capacity is allowed", "[static_vector]") {
 // --- data / iteration -------------------------------------------------------
 
 TEST_CASE("static_vector: data and iterators reflect the live elements",
-          "[static_vector]") {
+          "[static_vector]")
+{
     static_vector<int, 4> v;
     v.push_back(1);
     v.push_back(2);
@@ -189,7 +199,8 @@ TEST_CASE("static_vector: data and iterators reflect the live elements",
 }
 
 TEST_CASE("static_vector: cbegin and cend iterate const elements",
-          "[static_vector]") {
+          "[static_vector]")
+{
     static_vector<int, 4> v;
     v.push_back(4);
     v.push_back(5);
@@ -208,7 +219,8 @@ TEST_CASE("static_vector: cbegin and cend iterate const elements",
 
 // --- Non-null data even when empty ------------------------------------------
 
-TEST_CASE("static_vector: empty data pointer is valid", "[static_vector]") {
+TEST_CASE("static_vector: empty data pointer is valid", "[static_vector]")
+{
     static_vector<int, 4> v;
     TEST_ASSERT_NOT_NULL(v.data());
     TEST_ASSERT_EQUAL_PTR(v.begin(), v.end());
@@ -219,7 +231,8 @@ TEST_CASE("static_vector: empty data pointer is valid", "[static_vector]") {
 namespace {
 
 // Path to the sibling static_vector_assert program (shared by the cases below).
-const assert_test_support::AssertProgramPath& assert_program() {
+const assert_test_support::AssertProgramPath& assert_program()
+{
     static const auto path =
         assert_test_support::assert_program_path("static_vector_assert");
     return path;
@@ -228,25 +241,29 @@ const assert_test_support::AssertProgramPath& assert_program() {
 }  // namespace
 
 TEST_CASE("static_vector: push_back(lvalue) when full aborts",
-          "[static_vector][assert]") {
+          "[static_vector][assert]")
+{
     TEST_ASSERT_TRUE(assert_test_support::assert_program_aborted(
         assert_program(), "push_back_lvalue_when_full"));
 }
 
 TEST_CASE("static_vector: push_back(rvalue) when full aborts",
-          "[static_vector][assert]") {
+          "[static_vector][assert]")
+{
     TEST_ASSERT_TRUE(assert_test_support::assert_program_aborted(
         assert_program(), "push_back_rvalue_when_full"));
 }
 
 TEST_CASE("static_vector: emplace_back when full aborts",
-          "[static_vector][assert]") {
+          "[static_vector][assert]")
+{
     TEST_ASSERT_TRUE(assert_test_support::assert_program_aborted(
         assert_program(), "emplace_back_when_full"));
 }
 
 TEST_CASE("static_vector: resize past capacity aborts",
-          "[static_vector][assert]") {
+          "[static_vector][assert]")
+{
     TEST_ASSERT_TRUE(assert_test_support::assert_program_aborted(
         assert_program(), "resize_past_capacity"));
 }

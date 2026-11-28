@@ -34,9 +34,12 @@ Board::Board(BoardPins pins) noexcept
       one_wire_(OneWire::create(pins.one_wire)),
       green_(Led::create(pins.green_led, pins.green_name)),
       red_(Led::create(pins.red_led, pins.red_name)),
-      wifi_(WifiRadio::create()) {}
+      wifi_(WifiRadio::create())
+{
+}
 
-esp_err_t Board::init_all() noexcept {
+esp_err_t Board::init_all() noexcept
+{
     if (esp_err_t err = chip_temperature_.init(); err != ESP_OK) {
         return err;
     }
@@ -52,7 +55,8 @@ esp_err_t Board::init_all() noexcept {
     return wifi_.init();
 }
 
-void Board::deep_sleep_start(std::chrono::seconds duration) noexcept {
+void Board::deep_sleep_start(std::chrono::seconds duration) noexcept
+{
     const auto micros =
         std::chrono::duration_cast<std::chrono::microseconds>(duration);
     // §3.8 is exactly this pair of calls; the timer is the only wake source
@@ -61,7 +65,8 @@ void Board::deep_sleep_start(std::chrono::seconds duration) noexcept {
     esp_deep_sleep_start();
 }
 
-WakeCauses Board::sleep_get_wakeup_causes() const noexcept {
+WakeCauses Board::sleep_get_wakeup_causes() const noexcept
+{
     return esp_sleep_get_wakeup_causes();
 }
 

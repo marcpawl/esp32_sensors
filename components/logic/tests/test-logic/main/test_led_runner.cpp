@@ -35,7 +35,8 @@ using thermo::logic::ledtask::LedRunner;
 
 // --- The templated runner satisfies its expected contract -------------------
 
-TEST_CASE("led runner: is generic over a BoardLike board", "[led_runner]") {
+TEST_CASE("led runner: is generic over a BoardLike board", "[led_runner]")
+{
     static_assert(thermo::hal::BoardLike<BoardStub>);
     // `create()` must return the same concrete type (part of the concept).
     static_assert(std::same_as<decltype(BoardStub::create({})), BoardStub>);
@@ -51,7 +52,8 @@ TEST_CASE("led runner: is generic over a BoardLike board", "[led_runner]") {
 
 // --- Construction shares the board -----------------------------------------
 
-TEST_CASE("led runner: shares an initialized stub board", "[led_runner]") {
+TEST_CASE("led runner: shares an initialized stub board", "[led_runner]")
+{
     auto board = std::make_shared<BoardStub>(BoardStub::create({}));
     TEST_ASSERT_EQUAL(ESP_OK, board->init_all());
 
@@ -71,7 +73,8 @@ TEST_CASE("led runner: shares an initialized stub board", "[led_runner]") {
 
 // --- Publishing a state never blocks ---------------------------------------
 
-TEST_CASE("led runner: set_state overwrites pending states", "[led_runner]") {
+TEST_CASE("led runner: set_state overwrites pending states", "[led_runner]")
+{
     LedRunner<BoardStub> runner(
         std::make_shared<BoardStub>(BoardStub::create({})));
 

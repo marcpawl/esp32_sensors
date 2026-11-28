@@ -18,14 +18,16 @@ namespace thermo::logic {
 
 Application::Application(Board& board) : board_(board) {}
 
-void Application::update_mode() {
+void Application::update_mode()
+{
     // Read the mode switches.
     espidf_cpp::SwitchState switch_config_state = board_.config_switch().read();
     espidf_cpp::SwitchState switch_run_state = board_.run_switch().read();
     mode_ = mode_from_switches(switch_config_state, switch_run_state);
 }
 
-void Application::initialize_state() {
+void Application::initialize_state()
+{
     // Minimum abount of time to delay to allow switches to debounce.
     std::chrono::milliseconds debounce_delay{500};
 
@@ -42,7 +44,8 @@ void Application::initialize_state() {
     update_mode();
 }
 
-[[noreturn]] void Application::configure_state() {
+[[noreturn]] void Application::configure_state()
+{
     ESP_LOGI(kTag, "Configure_state");
     do {
         espidf_cpp::vTaskDelay(std::chrono::seconds{5});
@@ -50,7 +53,8 @@ void Application::initialize_state() {
     logic::reboot();
 }
 
-[[noreturn]] void Application::run_state() {
+[[noreturn]] void Application::run_state()
+{
     ESP_LOGI(kTag, "run_state");
     do {
         espidf_cpp::vTaskDelay(std::chrono::seconds{5});
@@ -58,13 +62,15 @@ void Application::initialize_state() {
     logic::reboot();
 }
 
-[[noreturn]] void Application::off_state() {
+[[noreturn]] void Application::off_state()
+{
     ESP_LOGI(kTag, "off_state");
     logic::reboot();
 }
 
 [[noreturn]]
-void Application::application_main(void) {
+void Application::application_main(void)
+{
     ESP_LOGI(kTag, "Starting application");
 
     initialize_state();

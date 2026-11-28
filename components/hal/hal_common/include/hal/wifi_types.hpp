@@ -56,7 +56,8 @@ inline constexpr std::size_t kMaxPasswordLength = 63;
 // the stored length. `text` may be null, which stores the empty string.
 template<std::size_t Capacity>
 constexpr std::size_t copy_text(std::array<char, Capacity>& buffer,
-                                const char* text) noexcept {
+                                const char* text) noexcept
+{
     static_assert(Capacity >= 1);
     buffer.fill('\0');
     if (text == nullptr) {
@@ -88,7 +89,8 @@ struct StationConfig {
     std::array<char, kMaxSsidLength + 1> ssid{};
     std::array<char, kMaxPasswordLength + 1> password{};
 
-    [[nodiscard]] constexpr bool has_ssid() const noexcept {
+    [[nodiscard]] constexpr bool has_ssid() const noexcept
+    {
         return ssid[0] != '\0';
     }
 

@@ -31,12 +31,14 @@ static_assert(sizeof(StationConfig{}.password) >= 64);
 
 bool g_stack_initialized = false;
 
-wifi_auth_mode_t ap_auth_mode(AccessPointConfig const& config) {
+wifi_auth_mode_t ap_auth_mode(AccessPointConfig const& config)
+{
     return config.password[0] == '\0' ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA2_PSK;
 }
 
 // Fills the driver's AP configuration from the HAL description.
-void make_ap_config(AccessPointConfig const& config, wifi_config_t& out) {
+void make_ap_config(AccessPointConfig const& config, wifi_config_t& out)
+{
     out = {};
     std::strncpy(reinterpret_cast<char*>(out.ap.ssid), config.ssid.data(),
                  sizeof(out.ap.ssid) - 1);
@@ -56,7 +58,8 @@ void make_ap_config(AccessPointConfig const& config, wifi_config_t& out) {
 // scan threshold is left unset so the driver infers the weakest acceptable
 // auth mode from the password, keeping WPA/WPA2 and WPA2/WPA3 networks
 // connectable.
-void make_station_config(StationConfig const& config, wifi_config_t& out) {
+void make_station_config(StationConfig const& config, wifi_config_t& out)
+{
     out = {};
     std::strncpy(reinterpret_cast<char*>(out.sta.ssid), config.ssid.data(),
                  sizeof(out.sta.ssid) - 1);
@@ -66,7 +69,8 @@ void make_station_config(StationConfig const& config, wifi_config_t& out) {
 
 // Stops the driver if it is running. A driver that was never started (or is
 // already stopping) is not an error.
-esp_err_t stop_driver() {
+esp_err_t stop_driver()
+{
     esp_err_t const err = esp_wifi_stop();
     if (err == ESP_OK || err == ESP_ERR_WIFI_NOT_STARTED) {
         return ESP_OK;
@@ -76,7 +80,8 @@ esp_err_t stop_driver() {
 
 }  // namespace
 
-esp_err_t WifiRadioBoard::init() noexcept {
+esp_err_t WifiRadioBoard::init() noexcept
+{
     if (!g_stack_initialized) {
         esp_err_t err = esp_netif_init();
         if (err != ESP_OK) {
@@ -109,7 +114,8 @@ esp_err_t WifiRadioBoard::init() noexcept {
     return ESP_OK;
 }
 
-esp_err_t WifiRadioBoard::start_ap(AccessPointConfig const& config) noexcept {
+esp_err_t WifiRadioBoard::start_ap(AccessPointConfig const& config) noexcept
+{
     if (!initialized_) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -129,7 +135,8 @@ esp_err_t WifiRadioBoard::start_ap(AccessPointConfig const& config) noexcept {
     return ESP_OK;
 }
 
-esp_err_t WifiRadioBoard::stop_ap() noexcept {
+esp_err_t WifiRadioBoard::stop_ap() noexcept
+{
     if (!initialized_) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -144,7 +151,8 @@ esp_err_t WifiRadioBoard::stop_ap() noexcept {
     return ESP_OK;
 }
 
-esp_err_t WifiRadioBoard::start_station(StationConfig const& config) noexcept {
+esp_err_t WifiRadioBoard::start_station(StationConfig const& config) noexcept
+{
     if (!initialized_) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -175,7 +183,8 @@ esp_err_t WifiRadioBoard::start_station(StationConfig const& config) noexcept {
     return ESP_OK;
 }
 
-esp_err_t WifiRadioBoard::stop_station() noexcept {
+esp_err_t WifiRadioBoard::stop_station() noexcept
+{
     if (!initialized_) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -191,7 +200,8 @@ esp_err_t WifiRadioBoard::stop_station() noexcept {
     return ESP_OK;
 }
 
-esp_err_t WifiRadioBoard::apply_interfaces() noexcept {
+esp_err_t WifiRadioBoard::apply_interfaces() noexcept
+{
     // The driver only accepts a mode change while stopped.
     esp_err_t err = stop_driver();
     if (err != ESP_OK) {

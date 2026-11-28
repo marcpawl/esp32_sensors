@@ -69,11 +69,13 @@ const char kServerKeyPem[] =
     "hjT7grH2Bm1zhm09SaFVO8uf\n"
     "-----END PRIVATE KEY-----\n";
 
-std::size_t server_cert_len() {
+std::size_t server_cert_len()
+{
     return std::strlen(kServerCertPem);
 }
 
-std::size_t server_key_len() {
+std::size_t server_key_len()
+{
     return std::strlen(kServerKeyPem);
 }
 

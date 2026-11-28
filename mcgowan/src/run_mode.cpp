@@ -50,7 +50,8 @@ constexpr const char* kTag = "run";
 // Builds a fixed-size sample record from a reading set (§4.1); `age_base` and
 // `batt_mv` are the record's first two fields, in layout order.
 logic::SampleRecord make_record(std::uint32_t age_base, std::uint16_t batt_mv,
-                                const ReadingList& readings) {
+                                const ReadingList& readings)
+{
     logic::SampleRecord rec{};
     rec.age_base = age_base;
     rec.batt_mv = batt_mv;
@@ -80,7 +81,8 @@ logic::SampleRecord make_record(std::uint32_t age_base, std::uint16_t batt_mv,
 #pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
 
 std::vector<logic::payload::NamedSample> collect_batch(
-    const logic::RtcState& st) {
+    const logic::RtcState& st)
+{
     std::vector<logic::payload::NamedSample> out;
     out.reserve(st.buffer.size());
     for (const logic::SampleRecord& rec : st.buffer) {
@@ -99,7 +101,8 @@ std::vector<logic::payload::NamedSample> collect_batch(
 
 // Friendly names in column order, padded to the sensor count (§5.1.3).
 logic::payload::SensorNames names_for(const Config& cfg,
-                                      const ReadingList& readings) {
+                                      const ReadingList& readings)
+{
     logic::payload::SensorNames names;
     for (std::size_t i = 0;
          i < logic::limits::kSensorCount && i < readings.size(); ++i) {
@@ -119,7 +122,8 @@ logic::payload::SensorNames names_for(const Config& cfg,
 // the wire format can be reviewed, but no connection is attempted yet. Returns
 // false to represent "not yet implemented", which triggers backoff (§3.7).
 bool stub_upload(const Config& cfg, logic::RtcState& st,
-                 const ReadingList& readings) {
+                 const ReadingList& readings)
+{
     const auto batch = collect_batch(st);
     const logic::payload::DeviceName device(cfg.dev_name.c_str());
     const logic::payload::Payload json = logic::payload::build_batch_json(
@@ -134,8 +138,8 @@ bool stub_upload(const Config& cfg, logic::RtcState& st,
 }  // namespace
 
 template<hal::BoardLike Board>
-[[noreturn]] void run_mode_cycle(Board& board,
-                                 logic::LedTask<Board>& led_task) {
+[[noreturn]] void run_mode_cycle(Board& board, logic::LedTask<Board>& led_task)
+{
     logic::RtcState& st = rtc_state();
     st.boot_count++;
 
@@ -248,7 +252,8 @@ template<hal::BoardLike Board>
 }
 
 [[noreturn]] void run_mode_cycle(hal::board::Board& board,
-                                 logic::LedTask<hal::board::Board>& led_task) {
+                                 logic::LedTask<hal::board::Board>& led_task)
+{
     run_mode_cycle<hal::board::Board>(board, led_task);
 }
 

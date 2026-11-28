@@ -51,15 +51,18 @@ struct BoardDeviceSet {
 
     void deep_sleep_start(std::chrono::seconds /*duration*/) noexcept {}
 
-    [[nodiscard]] WakeCauses sleep_get_wakeup_causes() const noexcept {
+    [[nodiscard]] WakeCauses sleep_get_wakeup_causes() const noexcept
+    {
         return 0;
     }
 
-    [[nodiscard]] ChipTemperature& chip_temperature() noexcept {
+    [[nodiscard]] ChipTemperature& chip_temperature() noexcept
+    {
         return chip_temperature_;
     }
 
-    [[nodiscard]] ChipTemperature const& chip_temperature() const noexcept {
+    [[nodiscard]] ChipTemperature const& chip_temperature() const noexcept
+    {
         return chip_temperature_;
     }
 
@@ -99,7 +102,8 @@ struct CompleteBoard : BoardDeviceSet {
 // them cannot serve a board-independent template, so `BoardLike` must reject
 // it.
 struct BoardWithoutDeviceTypes : BoardDeviceSet {
-    static BoardWithoutDeviceTypes create(BoardPins /*pins*/) noexcept {
+    static BoardWithoutDeviceTypes create(BoardPins /*pins*/) noexcept
+    {
         return {};
     }
 };
@@ -109,7 +113,8 @@ struct BoardWithoutDeviceTypes : BoardDeviceSet {
 // --- BoardPins defaults -----------------------------------------------------
 
 TEST_CASE("hal board types: BoardPins defaults to the board pin map (§2.4)",
-          "[hal_board_types]") {
+          "[hal_board_types]")
+{
     // The default wiring comes from `hal/pin_map.hpp`, so a board can be built
     // on the reference hardware without repeating the numbers.
     const BoardPins def{};
@@ -125,13 +130,15 @@ TEST_CASE("hal board types: BoardPins defaults to the board pin map (§2.4)",
 // --- The concept accepts a complete board ----------------------------------
 
 TEST_CASE("hal board types: a complete board models BoardLike",
-          "[hal_board_types]") {
+          "[hal_board_types]")
+{
     static_assert(BoardLike<CompleteBoard>);
     TEST_PASS();
 }
 
 TEST_CASE("hal board types: BoardLike rejects a board without device types",
-          "[hal_board_types]") {
+          "[hal_board_types]")
+{
     // The device interface is complete, but `LedType` / `SwitchType` are
     // missing, so a template could not derive them from the board.
     static_assert(!BoardLike<BoardWithoutDeviceTypes>);
@@ -140,8 +147,8 @@ TEST_CASE("hal board types: BoardLike rejects a board without device types",
 
 // --- ...and rejects a type that is not a board -----------------------------
 
-TEST_CASE("hal board types: BoardLike rejects a non-board",
-          "[hal_board_types]") {
+TEST_CASE("hal board types: BoardLike rejects a non-board", "[hal_board_types]")
+{
     static_assert(!BoardLike<NotABoard>);
     // A non-class cannot be a board.
     static_assert(!BoardLike<int>);

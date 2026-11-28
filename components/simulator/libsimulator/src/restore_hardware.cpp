@@ -10,15 +10,16 @@
 namespace thermo::simulator {
 namespace {
 
-constexpr espidf_cpp::SwitchState to_switch_state(
-    std::uint8_t stored) noexcept {
+constexpr espidf_cpp::SwitchState to_switch_state(std::uint8_t stored) noexcept
+{
     return stored == kOn ? espidf_cpp::SwitchState::kOn
                          : espidf_cpp::SwitchState::kOff;
 }
 
 }  // namespace
 
-void restore_hardware() noexcept {
+void restore_hardware() noexcept
+{
     // The wrapper owns the one-time flash setup, including recovery.
     espidf_cpp::Nvs<espidf_cpp::NvsMode::ReadWrite>::init_nvs_flash();
 

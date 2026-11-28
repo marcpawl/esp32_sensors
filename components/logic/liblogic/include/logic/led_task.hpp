@@ -60,7 +60,9 @@ struct Step {
     // usable in constant expressions declared earlier in this class.
     constexpr Step(std::chrono::milliseconds duration, RedLed red_led,
                    GreenLed green_led) noexcept
-        : duration_(duration), red_led_(red_led), green_led_(green_led) {}
+        : duration_(duration), red_led_(red_led), green_led_(green_led)
+    {
+    }
 };
 
 template<std::size_t N>
@@ -73,7 +75,9 @@ struct CycleSteps {
     template<typename... Args>
         requires(sizeof...(Args) == N)
     constexpr explicit(N == 1) CycleSteps(LedState state, Args&&... args)
-        : state_(state), steps_{std::forward<Args>(args)...} {}
+        : state_(state), steps_{std::forward<Args>(args)...}
+    {
+    }
 };
 
 // Deduction guide to automatically deduce N from the number of passed steps
@@ -94,7 +98,8 @@ using Cycles = std::array<Cycle, 9>;
 // A free function rather than a member of `LedRunner`: the table does not
 // depend on the board, so making it board-free lets the coverage checks below
 // assert it without naming any concrete board type.
-[[nodiscard]] constexpr Cycles led_cycles() noexcept {
+[[nodiscard]] constexpr Cycles led_cycles() noexcept
+{
     return {
         CycleSteps{LedState::kOff,
                    Step{std::chrono::hours{1}, RedLed::Off, GreenLed::Off}},
@@ -138,7 +143,8 @@ using Cycles = std::array<Cycle, 9>;
 // Whether the compile-time table contains a cycle for `state`. Free, like the
 // table, so it can be checked without a board. A missing entry would otherwise
 // abort at runtime in `lookup_cycle`.
-[[nodiscard]] constexpr bool has_cycle(LedState state) noexcept {
+[[nodiscard]] constexpr bool has_cycle(LedState state) noexcept
+{
     constexpr Cycles kTable = led_cycles();
     for (const Cycle& cycle : kTable) {
         const bool match = std::visit(
@@ -172,7 +178,9 @@ class LedRunner {
   public:
     // Shares ownership of `board`; `board` must not be null.
     explicit LedRunner(std::shared_ptr<Board> board) noexcept
-        : board_(std::move(board)) {}
+        : board_(std::move(board))
+    {
+    }
 
     LedRunner(LedRunner const&) = delete;
 
@@ -220,14 +228,15 @@ class LedRunner {
     // Receive, blocking up to `timeout` ticks. Returns the message when one was
     // dequeued, or `std::nullopt` on timeout.
     //
-    std::optional<LedState> receive(TickType_t timeout) noexcept {
+    std::optional<LedState> receive(TickType_t timeout) noexcept
+    {
         return queue_.receive(timeout);
     }
 
     // Receive, blocking up to `timeout` milliseconds. Convenience overload for
     // callers that prefer a `std::chrono` duration over raw FreeRTOS ticks.
-    std::optional<LedState> receive(
-        std::chrono::milliseconds timeout) noexcept {
+    std::optional<LedState> receive(std::chrono::milliseconds timeout) noexcept
+    {
         return queue_.receive(timeout);
     }
 
@@ -241,7 +250,8 @@ class LedRunner {
 };
 
 template<hal::BoardLike Board>
-[[noreturn]] void LedRunner<Board>::run() noexcept {
+[[noreturn]] void LedRunner<Board>::run() noexcept
+{
     LedState state = LedState::kBoot;
     while (true) {
         state = on_state_changed(state);
@@ -249,7 +259,8 @@ template<hal::BoardLike Board>
 }
 
 template<hal::BoardLike Board>
-Cycle const& LedRunner<Board>::lookup_cycle(LedState state) const noexcept {
+Cycle const& LedRunner<Board>::lookup_cycle(LedState state) const noexcept
+{
     // `led_cycles()` returns by value, so bind it to a function-local static
     // to give the table (and thus the returned reference) static storage
     // duration.
@@ -271,7 +282,8 @@ Cycle const& LedRunner<Board>::lookup_cycle(LedState state) const noexcept {
 }
 
 template<hal::BoardLike Board>
-LedState LedRunner<Board>::on_state_changed(LedState new_state) noexcept {
+LedState LedRunner<Board>::on_state_changed(LedState new_state) noexcept
+{
     const Cycle& cycle = lookup_cycle(new_state);
     return std::visit(
         [this](const auto& steps) -> LedState { return execute_cycle(steps); },
@@ -279,7 +291,8 @@ LedState LedRunner<Board>::on_state_changed(LedState new_state) noexcept {
 }
 
 template<hal::BoardLike Board>
-void LedRunner<Board>::change_leds(Step const& step) noexcept {
+void LedRunner<Board>::change_leds(Step const& step) noexcept
+{
     // The board is shared, never null (the constructor requires one).
     Board& board = *board_;
     board.red().write(step.red_led_ == RedLed::On ? hal::LedState::kOn
@@ -291,7 +304,8 @@ void LedRunner<Board>::change_leds(Step const& step) noexcept {
 template<hal::BoardLike Board>
 template<std::size_t N>
 [[nodiscard]] LedState LedRunner<Board>::execute_cycle(
-    const CycleSteps<N>& cycle) noexcept {
+    const CycleSteps<N>& cycle) noexcept
+{
     while (true) {
         for (Step const& step : cycle.steps_) {
             change_leds(step);
@@ -344,7 +358,8 @@ class LedTask : protected espidf_cpp::Task<ledtask::LedRunner<Board>> {
 
     LedTask& operator=(LedTask&&) = delete;
 
-    void set_state(LedState new_state) noexcept {
+    void set_state(LedState new_state) noexcept
+    {
         // `runner_` lives in the dependent base, so name it through the base
         // type (unqualified lookup would not find it in a template).
         this->runner_.set_state(new_state);
@@ -354,7 +369,8 @@ class LedTask : protected espidf_cpp::Task<ledtask::LedRunner<Board>> {
 template<hal::BoardLike Board>
 LedTask<Board>::LedTask(std::shared_ptr<Board> board)
     : espidf_cpp::Task<ledtask::LedRunner<Board>>(
-          ledtask::LedRunner<Board>(std::move(board)),
-          espidf_cpp::TaskParams()) {}
+          ledtask::LedRunner<Board>(std::move(board)), espidf_cpp::TaskParams())
+{
+}
 
 }  // namespace thermo::logic

@@ -18,7 +18,8 @@ constexpr std::uint8_t kRomCommandReadScratchpad = 0xBE;
 
 constexpr std::uint8_t kFamilyDs18b20 = 0x28;
 
-std::uint8_t crc8(const std::uint8_t* data, std::size_t len) {
+std::uint8_t crc8(const std::uint8_t* data, std::size_t len)
+{
     std::uint8_t crc = 0;
     for (std::size_t i = 0; i < len; ++i) {
         std::uint8_t in = data[i];
@@ -36,7 +37,8 @@ std::uint8_t crc8(const std::uint8_t* data, std::size_t len) {
 
 }  // namespace
 
-RomIdList Ds18b20::scan() {
+RomIdList Ds18b20::scan()
+{
     // Full ROM search (binary tree walk) is not implemented; this simple form
     // works only when a single device is present. Run mode avoids scanning
     // entirely by using cached ROM IDs (§3.4).
@@ -56,7 +58,8 @@ RomIdList Ds18b20::scan() {
     return found;
 }
 
-esp_err_t Ds18b20::start_conversion() {
+esp_err_t Ds18b20::start_conversion()
+{
     // GCC's analyzer cannot model the 1-Wire bus calls and reports them as
     // reading uninitialised storage. The code is correct; keep the diagnostic
     // fatal everywhere else.
@@ -73,7 +76,8 @@ esp_err_t Ds18b20::start_conversion() {
     // NOLINTEND
 }
 
-std::optional<std::int16_t> Ds18b20::read_temperature(const RomId& rom) {
+std::optional<std::int16_t> Ds18b20::read_temperature(const RomId& rom)
+{
     if (!bus_.reset()) {
         return std::nullopt;
     }

@@ -35,7 +35,8 @@ using thermo::logic::rom_id_to_hex;
 namespace {
 
 // Builds a ROM ID whose first byte is `tag` so tests can distinguish sensors.
-RomId rom_with_byte(std::uint8_t tag) {
+RomId rom_with_byte(std::uint8_t tag)
+{
     RomId rom{};
     rom.bytes[0] = tag;
     rom.bytes[7] = 0x28;  // DS18B20 family code, for realism.
@@ -43,7 +44,8 @@ RomId rom_with_byte(std::uint8_t tag) {
 }
 
 DS18B20Reading reading_with_temp(std::uint8_t tag,
-                                 std::optional<std::int16_t> temp) {
+                                 std::optional<std::int16_t> temp)
+{
     DS18B20Reading r{};
     r.rom = rom_with_byte(tag);
     r.temp_c_x100 = temp;
@@ -54,7 +56,8 @@ DS18B20Reading reading_with_temp(std::uint8_t tag,
 
 // --- Empty snapshot ---------------------------------------------------------
 
-TEST_CASE("scan json: no sensors yields empty array", "[config_page]") {
+TEST_CASE("scan json: no sensors yields empty array", "[config_page]")
+{
     Config cfg{};
     ScanSnapshot scan{};
     scan.power_source = PowerSource::kSolarBattery;
@@ -73,7 +76,8 @@ TEST_CASE("scan json: no sensors yields empty array", "[config_page]") {
 
 // --- power_source is a quoted JSON string (§6.1) ---------------------------
 
-TEST_CASE("scan json: power source is a quoted string", "[config_page]") {
+TEST_CASE("scan json: power source is a quoted string", "[config_page]")
+{
     Config cfg{};
     ScanSnapshot scan{};
     scan.power_source = PowerSource::kUsbComputer;
@@ -85,7 +89,8 @@ TEST_CASE("scan json: power source is a quoted string", "[config_page]") {
 }
 
 TEST_CASE("scan json: every power source maps to its quoted name",
-          "[config_page]") {
+          "[config_page]")
+{
     const struct {
         PowerSource source;
         const char* expected;
@@ -110,7 +115,8 @@ TEST_CASE("scan json: every power source maps to its quoted name",
 
 // --- battery_mv is optional -------------------------------------------------
 
-TEST_CASE("scan json: battery_mv is emitted when present", "[config_page]") {
+TEST_CASE("scan json: battery_mv is emitted when present", "[config_page]")
+{
     Config cfg{};
     ScanSnapshot scan{};
     scan.power_source = PowerSource::kSolarBattery;
@@ -121,7 +127,8 @@ TEST_CASE("scan json: battery_mv is emitted when present", "[config_page]") {
     TEST_ASSERT_NOT_NULL(strstr(json.c_str(), "\"battery_mv\": 3900,"));
 }
 
-TEST_CASE("scan json: battery_mv defaults to absent", "[config_page]") {
+TEST_CASE("scan json: battery_mv defaults to absent", "[config_page]")
+{
     Config cfg{};
     ScanSnapshot scan{};
     scan.power_source = PowerSource::kUsbBatteryPack;
@@ -135,7 +142,8 @@ TEST_CASE("scan json: battery_mv defaults to absent", "[config_page]") {
 }
 
 TEST_CASE("scan json: battery_mv is omitted when explicitly absent",
-          "[config_page]") {
+          "[config_page]")
+{
     Config cfg{};
     ScanSnapshot scan{};
     scan.power_source = PowerSource::kUsbBatteryPack;
@@ -148,7 +156,8 @@ TEST_CASE("scan json: battery_mv is omitted when explicitly absent",
 
 // --- Sensor entries: ROM, name, temp ---------------------------------------
 
-TEST_CASE("scan json: sensor name defaults to the ROM id", "[config_page]") {
+TEST_CASE("scan json: sensor name defaults to the ROM id", "[config_page]")
+{
     Config cfg{};  // No mappings.
     ScanSnapshot scan{};
     scan.power_source = PowerSource::kSolarBattery;
@@ -163,7 +172,8 @@ TEST_CASE("scan json: sensor name defaults to the ROM id", "[config_page]") {
     TEST_ASSERT_NOT_NULL(strstr(json.c_str(), expected.c_str()));
 }
 
-TEST_CASE("scan json: mapped name overrides the ROM id", "[config_page]") {
+TEST_CASE("scan json: mapped name overrides the ROM id", "[config_page]")
+{
     const RomId rom = rom_with_byte(0x02);
 
     Config cfg{};
@@ -184,8 +194,8 @@ TEST_CASE("scan json: mapped name overrides the ROM id", "[config_page]") {
     TEST_ASSERT_NOT_NULL(strstr(json.c_str(), expected.c_str()));
 }
 
-TEST_CASE("scan json: missing temperature serializes as null",
-          "[config_page]") {
+TEST_CASE("scan json: missing temperature serializes as null", "[config_page]")
+{
     Config cfg{};
     ScanSnapshot scan{};
     scan.power_source = PowerSource::kSolarBattery;
@@ -198,7 +208,8 @@ TEST_CASE("scan json: missing temperature serializes as null",
 
 // --- Untrusted names are HTML-escaped (§5.1.3) ------------------------------
 
-TEST_CASE("scan json: names are html-escaped", "[config_page]") {
+TEST_CASE("scan json: names are html-escaped", "[config_page]")
+{
     const RomId rom = rom_with_byte(0x04);
 
     Config cfg{};
@@ -217,7 +228,8 @@ TEST_CASE("scan json: names are html-escaped", "[config_page]") {
 
 // --- Multiple sensors are comma-separated ----------------------------------
 
-TEST_CASE("scan json: multiple sensors are comma-separated", "[config_page]") {
+TEST_CASE("scan json: multiple sensors are comma-separated", "[config_page]")
+{
     Config cfg{};
     ScanSnapshot scan{};
     scan.power_source = PowerSource::kSolarBattery;
@@ -249,7 +261,8 @@ TEST_CASE("scan json: multiple sensors are comma-separated", "[config_page]") {
 
 // --- Field order is stable --------------------------------------------------
 
-TEST_CASE("scan json: top-level field order is stable", "[config_page]") {
+TEST_CASE("scan json: top-level field order is stable", "[config_page]")
+{
     Config cfg{};
     ScanSnapshot scan{};
     scan.power_source = PowerSource::kSolarBattery;

@@ -12,18 +12,21 @@
 #include "unity.h"
 
 TEST_CASE("espidf_cpp task: vTaskDelay accepts a zero delay",
-          "[espidf_cpp_task]") {
+          "[espidf_cpp_task]")
+{
     thermo::espidf_cpp::vTaskDelay(std::chrono::milliseconds{0});
     TEST_ASSERT_TRUE(true);
 }
 
 TEST_CASE("espidf_cpp task: vTaskDelay accepts a non-zero delay",
-          "[espidf_cpp_task]") {
+          "[espidf_cpp_task]")
+{
     thermo::espidf_cpp::vTaskDelay(std::chrono::milliseconds{1});
     TEST_ASSERT_TRUE(true);
 }
 
-TEST_CASE("espidf_cpp task: vTaskDelay delays", "[espidf_cpp_task]") {
+TEST_CASE("espidf_cpp task: vTaskDelay delays", "[espidf_cpp_task]")
+{
     constexpr auto delay = std::chrono::milliseconds{500};
     auto const before = std::chrono::steady_clock::now();
     thermo::espidf_cpp::vTaskDelay(delay);

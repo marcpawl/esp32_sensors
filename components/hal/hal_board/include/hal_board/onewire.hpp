@@ -45,7 +45,8 @@ class OneWire {
 
     // Builds a bus for the given data pin. Same signature for the hardware and
     // stub implementations; call init() before discover_sensors().
-    [[nodiscard]] static OneWire create(Gpio gpio) noexcept {
+    [[nodiscard]] static OneWire create(Gpio gpio) noexcept
+    {
         return OneWire(gpio);
     }
 

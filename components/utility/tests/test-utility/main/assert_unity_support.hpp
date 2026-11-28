@@ -32,7 +32,8 @@ using AssertProgramPath = thermo::utility::static_string<4160>;
 
 // Absolute path to a sibling `_assert` program. The program is emitted next to
 // the test ELF, so resolve this process's own directory via /proc/self/exe.
-inline AssertProgramPath assert_program_path(const char* program_name) {
+inline AssertProgramPath assert_program_path(const char* program_name)
+{
     char exe[4096];
     const ssize_t n = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
     TEST_ASSERT_TRUE_MESSAGE(n > 0, "readlink(/proc/self/exe) failed");
@@ -49,7 +50,8 @@ inline AssertProgramPath assert_program_path(const char* program_name) {
 // Forks, execs `program` with `case_name`, and waits for it. Returns true iff
 // the child terminated abnormally, i.e. the assert fired.
 inline bool assert_program_aborted(const AssertProgramPath& program,
-                                   const char* case_name) {
+                                   const char* case_name)
+{
     const pid_t pid = fork();
     TEST_ASSERT_TRUE_MESSAGE(pid >= 0, "fork() failed");
     if (pid == 0) {

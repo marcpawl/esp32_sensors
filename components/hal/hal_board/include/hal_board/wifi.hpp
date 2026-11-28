@@ -52,7 +52,8 @@ class WifiRadioBoard {
 
     // Builds a radio. Same signature for the hardware and stub
     // implementations; call init() before any other method.
-    [[nodiscard]] static WifiRadioBoard create() noexcept {
+    [[nodiscard]] static WifiRadioBoard create() noexcept
+    {
         return WifiRadioBoard();
     }
 

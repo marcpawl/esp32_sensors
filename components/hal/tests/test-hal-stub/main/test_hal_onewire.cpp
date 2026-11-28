@@ -39,7 +39,8 @@ using thermo::hal::stub::OneWire;
 // parity with the GPIO-backed implementation.
 constexpr Gpio kDataGpio{4};
 
-RomId make_rom(std::initializer_list<unsigned> bytes) {
+RomId make_rom(std::initializer_list<unsigned> bytes)
+{
     RomId id{};
     std::size_t i = 0;
     for (unsigned b : bytes) {
@@ -52,7 +53,8 @@ RomId make_rom(std::initializer_list<unsigned> bytes) {
 
 // Builds a reading from a ROM ID and an optional temperature (x100 °C).
 DS18B20Reading make_reading(std::initializer_list<unsigned> bytes,
-                            std::optional<std::int16_t> temp = std::nullopt) {
+                            std::optional<std::int16_t> temp = std::nullopt)
+{
     return DS18B20Reading{make_rom(bytes), temp};
 }
 
@@ -60,13 +62,15 @@ DS18B20Reading make_reading(std::initializer_list<unsigned> bytes,
 // no `std::initializer_list` constructor: GCC's analyzer cannot model that
 // container's storage, so braced construction would need a diagnostic
 // suppression.
-ReadingList one_reading(DS18B20Reading reading) {
+ReadingList one_reading(DS18B20Reading reading)
+{
     ReadingList list;
     list.push_back(reading);
     return list;
 }
 
-OneWire make_bus() {
+OneWire make_bus()
+{
     OneWire bus = OneWire::create(kDataGpio);
     bus.init();
     return bus;
@@ -76,8 +80,8 @@ OneWire make_bus() {
 
 // --- Construction / factory -------------------------------------------------
 
-TEST_CASE("hal onewire: create() returns a usable, inited bus",
-          "[hal_onewire]") {
+TEST_CASE("hal onewire: create() returns a usable, inited bus", "[hal_onewire]")
+{
     OneWire bus = OneWire::create(kDataGpio);
     // init() always succeeds for the stub (there is no pin to configure).
     TEST_ASSERT_EQUAL(ESP_OK, bus.init());
@@ -86,7 +90,8 @@ TEST_CASE("hal onewire: create() returns a usable, inited bus",
 }
 
 TEST_CASE("hal onewire: init() is idempotent and returns ESP_OK",
-          "[hal_onewire]") {
+          "[hal_onewire]")
+{
     OneWire bus = make_bus();
     TEST_ASSERT_EQUAL(ESP_OK, bus.init());
     TEST_ASSERT_EQUAL(ESP_OK, bus.init());
@@ -94,7 +99,8 @@ TEST_CASE("hal onewire: init() is idempotent and returns ESP_OK",
 
 // --- Default collection -----------------------------------------------------
 
-TEST_CASE("hal onewire: defaults to the three spec sensors", "[hal_onewire]") {
+TEST_CASE("hal onewire: defaults to the three spec sensors", "[hal_onewire]")
+{
     const OneWire bus = make_bus();
     const RomIdList sensors = bus.discover_sensors();
 
@@ -109,7 +115,8 @@ TEST_CASE("hal onewire: defaults to the three spec sensors", "[hal_onewire]") {
 }
 
 TEST_CASE("hal onewire: the default readings match the discovery order",
-          "[hal_onewire]") {
+          "[hal_onewire]")
+{
     const OneWire bus = make_bus();
     const ReadingList readings = bus.read();
     const RomIdList roms = bus.discover_sensors();
@@ -123,7 +130,8 @@ TEST_CASE("hal onewire: the default readings match the discovery order",
 // --- Round-trips through set_sensors() --------------------------------------
 
 TEST_CASE("hal onewire: set_sensors() is reflected by discover_sensors()",
-          "[hal_onewire]") {
+          "[hal_onewire]")
+{
     OneWire bus = make_bus();
 
     ReadingList two;
@@ -139,7 +147,8 @@ TEST_CASE("hal onewire: set_sensors() is reflected by discover_sensors()",
 }
 
 TEST_CASE("hal onewire: set_sensors({}) yields an empty collection",
-          "[hal_onewire]") {
+          "[hal_onewire]")
+{
     OneWire bus = make_bus();
     bus.set_sensors(ReadingList{});
     TEST_ASSERT_EQUAL_UINT(0, bus.discover_sensors().size());
@@ -147,7 +156,8 @@ TEST_CASE("hal onewire: set_sensors({}) yields an empty collection",
 }
 
 TEST_CASE("hal onewire: repeated set_sensors() keeps the last value",
-          "[hal_onewire]") {
+          "[hal_onewire]")
+{
     OneWire bus = make_bus();
 
     const ReadingList first =
@@ -162,7 +172,8 @@ TEST_CASE("hal onewire: repeated set_sensors() keeps the last value",
     TEST_ASSERT_TRUE(got[0] == last[0].rom);
 }
 
-TEST_CASE("hal onewire: discover_sensors() returns a copy", "[hal_onewire]") {
+TEST_CASE("hal onewire: discover_sensors() returns a copy", "[hal_onewire]")
+{
     OneWire bus = make_bus();
     const ReadingList first =
         one_reading(make_reading({0x28, 1, 2, 3, 4, 5, 6, 7}));
@@ -177,7 +188,8 @@ TEST_CASE("hal onewire: discover_sensors() returns a copy", "[hal_onewire]") {
 // --- read() returns readings ------------------------------------------------
 
 TEST_CASE("hal onewire: read() returns the set readings in order",
-          "[hal_onewire]") {
+          "[hal_onewire]")
+{
     OneWire bus = make_bus();
 
     ReadingList set;
@@ -196,7 +208,8 @@ TEST_CASE("hal onewire: read() returns the set readings in order",
 }
 
 TEST_CASE("hal onewire: read() round-trips a missing temperature as nullopt",
-          "[hal_onewire]") {
+          "[hal_onewire]")
+{
     OneWire bus = make_bus();
     bus.set_sensors(
         one_reading(make_reading({0x28, 9, 9, 9, 9, 9, 9, 9}, std::nullopt)));
@@ -206,7 +219,8 @@ TEST_CASE("hal onewire: read() round-trips a missing temperature as nullopt",
     TEST_ASSERT_FALSE(got[0].temp_c_x100.has_value());
 }
 
-TEST_CASE("hal onewire: read() returns a copy", "[hal_onewire]") {
+TEST_CASE("hal onewire: read() returns a copy", "[hal_onewire]")
+{
     OneWire bus = make_bus();
     bus.set_sensors(
         one_reading(make_reading({0x28, 1, 2, 3, 4, 5, 6, 7}, 2500)));
@@ -218,7 +232,8 @@ TEST_CASE("hal onewire: read() returns a copy", "[hal_onewire]") {
 
 // --- The stub satisfies the shared concept ---------------------------------
 
-TEST_CASE("hal onewire: stub OneWire models OneWireLike", "[hal_onewire]") {
+TEST_CASE("hal onewire: stub OneWire models OneWireLike", "[hal_onewire]")
+{
     static_assert(thermo::hal::OneWireLike<OneWire>);
     // create() must return the same concrete type (part of the concept).
     static_assert(std::same_as<decltype(OneWire::create(Gpio{1})), OneWire>);

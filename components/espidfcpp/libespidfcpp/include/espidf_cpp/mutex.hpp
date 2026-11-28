@@ -69,14 +69,16 @@ class Mutex {
 
     // Raw FreeRTOS handle, used by this class's own FreeRTOS calls. It remains
     // owned here (`vQueueDelete` runs when the mutex is destroyed).
-    [[nodiscard]] SemaphoreHandle_t handle() const noexcept {
+    [[nodiscard]] SemaphoreHandle_t handle() const noexcept
+    {
         return handle_.get();
     }
 
     // Acquires the mutex, blocking indefinitely. Aborts if the take itself
     // fails (only possible for an invalid handle, which the constructor
     // prevents).
-    void lock() noexcept {
+    void lock() noexcept
+    {
         if (!take(portMAX_DELAY)) {
             ESP_LOGE(kTag, "xSemaphoreTake failed");
             assert(false && "FreeRTOS could not take the mutex");
@@ -89,8 +91,8 @@ class Mutex {
 
     // Acquires the mutex, waiting up to `timeout` milliseconds. Returns whether
     // the mutex was acquired before the timeout expired.
-    [[nodiscard]] bool try_lock_for(
-        std::chrono::milliseconds timeout) noexcept {
+    [[nodiscard]] bool try_lock_for(std::chrono::milliseconds timeout) noexcept
+    {
         return take(pdMS_TO_TICKS(static_cast<std::uint32_t>(timeout.count())));
     }
 
@@ -98,7 +100,8 @@ class Mutex {
     // did not hold the mutex (a double unlock or an unlock without a lock).
     void unlock() noexcept;
 
-    [[nodiscard]] bool take(TickType_t ticks_to_wait) noexcept {
+    [[nodiscard]] bool take(TickType_t ticks_to_wait) noexcept
+    {
         BaseType_t const taken =
             recursive_ ? xSemaphoreTakeRecursive(handle_.get(), ticks_to_wait)
                        : xSemaphoreTake(handle_.get(), ticks_to_wait);
@@ -126,7 +129,8 @@ class Lock {
 
     // Acquires `mutex` if it is free right now; never blocks. Returns the Lock
     // that owns it, or `std::nullopt` when the mutex is held elsewhere.
-    [[nodiscard]] static std::optional<Lock> try_lock(Mutex& mutex) noexcept {
+    [[nodiscard]] static std::optional<Lock> try_lock(Mutex& mutex) noexcept
+    {
         if (!mutex.try_lock()) {
             return std::nullopt;
         }
@@ -136,7 +140,8 @@ class Lock {
     // Acquires `mutex`, waiting up to `timeout` milliseconds. Returns the Lock
     // that owns it, or `std::nullopt` when the timeout expired first.
     [[nodiscard]] static std::optional<Lock> try_lock_for(
-        Mutex& mutex, std::chrono::milliseconds timeout) noexcept {
+        Mutex& mutex, std::chrono::milliseconds timeout) noexcept
+    {
         if (!mutex.try_lock_for(timeout)) {
             return std::nullopt;
         }
@@ -148,10 +153,12 @@ class Lock {
 
     // Transfers ownership of the lock. The moved-from Lock no longer releases
     // the mutex.
-    Lock(Lock&& other) noexcept
-        : mutex_(std::exchange(other.mutex_, nullptr)) {}
+    Lock(Lock&& other) noexcept : mutex_(std::exchange(other.mutex_, nullptr))
+    {
+    }
 
-    Lock& operator=(Lock&& other) noexcept {
+    Lock& operator=(Lock&& other) noexcept
+    {
         if (this != &other) {
             release();
             mutex_ = std::exchange(other.mutex_, nullptr);
@@ -180,13 +187,15 @@ class Lock {
 
     // Releases the mutex. Private because a Lock holds its mutex for its whole
     // lifetime: only the destructor and move assignment may drop it.
-    void unlock() noexcept {
+    void unlock() noexcept
+    {
         mutex_->unlock();
         mutex_ = nullptr;
     }
 
     // Unlocks if this Lock still owns the mutex.
-    void release() noexcept {
+    void release() noexcept
+    {
         if (mutex_ != nullptr) {
             unlock();
         }

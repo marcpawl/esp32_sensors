@@ -44,7 +44,8 @@ namespace detail {
 // this: a null dereference cannot be handled in a constant expression, which
 // would silently demote a constant-evaluated `append(nullptr)` to a runtime
 // call.
-constexpr std::size_t c_str_len(const char* s) noexcept {
+constexpr std::size_t c_str_len(const char* s) noexcept
+{
     std::size_t n = 0;
     while (s[n] != '\0') {
         ++n;
@@ -75,7 +76,8 @@ constexpr std::size_t c_str_len(const char* s) noexcept {
 // Precondition: neither argument is null (both callers pass `c_str()`).
 constexpr std::strong_ordering compare_c_str(const char* a, std::size_t a_len,
                                              const char* b,
-                                             std::size_t b_len) noexcept {
+                                             std::size_t b_len) noexcept
+{
     const std::size_t common = a_len < b_len ? a_len : b_len;
 
     int prefix = 0;
@@ -122,7 +124,8 @@ class static_string {
     constexpr static_string() noexcept { buf_[0] = '\0'; }
 
     // Copy from a C string. Asserts if `s` does not fit (len > capacity()).
-    constexpr static_string(const char* s) {
+    constexpr static_string(const char* s)
+    {
         buf_[0] = '\0';  // Guarantee a terminator before any copy.
         assign(s);
     }
@@ -131,7 +134,8 @@ class static_string {
     // capacity()). Explicit because a view is not implicitly a fixed-capacity
     // string. Unlike the C-string overload, embedded NULs are preserved because
     // the full bounded length is copied.
-    explicit constexpr static_string(std::string_view const& s) {
+    explicit constexpr static_string(std::string_view const& s)
+    {
         buf_[0] = '\0';  // Guarantee a terminator before any copy.
         append(s.data(), s.size());
     }
@@ -147,7 +151,8 @@ class static_string {
     // Copy from a smaller capacity. M < N guarantees
     // the source value fits without a runtime check.
     template<std::size_t M>
-    constexpr static_string(const static_string<M>& other) {
+    constexpr static_string(const static_string<M>& other)
+    {
         static_assert(M < N, "source capacity exceeds destination capacity");
         buf_[0] = '\0';  // Guarantee a terminator before any copy.
         append(other.data(), other.size());
@@ -156,7 +161,8 @@ class static_string {
     // Move from a smaller capacity by copying the characters (inline storage
     // has a different capacity) and emptying the source.
     template<std::size_t M>
-    constexpr static_string(static_string<M>&& other) {
+    constexpr static_string(static_string<M>&& other)
+    {
         static_assert(M < N, "source capacity exceeds destination capacity");
         buf_[0] = '\0';  // Guarantee a terminator before any copy.
         append(other.data(), other.size());
@@ -169,7 +175,8 @@ class static_string {
     constexpr bool empty() const noexcept { return size_ == 0; }
 
     // Remaining character capacity (excluding the reserved NUL).
-    constexpr size_type remaining() const noexcept {
+    constexpr size_type remaining() const noexcept
+    {
         return capacity() - size_;
     }
 
@@ -181,24 +188,28 @@ class static_string {
 
     constexpr char& operator[](size_type i) noexcept { return buf_[i]; }
 
-    constexpr const char& operator[](size_type i) const noexcept {
+    constexpr const char& operator[](size_type i) const noexcept
+    {
         return buf_[i];
     }
 
     // Last character. Asserts on an empty string.
-    constexpr char& back() noexcept {
+    constexpr char& back() noexcept
+    {
         assert(!empty());
         return buf_[size_ - 1];
     }
 
-    constexpr const char& back() const noexcept {
+    constexpr const char& back() const noexcept
+    {
         assert(!empty());
         return buf_[size_ - 1];
     }
 
     // Removes the last character and restores the terminator.
     // Asserts on an empty string.
-    constexpr void pop_back() noexcept {
+    constexpr void pop_back() noexcept
+    {
         assert(!empty());
         --size_;
         buf_[size_] = '\0';
@@ -213,13 +224,15 @@ class static_string {
     constexpr const char* cend() const noexcept { return end(); }
 
     // Replaces the contents with `s`. Asserts if `s` does not fit.
-    constexpr void assign(const char* s) {
+    constexpr void assign(const char* s)
+    {
         clear();
         append(s);
     }
 
     // Appends `s`. Asserts if the result would exceed capacity().
-    constexpr void append(const char* s) {
+    constexpr void append(const char* s)
+    {
         if (s == nullptr) {
             return;
         }
@@ -229,7 +242,8 @@ class static_string {
     // Appends the first `n` characters of `s` — a bounded slice of a buffer
     // that need not be NUL-terminated (e.g. a request URI). Asserts if the
     // result would exceed capacity().
-    constexpr void append(const char* s, size_type n) {
+    constexpr void append(const char* s, size_type n)
+    {
         if (s == nullptr) {
             return;
         }
@@ -242,7 +256,8 @@ class static_string {
     }
 
     // Appends a single character. Asserts when full.
-    constexpr void push_back(char c) {
+    constexpr void push_back(char c)
+    {
         assert(remaining() > 0);
         buf_[size_++] = c;
         buf_[size_] = '\0';
@@ -250,7 +265,8 @@ class static_string {
 
     // Non-aborting single-character append: returns false (and stores
     // nothing) when the string is full.
-    constexpr bool try_push_back(char c) noexcept {
+    constexpr bool try_push_back(char c) noexcept
+    {
         if (remaining() == 0) {
             return false;
         }
@@ -261,7 +277,8 @@ class static_string {
 
     // Non-aborting append of `n` bytes of `s`: returns false (and stores
     // nothing) when the whole slice does not fit.
-    constexpr bool try_append(const char* s, size_type n) noexcept {
+    constexpr bool try_append(const char* s, size_type n) noexcept
+    {
         if (s == nullptr || n > remaining()) {
             return false;
         }
@@ -273,19 +290,22 @@ class static_string {
     }
 
     // Appends a C string. Asserts if the result would exceed capacity().
-    constexpr static_string& operator+=(const char* s) {
+    constexpr static_string& operator+=(const char* s)
+    {
         append(s);
         return *this;
     }
 
     // Appends a single character. Asserts when full.
-    constexpr static_string& operator+=(char c) {
+    constexpr static_string& operator+=(char c)
+    {
         push_back(c);
         return *this;
     }
 
     // Empties the string (buffer still holds the NUL terminator).
-    constexpr void clear() noexcept {
+    constexpr void clear() noexcept
+    {
         size_ = 0;
         buf_[0] = '\0';
     }
@@ -299,7 +319,8 @@ class static_string {
 
     // Copy-assign from a smaller capacity.
     template<std::size_t M>
-    constexpr static_string& operator=(const static_string<M>& other) {
+    constexpr static_string& operator=(const static_string<M>& other)
+    {
         static_assert(M < N, "source capacity exceeds destination capacity");
         clear();
         append(other.data(), other.size());
@@ -309,7 +330,8 @@ class static_string {
     // Move-assign from a smaller capacity by copying the characters and
     // emptying the source.
     template<std::size_t M>
-    constexpr static_string& operator=(static_string<M>&& other) {
+    constexpr static_string& operator=(static_string<M>&& other)
+    {
         static_assert(M < N, "source capacity exceeds destination capacity");
         clear();
         append(other.data(), other.size());
@@ -341,7 +363,8 @@ class static_string {
     // Three-way comparison with another string, whatever its capacity.
     template<std::size_t M>
     [[nodiscard]] constexpr std::strong_ordering operator<=>(
-        const static_string<M>& other) const noexcept {
+        const static_string<M>& other) const noexcept
+    {
         return detail::compare_c_str(c_str(), size(), other.c_str(),
                                      other.size());
     }
@@ -349,7 +372,8 @@ class static_string {
     // Three-way comparison with a C string. A null pointer is the empty
     // string, matching the other C-string overloads.
     [[nodiscard]] constexpr std::strong_ordering operator<=>(
-        const char* s) const noexcept {
+        const char* s) const noexcept
+    {
         const char* other = (s == nullptr) ? "" : s;
         return detail::compare_c_str(c_str(), size(), other,
                                      detail::c_str_len(other));
@@ -360,7 +384,8 @@ class static_string {
     // character is compared.
     template<std::size_t M>
     [[nodiscard]] constexpr bool operator==(
-        const static_string<M>& other) const noexcept {
+        const static_string<M>& other) const noexcept
+    {
         return size() == other.size() &&
                detail::compare_c_str(c_str(), size(), other.c_str(),
                                      other.size()) ==
@@ -370,7 +395,8 @@ class static_string {
     // Equality with a C string. Goes through the same comparison as every
     // other operator, so an embedded NUL is an ordinary character here too and
     // `(a == b)` agrees with `(a <=> b) == 0`.
-    [[nodiscard]] constexpr bool operator==(const char* s) const noexcept {
+    [[nodiscard]] constexpr bool operator==(const char* s) const noexcept
+    {
         const char* other = (s == nullptr) ? "" : s;
         return detail::compare_c_str(c_str(), size(), other,
                                      detail::c_str_len(other)) ==
@@ -379,11 +405,13 @@ class static_string {
 
     template<std::size_t M>
     [[nodiscard]] constexpr bool operator!=(
-        const static_string<M>& other) const noexcept {
+        const static_string<M>& other) const noexcept
+    {
         return !(*this == other);
     }
 
-    [[nodiscard]] constexpr bool operator!=(const char* s) const noexcept {
+    [[nodiscard]] constexpr bool operator!=(const char* s) const noexcept
+    {
         return !(*this == s);
     }
 
@@ -392,25 +420,29 @@ class static_string {
     // comparison above.
     template<std::size_t M>
     [[nodiscard]] constexpr bool operator<(
-        const static_string<M>& other) const noexcept {
+        const static_string<M>& other) const noexcept
+    {
         return (*this <=> other) == std::strong_ordering::less;
     }
 
     template<std::size_t M>
     [[nodiscard]] constexpr bool operator>(
-        const static_string<M>& other) const noexcept {
+        const static_string<M>& other) const noexcept
+    {
         return (*this <=> other) == std::strong_ordering::greater;
     }
 
     template<std::size_t M>
     [[nodiscard]] constexpr bool operator<=(
-        const static_string<M>& other) const noexcept {
+        const static_string<M>& other) const noexcept
+    {
         return (*this <=> other) != std::strong_ordering::greater;
     }
 
     template<std::size_t M>
     [[nodiscard]] constexpr bool operator>=(
-        const static_string<M>& other) const noexcept {
+        const static_string<M>& other) const noexcept
+    {
         return (*this <=> other) != std::strong_ordering::less;
     }
 

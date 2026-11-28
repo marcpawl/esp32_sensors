@@ -58,20 +58,23 @@ constexpr TickType_t kWaitLimit = pdMS_TO_TICKS(4000);
 constexpr TickType_t kQuietTicks = kPeriodTicks * 10;
 
 // The timer's ID is the counter it must bump.
-void count_call(TimerHandle_t timer) noexcept {
+void count_call(TimerHandle_t timer) noexcept
+{
     auto* counter = static_cast<std::atomic<int>*>(pvTimerGetTimerID(timer));
     counter->fetch_add(1);
 }
 
 // Creates a one-shot timer whose callback increments `calls`. The period is a
 // full one-shot period; `pdFALSE` is the "no auto-reload" flag under test.
-TimerHandle_t make_one_shot(std::atomic<int>& calls) {
+TimerHandle_t make_one_shot(std::atomic<int>& calls)
+{
     return xTimerCreate("one-shot", kPeriodTicks, pdFALSE, &calls, count_call);
 }
 
 // Bounded wait, in poll steps, for the callback to have run `expected` times.
 // Returns the observed count so the caller can assert on it.
-int wait_for_calls(std::atomic<int>& calls, int expected) {
+int wait_for_calls(std::atomic<int>& calls, int expected)
+{
     for (TickType_t waited = 0; calls.load() < expected && waited < kWaitLimit;
          waited += kPollStep) {
         vTaskDelay(kPollStep);
@@ -81,7 +84,8 @@ int wait_for_calls(std::atomic<int>& calls, int expected) {
 
 // Bounded wait for the timer to report the given active state. Returns whether
 // it was observed.
-bool wait_for_active(TimerHandle_t timer, BaseType_t expected_active) {
+bool wait_for_active(TimerHandle_t timer, BaseType_t expected_active)
+{
     for (TickType_t waited = 0; waited < kWaitLimit; waited += kPollStep) {
         if (xTimerIsTimerActive(timer) == expected_active) {
             return true;
@@ -92,7 +96,8 @@ bool wait_for_active(TimerHandle_t timer, BaseType_t expected_active) {
 }
 
 // Gives the timer several periods to misbehave, then returns the count.
-int calls_after_quiet_period(std::atomic<int>& calls) {
+int calls_after_quiet_period(std::atomic<int>& calls)
+{
     vTaskDelay(kQuietTicks);
     return calls.load();
 }
@@ -102,7 +107,8 @@ int calls_after_quiet_period(std::atomic<int>& calls) {
 // --- Creation ---------------------------------------------------------------
 
 TEST_CASE("freertos timers: a one-shot timer is created idle",
-          "[freertos_timers]") {
+          "[freertos_timers]")
+{
     // A period below one tick rounds down to zero, which FreeRTOS rejects.
     static_assert(kPeriodTicks > 0, "the period must be at least one tick");
 
@@ -123,7 +129,8 @@ TEST_CASE("freertos timers: a one-shot timer is created idle",
 // --- Firing exactly once ----------------------------------------------------
 
 TEST_CASE("freertos timers: a one-shot timer calls back exactly once",
-          "[freertos_timers]") {
+          "[freertos_timers]")
+{
     g_calls[1].store(0);
     TimerHandle_t timer = make_one_shot(g_calls[1]);
     TEST_ASSERT_NOT_NULL(timer);
@@ -148,7 +155,8 @@ TEST_CASE("freertos timers: a one-shot timer calls back exactly once",
 // --- Re-arming --------------------------------------------------------------
 
 TEST_CASE("freertos timers: a one-shot timer can be re-armed",
-          "[freertos_timers]") {
+          "[freertos_timers]")
+{
     g_calls[2].store(0);
     TimerHandle_t timer = make_one_shot(g_calls[2]);
     TEST_ASSERT_NOT_NULL(timer);
@@ -172,7 +180,8 @@ TEST_CASE("freertos timers: a one-shot timer can be re-armed",
 // --- Stopping ---------------------------------------------------------------
 
 TEST_CASE("freertos timers: stopping a one-shot timer cancels the callback",
-          "[freertos_timers]") {
+          "[freertos_timers]")
+{
     g_calls[3].store(0);
     TimerHandle_t timer = make_one_shot(g_calls[3]);
     TEST_ASSERT_NOT_NULL(timer);
