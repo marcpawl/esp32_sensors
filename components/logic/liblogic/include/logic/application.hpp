@@ -15,6 +15,7 @@
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #pragma GCC diagnostic pop
 #include "logic/board.hpp"
+#include "mode_selection.hpp"
 
 // NOLINTEND
 
@@ -35,10 +36,21 @@ class Application {
     Application& operator=(Application const&) = delete;
     Application& operator=(Application&&) = delete;
 
+    [[noreturn]]
     void application_main(void);
 
   private:
+
+    // Update #mode_ based on the current switch states.
+    void update_mode();
+
+    void initialize_state(void);
+    [[noreturn]] void configure_state();
+    [[noreturn]]  void run_state();
+    [[noreturn]]  void off_state();
+
     Board& board_;
+    ModeSelection mode_;
 };
 
 }  // namespace thermo::logic
