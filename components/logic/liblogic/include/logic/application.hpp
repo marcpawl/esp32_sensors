@@ -1,8 +1,9 @@
 // Application entry point (§3).
 //
 // Part of the `liblogic` component: deciding what the device does with its
-// power budget — read the mode-sense poles, then dispatch to Configure, Off, or
-// Run — is board-independent application behaviour. It belongs next to the mode
+// power budget — read the mode-sense poles, then dispatch to Configure, Off,
+// Run, or handle an invalid pole pair — is board-independent application
+// behaviour. It belongs next to the mode
 // vocabulary (`logic/mode.hpp`) and the pole mapping
 // (`logic/mode_selection.hpp`) rather than in the firmware's `app_main`, which
 // stays a thin C-linkage shim.
@@ -14,10 +15,10 @@
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #pragma GCC diagnostic pop
-#include "logic/board.hpp"
-#include "mode_selection.hpp"
-
 // NOLINTEND
+
+#include "logic/board.hpp"
+#include "logic/mode.hpp"
 
 namespace thermo::logic {
 
@@ -40,17 +41,16 @@ class Application {
     void application_main(void);
 
   private:
-
     // Update #mode_ based on the current switch states.
     void update_mode();
 
     void initialize_state(void);
     [[noreturn]] void configure_state();
-    [[noreturn]]  void run_state();
-    [[noreturn]]  void off_state();
+    [[noreturn]] void run_state();
+    [[noreturn]] void off_state();
 
     Board& board_;
-    ModeSelection mode_;
+    Mode mode_{Mode::kInvalid};
 };
 
 }  // namespace thermo::logic

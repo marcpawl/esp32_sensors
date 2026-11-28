@@ -31,8 +31,8 @@ The headers are included with the `logic/` prefix:
 | `logic/led_manager.hpp` | `thermo::logic::TxState` (`kTxOk` / `kTxInhibited`) — the §3.6 battery-hysteresis transmission gate; board-independent vocabulary, dependency-free (only `<cstdint>`) |
 | `logic/limits.hpp` | the fixed capacities: `kSensorCount` (from `hal::kMaxSensors`), `kMaxBufferRecords` (256), `kMaxSensorNameLength` / `kMaxDeviceNameLength` (32), and `kMaxPayloadBytes` (1024) — shared by the sample buffer, the payload, and the sensor layer (§2.1, §4.1, §4.2, §5.1, §9.1). Depends only on the `hal_common` sensor vocabulary |
 | `logic/led_task.hpp` | `thermo::logic::LedState`, `thermo::logic::ledtask::*` (`Step`, `CycleSteps`, `LedRunner<Board>`), `thermo::logic::LedTask<Board>` — the LED status task built on `espidf_cpp::Task` |
-| `logic/mode.hpp` | `thermo::logic::Mode` (`kOff` / `kConfigure` / `kRun`) and `thermo::logic::to_string(Mode)` — the operating modes (§3), board-independent vocabulary |
-| `logic/mode_selection.hpp` | `thermo::logic::ModeSelection` (`std::optional<Mode>`) and `thermo::logic::mode_from_switches(SwitchState config, SwitchState run)` — the pure, `constexpr` mapping from the two mode-sense poles to a mode, reporting a both-poles-on miswire as `std::nullopt` |
+| `logic/mode.hpp` | `thermo::logic::Mode` (`kOff` / `kConfigure` / `kRun` / `kInvalid`) and `thermo::logic::to_string(Mode)` — the operating modes (§3), board-independent vocabulary |
+| `logic/mode_selection.hpp` | `thermo::logic::mode_from_switches(SwitchState config, SwitchState run)` — the pure, `constexpr` mapping from the two mode-sense poles to a `Mode`, reporting both poles on as `Mode::kInvalid` |
 | `logic/temp_format.hpp` / `src/temp_format.cpp` | `thermo::logic::kTempNull` (the int16 `0x8000` sensor-failure sentinel) and `thermo::logic::format_temp_c_x100()` returning `thermo::logic::TempText`, a fixed-capacity string — centred-hundredths formatting for the config UI and the payload (§4.2, §9); no ESP-IDF dependency |
 | `logic/rom_id.hpp` / `src/rom_id.cpp` | `thermo::logic::rom_id_to_hex()` and `thermo::logic::rom_id_from_hex()` — the free functions that render a `thermo::hal::RomId` as the 16-character uppercase hex key of §5.1.3 / §6.1 and parse one back (`std::nullopt` on a wrong length or a non-hex character). Free functions, not members: `RomId` in `hal_common` stays pure data. No ESP-IDF dependency |
 | `logic/payload.hpp` / `src/payload.cpp` | `thermo::logic::payload::NamedSample`, `SensorName(s)`, `DeviceName`, `Payload`, and `build_batch_json()` — the §9.1 upload document (key names, ordering, `batch_size`, JSON escaping) built from the buffered records. Everything it appends is fixed-capacity, so formatting a batch never touches the heap; an over-long document aborts at `kMaxPayloadBytes`. The temperatures go through `logic/temp_format.hpp`. No ESP-IDF dependency |
@@ -92,8 +92,8 @@ deliberately free of chip-specific ESP-IDF dependencies so they build for the
 applied to the mode-sense poles: it depends only on
 `hal/switch_types.hpp` (for `SwitchState`) and `logic/mode.hpp`, and is
 `constexpr`, so `test_mode_selection.cpp` exercises it directly and covers all
-four pole combinations — including the both-on hardware fault, which the
-header reports as `std::nullopt` instead of rebooting.
+four pole combinations — including the both-on bounce or fault, which the
+header reports as `Mode::kInvalid` instead of rebooting.
 
 `test_led_runner.cpp` instantiates the templated `LedRunner<Board>` against the
 stub `BoardStub`. The `hal_stub` component itself (the pin-free switches, LEDs,

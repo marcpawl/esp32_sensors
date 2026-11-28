@@ -1,15 +1,18 @@
 
-#include <chrono>
-
 #include "logic/application.hpp"
 
 // NOLINTBEGIN
 #pragma GCC diagnostic push  // NOLINT(ignored diagnostics)
 #include "esp_log.h"
 #pragma GCC diagnostic pop
+// NOLINTEND
 
-#include "logic/reboot.hpp"
+#include <chrono>
+#include <utility>
+
 #include "espidf_cpp/task.hpp"
+#include "logic/mode_selection.hpp"
+#include "logic/reboot.hpp"
 
 namespace thermo::logic {
 
@@ -24,13 +27,15 @@ void Application::update_mode() {
 
 void Application::initialize_state() {
     // Minimum abount of time to delay to allow switches to debounce.
-    std::chrono::milliseconds debounce_delay {500};
+    std::chrono::milliseconds debounce_delay{500};
 
     auto before = std::chrono::steady_clock::now();
     auto after = std::chrono::steady_clock::now();
     auto duration = after - before;
     if (duration < debounce_delay) {
-        std::chrono::milliseconds more_delay = std::chrono::duration_cast<std::chrono::milliseconds>(debounce_delay - duration);
+        std::chrono::milliseconds more_delay =
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                debounce_delay - duration);
         espidf_cpp::vTaskDelay(more_delay);
     }
 
@@ -44,7 +49,6 @@ void Application::initialize_state() {
     } while (false);
     logic::reboot();
 }
-
 
 [[noreturn]] void Application::run_state() {
     ESP_LOGI(kTag, "run_state");
@@ -64,28 +68,18 @@ void Application::application_main(void) {
     ESP_LOGI(kTag, "Starting application");
 
     initialize_state();
-    if (! mode_.has_value()) {
-        ESP_LOGE(kTag, "Mode switch did not return a valid state");
-        logic::reboot();
-     std::unreachable();
+    switch (mode_) {
+        case Mode::kOff:
+            off_state();
+        case Mode::kConfigure:
+            configure_state();
+        case Mode::kRun:
+            run_state();
+        case Mode::kInvalid:
+            ESP_LOGE(kTag, "Mode switch poles both on; invalid state");
+            logic::reboot();
     }
-
-    auto mode = mode_.value();
-    if (mode == Mode::kConfigure) {
-        configure_state();
-        std::unreachable();
-    } else if (mode == Mode::kRun) {
-        run_state();
-        std::unreachable();
-    } else if (mode == Mode::kOff) {
-        off_state();
-        std::unreachable();
-    } else {
-        ESP_LOGE(kTag, "Mode switch did not return a valid state");
-        espidf_cpp::vTaskDelay(std::chrono::seconds{60});
-        logic::reboot();
-        std::unreachable();
-    }
+    std::unreachable();
 }
 
 }  // namespace thermo::logic
