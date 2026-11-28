@@ -1751,6 +1751,25 @@ class SubprojectBuildTests(unittest.TestCase):
             },
         )
 
+    def test_a_build_selection_follows_the_platform_layers(self):
+        projects = dev._build_directories([dev.REPO_ROOT])
+        self.assertEqual(
+            [dev._repo_relative(path) for path in projects],
+            [
+                dev.UTILITY_TEST_DIR,
+                dev.HAL_COMMON_TEST_DIR,
+                dev.HAL_STUB_TEST_DIR,
+                "components/hal/tests/esp_timer/board",
+                dev.ESP_TIMER_STUB_DIR,
+                dev.ESPIDF_CPP_LINUX_TEST_DIR,
+                dev.ESPIDF_CPP_ESP32_TEST_DIR,
+                dev.LOGIC_TEST_DIR,
+                dev.TEST_SIMULATOR_DIR,
+                dev.FIRMWARE_DIR,
+                dev.DONNY_DIR,
+            ],
+        )
+
     def test_idf_runs_in_subproject_with_build_tree_inside_it(self):
         self.assertEqual(
             dev._idf("mcgowan", "build_esp32s3", "build"),
@@ -1838,6 +1857,16 @@ class SubprojectBuildTests(unittest.TestCase):
         self.assertEqual(
             dev._parse_directories(["components/utility"], cwd=dev.REPO_ROOT),
             [(dev.REPO_ROOT / "components" / "utility").resolve()],
+        )
+
+    def test_directory_arguments_are_reordered_by_layer(self):
+        utility = (dev.REPO_ROOT / "components" / "utility").resolve()
+        firmware = (dev.REPO_ROOT / dev.FIRMWARE_DIR).resolve()
+        self.assertEqual(
+            dev._parse_directories(
+                [str(firmware), "components/utility"], cwd=dev.REPO_ROOT
+            ),
+            [utility, firmware],
         )
 
     def test_a_host_absolute_path_is_accepted(self):
@@ -2019,6 +2048,78 @@ class SubprojectBuildTests(unittest.TestCase):
             for project in dev._discover_projects(dev.REPO_ROOT)
         }
         self.assertNotIn(dev.REPO_ROOT, directories)
+
+
+class PlatformLayerOrderTests(unittest.TestCase):
+    """Selected paths follow the `platform_layers` skill, lowest first."""
+
+    def _path(self, relative):
+        return dev.REPO_ROOT / relative
+
+    def test_order_follows_the_skill_layers(self):
+        paths = [
+            self._path(relative)
+            for relative in (
+                "mcgowan",
+                "components/espidfcpp/tests/test-espidf-cpp-esp32",
+                "components/logic/tests/test-logic",
+                "components/hal/tests/test-hal-stub",
+                "components/utility/tests/test-utility",
+                "components/simulator/tests/test-simulator",
+                "components/espidfcpp/tests/test-espidf-cpp-linux",
+                "components/hal/tests/test-hal-common",
+                "components/hal/hal_common",
+                "components/simulator/exe/donny",
+            )
+        ]
+        self.assertEqual(
+            [
+                dev._repo_relative(path)
+                for path in dev._ordered_by_layer(paths)
+            ],
+            [
+                "components/utility/tests/test-utility",
+                "components/hal/hal_common",
+                "components/hal/tests/test-hal-common",
+                "components/hal/tests/test-hal-stub",
+                "components/espidfcpp/tests/test-espidf-cpp-linux",
+                "components/espidfcpp/tests/test-espidf-cpp-esp32",
+                "components/logic/tests/test-logic",
+                "components/simulator/tests/test-simulator",
+                "mcgowan",
+                "components/simulator/exe/donny",
+            ],
+        )
+
+    def test_hal_common_is_ordered_before_the_other_hal_components(self):
+        common = self._path("components/hal/hal_common/include/hal/gpio.hpp")
+        stub = self._path("components/hal/hal_stub/board_stub.cpp")
+        board = self._path("components/hal/hal_board/board.cpp")
+        self.assertEqual(
+            dev._ordered_by_layer([board, stub, common]),
+            [common, board, stub],
+        )
+
+    def test_a_tied_layer_keeps_the_input_order(self):
+        tests = self._path("components/utility/tests/test-utility")
+        library = self._path("components/utility/libutility")
+        self.assertEqual(
+            dev._ordered_by_layer([tests, library]), [tests, library]
+        )
+
+    def test_unlayered_scopes_sort_before_the_stack(self):
+        firmware = self._path("mcgowan")
+        self.assertEqual(
+            dev._ordered_by_layer([firmware, dev.REPO_ROOT]),
+            [dev.REPO_ROOT, firmware],
+        )
+
+    def test_container_paths_use_the_same_order(self):
+        paths = ["/project/mcgowan", "/project/components/utility"]
+        self.assertEqual(
+            dev._ordered_by_layer(paths),
+            ["/project/components/utility", "/project/mcgowan"],
+        )
 
 
 class GccAnalyzerDriverTests(unittest.TestCase):
@@ -3770,7 +3871,7 @@ class CommandRegistryTests(unittest.TestCase):
             dev.cmd_build_test_espidf_cpp_esp32,
         )
 
-    def test_discovery_finds_every_host_suite(self):
+    def test_discovery_finds_every_host_suite_in_layer_order(self):
         # Discovery, not a table, decides which suites exist; the esp_timer
         # host suite used to be built but never run by `test`.
         projects = dev._host_test_projects_under(dev.REPO_ROOT)
@@ -3780,13 +3881,13 @@ class CommandRegistryTests(unittest.TestCase):
                 for project in projects
             ],
             [
-                "components/espidfcpp/tests/test-espidf-cpp-linux",
-                "components/hal/tests/esp_timer/stub",
+                "components/utility/tests/test-utility",
                 "components/hal/tests/test-hal-common",
                 "components/hal/tests/test-hal-stub",
+                "components/hal/tests/esp_timer/stub",
+                "components/espidfcpp/tests/test-espidf-cpp-linux",
                 "components/logic/tests/test-logic",
                 "components/simulator/tests/test-simulator",
-                "components/utility/tests/test-utility",
             ],
         )
         for project in projects:
@@ -3981,27 +4082,29 @@ class HostTestCommandTests(unittest.TestCase):
                 handler()
                 self.assertEqual(len(self.hops), 1)
 
-    def test_linux_runs_every_discovered_suite_in_path_order(self):
+    def test_linux_runs_every_discovered_suite_in_layer_order(self):
         # Discovery, not a table, decides what CI runs: the esp_timer host
         # suite used to be built but never run by the aggregate.
         self.assertEqual(dev.cmd_test_linux(), 0)
-        expected = [
-            cmd
-            for project in dev._host_test_projects_under(dev.REPO_ROOT)
-            for cmd in self._suite_calls(
-                dev._repo_relative(project.directory),
-                f"{project.name}.elf",
+        expected = []
+        for relative in (
+            dev.UTILITY_TEST_DIR,
+            dev.HAL_COMMON_TEST_DIR,
+            dev.HAL_STUB_TEST_DIR,
+            dev.ESP_TIMER_STUB_DIR,
+            dev.ESPIDF_CPP_LINUX_TEST_DIR,
+            dev.LOGIC_TEST_DIR,
+            dev.TEST_SIMULATOR_DIR,
+        ):
+            project = dev._project_at(dev.REPO_ROOT / relative)
+            self.assertIsNotNone(project, relative)
+            expected.append(
+                f"./{relative}/{dev.TEST_BUILD_DIR}/{project.name}.elf"
             )
-        ]
-        self.assertEqual(self.calls, expected)
         executed = [
             cmd[-1] for cmd in self.calls if cmd[-1].endswith(".elf")
         ]
-        self.assertIn(
-            f"./{dev.ESP_TIMER_STUB_DIR}/{dev.TEST_BUILD_DIR}/"
-            f"esp32_sensors_esp_timer_stub_tests.elf",
-            executed,
-        )
+        self.assertEqual(executed, expected)
 
     def test_a_configured_suite_is_built_without_set_target(self):
         # `set-target` wipes ninja's dependency log; on a repeat run it must
@@ -4569,6 +4672,44 @@ class TidyCommandTests(unittest.TestCase):
         self.assertEqual(runner.call_args.args[1:], (3, False))
         run.assert_called_once_with(["runner"])
 
+    def test_cmd_clang_tidy_analyzes_units_in_layer_order(self):
+        paths = [
+            dev.REPO_ROOT / relative
+            for relative in (
+                "mcgowan/src/main.cpp",
+                "components/logic/liblogic/src/payload.cpp",
+                "components/utility/libutility/include/"
+                "utility/static_vector.hpp",
+            )
+        ]
+        units = [{"file": str(path)} for path in paths]
+        directories = [dev.REPO_ROOT / "components"]
+        with (
+            mock.patch.object(dev, "change_to_container"),
+            mock.patch.object(
+                dev, "_escalated_scopes", return_value=directories
+            ),
+            mock.patch.object(dev, "_ensure_submodules", return_value=0),
+            mock.patch.object(dev, "_project_at", return_value=None),
+            mock.patch.object(
+                dev, "_discover_tidy_databases", return_value=[]
+            ),
+            mock.patch.object(dev, "_tidy_units_under", return_value=units),
+            mock.patch.object(
+                dev,
+                "_unique_tidy_units",
+                side_effect=lambda selected, **_: selected,
+            ) as unique,
+            mock.patch.object(dev, "_tidy_database"),
+            mock.patch.object(dev, "_tidy_jobs", return_value=1),
+            mock.patch.object(
+                dev, "_tidy_run_command", return_value=["runner"]
+            ),
+            mock.patch.object(dev, "run", return_value=0),
+        ):
+            self.assertEqual(dev.cmd_clang_tidy(directories), 0)
+        self.assertEqual(unique.call_args.args[0], units[::-1])
+
     def test_cmd_clang_tidy_analyzes_a_named_file(self):
         header = (
             dev.REPO_ROOT / "components" / "espidfcpp" / "libespidfcpp"
@@ -4774,12 +4915,12 @@ class TidyDirectoryTests(unittest.TestCase):
             dev._parse_directories([str(self.root.parent)], root=self.root)
         )
 
-    def test_no_arguments_means_every_discovered_project(self):
+    def test_no_arguments_means_every_discovered_project_in_layer_order(self):
         self.assertEqual(
             dev._parse_tidy_scopes([]),
             [
                 project.directory
-                for project in dev._discover_projects(dev.REPO_ROOT)
+                for project in dev._espidf_projects_under(dev.REPO_ROOT)
             ],
         )
 
@@ -5363,6 +5504,14 @@ class FormatCommandTests(unittest.TestCase):
         files.assert_called_once_with([source])
         self.assertEqual(self.calls, [["clang-format", "-i", relative]])
         self.assertEqual(self.hops, [["format", f"/project/{relative}"]])
+
+    def test_format_scopes_are_reordered_by_layer(self):
+        utility = dev.REPO_ROOT / "components" / "utility"
+        firmware = dev.REPO_ROOT / "mcgowan" / "src" / "main.cpp"
+        self.assertEqual(
+            dev._format_scopes([str(firmware), str(utility)]),
+            [utility, firmware],
+        )
 
     def test_format_check_accepts_mixed_directories_and_files(self):
         components = dev.REPO_ROOT / "components"

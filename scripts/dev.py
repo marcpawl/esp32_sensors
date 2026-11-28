@@ -47,7 +47,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from typing import Callable, NamedTuple
+from typing import Callable, Iterable, NamedTuple, TypeVar
 
 from clion_manual_test import (
     CLION_LAUNCHER_ENV,
@@ -78,6 +78,40 @@ ROOTS = (
     "components",
     "scripts",
 )
+
+# Platform layers from `.opencode/skills/platform_layers/SKILL.md`, lowest
+# first. The second value follows the skill's walk order within a layer.
+# Longest matching prefix wins, so a nested component or test project refines
+# the order of its parent. Unlayered paths (the repository root, `components`
+# itself, and tooling) sort before the stack; paths sharing a key keep their
+# input order.
+UNLAYERED_ORDER = (-1, 0)
+LAYER_ORDER: tuple[tuple[str, tuple[int, int]], ...] = (
+    ("components/utility", (0, 0)),
+    ("components/hal/hal_common", (1, 0)),
+    ("components/hal/tests/test-hal-common", (1, 1)),
+    ("components/hal/hal_board", (2, 0)),
+    ("components/hal/hal_stub", (2, 1)),
+    ("components/hal/tests/test-hal-stub", (2, 2)),
+    ("components/hal/tests/esp_timer", (2, 3)),
+    ("components/hal/tests", (2, 2)),
+    ("components/hal", (2, 0)),
+    ("components/espidfcpp/libespidfcpp", (3, 0)),
+    ("components/espidfcpp/tests/test-espidf-cpp-lib", (3, 1)),
+    ("components/espidfcpp/tests/test-espidf-cpp-linux", (3, 2)),
+    ("components/espidfcpp/tests/test-espidf-cpp-esp32", (3, 3)),
+    ("components/espidfcpp", (3, 0)),
+    ("components/logic/liblogic", (4, 0)),
+    ("components/logic/tests/test-logic", (4, 1)),
+    ("components/simulator/libsimulator", (5, 0)),
+    ("components/simulator/tests/test-simulator", (5, 1)),
+    ("components/simulator", (5, 0)),
+    ("mcgowan", (6, 0)),
+    ("components/simulator/exe/donny", (6, 1)),
+)
+
+_T = TypeVar("_T")
+
 EXTENSIONS = (".cpp", ".hpp", ".h", ".cc", ".cxx")
 
 # Vendored third-party trees (both the `third_party/json` component and the
@@ -408,13 +442,18 @@ def _discover_projects(directory: Path) -> list[Project]:
 def _espidf_projects_under(
     directory: Path, root: Path = REPO_ROOT
 ) -> list[Project]:
-    """Every ESP-IDF project at or under `directory`, in path order.
+    """Every ESP-IDF project at or under `directory`, in layer order.
 
     A thin wrapper over `_discover_projects` with the `(directory, root)`
-    signature the selection helpers take; the root plays no part in plain
-    discovery. Pure.
+    signature the selection helpers take. Discovery stays in path order; the
+    projects are then sorted from the lowest platform layer to the highest.
+    Pure.
     """
-    return _discover_projects(directory)
+    return _ordered_by_layer(
+        _discover_projects(directory),
+        root,
+        lambda project: project.directory,
+    )
 
 
 def _is_host_test_project(project: Project, root: Path = REPO_ROOT) -> bool:
@@ -431,12 +470,15 @@ def _is_host_test_project(project: Project, root: Path = REPO_ROOT) -> bool:
 def _host_test_projects_under(
     directory: Path, root: Path = REPO_ROOT
 ) -> list[Project]:
-    """Linux test projects at or under `directory`, in path order."""
-    return [
+    """Linux test projects at or under `directory`, in layer order."""
+    projects = [
         project
         for project in _discover_projects(directory)
         if _is_host_test_project(project, root)
     ]
+    return _ordered_by_layer(
+        projects, root, lambda project: project.directory
+    )
 
 
 def _repo_relative(path: Path, root: Path = REPO_ROOT) -> str:
@@ -659,7 +701,8 @@ def source_files(scopes: list[Path] | None = None) -> list[str]:
     covers everything. Vendored trees are always filtered out. It includes
     files that have not been `git add`ed yet, so formatting a new source does
     not depend on staging it first; ignored files (build output) are still
-    excluded by `--exclude-standard`.
+    excluded by `--exclude-standard`. The result is in platform-layer order,
+    lowest first, so `format` visits sources in dependency order.
     """
     roots = (
         tuple(_repo_relative(scope) for scope in scopes)
@@ -687,7 +730,7 @@ def source_files(scopes: list[Path] | None = None) -> list[str]:
         )
         raise
 
-    return _select_sources(result.stdout.splitlines())
+    return _ordered_by_layer(_select_sources(result.stdout.splitlines()))
 
 
 def _cxx_sources_under(
@@ -965,11 +1008,13 @@ def cmd_submodules() -> int:
 def _clean_scopes(arguments: list[str]) -> list[Path] | None:
     """The paths a clean command operates on, repo root by default.
 
-    Each argument is a directory, file, or glob inside the repository. With no
-    arguments the whole repository is cleaned (`/project` in the container).
+    Each argument is a directory, file, or glob inside the repository. Named
+    scopes are processed in platform-layer order. With no arguments the whole
+    repository is cleaned (`/project` in the container).
     """
     if arguments:
-        return _expand_path_scopes(arguments)
+        scopes = _expand_path_scopes(arguments)
+        return None if scopes is None else _ordered_by_layer(scopes)
     return [REPO_ROOT]
 
 
@@ -1077,6 +1122,47 @@ def _path_pattern(
         except ValueError:
             return path
     return (cwd or Path.cwd()) / path
+
+
+def _layer_order(path: Path | str, root: Path = REPO_ROOT) -> tuple[int, int]:
+    """The platform-layer order key for `path`; lower means lower layer.
+
+    Repo-relative paths and `/project/...` container paths are both accepted.
+    The longest matching prefix wins, so `hal_common` is ordered before the
+    other HAL components even though both sit under `components/hal`. A path
+    with no entry in `LAYER_ORDER` is unlayered and sorts before the stack.
+    """
+    candidate = _path_pattern(str(path), root=root, cwd=root)
+    relative = _repo_relative(candidate, root)
+    best_length = -1
+    order = UNLAYERED_ORDER
+    for prefix, prefix_order in LAYER_ORDER:
+        if relative == prefix or relative.startswith(f"{prefix}/"):
+            if len(prefix) > best_length:
+                best_length = len(prefix)
+                order = prefix_order
+    return order
+
+
+def _identity_path(path: Path | str) -> Path | str:
+    """`path` itself; the default extractor for `_ordered_by_layer`."""
+    return path
+
+
+def _ordered_by_layer(
+    items: Iterable[_T],
+    root: Path = REPO_ROOT,
+    path_of: Callable[[_T], Path | str] = _identity_path,
+) -> list[_T]:
+    """`items` in platform-layer order, stable within one layer.
+
+    Callers feed this the paths or projects a command has already selected; it
+    never changes which items are selected, only the order they are processed.
+    """
+    return sorted(
+        items,
+        key=lambda item: _layer_order(path_of(item), root),
+    )
 
 
 def _resolve_path(
@@ -1249,7 +1335,8 @@ def _parse_directories(
 
     No arguments means an empty list; `build` and `test` then use
     `_start_directory`. A path that is not a directory inside the repository
-    prints an error and returns None so the caller can exit non-zero.
+    prints an error and returns None so the caller can exit non-zero. Named
+    directories are returned in platform-layer order, lowest first.
     """
     if not arguments:
         return []
@@ -1264,7 +1351,7 @@ def _parse_directories(
             )
             return None
         directories.append(directory)
-    return directories
+    return _ordered_by_layer(directories, root=root)
 
 
 def _carrying_directory(
@@ -1498,7 +1585,7 @@ def _analyze_project_directories(directories: list[Path]) -> int:
 
 
 def _build_directories(directories: list[Path]) -> list[Path] | None:
-    """The project directories a `build` selection names. Pure.
+    """The project directories a `build` selection names, in layer order.
 
     Every ESP-IDF project discovered at or under each argument is selected. An
     argument that contains none prints an error and returns None.
@@ -1506,7 +1593,8 @@ def _build_directories(directories: list[Path]) -> list[Path] | None:
     projects: list[Path] = []
     for directory in directories:
         found = [
-            project.directory for project in _discover_projects(directory)
+            project.directory
+            for project in _espidf_projects_under(directory)
         ]
         if not found:
             print(
@@ -1518,7 +1606,7 @@ def _build_directories(directories: list[Path]) -> list[Path] | None:
         for project in found:
             if project not in projects:
                 projects.append(project)
-    return projects
+    return _ordered_by_layer(projects)
 
 
 def cmd_build(arguments: list[str], analyzer: bool = False) -> int:
@@ -1543,6 +1631,10 @@ def cmd_build(arguments: list[str], analyzer: bool = False) -> int:
     enclosing tree that does have a project, and the climb ends at the
     repository root; a root with no project at all is a bug in this script.
 
+    Selected projects are processed from the lowest platform layer to the
+    highest (see `_ordered_by_layer`); the order inside one layer follows the
+    `platform_layers` walk order.
+
     With `--analyzer`, the selected projects are configured with the analyzer
     flag and their compile databases are replayed through `gcc_analyzer.py`:
     GCC runs to assembly in `/dev/null`, so the check produces no objects and
@@ -1558,7 +1650,7 @@ def cmd_build(arguments: list[str], analyzer: bool = False) -> int:
     )
     if escalated is None:
         return 1
-    directories = escalated
+    directories = _ordered_by_layer(escalated)
     rc = _ensure_submodules()
     if rc != 0:
         return rc
@@ -1654,7 +1746,7 @@ def _run_suites(suites: list[tuple[Path, str]]) -> int:
 def _test_projects(
     directories: list[Path], root: Path = REPO_ROOT
 ) -> list[Project] | None:
-    """The host test projects a `test` selection names, in path order. Pure.
+    """The host test projects a `test` selection names, in layer order. Pure.
 
     No directories means every suite in the repository. Each directory
     contributes every host test project at or under it. A directory that
@@ -1675,7 +1767,9 @@ def _test_projects(
         for project in found:
             if project not in projects:
                 projects.append(project)
-    return projects
+    return _ordered_by_layer(
+        projects, root, lambda project: project.directory
+    )
 
 
 def cmd_test_linux(arguments: list[str] | None = None) -> int:
@@ -1684,7 +1778,8 @@ def cmd_test_linux(arguments: list[str] | None = None) -> int:
     A host test suite is every `linux`-target ESP-IDF project under a `tests/`
     directory (`_host_test_projects_under`), so a new suite is picked up
     without touching this command. With no directory, the current directory
-    is used (a caller outside the repository is an error) in path order:
+    is used (a caller outside the repository is an error). Suites run in
+    platform-layer order, lowest first:
     `cd components/utility && dev.py test-linux` runs the utility suite, and
     `dev.py test-linux .` from the root runs every suite. The aggregate the
     pre-commit hook and CI call.
@@ -1716,7 +1811,7 @@ def cmd_test_linux(arguments: list[str] | None = None) -> int:
 def _on_target_test_projects_under(
     directory: Path, root: Path = REPO_ROOT
 ) -> list[Project]:
-    """Non-`linux` test projects at or under `directory`, in path order.
+    """Non-`linux` test projects at or under `directory`, in layer order.
 
     An on-target test is an ESP-IDF project that targets a chip and lives under
     a `tests/` directory, so host applications such as `donny` and the
@@ -1732,7 +1827,9 @@ def _on_target_test_projects_under(
             continue
         if TEST_PROJECT_DIRECTORY in relative.parts:
             projects.append(project)
-    return projects
+    return _ordered_by_layer(
+        projects, root, lambda project: project.directory
+    )
 
 
 def _on_target_projects(
@@ -1758,7 +1855,9 @@ def _on_target_projects(
         for project in found:
             if project not in projects:
                 projects.append(project)
-    return projects
+    return _ordered_by_layer(
+        projects, root, lambda project: project.directory
+    )
 
 
 def cmd_test_esp32(arguments: list[str] | None = None) -> int:
@@ -1767,8 +1866,8 @@ def cmd_test_esp32(arguments: list[str] | None = None) -> int:
     Every non-`linux` ESP-IDF project under a `tests/` directory is built and
     then run through its `test.py` driver, which drives the board (flash,
     serial log, sentinel). With no directory, the current directory is used;
-    a caller outside the repository is an error. `ESP32_PORT` selects the
-    board.
+    a caller outside the repository is an error. Projects run from the lowest
+    platform layer to the highest. `ESP32_PORT` selects the board.
 
     A directory with no on-target test at or under it cannot run the command,
     so its parent is tried instead, up to the repository root (see
@@ -1856,10 +1955,12 @@ def _format_scopes(arguments: list[str]) -> list[Path] | None:
 
     No arguments keeps the historical behavior: start from the caller's
     current directory. With arguments, each one is a directory, a C/C++
-    source, or a glob matching them (see `_parse_path_scopes`).
+    source, or a glob matching them (see `_parse_path_scopes`). Named scopes
+    are returned in platform-layer order, lowest first.
     """
     if arguments:
-        return _parse_path_scopes(arguments)
+        scopes = _parse_path_scopes(arguments)
+        return None if scopes is None else _ordered_by_layer(scopes)
     return _start_directories([])
 
 
@@ -1870,7 +1971,8 @@ def cmd_format(arguments: list[str]) -> int:
     them. Files are formatted directly; a directory with no source climbs to
     its nearest parent that has one. With no argument, starts from the current
     directory; a caller outside the repository is an error. `third_party/` is
-    never formatted.
+    never formatted. Sources are formatted from the lowest platform layer to
+    the highest.
     """
     scopes = _format_scopes(arguments)
     if scopes is None:
@@ -1899,7 +2001,8 @@ def cmd_format_check(arguments: list[str]) -> int:
     them. Files are checked directly; a directory with no source climbs to
     its nearest parent that has one. With no argument, starts from the current
     directory; a caller outside the repository is an error. `third_party/` is
-    never checked.
+    never checked. Sources are checked from the lowest platform layer to the
+    highest.
     """
     scopes = _format_scopes(arguments)
     if scopes is None:
@@ -2128,8 +2231,8 @@ def _parse_tidy_scopes(arguments: list[str]) -> list[Path] | None:
     matching them (see `_parse_path_scopes`). Invalid arguments, and a caller
     outside the repository, print an error and return None so the caller can
     exit non-zero. With no arguments the scope is every discovered project
-    from the repository root, or the caller's directory from a subdirectory,
-    as before.
+    from the repository root in layer order, or the caller's directory from a
+    subdirectory as before.
     """
     if arguments:
         return _parse_path_scopes(arguments, extensions=TIDY_FILE_EXTENSIONS)
@@ -2137,7 +2240,9 @@ def _parse_tidy_scopes(arguments: list[str]) -> list[Path] | None:
     if directories is None:
         return None
     if directories == [REPO_ROOT]:
-        return [project.directory for project in _discover_projects(REPO_ROOT)]
+        return [
+            project.directory for project in _espidf_projects_under(REPO_ROOT)
+        ]
     return directories
 
 
@@ -2408,6 +2513,9 @@ def cmd_clang_tidy(scopes: list[Path], fix: bool = False) -> int:
     `run-clang-tidy` analyzes them. An in-CMake analyzer is not used: it would
     need the same rewrite on every build and would slow normal builds.
 
+    Selected scopes and units are processed from the lowest platform layer to
+    the highest (see `_ordered_by_layer`).
+
     `run-clang-tidy` shards the database entries across `-j` workers. Its
     output may be interleaved because workers write to the same terminal;
     that is expected. Nothing is auto-built: a project with no compile
@@ -2425,6 +2533,7 @@ def cmd_clang_tidy(scopes: list[Path], fix: bool = False) -> int:
     cannot be fixed still fail the run, and the rewritten code should be
     re-formatted (`scripts/dev.py format`).
     """
+    scopes = _ordered_by_layer(scopes)
     change_to_container(_tidy_container_arguments(scopes, fix))
 
     escalated = _escalated_scopes(
@@ -2432,7 +2541,7 @@ def cmd_clang_tidy(scopes: list[Path], fix: bool = False) -> int:
     )
     if escalated is None:
         return 1
-    scopes = escalated
+    scopes = _ordered_by_layer(escalated)
 
     rc = _ensure_submodules()
     if rc != 0:
@@ -2459,7 +2568,8 @@ def cmd_clang_tidy(scopes: list[Path], fix: bool = False) -> int:
             databases = _discover_tidy_databases()
         units.extend(_tidy_units_under(scope, databases))
     units = _unique_tidy_units(
-        units, allow_headers=any(scope.is_file() for scope in scopes)
+        _ordered_by_layer(units, path_of=lambda entry: entry["file"]),
+        allow_headers=any(scope.is_file() for scope in scopes),
     )
 
     if not units:
@@ -3749,7 +3859,7 @@ def cmd_format_check_staged(arguments: list[str]) -> int:
     change_to_container(_project_container_arguments(
         "format-check-staged", scopes))
 
-    files = _staged_files(scopes)
+    files = _ordered_by_layer(_staged_files(scopes))
     if not files:
         return 0
 

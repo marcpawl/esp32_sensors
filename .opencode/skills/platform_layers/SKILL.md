@@ -96,24 +96,27 @@ the lowest layer to the highest.
 4. `test-espidf-cpp-linux`
 5. `test-espidf-cpp-esp32`
 6. `test-logic`
-6. `test-simulator`
+7. `test-simulator`
 
 **Applications:**
 
 1. `mcgowan`
 2. `donny`
 
-`./scripts/dev.py test-linux` runs the suites in this order:
+`scripts/dev.py` orders named paths and discovered targets by these layers,
+so sources are compiled, checked, and formatted from lowest to highest. For
+`test-linux` that means:
 
 1. `test-utility`
 2. `test-hal-common`
 3. `test-hal-stub`
-4. `test-logic`
+4. the host `esp_timer` suite
 5. `test-espidf-cpp-linux`
-6. `test-simulator`
+6. `test-logic`
+7. `test-simulator`
 
-That is the command's existing order, not the layer order to use for a new
-list.
+`LAYER_ORDER` in `scripts/dev.py` carries this sequence; new components or
+test projects need an entry there so their place stays pinned.
 
 ## Current dependency edges
 

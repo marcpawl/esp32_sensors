@@ -25,7 +25,7 @@ invoked from the host.
 | both | `clean [DIRECTORY\|FILE...]` | Remove git-ignored build products (`git clean -fdX`) from the selected paths, preserving CLion compile database and run configs; default: the repository root |
 | both | `build [--analyzer[=BOOL]] [DIRECTORY...]` | Build every project in/under the directories (from the root, the root aggregator builds everything); with `--analyzer`, reconfigure each project and run GCC's analyzer as a static check instead — no objects, no linking |
 | both | `build-test-espidf-cpp-linux` | Build the `libespidfcpp` unit tests for `linux` |
-| both | `test-linux [DIRECTORY...]` | Build and run every discovered host (`linux`) suite in path order, or those in/under the directories |
+| both | `test-linux [DIRECTORY...]` | Build and run every discovered host (`linux`) suite in platform-layer order, or those in/under the directories |
 | both | `test-esp32 [DIRECTORY...]` | Build, flash, and run every discovered on-target test project through its `test.py` driver |
 | both | `self-check` | Run the host unit tests for `dev.py` itself (host only; its image probes need Docker and the image fetched by `pull`, and fail without them) |
 | both | `flash` | `idf.py flash monitor` |
@@ -46,6 +46,21 @@ invoked from the host.
 | host | `install-hooks` | Install the git commit hooks |
 
 Set `ESP32_PORT` (e.g. `/dev/ttyACM0`) to target another serial device.
+
+### Platform-layer order
+
+`dev.py` processes named paths and discovered targets from the lowest platform
+layer to the highest. `LAYER_ORDER` in `scripts/dev.py` carries the sequence
+from the `platform_layers` skill. It applies to:
+
+- `build` and `build --analyzer`
+- `test-linux` and `test-esp32`
+- `clang-tidy`
+- `format`, `format-check`, and `format-check-staged`
+- `clean`
+
+Paths without a layer entry, such as the repository root and `scripts/`, sort
+before the stack. Paths sharing a layer keep the skill's walk order.
 
 ### Quoting arguments to `shell`
 

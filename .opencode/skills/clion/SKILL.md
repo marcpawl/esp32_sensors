@@ -153,7 +153,7 @@ project to discover, and intentionally has no configuration.
 | Build firmware (container) | `scripts/dev.py build` | builds every subproject |
 | `Build <component> component` (five) | `scripts/dev.py build components/<name>` | builds every project under one component; no config for header-only `sml` |
 | Flash & monitor (container) | `scripts/dev.py flash` | `idf.py -C mcgowan -B mcgowan/build_esp32s3 -p $ESP32_PORT flash monitor` (default `/dev/ttyUSB0`) |
-| Host unit tests (container) | `scripts/dev.py test-linux` | runs every discovered host test suite in path order, or those in/under a directory argument |
+| Host unit tests (container) | `scripts/dev.py test-linux` | runs every discovered host test suite in platform-layer order, or those in/under a directory argument |
 | clang-format check (container) | `scripts/dev.py format-check` | `clang-format --dry-run --Werror` |
 | menuconfig (container) | `scripts/dev.py menuconfig` | Kconfig UI |
 | Container shell (ESP-IDF) | `scripts/dev.py shell` | login shell with the IDF env sourced (accepts trailing args to run a command) |
