@@ -7,7 +7,7 @@
 #   scripts/dev.py ssh                          # SSH into a running container
 #
 # --- Which image? ---------------------------------------------------------
-# `dev` uses the PREBUILT image `marcpawl/esp-idf:20261119c`, which is the
+# `dev` uses the PREBUILT image `marcpawl/esp-idf:20261127a`, which is the
 # official ESP-IDF v6.1 image plus this project's tooling (gh, PyGithub,
 # esp-clang, pycodestyle). Pull it once with
 # `docker compose pull`; do not rebuild it.
@@ -45,7 +45,7 @@ services:
     # falls back to that build if the pull itself fails (bad tag, registry
     # outage), which is why CI runs `scripts/dev.py pull` as its own step
     # first: that step fails loudly instead of quietly rebuilding a toolchain.
-    image: marcpawl/esp-idf:20261119c
+    image: marcpawl/esp-idf:20261127a
     pull_policy: missing
 
     # Stable name for the dev container, so a prompt, `hostname`, and logs are

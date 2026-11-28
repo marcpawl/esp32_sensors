@@ -172,7 +172,7 @@ STYLE_FILE_NAMES = (".clang-format", ".clang-format-ignore")
 # never moved, so update it in both places (test_dev.py asserts they agree).
 # `LOCAL_IMAGE` is only what `image` (a local rebuild) produces, for trying out
 # Dockerfile changes.
-DEV_IMAGE = "marcpawl/esp-idf:20261119c"
+DEV_IMAGE = "marcpawl/esp-idf:20261127a"
 LOCAL_IMAGE = "esp32-sensors-dev:local"
 
 # The image's Dockerfile and its build context. Both live in `docker/`, next to

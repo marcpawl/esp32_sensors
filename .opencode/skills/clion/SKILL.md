@@ -20,7 +20,7 @@ host-side ESP-IDF install is required.
   `docker/docker-compose.yml`; it never defines its own image.
 - **Connect:** open the repository in CLion and accept the Dev Container
   prompt, or use *Remote Development → Dev Containers → docker-compose.yml →
-  `dev`*. CLion pulls `marcpawl/esp-idf:20261119c` if it is not cached. Compose
+  `dev`*. CLion pulls `marcpawl/esp-idf:20261127a` if it is not cached. Compose
   falls back to building the local `Dockerfile` when the pull fails, so run
   `./scripts/dev.py pull` first if that failure must be loud.
 - **Start and stop:** `./scripts/dev.py up` runs `docker compose up -d` before
