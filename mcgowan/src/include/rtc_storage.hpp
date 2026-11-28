@@ -34,7 +34,8 @@ logic::RtcState& rtc_state();
 // Takes the board because the wake cause is a board operation (§3.8): there is
 // no global board to consult, and the caller already holds one.
 template<hal::BoardLike Board>
-void rtc_state_init(Board const& board) {
+void rtc_state_init(Board const& board)
+{
     if (woke_from(board.sleep_get_wakeup_causes(), hal::WakeCause::kTimer)) {
         // State was retained across sleep; nothing to reset this boot.
         return;

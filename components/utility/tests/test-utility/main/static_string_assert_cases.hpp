@@ -24,32 +24,37 @@ namespace static_string_assert_cases {
 using assert_test_support::Case;
 
 // Constructing past capacity: strlen("abcdefgh") == 8 > capacity() == 4.
-inline void construct_overflow() {
+inline void construct_overflow()
+{
     thermo::utility::static_string<4> s("abcdefgh");
     (void)s;
 }
 
 // Constructing from a view past capacity: size() == 8 > capacity() == 4.
-inline void construct_string_view_overflow() {
+inline void construct_string_view_overflow()
+{
     constexpr std::string_view view("abcdefgh");
     thermo::utility::static_string<4> s(view);
     (void)s;
 }
 
 // Appending past capacity: remaining() == 2 but strlen("defgh") == 5.
-inline void append_overflow() {
+inline void append_overflow()
+{
     thermo::utility::static_string<5> s("abc");
     s.append("defgh");
 }
 
 // Assigning past capacity: strlen("toolong") == 7 > capacity() == 3.
-inline void assign_overflow() {
+inline void assign_overflow()
+{
     thermo::utility::static_string<3> s("x");
     s.assign("toolong");
 }
 
 // push_back with no remaining capacity.
-inline void push_back_when_full() {
+inline void push_back_when_full()
+{
     thermo::utility::static_string<2> s;
     s.push_back('a');
     s.push_back('b');
@@ -57,13 +62,15 @@ inline void push_back_when_full() {
 }
 
 // back() has no character to return on an empty string.
-inline void back_when_empty() {
+inline void back_when_empty()
+{
     thermo::utility::static_string<4> s;
     (void)s.back();
 }
 
 // pop_back() has no character to remove on an empty string.
-inline void pop_back_when_empty() {
+inline void pop_back_when_empty()
+{
     thermo::utility::static_string<4> s;
     s.pop_back();
 }
@@ -79,7 +86,8 @@ inline constexpr std::array<Case, 7> kCases = {{
 }};
 
 // Read-only view over the case table.
-inline constexpr std::span<const Case> cases() noexcept {
+inline constexpr std::span<const Case> cases() noexcept
+{
     return kCases;
 }
 

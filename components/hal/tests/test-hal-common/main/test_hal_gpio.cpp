@@ -27,7 +27,8 @@ using thermo::hal::Gpio;
 
 // --- Construction and reading back -----------------------------------------
 
-TEST_CASE("hal gpio: a default-constructed pin is GPIO 0", "[hal_gpio]") {
+TEST_CASE("hal gpio: a default-constructed pin is GPIO 0", "[hal_gpio]")
+{
     // `BoardPins` relies on this for the one pin the reference board leaves
     // unwired (the plain user switch), so the default is part of the contract
     // and must be constant-evaluated.
@@ -36,7 +37,8 @@ TEST_CASE("hal gpio: a default-constructed pin is GPIO 0", "[hal_gpio]") {
     TEST_ASSERT_EQUAL(0, pin.as_int());
 }
 
-TEST_CASE("hal gpio: as_int() returns the constructed pin", "[hal_gpio]") {
+TEST_CASE("hal gpio: as_int() returns the constructed pin", "[hal_gpio]")
+{
     // The constructor and the accessor are `constexpr`, so a pin is usable
     // wherever an `int` would be (static tables, template arguments).
     static_assert(Gpio{4}.as_int() == 4);
@@ -44,7 +46,8 @@ TEST_CASE("hal gpio: as_int() returns the constructed pin", "[hal_gpio]") {
     TEST_ASSERT_EQUAL(34, Gpio{34}.as_int());
 }
 
-TEST_CASE("hal gpio: pins compare by value", "[hal_gpio]") {
+TEST_CASE("hal gpio: pins compare by value", "[hal_gpio]")
+{
     static_assert(Gpio{4} == Gpio{4});
     static_assert(!(Gpio{4} == Gpio{5}));
     TEST_ASSERT_TRUE(Gpio{4} == Gpio{4});
@@ -54,7 +57,8 @@ TEST_CASE("hal gpio: pins compare by value", "[hal_gpio]") {
 // --- No accidental conversion either way -----------------------------------
 
 TEST_CASE("hal gpio: the conversion is explicit in both directions",
-          "[hal_gpio]") {
+          "[hal_gpio]")
+{
     // An `int` must not turn into a pin implicitly (that is the mistake the
     // type exists to prevent), and a pin must not decay back to an `int`.
     static_assert(!std::is_convertible_v<int, Gpio>);
@@ -65,7 +69,8 @@ TEST_CASE("hal gpio: the conversion is explicit in both directions",
     TEST_PASS();
 }
 
-TEST_CASE("hal gpio: a pin is a cheap value type", "[hal_gpio]") {
+TEST_CASE("hal gpio: a pin is a cheap value type", "[hal_gpio]")
+{
     // It is copied into every device and every `BoardPins`, so it must stay a
     // trivially copyable wrapper around one number.
     static_assert(std::is_trivially_copyable_v<Gpio>);
@@ -75,7 +80,8 @@ TEST_CASE("hal gpio: a pin is a cheap value type", "[hal_gpio]") {
 
 // --- The pin map carries the type ------------------------------------------
 
-TEST_CASE("hal gpio: every pin-map constant is a Gpio", "[hal_gpio]") {
+TEST_CASE("hal gpio: every pin-map constant is a Gpio", "[hal_gpio]")
+{
     // The §2.4 map is the single definition of the wiring; typing it means
     // `BoardPins` defaults cannot pick up a bare `int`.
     static_assert(
@@ -99,7 +105,8 @@ TEST_CASE("hal gpio: every pin-map constant is a Gpio", "[hal_gpio]") {
 }
 
 TEST_CASE("hal gpio: the pin-map constants keep their §2.4 values",
-          "[hal_gpio]") {
+          "[hal_gpio]")
+{
     // The numbers themselves are the specification's; this pins them once,
     // next to the type change that made the map easy to read.
     TEST_ASSERT_EQUAL(4, thermo::pins::kWireBus.as_int());

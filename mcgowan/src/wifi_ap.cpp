@@ -23,7 +23,8 @@ constexpr const char* kTag = "wifi_ap";
 bool g_stack_initialized = false;
 esp_netif_t* g_ap_netif = nullptr;
 
-void ensure_netif_and_events() {
+void ensure_netif_and_events()
+{
     if (!g_stack_initialized) {
         ESP_ERROR_CHECK(esp_netif_init());
         ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -36,7 +37,8 @@ void ensure_netif_and_events() {
 
 }  // namespace
 
-esp_err_t WifiAp::start(const Config& cfg) {
+esp_err_t WifiAp::start(const Config& cfg)
+{
     ensure_netif_and_events();
 
     wifi_init_config_t init_cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -70,7 +72,8 @@ esp_err_t WifiAp::start(const Config& cfg) {
     return ESP_OK;
 }
 
-IpAddressText WifiAp::ip_address() const {
+IpAddressText WifiAp::ip_address() const
+{
     const char* address = "192.168.4.1";
     char buf[16]{};
     if (g_ap_netif != nullptr) {

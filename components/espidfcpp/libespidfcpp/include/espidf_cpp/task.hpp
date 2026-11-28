@@ -50,7 +50,8 @@ class Task {
     // task body (`Runner::run`) runs on the new task, not the caller's thread;
     // this constructor returns as soon as the task has been created.
     Task(Runner&& runner, TaskParams params)
-        : params_(params), runner_(std::move(runner)) {
+        : params_(params), runner_(std::move(runner))
+    {
         static_assert(
             std::is_nothrow_invocable_r_v<void, decltype(&Runner::run),
                                           Runner*>,
@@ -89,7 +90,8 @@ class Task {
   private:
     // FreeRTOS task entry point; bridges back to Derived::run().
     [[noreturn]]
-    static void trampoline(void* arg) noexcept {
+    static void trampoline(void* arg) noexcept
+    {
         auto* self = static_cast<Task*>(arg);
         self->runner_.run();
         // Runner::run() is [[noreturn]]; this is unreachable,

@@ -60,7 +60,8 @@ class Switch {
     Switch& operator=(Switch const&) = delete;
     Switch& operator=(Switch&&) = delete;
 
-    [[nodiscard]] static Switch create(Gpio gpio) noexcept {
+    [[nodiscard]] static Switch create(Gpio gpio) noexcept
+    {
         return Switch(gpio);
     }
 

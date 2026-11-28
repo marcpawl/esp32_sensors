@@ -26,7 +26,8 @@ namespace {
 using namespace thermo::espidf_cpp;
 
 // Normalizes `url` into `out` and returns the result as a string_view into it.
-std::optional<std::string_view> normalize(std::string_view url) {
+std::optional<std::string_view> normalize(std::string_view url)
+{
     static std::array<char, 32> buffer{};
     const std::optional<std::size_t> length =
         normalize_url(url, std::span<char>(buffer.data(), buffer.size()));
@@ -36,7 +37,8 @@ std::optional<std::string_view> normalize(std::string_view url) {
     return std::string_view(buffer.data(), *length);
 }
 
-void assert_normalized(std::string_view url, std::string_view expected) {
+void assert_normalized(std::string_view url, std::string_view expected)
+{
     const std::optional<std::string_view> result = normalize(url);
     TEST_ASSERT_TRUE(result.has_value());
     TEST_ASSERT_EQUAL_STRING_LEN(expected.data(), result->data(),
@@ -48,14 +50,16 @@ void assert_normalized(std::string_view url, std::string_view expected) {
 
 // --- HttpMethod -------------------------------------------------------------
 
-TEST_CASE("http_server_types: method names", "[http_server_types]") {
+TEST_CASE("http_server_types: method names", "[http_server_types]")
+{
     TEST_ASSERT_EQUAL_STRING("GET", to_string(HttpMethod::kGet));
     TEST_ASSERT_EQUAL_STRING("POST", to_string(HttpMethod::kPost));
 }
 
 // --- HttpStatus -------------------------------------------------------------
 
-TEST_CASE("http_server_types: status codes", "[http_server_types]") {
+TEST_CASE("http_server_types: status codes", "[http_server_types]")
+{
     TEST_ASSERT_EQUAL_INT(200, to_code(HttpStatus::kOk));
     TEST_ASSERT_EQUAL_INT(400, to_code(HttpStatus::kBadRequest));
     TEST_ASSERT_EQUAL_INT(404, to_code(HttpStatus::kNotFound));
@@ -67,7 +71,8 @@ TEST_CASE("http_server_types: status codes", "[http_server_types]") {
     TEST_ASSERT_EQUAL_INT(503, to_code(HttpStatus::kServiceUnavailable));
 }
 
-TEST_CASE("http_server_types: status reason phrases", "[http_server_types]") {
+TEST_CASE("http_server_types: status reason phrases", "[http_server_types]")
+{
     TEST_ASSERT_EQUAL_STRING("OK", to_reason(HttpStatus::kOk));
     TEST_ASSERT_EQUAL_STRING("Bad Request", to_reason(HttpStatus::kBadRequest));
     TEST_ASSERT_EQUAL_STRING("Content Too Large",
@@ -81,25 +86,29 @@ TEST_CASE("http_server_types: status reason phrases", "[http_server_types]") {
 // --- normalize_url ----------------------------------------------------------
 
 TEST_CASE("http_server_types: normalize keeps a plain path",
-          "[http_server_types]") {
+          "[http_server_types]")
+{
     assert_normalized("/simulator", "/simulator");
     assert_normalized("/simulator/reset", "/simulator/reset");
 }
 
 TEST_CASE("http_server_types: normalize adds a leading slash",
-          "[http_server_types]") {
+          "[http_server_types]")
+{
     assert_normalized("simulator", "/simulator");
 }
 
 TEST_CASE("http_server_types: normalize drops a trailing slash",
-          "[http_server_types]") {
+          "[http_server_types]")
+{
     assert_normalized("/simulator/", "/simulator");
     assert_normalized("/simulator///", "/simulator");
     assert_normalized("simulator/", "/simulator");
 }
 
 TEST_CASE("http_server_types: normalize drops the query string",
-          "[http_server_types]") {
+          "[http_server_types]")
+{
     assert_normalized("/simulator?x=1&y=2", "/simulator");
     assert_normalized("/simulator?x=/a/b", "/simulator");
     assert_normalized("/simulator#frag", "/simulator");
@@ -107,14 +116,16 @@ TEST_CASE("http_server_types: normalize drops the query string",
 }
 
 TEST_CASE("http_server_types: normalize makes the root the empty path",
-          "[http_server_types]") {
+          "[http_server_types]")
+{
     assert_normalized("/", "");
     assert_normalized("", "");
     assert_normalized("?a=b", "");
 }
 
 TEST_CASE("http_server_types: normalize rejects a path that does not fit",
-          "[http_server_types]") {
+          "[http_server_types]")
+{
     std::array<char, 4> buffer{};
     const std::span<char> out(buffer.data(), buffer.size());
     TEST_ASSERT_TRUE(normalize_url("/abc", out).has_value());  // Exact fit.
@@ -127,7 +138,8 @@ TEST_CASE("http_server_types: normalize rejects a path that does not fit",
 // --- parse_int --------------------------------------------------------------
 
 TEST_CASE("http_server_types: parse_int accepts decimal integers",
-          "[http_server_types]") {
+          "[http_server_types]")
+{
     const std::optional<int> zero = parse_int<int>("0");
     const std::optional<int> forty_two = parse_int<int>("42");
     const std::optional<std::uint16_t> max_u16 =
@@ -141,7 +153,8 @@ TEST_CASE("http_server_types: parse_int accepts decimal integers",
 }
 
 TEST_CASE("http_server_types: parse_int rejects anything else",
-          "[http_server_types]") {
+          "[http_server_types]")
+{
     TEST_ASSERT_FALSE(parse_int<int>("").has_value());
     TEST_ASSERT_FALSE(parse_int<int>(" 1").has_value());
     TEST_ASSERT_FALSE(parse_int<int>("1 ").has_value());
@@ -154,7 +167,8 @@ TEST_CASE("http_server_types: parse_int rejects anything else",
 // --- HttpRequest ------------------------------------------------------------
 
 TEST_CASE("http_server_types: find_field returns the first match",
-          "[http_server_types]") {
+          "[http_server_types]")
+{
     HttpRequest request;
     TEST_ASSERT_TRUE(request.fields.try_push_back(HttpField{"a", "1"}));
     TEST_ASSERT_TRUE(request.fields.try_push_back(HttpField{"b", "2"}));
@@ -169,7 +183,8 @@ TEST_CASE("http_server_types: find_field returns the first match",
 }
 
 TEST_CASE("http_server_types: a default request is a GET with no fields",
-          "[http_server_types]") {
+          "[http_server_types]")
+{
     const HttpRequest request;
     TEST_ASSERT_TRUE(request.method == HttpMethod::kGet);
     TEST_ASSERT_TRUE(request.uri.empty());
@@ -178,8 +193,8 @@ TEST_CASE("http_server_types: a default request is a GET with no fields",
     TEST_ASSERT_FALSE(request.fields_truncated);
 }
 
-TEST_CASE("http_server_types: fields are fixed-capacity",
-          "[http_server_types]") {
+TEST_CASE("http_server_types: fields are fixed-capacity", "[http_server_types]")
+{
     HttpField field{"name", "value"};
     TEST_ASSERT_EQUAL_UINT(kMaxHttpFieldName, field.name.capacity());
     TEST_ASSERT_EQUAL_UINT(kMaxHttpFieldValue, field.value.capacity());
@@ -187,7 +202,8 @@ TEST_CASE("http_server_types: fields are fixed-capacity",
 }
 
 TEST_CASE("http_server_types: HttpField compares by content",
-          "[http_server_types]") {
+          "[http_server_types]")
+{
     // `operator==` is `= default`, which is only meaningful because
     // `static_string` compares by content: three different buffers holding the
     // same text must compare equal, and one differing character must not.

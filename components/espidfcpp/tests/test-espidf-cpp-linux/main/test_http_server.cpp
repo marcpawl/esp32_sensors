@@ -56,7 +56,8 @@ using Server = HttpServer<kBody>;
 
 // Echoes the method, the path, the field count, the truncation flag, and the
 // body, as "METHOD path n=<fields> t=<0|1> b=<body>".
-HttpResponse echo(HttpHandlerContext<kBody>& ctx) {
+HttpResponse echo(HttpHandlerContext<kBody>& ctx)
+{
     const HttpRequest& request = ctx.request;
     ctx.body.append(to_string(request.method));
     ctx.body.push_back(' ');
@@ -75,7 +76,8 @@ HttpResponse echo(HttpHandlerContext<kBody>& ctx) {
 // Reports the first field named "x" (or "-") and the whole field list as
 // "x=<first>;name=value&name=value": enough to check decoding, ordering, and
 // how '+' is treated.
-HttpResponse fields(HttpHandlerContext<kBody>& ctx) {
+HttpResponse fields(HttpHandlerContext<kBody>& ctx)
+{
     const auto x = ctx.request.find_field("x");
     ctx.body.append("x=");
     if (x) {
@@ -99,12 +101,14 @@ HttpResponse fields(HttpHandlerContext<kBody>& ctx) {
 
 // Always answers with a server-side failure and no body: the server must send
 // the status text as the body instead of an empty response.
-HttpResponse unavailable(HttpHandlerContext<kBody>&) {
+HttpResponse unavailable(HttpHandlerContext<kBody>&)
+{
     return {.status = HttpStatus::kServiceUnavailable};
 }
 
 // Answers with JSON, to check a handler-chosen content type.
-HttpResponse json(HttpHandlerContext<kBody>& ctx) {
+HttpResponse json(HttpHandlerContext<kBody>& ctx)
+{
     ctx.body.append("{\"ok\":true}");
     return {.status = HttpStatus::kOk, .content_type = "application/json"};
 }
@@ -113,7 +117,8 @@ HttpResponse json(HttpHandlerContext<kBody>& ctx) {
 // are all-or-nothing: a slice that does not fit is refused whole, and the
 // buffer is never overrun. `body.capacity()` (the buffer handed to handlers) is
 // the limit.
-HttpResponse fill(HttpHandlerContext<kBody>& ctx) {
+HttpResponse fill(HttpHandlerContext<kBody>& ctx)
+{
     const std::size_t capacity = ctx.body.capacity();
     // Fill to exactly `capacity()` characters.
     while (ctx.body.try_push_back('x')) {
@@ -143,7 +148,8 @@ struct RawResponse {
 // response into `storage`. Returns false if the connection failed or the reply
 // was not an HTTP response. The response views point into `storage`.
 bool exchange(std::uint16_t port, std::string_view request,
-              std::string& storage, RawResponse& response) {
+              std::string& storage, RawResponse& response)
+{
     const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) {
         return false;
@@ -197,7 +203,8 @@ bool exchange(std::uint16_t port, std::string_view request,
 }
 
 // True when `headers` contains `needle`, case-insensitively.
-bool has_header(std::string_view headers, std::string_view needle) {
+bool has_header(std::string_view headers, std::string_view needle)
+{
     std::string lowered(headers);
     std::string lowered_needle(needle);
     for (char& c : lowered) {
@@ -211,7 +218,8 @@ bool has_header(std::string_view headers, std::string_view needle) {
 
 // --- Fixture ----------------------------------------------------------------
 
-Server& server() {
+Server& server()
+{
     static Server instance;
     return instance;
 }
@@ -219,7 +227,8 @@ Server& server() {
 // Stops the shared server, unregisters every route, applies `configure()`, and
 // starts the server on a fresh port that this case owns. Returns the port.
 template<typename Configure>
-std::uint16_t prepare(Configure configure) {
+std::uint16_t prepare(Configure configure)
+{
     Server& srv = server();
     srv.stop();
     if (srv.route_count() > 0) {
@@ -239,7 +248,8 @@ std::uint16_t prepare(Configure configure) {
 
 // Sends `request` to `port` and asserts an HTTP response came back.
 void round_trip(std::uint16_t port, std::string_view request,
-                std::string& storage, RawResponse& response) {
+                std::string& storage, RawResponse& response)
+{
     TEST_ASSERT_TRUE_MESSAGE(exchange(port, request, storage, response),
                              "no HTTP response");
 }
@@ -248,7 +258,8 @@ void round_trip(std::uint16_t port, std::string_view request,
 
 // --- Registration bookkeeping -----------------------------------------------
 
-TEST_CASE("http_server: registering routes counts them", "[http_server]") {
+TEST_CASE("http_server: registering routes counts them", "[http_server]")
+{
     Server srv;
     TEST_ASSERT_EQUAL_UINT(0, srv.route_count());
     TEST_ASSERT_EQUAL(ESP_OK, srv.register_route("/a", echo));
@@ -257,14 +268,16 @@ TEST_CASE("http_server: registering routes counts them", "[http_server]") {
 }
 
 TEST_CASE("http_server: registering a prefix twice replaces its handler",
-          "[http_server]") {
+          "[http_server]")
+{
     Server srv;
     TEST_ASSERT_EQUAL(ESP_OK, srv.register_route("/a", echo));
     TEST_ASSERT_EQUAL(ESP_OK, srv.register_route("/a", json));
     TEST_ASSERT_EQUAL_UINT(1, srv.route_count());
 }
 
-TEST_CASE("http_server: prefixes are normalized", "[http_server]") {
+TEST_CASE("http_server: prefixes are normalized", "[http_server]")
+{
     Server srv;
     TEST_ASSERT_EQUAL(ESP_OK, srv.register_route("a", echo));
     TEST_ASSERT_EQUAL(ESP_OK, srv.register_route("/a/", json));  // Same route.
@@ -272,7 +285,8 @@ TEST_CASE("http_server: prefixes are normalized", "[http_server]") {
     TEST_ASSERT_EQUAL_UINT(1, srv.route_count());
 }
 
-TEST_CASE("http_server: registration rejects bad arguments", "[http_server]") {
+TEST_CASE("http_server: registration rejects bad arguments", "[http_server]")
+{
     Server srv;
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_ARG, srv.register_route("/a", nullptr));
 
@@ -290,8 +304,8 @@ TEST_CASE("http_server: registration rejects bad arguments", "[http_server]") {
     TEST_ASSERT_EQUAL_UINT(1, srv.route_count());
 }
 
-TEST_CASE("http_server: registration is refused while running",
-          "[http_server]") {
+TEST_CASE("http_server: registration is refused while running", "[http_server]")
+{
     const std::uint16_t port = prepare([](Server& srv) {
         TEST_ASSERT_EQUAL(ESP_OK, srv.register_route("/a", echo));
     });
@@ -308,7 +322,8 @@ TEST_CASE("http_server: registration is refused while running",
 }
 
 TEST_CASE("http_server: unregister removes the prefix and its children",
-          "[http_server]") {
+          "[http_server]")
+{
     Server srv;
     TEST_ASSERT_EQUAL(ESP_OK, srv.register_route("/sim", echo));
     TEST_ASSERT_EQUAL(ESP_OK, srv.register_route("/sim/reset", echo));
@@ -320,7 +335,8 @@ TEST_CASE("http_server: unregister removes the prefix and its children",
 }
 
 TEST_CASE("http_server: unregistering below a prefix keeps the parent",
-          "[http_server]") {
+          "[http_server]")
+{
     Server srv;
     TEST_ASSERT_EQUAL(ESP_OK, srv.register_route("/sim", echo));
     TEST_ASSERT_EQUAL(ESP_OK, srv.register_route("/sim/reset", echo));
@@ -332,7 +348,8 @@ TEST_CASE("http_server: unregistering below a prefix keeps the parent",
 }
 
 TEST_CASE("http_server: unregistering the root removes every route",
-          "[http_server]") {
+          "[http_server]")
+{
     Server srv;
     TEST_ASSERT_EQUAL(ESP_OK, srv.register_route("/a", echo));
     TEST_ASSERT_EQUAL(ESP_OK, srv.register_route("/b/c", echo));
@@ -342,8 +359,8 @@ TEST_CASE("http_server: unregistering the root removes every route",
     TEST_ASSERT_EQUAL(ESP_ERR_NOT_FOUND, srv.unregister_route(""));
 }
 
-TEST_CASE("http_server: a stopped server can be started again",
-          "[http_server]") {
+TEST_CASE("http_server: a stopped server can be started again", "[http_server]")
+{
     // Every server used to share ESP-IDF's one default control-socket port,
     // so a restart could fail with EADDRINUSE.
     Server srv;
@@ -356,8 +373,8 @@ TEST_CASE("http_server: a stopped server can be started again",
     TEST_ASSERT_EQUAL(ESP_OK, srv.stop());
 }
 
-TEST_CASE("http_server: routes are kept across stop and start",
-          "[http_server]") {
+TEST_CASE("http_server: routes are kept across stop and start", "[http_server]")
+{
     Server srv;
     TEST_ASSERT_EQUAL(ESP_OK, srv.register_route("/a", echo));
     TEST_ASSERT_EQUAL(ESP_OK, srv.start());
@@ -369,7 +386,8 @@ TEST_CASE("http_server: routes are kept across stop and start",
     TEST_ASSERT_EQUAL_UINT(1, srv.route_count());
 }
 
-TEST_CASE("http_server: start without routes fails", "[http_server]") {
+TEST_CASE("http_server: start without routes fails", "[http_server]")
+{
     Server srv;
     srv.set_port(19000);
     TEST_ASSERT_EQUAL(ESP_ERR_INVALID_STATE, srv.start());
@@ -378,7 +396,8 @@ TEST_CASE("http_server: start without routes fails", "[http_server]") {
 
 // --- Routing ----------------------------------------------------------------
 
-TEST_CASE("http_server: a prefix route serves its paths", "[http_server]") {
+TEST_CASE("http_server: a prefix route serves its paths", "[http_server]")
+{
     std::string storage;
     RawResponse response;
     const std::uint16_t port = prepare([](Server& srv) {
@@ -407,7 +426,8 @@ TEST_CASE("http_server: a prefix route serves its paths", "[http_server]") {
     TEST_ASSERT_TRUE(has_header(response.headers, "application/json"));
 }
 
-TEST_CASE("http_server: an unknown path is 404", "[http_server]") {
+TEST_CASE("http_server: an unknown path is 404", "[http_server]")
+{
     std::string storage;
     RawResponse response;
     const std::uint16_t port = prepare([](Server& srv) {
@@ -419,7 +439,8 @@ TEST_CASE("http_server: an unknown path is 404", "[http_server]") {
     TEST_ASSERT_EQUAL_STRING("Not Found", std::string(response.body).c_str());
 }
 
-TEST_CASE("http_server: an unsupported method is 405", "[http_server]") {
+TEST_CASE("http_server: an unsupported method is 405", "[http_server]")
+{
     std::string storage;
     RawResponse response;
     const std::uint16_t port = prepare([](Server& srv) {
@@ -430,7 +451,8 @@ TEST_CASE("http_server: an unsupported method is 405", "[http_server]") {
     TEST_ASSERT_EQUAL_INT(405, response.status);
 }
 
-TEST_CASE("http_server: the root route covers every path", "[http_server]") {
+TEST_CASE("http_server: the root route covers every path", "[http_server]")
+{
     std::string storage;
     RawResponse response;
     const std::uint16_t port = prepare([](Server& srv) {
@@ -444,7 +466,8 @@ TEST_CASE("http_server: the root route covers every path", "[http_server]") {
 }
 
 TEST_CASE("http_server: a route unregistered while stopped is not served",
-          "[http_server]") {
+          "[http_server]")
+{
     std::string storage;
     RawResponse response;
     const std::uint16_t port = prepare([](Server& srv) {
@@ -466,8 +489,8 @@ TEST_CASE("http_server: a route unregistered while stopped is not served",
 
 // --- GET fields -------------------------------------------------------------
 
-TEST_CASE("http_server: GET fields come from the query string",
-          "[http_server]") {
+TEST_CASE("http_server: GET fields come from the query string", "[http_server]")
+{
     std::string storage;
     RawResponse response;
     const std::uint16_t port = prepare([](Server& srv) {
@@ -482,7 +505,8 @@ TEST_CASE("http_server: GET fields come from the query string",
 }
 
 TEST_CASE("http_server: GET without a query string has no fields",
-          "[http_server]") {
+          "[http_server]")
+{
     std::string storage;
     RawResponse response;
     const std::uint16_t port = prepare([](Server& srv) {
@@ -495,7 +519,8 @@ TEST_CASE("http_server: GET without a query string has no fields",
 
 // --- POST fields ------------------------------------------------------------
 
-TEST_CASE("http_server: POST form fields are decoded", "[http_server]") {
+TEST_CASE("http_server: POST form fields are decoded", "[http_server]")
+{
     std::string storage;
     RawResponse response;
     const std::uint16_t port = prepare([](Server& srv) {
@@ -514,7 +539,8 @@ TEST_CASE("http_server: POST form fields are decoded", "[http_server]") {
 }
 
 TEST_CASE("http_server: POST content type ignores parameters and case",
-          "[http_server]") {
+          "[http_server]")
+{
     std::string storage;
     RawResponse response;
     const std::uint16_t port = prepare([](Server& srv) {
@@ -530,7 +556,8 @@ TEST_CASE("http_server: POST content type ignores parameters and case",
                              std::string(response.body).c_str());
 }
 
-TEST_CASE("http_server: a non-form POST body is 415", "[http_server]") {
+TEST_CASE("http_server: a non-form POST body is 415", "[http_server]")
+{
     std::string storage;
     RawResponse response;
     const std::uint16_t port = prepare([](Server& srv) {
@@ -543,7 +570,8 @@ TEST_CASE("http_server: a non-form POST body is 415", "[http_server]") {
     TEST_ASSERT_EQUAL_INT(415, response.status);
 }
 
-TEST_CASE("http_server: a malformed form escape is 400", "[http_server]") {
+TEST_CASE("http_server: a malformed form escape is 400", "[http_server]")
+{
     std::string storage;
     RawResponse response;
     const std::uint16_t port = prepare([](Server& srv) {
@@ -557,7 +585,8 @@ TEST_CASE("http_server: a malformed form escape is 400", "[http_server]") {
     TEST_ASSERT_EQUAL_INT(400, response.status);
 }
 
-TEST_CASE("http_server: an oversized POST body is 413", "[http_server]") {
+TEST_CASE("http_server: an oversized POST body is 413", "[http_server]")
+{
     std::string storage;
     RawResponse response;
     const std::uint16_t port = prepare([](Server& srv) {
@@ -574,7 +603,8 @@ TEST_CASE("http_server: an oversized POST body is 413", "[http_server]") {
 
 // --- Limits ----------------------------------------------------------------
 
-TEST_CASE("http_server: an over-long path is 414", "[http_server]") {
+TEST_CASE("http_server: an over-long path is 414", "[http_server]")
+{
     std::string storage;
     RawResponse response;
     const std::uint16_t port = prepare([](Server& srv) {
@@ -587,7 +617,8 @@ TEST_CASE("http_server: an over-long path is 414", "[http_server]") {
 }
 
 TEST_CASE("http_server: too many fields are reported, not fatal",
-          "[http_server]") {
+          "[http_server]")
+{
     std::string storage;
     RawResponse response;
     const std::uint16_t port = prepare([](Server& srv) {
@@ -610,7 +641,8 @@ TEST_CASE("http_server: too many fields are reported, not fatal",
 }
 
 TEST_CASE("http_server: an over-long field value is dropped, not fatal",
-          "[http_server]") {
+          "[http_server]")
+{
     std::string storage;
     RawResponse response;
     const std::uint16_t port = prepare([](Server& srv) {
@@ -628,7 +660,8 @@ TEST_CASE("http_server: an over-long field value is dropped, not fatal",
 // --- Responses --------------------------------------------------------------
 
 TEST_CASE("http_server: a handler-chosen error gets the status text",
-          "[http_server]") {
+          "[http_server]")
+{
     std::string storage;
     RawResponse response;
     const std::uint16_t port = prepare([](Server& srv) {
@@ -641,7 +674,8 @@ TEST_CASE("http_server: a handler-chosen error gets the status text",
 }
 
 TEST_CASE("http_server: a handler can fill its response buffer exactly",
-          "[http_server]") {
+          "[http_server]")
+{
     std::string storage;
     RawResponse response;
     const std::uint16_t port = prepare([](Server& srv) {
@@ -658,7 +692,8 @@ TEST_CASE("http_server: a handler can fill its response buffer exactly",
 // -------------------------------------------------------------
 
 TEST_CASE("http_server: garbage in is an HTTP error, not a crash",
-          "[http_server]") {
+          "[http_server]")
+{
     std::string storage;
     RawResponse response;
     const std::uint16_t port = prepare([](Server& srv) {

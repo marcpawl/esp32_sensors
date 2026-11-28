@@ -20,7 +20,8 @@ namespace {
 // `label` its visible label.
 void field(std::string& out, const char* name, const char* label,
            const std::string& value, const char* type = "text",
-           const char* extra = "") {
+           const char* extra = "")
+{
     out += "<p><label>" + html_escape(label) + "<br>";
     out += "<input type='" + std::string(type) + "' name='" + name +
            "' value='" + html_escape(value) + "' " + extra + "></label></p>\n";
@@ -28,23 +29,27 @@ void field(std::string& out, const char* name, const char* label,
 
 // Appends a numeric input row to the form; `name` and `label` as `field()`.
 void field_num(std::string& out, const char* name, const char* label,
-               const std::string& value, const char* step = "1") {
+               const std::string& value, const char* step = "1")
+{
     out += "<p><label>" + html_escape(label) + "<br>";
     out += "<input type='number' step='" + std::string(step) + "' name='" +
            name + "' value='" + html_escape(value) + "'></label></p>\n";
 }
 
-void checkbox(std::string& out, const char* name, const char* label, bool on) {
+void checkbox(std::string& out, const char* name, const char* label, bool on)
+{
     out += "<p><label><input type='checkbox' name='" + std::string(name) +
            "' value='1' " + (on ? "checked" : "") + "> " + html_escape(label) +
            "</label></p>\n";
 }
 
-std::string to_string_u32(std::uint32_t v) {
+std::string to_string_u32(std::uint32_t v)
+{
     return std::to_string(v);
 }
 
-std::string to_string_f(float v) {
+std::string to_string_f(float v)
+{
     char buf[32];
     std::snprintf(buf, sizeof(buf), "%g", static_cast<double>(v));
     return buf;
@@ -52,7 +57,8 @@ std::string to_string_f(float v) {
 
 }  // namespace
 
-std::string html_escape(const std::string& in) {
+std::string html_escape(const std::string& in)
+{
     std::string out;
     out.reserve(in.size());
     for (char c : in) {
@@ -79,7 +85,8 @@ std::string html_escape(const std::string& in) {
     return out;
 }
 
-std::string format_saved_time(std::uint32_t epoch_utc) {
+std::string format_saved_time(std::uint32_t epoch_utc)
+{
     if (epoch_utc == 0) {
         return "never";  // §6.2 initial state.
     }
@@ -91,7 +98,8 @@ std::string format_saved_time(std::uint32_t epoch_utc) {
     return buf;
 }
 
-std::string render_scan_json(const Config& cfg, const ScanSnapshot& scan) {
+std::string render_scan_json(const Config& cfg, const ScanSnapshot& scan)
+{
     // §6.1 response: battery_mv, unit, and a sensors array of
     // {rom, name, temp_c}. Field order is stable for easy diffing.
     std::string out = "{\n";
@@ -138,7 +146,8 @@ std::string render_scan_json(const Config& cfg, const ScanSnapshot& scan) {
 }
 
 std::string render_form(const Config& cfg, const ScanSnapshot& scan,
-                        const std::vector<ValidationError>& errors) {
+                        const std::vector<ValidationError>& errors)
+{
     std::string out;
     out += "<!DOCTYPE html><html><head><meta charset='utf-8'>";
     out +=
@@ -239,7 +248,8 @@ std::string render_form(const Config& cfg, const ScanSnapshot& scan,
     return out;
 }
 
-std::string render_saved(const Config& cfg, const std::string& warning) {
+std::string render_saved(const Config& cfg, const std::string& warning)
+{
     std::string out;
     out += "<!DOCTYPE html><html><head><meta charset='utf-8'>";
     out += "<title>Configuration Saved</title></head><body>";

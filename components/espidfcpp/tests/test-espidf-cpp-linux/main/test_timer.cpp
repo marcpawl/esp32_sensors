@@ -25,7 +25,8 @@ void timer_callback() {}
 }  // namespace
 
 TEST_CASE("espidf_cpp timer: construction creates and invokes the callback",
-          "[espidf_cpp_timer]") {
+          "[espidf_cpp_timer]")
+{
     fake_esp_timer::reset();
     int calls = 0;
     {
@@ -46,7 +47,8 @@ TEST_CASE("espidf_cpp timer: construction creates and invokes the callback",
 }
 
 TEST_CASE("espidf_cpp timer: construction defaults the name to timer",
-          "[espidf_cpp_timer]") {
+          "[espidf_cpp_timer]")
+{
     fake_esp_timer::reset();
     Timer timer(&timer_callback);
     TEST_ASSERT_EQUAL_STRING("timer", fake_esp_timer::state().name.c_str());
@@ -54,7 +56,8 @@ TEST_CASE("espidf_cpp timer: construction defaults the name to timer",
 }
 
 TEST_CASE("espidf_cpp timer: destruction stops and deletes the timer",
-          "[espidf_cpp_timer]") {
+          "[espidf_cpp_timer]")
+{
     fake_esp_timer::reset();
     {
         Timer timer(&timer_callback);
@@ -67,7 +70,8 @@ TEST_CASE("espidf_cpp timer: destruction stops and deletes the timer",
 }
 
 TEST_CASE("espidf_cpp timer: start_once delegates a one-shot start",
-          "[espidf_cpp_timer]") {
+          "[espidf_cpp_timer]")
+{
     fake_esp_timer::reset();
     Timer timer(&timer_callback);
 
@@ -79,7 +83,8 @@ TEST_CASE("espidf_cpp timer: start_once delegates a one-shot start",
 }
 
 TEST_CASE("espidf_cpp timer: start_periodic delegates a periodic start",
-          "[espidf_cpp_timer]") {
+          "[espidf_cpp_timer]")
+{
     fake_esp_timer::reset();
     Timer timer(&timer_callback);
 
@@ -91,7 +96,8 @@ TEST_CASE("espidf_cpp timer: start_periodic delegates a periodic start",
 }
 
 TEST_CASE("espidf_cpp timer: restart delegates a new delay",
-          "[espidf_cpp_timer]") {
+          "[espidf_cpp_timer]")
+{
     fake_esp_timer::reset();
     Timer timer(&timer_callback);
     TEST_ASSERT_EQUAL(ESP_OK, timer.start_once(std::chrono::milliseconds{100}));
@@ -102,7 +108,8 @@ TEST_CASE("espidf_cpp timer: restart delegates a new delay",
 }
 
 TEST_CASE("espidf_cpp timer: restart starts a timer that never ran",
-          "[espidf_cpp_timer]") {
+          "[espidf_cpp_timer]")
+{
     fake_esp_timer::reset();
     Timer timer(&timer_callback);
 
@@ -115,7 +122,8 @@ TEST_CASE("espidf_cpp timer: restart starts a timer that never ran",
 }
 
 TEST_CASE("espidf_cpp timer: restart starts a stopped one-shot timer",
-          "[espidf_cpp_timer]") {
+          "[espidf_cpp_timer]")
+{
     fake_esp_timer::reset();
     Timer timer(&timer_callback);
     TEST_ASSERT_EQUAL(ESP_OK, timer.start_once(std::chrono::milliseconds{100}));
@@ -130,7 +138,8 @@ TEST_CASE("espidf_cpp timer: restart starts a stopped one-shot timer",
 }
 
 TEST_CASE("espidf_cpp timer: restart starts a stopped periodic timer",
-          "[espidf_cpp_timer]") {
+          "[espidf_cpp_timer]")
+{
     fake_esp_timer::reset();
     Timer timer(&timer_callback);
     TEST_ASSERT_EQUAL(ESP_OK,
@@ -146,7 +155,8 @@ TEST_CASE("espidf_cpp timer: restart starts a stopped periodic timer",
 }
 
 TEST_CASE("espidf_cpp timer: restart() is the ISR-safe path (no queries)",
-          "[espidf_cpp_timer]") {
+          "[espidf_cpp_timer]")
+{
     fake_esp_timer::reset();
     Timer timer(&timer_callback);
     TEST_ASSERT_EQUAL(ESP_OK, timer.start_once(std::chrono::milliseconds{100}));
@@ -163,7 +173,8 @@ TEST_CASE("espidf_cpp timer: restart() is the ISR-safe path (no queries)",
 }
 
 TEST_CASE("espidf_cpp timer: restart() starts a stopped timer without queries",
-          "[espidf_cpp_timer]") {
+          "[espidf_cpp_timer]")
+{
     fake_esp_timer::reset();
     Timer timer(&timer_callback);
 
@@ -188,7 +199,8 @@ TEST_CASE("espidf_cpp timer: restart() starts a stopped timer without queries",
     TEST_ASSERT_EQUAL_UINT64(25'000, fake_esp_timer::state().last_delay_us);
 }
 
-TEST_CASE("espidf_cpp timer: stop and cancel delegate", "[espidf_cpp_timer]") {
+TEST_CASE("espidf_cpp timer: stop and cancel delegate", "[espidf_cpp_timer]")
+{
     fake_esp_timer::reset();
     Timer timer(&timer_callback);
     TEST_ASSERT_EQUAL(ESP_OK, timer.start_once(std::chrono::milliseconds{100}));
@@ -204,7 +216,8 @@ TEST_CASE("espidf_cpp timer: stop and cancel delegate", "[espidf_cpp_timer]") {
 }
 
 TEST_CASE("espidf_cpp timer: stop_blocking delegates its timeout",
-          "[espidf_cpp_timer]") {
+          "[espidf_cpp_timer]")
+{
     fake_esp_timer::reset();
     Timer timer(&timer_callback);
     TEST_ASSERT_EQUAL(ESP_OK, timer.start_once(std::chrono::milliseconds{100}));
@@ -216,7 +229,8 @@ TEST_CASE("espidf_cpp timer: stop_blocking delegates its timeout",
 }
 
 TEST_CASE("espidf_cpp timer: period reports the periodic period",
-          "[espidf_cpp_timer]") {
+          "[espidf_cpp_timer]")
+{
     fake_esp_timer::reset();
     Timer timer(&timer_callback);
     TEST_ASSERT_EQUAL(ESP_OK,
@@ -226,7 +240,8 @@ TEST_CASE("espidf_cpp timer: period reports the periodic period",
 }
 
 TEST_CASE("espidf_cpp timer: period is zero for a one-shot timer",
-          "[espidf_cpp_timer]") {
+          "[espidf_cpp_timer]")
+{
     fake_esp_timer::reset();
     Timer timer(&timer_callback);
     TEST_ASSERT_EQUAL(ESP_OK, timer.start_once(std::chrono::milliseconds{100}));
@@ -235,7 +250,8 @@ TEST_CASE("espidf_cpp timer: period is zero for a one-shot timer",
 }
 
 TEST_CASE("espidf_cpp timer: expiry reports a one-shot expiry",
-          "[espidf_cpp_timer]") {
+          "[espidf_cpp_timer]")
+{
     fake_esp_timer::reset();
     Timer timer(&timer_callback);
     TEST_ASSERT_EQUAL(ESP_OK, timer.start_once(std::chrono::milliseconds{100}));
@@ -244,7 +260,8 @@ TEST_CASE("espidf_cpp timer: expiry reports a one-shot expiry",
 }
 
 TEST_CASE("espidf_cpp timer: move construction transfers the handle",
-          "[espidf_cpp_timer]") {
+          "[espidf_cpp_timer]")
+{
     fake_esp_timer::reset();
     int calls = 0;
     Timer source([&calls] { ++calls; });
@@ -264,7 +281,8 @@ TEST_CASE("espidf_cpp timer: move construction transfers the handle",
 }
 
 TEST_CASE("espidf_cpp timer: move assignment releases the old timer",
-          "[espidf_cpp_timer]") {
+          "[espidf_cpp_timer]")
+{
     fake_esp_timer::reset();
     Timer target(&timer_callback);
     Timer source(&timer_callback);
@@ -279,7 +297,8 @@ TEST_CASE("espidf_cpp timer: move assignment releases the old timer",
     TEST_ASSERT_EQUAL_INT(1, fake_esp_timer::state().delete_calls);
 }
 
-TEST_CASE("espidf_cpp timer: the class is move-only", "[espidf_cpp_timer]") {
+TEST_CASE("espidf_cpp timer: the class is move-only", "[espidf_cpp_timer]")
+{
     static_assert(!std::is_copy_constructible_v<Timer>);
     static_assert(!std::is_copy_assignable_v<Timer>);
     static_assert(std::is_nothrow_move_constructible_v<Timer>);

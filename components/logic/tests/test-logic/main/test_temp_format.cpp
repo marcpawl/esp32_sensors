@@ -20,7 +20,8 @@ using thermo::logic::kTempNull;
 using thermo::logic::TempText;
 
 namespace {
-TempText fmt(std::int16_t v) {
+TempText fmt(std::int16_t v)
+{
     // The diagnostic belongs to format_temp_c_x100()'s snprintf buffer; see
     // the comment there. Keep it fatal everywhere else.
     // NOLINTBEGIN
@@ -34,7 +35,8 @@ TempText fmt(std::int16_t v) {
 
 // --- Exact tenths -----------------------------------------------------------
 
-TEST_CASE("temp: exact tenths format without rounding", "[temp_format]") {
+TEST_CASE("temp: exact tenths format without rounding", "[temp_format]")
+{
     TEST_ASSERT_EQUAL_STRING("24.0", fmt(2400).c_str());
     TEST_ASSERT_EQUAL_STRING("24.5", fmt(2450).c_str());
     TEST_ASSERT_EQUAL_STRING("0.0", fmt(0).c_str());
@@ -44,7 +46,8 @@ TEST_CASE("temp: exact tenths format without rounding", "[temp_format]") {
 
 // --- Round-half-away-from-zero (§9.3) --------------------------------------
 
-TEST_CASE("temp: rounds half away from zero", "[temp_format]") {
+TEST_CASE("temp: rounds half away from zero", "[temp_format]")
+{
     // Positive: 0.05 -> 0.1, 0.04 -> 0.0
     TEST_ASSERT_EQUAL_STRING("0.1", fmt(5).c_str());
     TEST_ASSERT_EQUAL_STRING("0.0", fmt(4).c_str());
@@ -55,7 +58,8 @@ TEST_CASE("temp: rounds half away from zero", "[temp_format]") {
     TEST_ASSERT_EQUAL_STRING("0.0", fmt(-4).c_str());
 }
 
-TEST_CASE("temp: rounding carries into the whole part", "[temp_format]") {
+TEST_CASE("temp: rounding carries into the whole part", "[temp_format]")
+{
     // 9.95 -> 10.0, not "9.10"
     TEST_ASSERT_EQUAL_STRING("10.0", fmt(995).c_str());
     // 99.99 -> 100.0
@@ -66,7 +70,8 @@ TEST_CASE("temp: rounding carries into the whole part", "[temp_format]") {
 
 // --- Boundary values --------------------------------------------------------
 
-TEST_CASE("temp: handles extreme int16 values", "[temp_format]") {
+TEST_CASE("temp: handles extreme int16 values", "[temp_format]")
+{
     // INT16_MAX = 32767 -> 327.67 -> 327.7
     TEST_ASSERT_EQUAL_STRING("327.7", fmt(32767).c_str());
     // INT16_MIN = -32768 -> -327.68 -> -327.7 (negation must not overflow)
@@ -74,7 +79,8 @@ TEST_CASE("temp: handles extreme int16 values", "[temp_format]") {
                              fmt(static_cast<std::int16_t>(-32768)).c_str());
 }
 
-TEST_CASE("temp: negative sub-tenth values keep their sign", "[temp_format]") {
+TEST_CASE("temp: negative sub-tenth values keep their sign", "[temp_format]")
+{
     // -9 hundredths = -0.09 -> rounds away from zero to -0.1 (not "0.1",
     // which was the sign-dropping bug this case guards against).
     TEST_ASSERT_EQUAL_STRING("-0.1", fmt(-9).c_str());
@@ -86,7 +92,8 @@ TEST_CASE("temp: negative sub-tenth values keep their sign", "[temp_format]") {
 
 // --- Realistic DS18B20 values ----------------------------------------------
 
-TEST_CASE("temp: typical sensor readings", "[temp_format]") {
+TEST_CASE("temp: typical sensor readings", "[temp_format]")
+{
     // DS18B20 default resolution is 0.0625 C; a few real-looking samples.
     TEST_ASSERT_EQUAL_STRING("23.1", fmt(2312).c_str());  // 23.12 -> 23.1
     TEST_ASSERT_EQUAL_STRING("23.2", fmt(2315).c_str());  // 23.15 -> 23.2
@@ -96,7 +103,8 @@ TEST_CASE("temp: typical sensor readings", "[temp_format]") {
 
 // --- The null sentinel (§4.1) ----------------------------------------------
 
-TEST_CASE("temp: null sentinel constant is 0x8000", "[temp_format]") {
+TEST_CASE("temp: null sentinel constant is 0x8000", "[temp_format]")
+{
     // kTempNull intentionally equals INT16_MIN and must not be treated as a
     // real temperature by callers; assert the agreed value here so a change
     // breaks the build loudly.

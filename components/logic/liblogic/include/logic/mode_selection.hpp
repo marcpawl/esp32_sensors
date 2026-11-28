@@ -36,7 +36,8 @@ namespace thermo::logic {
 // parameters are the two poles in the switch's own order (§3.1-§3.3):
 // Configure pole, then Run pole.
 [[nodiscard]] constexpr Mode mode_from_switches(
-    espidf_cpp::SwitchState config, espidf_cpp::SwitchState run) noexcept {
+    espidf_cpp::SwitchState config, espidf_cpp::SwitchState run) noexcept
+{
     const bool config_on = config == espidf_cpp::SwitchState::kOn;
     const bool run_on = run == espidf_cpp::SwitchState::kOn;
     if (config_on && !run_on) {

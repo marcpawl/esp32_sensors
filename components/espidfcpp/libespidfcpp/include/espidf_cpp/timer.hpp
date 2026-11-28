@@ -46,7 +46,8 @@ class Timer {
           bool skip_unhandled_events = false)
         : callback_(
               std::make_unique<std::function<void()>>(std::move(callback))),
-          name_(name != nullptr ? name : "timer") {
+          name_(name != nullptr ? name : "timer")
+    {
         if (!*callback_) {
             assert(false && "timer callback must not be empty");
             std::abort();
@@ -74,9 +75,12 @@ class Timer {
         : handle_(std::exchange(other.handle_, nullptr)),
           callback_(std::move(other.callback_)),
           name_(other.name_),
-          periodic_(other.periodic_) {}
+          periodic_(other.periodic_)
+    {
+    }
 
-    Timer& operator=(Timer&& other) noexcept {
+    Timer& operator=(Timer&& other) noexcept
+    {
         if (this != &other) {
             destroy();
             handle_ = std::exchange(other.handle_, nullptr);
@@ -89,7 +93,8 @@ class Timer {
 
     // Starts a one-shot timer. The timer must not already be running. Remembers
     // the timer's kind so `restart()` can start it again if it was stopped.
-    esp_err_t start_once(std::chrono::microseconds delay) {
+    esp_err_t start_once(std::chrono::microseconds delay)
+    {
         const esp_err_t result =
             esp_timer_start_once(handle_, to_microseconds(delay));
         if (result == ESP_OK) {
@@ -101,7 +106,8 @@ class Timer {
     // Starts a periodic timer. The timer must not already be running.
     // Remembers the timer's kind so `restart()` can start it again if it was
     // stopped.
-    esp_err_t start_periodic(std::chrono::microseconds period) {
+    esp_err_t start_periodic(std::chrono::microseconds period)
+    {
         const esp_err_t result =
             esp_timer_start_periodic(handle_, to_microseconds(period));
         if (result == ESP_OK) {
@@ -119,7 +125,8 @@ class Timer {
     // that is not running, the `esp_timer_start_*()` entry points. It does not
     // query the timer or allocate. (`is_active()` and `period()` are for task
     // context; they are not used here.)
-    [[thermo::isr_safe]] esp_err_t restart(std::chrono::microseconds delay) {
+    [[thermo::isr_safe]] esp_err_t restart(std::chrono::microseconds delay)
+    {
         // `esp_timer_restart()` reports ESP_ERR_INVALID_STATE when the timer is
         // not running. That is the only case that falls back to a start; any
         // other result is the caller's to see.
@@ -136,7 +143,8 @@ class Timer {
 
     // Disarms the timer and waits up to `timeout_ticks` for an in-flight
     // callback to finish.
-    esp_err_t stop_blocking(std::uint32_t timeout_ticks) {
+    esp_err_t stop_blocking(std::uint32_t timeout_ticks)
+    {
         return esp_timer_stop_blocking(handle_, timeout_ticks);
     }
 
@@ -144,12 +152,14 @@ class Timer {
     // to disarm it and do not care whether it was running.
     void cancel() noexcept { (void)esp_timer_stop(handle_); }
 
-    [[nodiscard]] bool is_active() const {
+    [[nodiscard]] bool is_active() const
+    {
         return handle_ != nullptr && esp_timer_is_active(handle_);
     }
 
     // The timer's period: 0 for a one-shot timer.
-    [[nodiscard]] std::chrono::microseconds period() const {
+    [[nodiscard]] std::chrono::microseconds period() const
+    {
         std::uint64_t period_us = 0;
         const esp_err_t result = esp_timer_get_period(handle_, &period_us);
         assert(result == ESP_OK && "esp_timer_get_period failed");
@@ -160,7 +170,8 @@ class Timer {
     // The next expiry time of a one-shot timer. A periodic timer has no
     // meaningful expiry here, so this asserts instead of returning a misleading
     // value.
-    [[nodiscard]] std::chrono::microseconds expiry() const {
+    [[nodiscard]] std::chrono::microseconds expiry() const
+    {
         std::uint64_t expiry_us = 0;
         const esp_err_t result = esp_timer_get_expiry_time(handle_, &expiry_us);
         assert(result == ESP_OK && "esp_timer_get_expiry_time failed");
@@ -172,11 +183,13 @@ class Timer {
 
   private:
     // The `esp_timer` C callback, bridging back to the stored std::function.
-    static void invoke(void* arg) {
+    static void invoke(void* arg)
+    {
         (*static_cast<std::function<void()>*>(arg))();
     }
 
-    static std::uint64_t to_microseconds(std::chrono::microseconds value) {
+    static std::uint64_t to_microseconds(std::chrono::microseconds value)
+    {
         if (value < std::chrono::microseconds::zero()) {
             assert(false && "timer duration must not be negative");
             std::abort();
@@ -184,7 +197,8 @@ class Timer {
         return static_cast<std::uint64_t>(value.count());
     }
 
-    void destroy() noexcept {
+    void destroy() noexcept
+    {
         if (handle_ == nullptr) {
             return;
         }

@@ -59,7 +59,8 @@ esp_err_t init_nvs() {
 #endif
 }  // namespace
 
-extern "C" void app_main(void) {
+extern "C" void app_main(void)
+{
     // The board is created first because both the boot policy and the
     // mode-sense switch poles go through it: `rtc_state_init()` asks it why the
     // last wake happened (§3.8) and `read_mode()` reads the switch poles. It is

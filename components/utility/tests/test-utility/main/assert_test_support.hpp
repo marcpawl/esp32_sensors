@@ -39,7 +39,8 @@ struct Case {
 // Otherwise runs the matching trigger, which must abort; it only returns 0 if
 // the trigger failed to abort (reported on stderr).
 inline int run_assert_program(int argc, char** argv,
-                              std::span<const Case> cases) {
+                              std::span<const Case> cases)
+{
     if (argc < 2) {
         // No case requested: success, nothing to do.
         return 0;

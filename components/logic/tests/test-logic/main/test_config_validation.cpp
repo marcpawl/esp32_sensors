@@ -35,7 +35,8 @@ namespace {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wanalyzer-use-of-uninitialized-value"
 
-Config valid_config() {
+Config valid_config()
+{
     Config cfg;
     cfg.ap_ssid = "ThermoSetup";
     cfg.ap_pass = "setup1234";
@@ -63,7 +64,8 @@ Config valid_config() {
 
 // --- Baseline ---------------------------------------------------------------
 
-TEST_CASE("validate: a well-formed config passes", "[validation]") {
+TEST_CASE("validate: a well-formed config passes", "[validation]")
+{
     const auto result = validate(valid_config());
     TEST_ASSERT_TRUE(result.ok);
     TEST_ASSERT_EQUAL_INT(0, static_cast<int>(result.errors.size()));
@@ -71,7 +73,8 @@ TEST_CASE("validate: a well-formed config passes", "[validation]") {
 
 // --- SSID -------------------------------------------------------------------
 
-TEST_CASE("validate_ssid: length bounds", "[validation]") {
+TEST_CASE("validate_ssid: length bounds", "[validation]")
+{
     TEST_ASSERT_TRUE(validate_ssid("").has_value());    // too short
     TEST_ASSERT_FALSE(validate_ssid("A").has_value());  // 1 char ok
     TEST_ASSERT_FALSE(validate_ssid(std::string(32, 'a')).has_value());
@@ -79,22 +82,24 @@ TEST_CASE("validate_ssid: length bounds", "[validation]") {
         validate_ssid(std::string(33, 'a')).has_value());  // too long
 }
 
-TEST_CASE("validate_ssid: rejects control characters", "[validation]") {
+TEST_CASE("validate_ssid: rejects control characters", "[validation]")
+{
     std::string with_tab = "bad\tssid";
     TEST_ASSERT_TRUE(validate_ssid(with_tab).has_value());
 }
 
 // --- Passwords --------------------------------------------------------------
 
-TEST_CASE("validate_ap_password: 8-63 characters", "[validation]") {
+TEST_CASE("validate_ap_password: 8-63 characters", "[validation]")
+{
     TEST_ASSERT_TRUE(validate_ap_password("short").has_value());  // 5 chars
     TEST_ASSERT_FALSE(validate_ap_password("12345678").has_value());
     TEST_ASSERT_FALSE(validate_ap_password(std::string(63, 'x')).has_value());
     TEST_ASSERT_TRUE(validate_ap_password(std::string(64, 'x')).has_value());
 }
 
-TEST_CASE("validate_sta_password: empty allowed (open network)",
-          "[validation]") {
+TEST_CASE("validate_sta_password: empty allowed (open network)", "[validation]")
+{
     TEST_ASSERT_FALSE(validate_sta_password("").has_value());
     // Non-empty must still obey the WPA2 bounds.
     TEST_ASSERT_TRUE(validate_sta_password("abc").has_value());
@@ -103,8 +108,8 @@ TEST_CASE("validate_sta_password: empty allowed (open network)",
 
 // --- URL --------------------------------------------------------------------
 
-TEST_CASE("validate_url: requires an http(s) scheme and a host",
-          "[validation]") {
+TEST_CASE("validate_url: requires an http(s) scheme and a host", "[validation]")
+{
     TEST_ASSERT_FALSE(validate_url("https://example.com/x").has_value());
     TEST_ASSERT_FALSE(validate_url("http://h/x").has_value());
 
@@ -117,7 +122,8 @@ TEST_CASE("validate_url: requires an http(s) scheme and a host",
 
 // --- Interval ---------------------------------------------------------------
 
-TEST_CASE("validate_interval: positive integers only", "[validation]") {
+TEST_CASE("validate_interval: positive integers only", "[validation]")
+{
     TEST_ASSERT_FALSE(validate_interval("1").has_value());
     TEST_ASSERT_FALSE(validate_interval("3600").has_value());
 
@@ -130,14 +136,16 @@ TEST_CASE("validate_interval: positive integers only", "[validation]") {
 
 // --- Device name and NTP server --------------------------------------------
 
-TEST_CASE("validate_device_name: 1-32 characters", "[validation]") {
+TEST_CASE("validate_device_name: 1-32 characters", "[validation]")
+{
     TEST_ASSERT_FALSE(validate_device_name("shed").has_value());
     TEST_ASSERT_TRUE(validate_device_name("").has_value());
     TEST_ASSERT_TRUE(validate_device_name(std::string(33, 'd')).has_value());
 }
 
 TEST_CASE("validate: a sensor name over the payload capacity is rejected",
-          "[validation]") {
+          "[validation]")
+{
     Config cfg = valid_config();
     cfg.mappings.push_back(
         {"28FF64A1B21603C4", std::string(kMaxSensorNameLength, 'a')});
@@ -149,7 +157,8 @@ TEST_CASE("validate: a sensor name over the payload capacity is rejected",
     TEST_ASSERT_EQUAL_STRING("mappings", result.errors[0].field.c_str());
 }
 
-TEST_CASE("validate_ntp_server: hostname, no scheme", "[validation]") {
+TEST_CASE("validate_ntp_server: hostname, no scheme", "[validation]")
+{
     TEST_ASSERT_FALSE(validate_ntp_server("pool.ntp.org").has_value());
     TEST_ASSERT_FALSE(validate_ntp_server("time-a.nist.gov").has_value());
 
@@ -160,7 +169,8 @@ TEST_CASE("validate_ntp_server: hostname, no scheme", "[validation]") {
 
 // --- Cross-field rules ------------------------------------------------------
 
-TEST_CASE("validate: high-water must exceed low-water", "[validation]") {
+TEST_CASE("validate: high-water must exceed low-water", "[validation]")
+{
     Config cfg = valid_config();
     cfg.batt_high_mv = cfg.batt_low_mv;  // not strictly greater
     const auto result = validate(cfg);
@@ -168,7 +178,8 @@ TEST_CASE("validate: high-water must exceed low-water", "[validation]") {
     TEST_ASSERT_EQUAL_STRING("batt_high_mv", result.errors[0].field.c_str());
 }
 
-TEST_CASE("validate: retry_max must be >= retry_base", "[validation]") {
+TEST_CASE("validate: retry_max must be >= retry_base", "[validation]")
+{
     Config cfg = valid_config();
     cfg.retry_base_s = 600;
     cfg.retry_max_s = 300;
@@ -184,14 +195,16 @@ TEST_CASE("validate: retry_max must be >= retry_base", "[validation]") {
     TEST_ASSERT_TRUE(found);
 }
 
-TEST_CASE("validate: batch_size must be at least 1", "[validation]") {
+TEST_CASE("validate: batch_size must be at least 1", "[validation]")
+{
     Config cfg = valid_config();
     cfg.batch_size = 0;
     TEST_ASSERT_FALSE(validate(cfg).ok);
 }
 
 TEST_CASE("validate: battery thresholds and resistors must be positive",
-          "[validation]") {
+          "[validation]")
+{
     Config cfg = valid_config();
     cfg.batt_low_mv = 0;
     TEST_ASSERT_FALSE(validate(cfg).ok);
@@ -209,14 +222,16 @@ TEST_CASE("validate: battery thresholds and resistors must be positive",
     TEST_ASSERT_FALSE(validate(cfg).ok);
 }
 
-TEST_CASE("validate: retry_base of zero is rejected", "[validation]") {
+TEST_CASE("validate: retry_base of zero is rejected", "[validation]")
+{
     Config cfg = valid_config();
     cfg.retry_base_s = 0;
     cfg.retry_max_s = 3600;  // keep max >= base so only the base rule fires
     TEST_ASSERT_FALSE(validate(cfg).ok);
 }
 
-TEST_CASE("validate: accumulates multiple errors", "[validation]") {
+TEST_CASE("validate: accumulates multiple errors", "[validation]")
+{
     Config cfg = valid_config();
     cfg.ap_ssid = "";
     cfg.dest_url = "ftp://nope";

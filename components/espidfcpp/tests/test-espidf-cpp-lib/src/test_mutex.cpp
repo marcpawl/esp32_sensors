@@ -35,7 +35,8 @@ using thermo::espidf_cpp::Mutex;
 
 // --- Creation ---------------------------------------------------------------
 
-TEST_CASE("mutex: a normal mutex can be acquired and released", "[mutex]") {
+TEST_CASE("mutex: a normal mutex can be acquired and released", "[mutex]")
+{
     Mutex mutex;
     TEST_ASSERT_FALSE(mutex.is_recursive());
     {
@@ -44,7 +45,8 @@ TEST_CASE("mutex: a normal mutex can be acquired and released", "[mutex]") {
     }
 }
 
-TEST_CASE("mutex: a recursive mutex can be acquired recursively", "[mutex]") {
+TEST_CASE("mutex: a recursive mutex can be acquired recursively", "[mutex]")
+{
     Mutex mutex{Mutex::Kind::recursive};
     TEST_ASSERT_TRUE(mutex.is_recursive());
     {
@@ -56,7 +58,8 @@ TEST_CASE("mutex: a recursive mutex can be acquired recursively", "[mutex]") {
 
 // --- Blocking and non-blocking acquisition ---------------------------------
 
-TEST_CASE("lock: the constructor acquires an uncontended mutex", "[mutex]") {
+TEST_CASE("lock: the constructor acquires an uncontended mutex", "[mutex]")
+{
     Mutex mutex;
     {
         const Lock lock{mutex};
@@ -69,7 +72,8 @@ TEST_CASE("lock: the constructor acquires an uncontended mutex", "[mutex]") {
 }
 
 TEST_CASE("lock: try_lock acquires a free mutex and returns nullopt when held",
-          "[mutex]") {
+          "[mutex]")
+{
     Mutex mutex;
 
     {
@@ -84,7 +88,8 @@ TEST_CASE("lock: try_lock acquires a free mutex and returns nullopt when held",
     TEST_ASSERT_TRUE(second->owns_lock());
 }
 
-TEST_CASE("lock: try_lock_for times out while the mutex is held", "[mutex]") {
+TEST_CASE("lock: try_lock_for times out while the mutex is held", "[mutex]")
+{
     Mutex mutex;
     const Lock held{mutex};
 
@@ -93,7 +98,8 @@ TEST_CASE("lock: try_lock_for times out while the mutex is held", "[mutex]") {
         Lock::try_lock_for(mutex, std::chrono::milliseconds{20}).has_value());
 }
 
-TEST_CASE("lock: try_lock_for acquires a free mutex", "[mutex]") {
+TEST_CASE("lock: try_lock_for acquires a free mutex", "[mutex]")
+{
     Mutex mutex;
 
     const std::optional<Lock> lock =
@@ -102,7 +108,8 @@ TEST_CASE("lock: try_lock_for acquires a free mutex", "[mutex]") {
     TEST_ASSERT_TRUE(lock->owns_lock());
 }
 
-TEST_CASE("lock: a recursive mutex permits nested Locks", "[mutex]") {
+TEST_CASE("lock: a recursive mutex permits nested Locks", "[mutex]")
+{
     Mutex mutex{Mutex::Kind::recursive};
 
     {
@@ -124,7 +131,8 @@ TEST_CASE("lock: a recursive mutex permits nested Locks", "[mutex]") {
 
 // --- Move semantics ---------------------------------------------------------
 
-TEST_CASE("lock: move construction transfers ownership", "[mutex]") {
+TEST_CASE("lock: move construction transfers ownership", "[mutex]")
+{
     Mutex mutex;
     {
         Lock source{mutex};
@@ -142,7 +150,8 @@ TEST_CASE("lock: move construction transfers ownership", "[mutex]") {
     TEST_ASSERT_TRUE(Lock::try_lock(mutex).has_value());
 }
 
-TEST_CASE("lock: move assignment releases the previous lock", "[mutex]") {
+TEST_CASE("lock: move assignment releases the previous lock", "[mutex]")
+{
     Mutex first;
     Mutex second;
     Lock target{first};
@@ -158,7 +167,8 @@ TEST_CASE("lock: move assignment releases the previous lock", "[mutex]") {
 
 // --- Compile-time contract --------------------------------------------------
 
-TEST_CASE("mutex: the wrapper is neither copyable nor movable", "[mutex]") {
+TEST_CASE("mutex: the wrapper is neither copyable nor movable", "[mutex]")
+{
     static_assert(!std::is_copy_constructible_v<Mutex>);
     static_assert(!std::is_copy_assignable_v<Mutex>);
     static_assert(!std::is_move_constructible_v<Mutex>);
@@ -166,7 +176,8 @@ TEST_CASE("mutex: the wrapper is neither copyable nor movable", "[mutex]") {
     TEST_PASS();
 }
 
-TEST_CASE("lock: the wrapper is move-only", "[mutex]") {
+TEST_CASE("lock: the wrapper is move-only", "[mutex]")
+{
     static_assert(!std::is_copy_constructible_v<Lock>);
     static_assert(!std::is_copy_assignable_v<Lock>);
     static_assert(std::is_nothrow_move_constructible_v<Lock>);

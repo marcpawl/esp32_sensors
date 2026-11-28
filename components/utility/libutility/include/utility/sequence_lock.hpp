@@ -72,7 +72,8 @@ class SequenceLock {
     explicit SequenceLock(Model const& initial = Model{}) : cell_{0, initial} {}
 
     // Return a consistent snapshot, retrying while a writer is active.
-    [[nodiscard]] VersionedModel read() const noexcept {
+    [[nodiscard]] VersionedModel read() const noexcept
+    {
         for (;;) {
             const std::uint32_t before =
                 cell_.version.load(std::memory_order_acquire);
@@ -123,7 +124,8 @@ class SequenceLock {
     // The intended usage is to overwrite part of the model, even if other
     // writers have modified the model.
     void overwrite(
-        std::function<void(VersionedModel& model)> const& writer) noexcept {
+        std::function<void(VersionedModel& model)> const& writer) noexcept
+    {
         WriteResult result;
         do {
             VersionedModel model = read();
@@ -136,7 +138,8 @@ class SequenceLock {
     // Store `versioned_model.model` if `versioned_model.version` is still
     // current. A failed exchange means another writer moved the version first.
     [[nodiscard]] WriteResult do_write(
-        VersionedModel const& versioned_model) noexcept {
+        VersionedModel const& versioned_model) noexcept
+    {
         // Take the cell from even to odd in one atomic step. Only the winner
         // copies the model, so no two writers overlap; the loser's version is
         // stale and the write is rejected.
@@ -161,7 +164,8 @@ class SequenceLock {
         Model model{};
     };
 
-    static constexpr bool is_writing(std::uint32_t version) noexcept {
+    static constexpr bool is_writing(std::uint32_t version) noexcept
+    {
         return (version & 1U) != 0U;
     }
 

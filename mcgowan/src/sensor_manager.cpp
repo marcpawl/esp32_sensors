@@ -21,12 +21,13 @@ constexpr int kConversionWaitMs = 800;
 
 SensorManager::SensorManager(int gpio) : bus_(gpio), device_(bus_) {}
 
-esp_err_t SensorManager::init() {
+esp_err_t SensorManager::init()
+{
     return bus_.init();
 }
 
-ReadingList SensorManager::read_all(const RomIdList& roms,
-                                    RomIdList* out_roms) {
+ReadingList SensorManager::read_all(const RomIdList& roms, RomIdList* out_roms)
+{
     RomIdList active = roms;
 
     if (active.empty()) {

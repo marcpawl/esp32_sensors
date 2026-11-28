@@ -49,7 +49,8 @@ struct Reading {
 };
 
 // Receives with no wait: an item, or `std::nullopt` if the buffer is empty.
-std::optional<Reading> receive_now(RingBuffer<Reading>& buffer) {
+std::optional<Reading> receive_now(RingBuffer<Reading>& buffer)
+{
     return buffer.receive(static_cast<TickType_t>(0));
 }
 
@@ -57,19 +58,22 @@ std::optional<Reading> receive_now(RingBuffer<Reading>& buffer) {
 
 // --- Creation / destruction -------------------------------------------------
 
-TEST_CASE("ring_buffer: creation yields a valid handle", "[ring_buffer]") {
+TEST_CASE("ring_buffer: creation yields a valid handle", "[ring_buffer]")
+{
     const RingBuffer<Reading> buffer{4};
     TEST_ASSERT_NOT_NULL(buffer.handle());
 }
 
-TEST_CASE("ring_buffer: a new buffer is empty", "[ring_buffer]") {
+TEST_CASE("ring_buffer: a new buffer is empty", "[ring_buffer]")
+{
     RingBuffer<Reading> buffer{4};
     TEST_ASSERT_FALSE(receive_now(buffer).has_value());
 }
 
 // --- Send / receive round-trips --------------------------------------------
 
-TEST_CASE("ring_buffer: a sent item is received unchanged", "[ring_buffer]") {
+TEST_CASE("ring_buffer: a sent item is received unchanged", "[ring_buffer]")
+{
     RingBuffer<Reading> buffer{2};
     const Reading sent{2350, 2};
 
@@ -81,7 +85,8 @@ TEST_CASE("ring_buffer: a sent item is received unchanged", "[ring_buffer]") {
 }
 
 TEST_CASE("ring_buffer: items are received in the order they were sent",
-          "[ring_buffer]") {
+          "[ring_buffer]")
+{
     RingBuffer<Reading> buffer{3};
 
     TEST_ASSERT_TRUE(buffer.send(Reading{10, 0}, static_cast<TickType_t>(0)));
@@ -98,7 +103,8 @@ TEST_CASE("ring_buffer: items are received in the order they were sent",
 }
 
 TEST_CASE("ring_buffer: a receive frees a slot for the next send",
-          "[ring_buffer]") {
+          "[ring_buffer]")
+{
     RingBuffer<Reading> buffer{2};
 
     TEST_ASSERT_TRUE(buffer.send(Reading{1, 0}, static_cast<TickType_t>(0)));
@@ -113,7 +119,8 @@ TEST_CASE("ring_buffer: a receive frees a slot for the next send",
 // --- Fullness ---------------------------------------------------------------
 
 TEST_CASE("ring_buffer: send fails when every configured slot is taken",
-          "[ring_buffer]") {
+          "[ring_buffer]")
+{
     RingBuffer<Reading> buffer{2};
 
     TEST_ASSERT_TRUE(buffer.send(Reading{1, 0}, static_cast<TickType_t>(0)));
@@ -132,7 +139,8 @@ TEST_CASE("ring_buffer: send fails when every configured slot is taken",
 }
 
 TEST_CASE("ring_buffer: the chrono-send overload reports a full buffer",
-          "[ring_buffer]") {
+          "[ring_buffer]")
+{
     RingBuffer<Reading> buffer{2};
 
     TEST_ASSERT_TRUE(buffer.send(Reading{1, 0}, std::chrono::milliseconds{0}));
@@ -143,7 +151,8 @@ TEST_CASE("ring_buffer: the chrono-send overload reports a full buffer",
 // --- Timeouts ---------------------------------------------------------------
 
 TEST_CASE("ring_buffer: a long receive times out on an empty buffer",
-          "[ring_buffer]") {
+          "[ring_buffer]")
+{
     RingBuffer<Reading> buffer{2};
 
     // A short, real wait (20 ms) with nothing to receive. This also checks
@@ -153,7 +162,8 @@ TEST_CASE("ring_buffer: a long receive times out on an empty buffer",
     TEST_ASSERT_FALSE(buffer.receive(pdMS_TO_TICKS(20)).has_value());
 }
 
-TEST_CASE("ring_buffer: the chrono-receive overload works", "[ring_buffer]") {
+TEST_CASE("ring_buffer: the chrono-receive overload works", "[ring_buffer]")
+{
     RingBuffer<Reading> buffer{2};
     TEST_ASSERT_TRUE(buffer.send(Reading{42, 3}, std::chrono::milliseconds{0}));
 
@@ -166,7 +176,8 @@ TEST_CASE("ring_buffer: the chrono-receive overload works", "[ring_buffer]") {
 
 // --- ISR-safe entry points --------------------------------------------------
 
-TEST_CASE("ring_buffer: sendFromIsr delivers like send", "[ring_buffer]") {
+TEST_CASE("ring_buffer: sendFromIsr delivers like send", "[ring_buffer]")
+{
     RingBuffer<Reading> buffer{2};
 
     TEST_ASSERT_TRUE(buffer.sendFromIsr(Reading{700, 2}));
@@ -176,7 +187,8 @@ TEST_CASE("ring_buffer: sendFromIsr delivers like send", "[ring_buffer]") {
     TEST_ASSERT_TRUE((Reading{700, 2} == *received));
 }
 
-TEST_CASE("ring_buffer: sendFromIsr reports a full buffer", "[ring_buffer]") {
+TEST_CASE("ring_buffer: sendFromIsr reports a full buffer", "[ring_buffer]")
+{
     RingBuffer<Reading> buffer{2};
 
     TEST_ASSERT_TRUE(buffer.sendFromIsr(Reading{1, 0}));
@@ -184,7 +196,8 @@ TEST_CASE("ring_buffer: sendFromIsr reports a full buffer", "[ring_buffer]") {
     TEST_ASSERT_FALSE(buffer.sendFromIsr(Reading{3, 0}));
 }
 
-TEST_CASE("ring_buffer: receiveFromIsr retrieves an item", "[ring_buffer]") {
+TEST_CASE("ring_buffer: receiveFromIsr retrieves an item", "[ring_buffer]")
+{
     RingBuffer<Reading> buffer{2};
     TEST_ASSERT_TRUE(buffer.send(Reading{55, 1}, static_cast<TickType_t>(0)));
 
@@ -197,7 +210,8 @@ TEST_CASE("ring_buffer: receiveFromIsr retrieves an item", "[ring_buffer]") {
 // --- Move semantics ---------------------------------------------------------
 
 TEST_CASE("ring_buffer: move construction transfers the handle",
-          "[ring_buffer]") {
+          "[ring_buffer]")
+{
     RingBuffer<Reading> source{2};
     RingbufHandle_t const original = source.handle();
     TEST_ASSERT_TRUE(source.send(Reading{9, 1}, static_cast<TickType_t>(0)));
@@ -210,8 +224,8 @@ TEST_CASE("ring_buffer: move construction transfers the handle",
     TEST_ASSERT_EQUAL_INT16(9, received->temp_c_x100);
 }
 
-TEST_CASE("ring_buffer: move assignment transfers the handle",
-          "[ring_buffer]") {
+TEST_CASE("ring_buffer: move assignment transfers the handle", "[ring_buffer]")
+{
     RingBuffer<Reading> source{2};
     RingbufHandle_t const original = source.handle();
     TEST_ASSERT_TRUE(source.send(Reading{4, 0}, static_cast<TickType_t>(0)));
@@ -227,7 +241,8 @@ TEST_CASE("ring_buffer: move assignment transfers the handle",
 
 // --- Compile-time contract --------------------------------------------------
 
-TEST_CASE("ring_buffer: copy is disabled, move is enabled", "[ring_buffer]") {
+TEST_CASE("ring_buffer: copy is disabled, move is enabled", "[ring_buffer]")
+{
     static_assert(!std::is_copy_constructible_v<RingBuffer<Reading>>);
     static_assert(!std::is_copy_assignable_v<RingBuffer<Reading>>);
     static_assert(std::is_move_constructible_v<RingBuffer<Reading>>);

@@ -20,7 +20,8 @@ void setUp(void) {}
 
 void tearDown(void) {}
 
-extern "C" void app_main(void) {
+extern "C" void app_main(void)
+{
     // `unity_run_all_tests()` runs every registered case (printing PASS/FAIL)
     // and returns; it does not terminate the process. Exit explicitly with a
     // non-zero status when any case failed so `idf.py`/CI/shell can detect it,

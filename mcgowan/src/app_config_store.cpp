@@ -45,7 +45,8 @@ constexpr const char* kDevName = "dev_name";
 constexpr const char* kNtpServer = "ntp_server";
 constexpr const char* kSavedTime = "saved_time";
 
-std::string read_str(nvs_handle_t h, const char* key, const std::string& def) {
+std::string read_str(nvs_handle_t h, const char* key, const std::string& def)
+{
     std::size_t len = 0;
     if (nvs_get_str(h, key, nullptr, &len) != ESP_OK || len == 0) {
         return def;
@@ -61,19 +62,22 @@ std::string read_str(nvs_handle_t h, const char* key, const std::string& def) {
     return out;
 }
 
-std::uint32_t read_u32(nvs_handle_t h, const char* key, std::uint32_t def) {
+std::uint32_t read_u32(nvs_handle_t h, const char* key, std::uint32_t def)
+{
     std::uint32_t v = def;
     nvs_get_u32(h, key, &v);
     return v;
 }
 
-std::int32_t read_i32(nvs_handle_t h, const char* key, std::int32_t def) {
+std::int32_t read_i32(nvs_handle_t h, const char* key, std::int32_t def)
+{
     std::int32_t v = def;
     nvs_get_i32(h, key, &v);
     return v;
 }
 
-float read_f32(nvs_handle_t h, const char* key, float def) {
+float read_f32(nvs_handle_t h, const char* key, float def)
+{
     // NVS has no float type; store as the raw bit pattern via a blob.
     float v = def;
     std::size_t len = sizeof(v);
@@ -81,14 +85,16 @@ float read_f32(nvs_handle_t h, const char* key, float def) {
     return v;
 }
 
-std::uint8_t read_u8(nvs_handle_t h, const char* key, std::uint8_t def) {
+std::uint8_t read_u8(nvs_handle_t h, const char* key, std::uint8_t def)
+{
     std::uint8_t v = def;
     nvs_get_u8(h, key, &v);
     return v;
 }
 
 // Enumerates `map_<ROMID>` keys and loads them into cfg.mappings.
-void load_mappings(nvs_handle_t h, Config& cfg) {
+void load_mappings(nvs_handle_t h, Config& cfg)
+{
     nvs_iterator_t it = nullptr;
     esp_err_t err =
         nvs_entry_find("nvs", config::kNamespace, NVS_TYPE_STR, &it);
@@ -113,7 +119,8 @@ void load_mappings(nvs_handle_t h, Config& cfg) {
 
 }  // namespace
 
-std::string default_ap_ssid() {
+std::string default_ap_ssid()
+{
     std::uint8_t mac[6] = {};
     esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
     char buf[32];
@@ -121,7 +128,8 @@ std::string default_ap_ssid() {
     return buf;
 }
 
-esp_err_t config_load(Config& out) {
+esp_err_t config_load(Config& out)
+{
     nvs_handle_t h = 0;
     esp_err_t err = nvs_open(config::kNamespace, NVS_READONLY, &h);
     if (err == ESP_ERR_NVS_NOT_FOUND) {
@@ -158,7 +166,8 @@ esp_err_t config_load(Config& out) {
     return ESP_OK;
 }
 
-esp_err_t config_save(const Config& cfg) {
+esp_err_t config_save(const Config& cfg)
+{
     nvs_handle_t h = 0;
     esp_err_t err = nvs_open(config::kNamespace, NVS_READWRITE, &h);
     if (err != ESP_OK) {
@@ -197,7 +206,8 @@ esp_err_t config_save(const Config& cfg) {
     return err;
 }
 
-esp_err_t config_reset() {
+esp_err_t config_reset()
+{
     nvs_handle_t h = 0;
     esp_err_t err = nvs_open(config::kNamespace, NVS_READWRITE, &h);
     if (err != ESP_OK) {

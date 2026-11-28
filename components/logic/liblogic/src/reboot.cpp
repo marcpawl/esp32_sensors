@@ -13,7 +13,8 @@
 namespace thermo::logic {
 
 [[noreturn]]
-void reboot() {
+void reboot()
+{
     // Give logging time to flush out over serial
     //
     vTaskDelay(pdMS_TO_TICKS(2000));

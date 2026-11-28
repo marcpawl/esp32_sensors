@@ -42,7 +42,8 @@ constexpr int kMaxElapsedMs = 5000;
 }  // namespace
 
 TEST_CASE("freertos task: vTaskDelay blocks for the requested time",
-          "[freertos_task]") {
+          "[freertos_task]")
+{
     static_assert(kDelayTicks > 0, "the delay must be at least one tick");
 
     const TickType_t ticks_before = xTaskGetTickCount();

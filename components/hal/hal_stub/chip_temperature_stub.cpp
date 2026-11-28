@@ -14,15 +14,18 @@ namespace thermo::hal::stub {
 
 ChipTemperature::ChipTemperature() noexcept = default;
 
-esp_err_t ChipTemperature::init() noexcept {
+esp_err_t ChipTemperature::init() noexcept
+{
     return ESP_OK;
 }
 
-std::int16_t ChipTemperature::read() const noexcept {
+std::int16_t ChipTemperature::read() const noexcept
+{
     return celsius_x100_;
 }
 
-void ChipTemperature::set_celsius(std::int16_t celsius_x100) noexcept {
+void ChipTemperature::set_celsius(std::int16_t celsius_x100) noexcept
+{
     celsius_x100_ = celsius_x100;
 }
 

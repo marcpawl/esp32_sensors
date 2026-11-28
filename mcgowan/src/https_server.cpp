@@ -40,7 +40,8 @@ struct HandlerContext {
 // Sends `body` with the given status and content type. `content_type` comes
 // first because `status` has a default.
 esp_err_t send_body(httpd_req_t* req, const std::string& body,
-                    const char* content_type, const char* status = "200 OK") {
+                    const char* content_type, const char* status = "200 OK")
+{
     httpd_resp_set_status(req, status);
     httpd_resp_set_type(req, content_type);
     return httpd_resp_send(req, body.c_str(),
@@ -48,7 +49,8 @@ esp_err_t send_body(httpd_req_t* req, const std::string& body,
 }
 
 // Collects the request body (with a sane cap) into a string.
-std::optional<std::string> read_body(httpd_req_t* req) {
+std::optional<std::string> read_body(httpd_req_t* req)
+{
     constexpr std::size_t kMaxBody = 8192;
     if (static_cast<std::size_t>(req->content_len) > kMaxBody) {
         return std::nullopt;
@@ -70,7 +72,8 @@ std::optional<std::string> read_body(httpd_req_t* req) {
 }
 
 // URL-decodes a form component into UTF-8 (byte-for-byte; no re-encoding).
-std::string url_decode(const std::string& in, bool plus_is_space) {
+std::string url_decode(const std::string& in, bool plus_is_space)
+{
     std::string out;
     out.reserve(in.size());
     for (std::size_t i = 0; i < in.size(); ++i) {
@@ -99,7 +102,8 @@ std::string url_decode(const std::string& in, bool plus_is_space) {
 
 // Parses application/x-www-form-urlencoded data into a simple key/value map.
 std::vector<std::pair<std::string, std::string>> parse_form(
-    const std::string& body) {
+    const std::string& body)
+{
     std::vector<std::pair<std::string, std::string>> fields;
     std::size_t pos = 0;
     while (pos < body.size()) {
@@ -121,7 +125,8 @@ std::vector<std::pair<std::string, std::string>> parse_form(
 
 std::optional<std::string> get_field(
     const std::vector<std::pair<std::string, std::string>>& fields,
-    const std::string& key) {
+    const std::string& key)
+{
     for (const auto& [k, v] : fields) {
         if (k == key) {
             return v;
@@ -130,7 +135,8 @@ std::optional<std::string> get_field(
     return std::nullopt;
 }
 
-std::uint32_t to_u32(const std::string& s, std::uint32_t def) {
+std::uint32_t to_u32(const std::string& s, std::uint32_t def)
+{
     std::uint32_t value = 0;
     const auto* first = s.data();
     const auto* last = s.data() + s.size();
@@ -141,7 +147,8 @@ std::uint32_t to_u32(const std::string& s, std::uint32_t def) {
     return value;
 }
 
-std::int32_t to_i32(const std::string& s, std::int32_t def) {
+std::int32_t to_i32(const std::string& s, std::int32_t def)
+{
     std::int32_t value = 0;
     const auto* first = s.data();
     const auto* last = s.data() + s.size();
@@ -152,7 +159,8 @@ std::int32_t to_i32(const std::string& s, std::int32_t def) {
     return value;
 }
 
-float to_f32(const std::string& s, float def) {
+float to_f32(const std::string& s, float def)
+{
     float value = 0.0F;
     const auto* first = s.data();
     const auto* last = s.data() + s.size();
@@ -166,7 +174,8 @@ float to_f32(const std::string& s, float def) {
 // --- URI handlers ----------------------------------------------------------
 
 // GET / — the configuration form (§6).
-esp_err_t handler_root(httpd_req_t* req) {
+esp_err_t handler_root(httpd_req_t* req)
+{
     auto* ctx = static_cast<HandlerContext*>(req->user_ctx);
     const ScanSnapshot scan = (*ctx->scan_provider)();
     const std::string html =
@@ -175,7 +184,8 @@ esp_err_t handler_root(httpd_req_t* req) {
 }
 
 // GET /scan — JSON snapshot (§6.1).
-esp_err_t handler_scan(httpd_req_t* req) {
+esp_err_t handler_scan(httpd_req_t* req)
+{
     auto* ctx = static_cast<HandlerContext*>(req->user_ctx);
     const ScanSnapshot scan = (*ctx->scan_provider)();
     const std::string json = config_page::render_scan_json(*ctx->cfg, scan);
@@ -183,7 +193,8 @@ esp_err_t handler_scan(httpd_req_t* req) {
 }
 
 // POST /save — validate, persist, NTP sync, then redirect (§5.3).
-esp_err_t handler_save(httpd_req_t* req) {
+esp_err_t handler_save(httpd_req_t* req)
+{
     auto* ctx = static_cast<HandlerContext*>(req->user_ctx);
     const auto body = read_body(req);
     if (!body) {
@@ -283,7 +294,8 @@ esp_err_t handler_save(httpd_req_t* req) {
 }
 
 // GET /saved — confirmation page (§6).
-esp_err_t handler_saved(httpd_req_t* req) {
+esp_err_t handler_saved(httpd_req_t* req)
+{
     auto* ctx = static_cast<HandlerContext*>(req->user_ctx);
     const std::string html =
         config_page::render_saved(*ctx->cfg, ctx->last_warning);
@@ -298,9 +310,12 @@ ConfigHttpsServer::ConfigHttpsServer(Config& cfg, ScanProvider scan_provider,
                                      SaveHandler save_handler)
     : cfg_(cfg),
       scan_provider_(std::move(scan_provider)),
-      save_handler_(std::move(save_handler)) {}
+      save_handler_(std::move(save_handler))
+{
+}
 
-esp_err_t ConfigHttpsServer::start() {
+esp_err_t ConfigHttpsServer::start()
+{
     // The static context outlives the server; callbacks only dereference
     // pointers into the member callables below.
     g_ctx.cfg = &cfg_;
@@ -357,7 +372,8 @@ esp_err_t ConfigHttpsServer::start() {
     return ESP_OK;
 }
 
-esp_err_t ConfigHttpsServer::stop() {
+esp_err_t ConfigHttpsServer::stop()
+{
     if (handle_ == nullptr) {
         return ESP_OK;
     }

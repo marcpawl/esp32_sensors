@@ -23,7 +23,8 @@ using thermo::hal::woke_from;
 }  // namespace
 
 TEST_CASE("hal sleep types: the wake-cause vocabulary is a bit per wake source",
-          "[hal_sleep_types]") {
+          "[hal_sleep_types]")
+{
     // One bit per source, in the position named by the enumerator, so the
     // hardware board can pass ESP-IDF's `BIT(ESP_SLEEP_WAKEUP_*)` bitmap
     // through unchanged.
@@ -36,7 +37,8 @@ TEST_CASE("hal sleep types: the wake-cause vocabulary is a bit per wake source",
 }
 
 TEST_CASE("hal sleep types: woke_from() reads one source out of the bitmap",
-          "[hal_sleep_types]") {
+          "[hal_sleep_types]")
+{
     // Wake causes are a bitmap because several sources can fire at once.
     const auto causes = wake_cause_bit(WakeCause::kTimer) |
                         wake_cause_bit(WakeCause::kUndefined);

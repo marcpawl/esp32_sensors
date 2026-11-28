@@ -71,7 +71,8 @@ class BoardStub {
 
     // Builds a board for the given wiring. Same signature for the hardware and
     // stub implementations; call init_all() before using the devices.
-    [[nodiscard]] static BoardStub create(BoardPins pins) noexcept {
+    [[nodiscard]] static BoardStub create(BoardPins pins) noexcept
+    {
         // GCC's analyzer cannot model libstdc++'s std::string/std::vector
         // internals and reports an uninitialised read while returning the
         // board by value. The code is correct; keep the diagnostic fatal
@@ -89,11 +90,13 @@ class BoardStub {
     esp_err_t init_all() noexcept;
 
     // The on-die chip temperature sensor (stub; reading via set_celsius()).
-    [[nodiscard]] ChipTemperature& chip_temperature() noexcept {
+    [[nodiscard]] ChipTemperature& chip_temperature() noexcept
+    {
         return chip_temperature_;
     }
 
-    [[nodiscard]] ChipTemperature const& chip_temperature() const noexcept {
+    [[nodiscard]] ChipTemperature const& chip_temperature() const noexcept
+    {
         return chip_temperature_;
     }
 

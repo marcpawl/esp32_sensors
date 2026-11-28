@@ -81,7 +81,8 @@ enum class HttpMethod : std::uint8_t {
 };
 
 // `"GET"` / `"POST"` — e.g. for logging.
-[[nodiscard]] constexpr const char* to_string(HttpMethod method) noexcept {
+[[nodiscard]] constexpr const char* to_string(HttpMethod method) noexcept
+{
     switch (method) {
         case HttpMethod::kGet:
             return "GET";
@@ -153,7 +154,8 @@ struct HttpRequest {
     // Ambiguous when several fields share the name — check
     // `fields_truncated`, or iterate `fields` to see all of them.
     [[nodiscard]] std::optional<std::string_view> find_field(
-        std::string_view name) const noexcept {
+        std::string_view name) const noexcept
+    {
         for (const HttpField& field : fields) {
             if (std::string_view(field.name.c_str(), field.name.size()) ==
                 name) {
@@ -182,7 +184,8 @@ enum class HttpStatus : std::uint8_t {
 };
 
 // Numeric status code (200, 400, ...).
-[[nodiscard]] constexpr int to_code(HttpStatus status) noexcept {
+[[nodiscard]] constexpr int to_code(HttpStatus status) noexcept
+{
     switch (status) {
         case HttpStatus::kOk:
             return 200;
@@ -207,7 +210,8 @@ enum class HttpStatus : std::uint8_t {
 }
 
 // The status line reason phrase ("OK", "Bad Request", ...).
-[[nodiscard]] constexpr const char* to_reason(HttpStatus status) noexcept {
+[[nodiscard]] constexpr const char* to_reason(HttpStatus status) noexcept
+{
     switch (status) {
         case HttpStatus::kOk:
             return "OK";
@@ -265,7 +269,8 @@ template<typename Int>
     requires(std::is_integral_v<Int> && !std::is_same_v<Int, bool> &&
              !std::is_same_v<Int, char>)
 [[nodiscard]] constexpr std::optional<Int> parse_int(
-    std::string_view text) noexcept {
+    std::string_view text) noexcept
+{
     if (text.empty()) {
         return std::nullopt;
     }
@@ -289,7 +294,8 @@ template<typename Int>
 // "/simulator". The root is the empty string. Returns nullopt when the
 // normalized path does not fit in `out` (the caller answers 414 URI Too Long).
 [[nodiscard]] inline std::optional<std::size_t> normalize_url(
-    std::string_view url, std::span<char> out) noexcept {
+    std::string_view url, std::span<char> out) noexcept
+{
     std::string_view path = url.substr(0, url.find_first_of("?#"));
     while (path.size() > 1 && path.back() == '/') {
         path.remove_suffix(1);

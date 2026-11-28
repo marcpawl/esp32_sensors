@@ -36,7 +36,8 @@ class Gpio {
 
     // The pin number, for the driver boundary and for diagnostics. This is the
     // only way out of the type, so every conversion is greppable.
-    [[nodiscard]] constexpr gpio_num_t as_gpio_num_t() const noexcept {
+    [[nodiscard]] constexpr gpio_num_t as_gpio_num_t() const noexcept
+    {
         return gpio_;
     }
 

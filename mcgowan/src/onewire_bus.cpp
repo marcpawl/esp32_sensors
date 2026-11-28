@@ -21,7 +21,8 @@ namespace thermo {
 namespace {
 
 // Microsecond spin using the ROM delay (accurate enough for 1-Wire slots).
-inline void delay_us(std::uint32_t us) {
+inline void delay_us(std::uint32_t us)
+{
     esp_rom_delay_us(us);
 }
 
@@ -42,16 +43,19 @@ class IrqGuard {
 };
 
 // Drive the line low (output 0).
-inline void drive_low(int gpio) {
+inline void drive_low(int gpio)
+{
     gpio_set_level(static_cast<gpio_num_t>(gpio), 0);
 }
 
 // Release the line and let the pull-up take it high.
-inline void release(int gpio) {
+inline void release(int gpio)
+{
     gpio_set_level(static_cast<gpio_num_t>(gpio), 1);
 }
 
-inline int sample(int gpio) {
+inline int sample(int gpio)
+{
     return gpio_get_level(static_cast<gpio_num_t>(gpio));
 }
 
@@ -59,13 +63,15 @@ inline int sample(int gpio) {
 
 OneWireBus::OneWireBus(int gpio) : gpio_(gpio) {}
 
-OneWireBus::~OneWireBus() {
+OneWireBus::~OneWireBus()
+{
     if (initialized_) {
         gpio_reset_pin(static_cast<gpio_num_t>(gpio_));
     }
 }
 
-esp_err_t OneWireBus::init() {
+esp_err_t OneWireBus::init()
+{
     gpio_config_t cfg = {};
     cfg.pin_bit_mask = 1ULL << gpio_;
     cfg.mode = GPIO_MODE_INPUT_OUTPUT_OD;  // Open-drain.
@@ -81,7 +87,8 @@ esp_err_t OneWireBus::init() {
     return ESP_OK;
 }
 
-bool OneWireBus::reset() {
+bool OneWireBus::reset()
+{
     bool presence = false;
     IrqGuard guard;
     drive_low(gpio_);
@@ -93,7 +100,8 @@ bool OneWireBus::reset() {
     return presence;
 }
 
-void OneWireBus::write_bit(bool bit) {
+void OneWireBus::write_bit(bool bit)
+{
     IrqGuard guard;
     if (bit) {
         drive_low(gpio_);
@@ -108,7 +116,8 @@ void OneWireBus::write_bit(bool bit) {
     }
 }
 
-bool OneWireBus::read_bit() {
+bool OneWireBus::read_bit()
+{
     IrqGuard guard;
     drive_low(gpio_);
     delay_us(6);
@@ -119,13 +128,15 @@ bool OneWireBus::read_bit() {
     return value;
 }
 
-void OneWireBus::write_byte(std::uint8_t value) {
+void OneWireBus::write_byte(std::uint8_t value)
+{
     for (int i = 0; i < 8; ++i) {
         write_bit((value >> i) & 0x01);
     }
 }
 
-std::uint8_t OneWireBus::read_byte() {
+std::uint8_t OneWireBus::read_byte()
+{
     std::uint8_t value = 0;
     for (int i = 0; i < 8; ++i) {
         if (read_bit()) {
@@ -135,7 +146,8 @@ std::uint8_t OneWireBus::read_byte() {
     return value;
 }
 
-std::uint8_t OneWireBus::crc8(const std::uint8_t* data, std::size_t len) {
+std::uint8_t OneWireBus::crc8(const std::uint8_t* data, std::size_t len)
+{
     // Dallas/Maxim CRC8, reflected polynomial 0x8C.
     std::uint8_t crc = 0;
     for (std::size_t i = 0; i < len; ++i) {
@@ -152,7 +164,8 @@ std::uint8_t OneWireBus::crc8(const std::uint8_t* data, std::size_t len) {
     return crc;
 }
 
-bool OneWireBus::crc8_ok(const std::uint8_t* data, std::size_t len) {
+bool OneWireBus::crc8_ok(const std::uint8_t* data, std::size_t len)
+{
     return crc8(data, len) == data[len];
 }
 

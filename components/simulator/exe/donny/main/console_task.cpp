@@ -90,7 +90,8 @@ constexpr char const* const kTag = "console";
 constexpr std::size_t kLineCapacity = 4096;
 
 // Consumes stdin up to and including the next newline (or end of input).
-void discard_through_newline() {
+void discard_through_newline()
+{
     while (true) {
         char discarded = '\0';
         const ssize_t count = ::read(STDIN_FILENO, &discarded, 1);
@@ -121,7 +122,8 @@ void discard_through_newline() {
 // `errno`, so an `EINTR` can simply be resumed — and it is also what clears a
 // spurious `stdin` error flag, since that flag lives on the `FILE` and the
 // handle is read directly here.
-std::optional<std::string> read_line(std::array<char, kLineCapacity>& buffer) {
+std::optional<std::string> read_line(std::array<char, kLineCapacity>& buffer)
+{
     std::size_t length = 0;
     while (true) {
         // One byte at a time, so nothing past the newline is consumed: bytes
@@ -165,17 +167,20 @@ std::optional<std::string> read_line(std::array<char, kLineCapacity>& buffer) {
 
 // --- Small value helpers ---------------------------------------------------
 
-constexpr const char* to_text(espidf_cpp::SwitchState state) noexcept {
+constexpr const char* to_text(espidf_cpp::SwitchState state) noexcept
+{
     return state == espidf_cpp::SwitchState::kOn ? "on" : "off";
 }
 
-constexpr const char* to_text(BoardSimulator::Power state) {
+constexpr const char* to_text(BoardSimulator::Power state)
+{
     return state == BoardSimulator::Power::On ? "on" : "off";
 }
 
 // Parses "on" / "off" (or a JSON boolean). Returns `std::nullopt` for anything
 // else, so a caller can report a bad value instead of guessing.
-std::optional<bool> parse_switch(const json& value) {
+std::optional<bool> parse_switch(const json& value)
+{
     if (value.is_boolean()) {
         return value.get<bool>();
     }
@@ -196,7 +201,8 @@ std::optional<bool> parse_switch(const json& value) {
 // rejected (rather than truncated, which would silently change the credential).
 template<std::size_t Capacity>
 bool assign_text(std::array<char, Capacity>& buffer, const json& value,
-                 std::size_t max_length = Capacity - 1) {
+                 std::size_t max_length = Capacity - 1)
+{
     if (!value.is_string()) {
         return false;
     }
@@ -212,7 +218,8 @@ bool assign_text(std::array<char, Capacity>& buffer, const json& value,
 // --- Snapshot: the board's state as JSON -----------------------------------
 
 // The complete board state. Every field is always present.
-json snapshot(const simulator::BoardSimulator& board) {
+json snapshot(const simulator::BoardSimulator& board)
+{
     return json{
         {"power", to_text(board.power_)},
         {"switch_config", to_text(board.config_switch().read())},
@@ -220,7 +227,8 @@ json snapshot(const simulator::BoardSimulator& board) {
     };
 }
 
-espidf_cpp::SwitchState switch_state_from_bool(bool b) {
+espidf_cpp::SwitchState switch_state_from_bool(bool b)
+{
     if (b) {
         return espidf_cpp::SwitchState::kOn;
     } else {
@@ -235,7 +243,8 @@ espidf_cpp::SwitchState switch_state_from_bool(bool b) {
 // one at a time, so a rejected document takes effect partially; the caller
 // reports the error and still echoes the resulting state, letting the driver
 // see what did take effect.
-std::optional<std::string> apply(const json& doc, BoardSimulator& board) {
+std::optional<std::string> apply(const json& doc, BoardSimulator& board)
+{
     if (!doc.is_object()) {
         return "document must be a JSON object";
     }
@@ -299,7 +308,8 @@ std::optional<std::string> apply(const json& doc, BoardSimulator& board) {
 ConsoleRunner::ConsoleRunner(BoardSimulator& board) noexcept : board_(board) {}
 
 // `[[noreturn]]`, as required by `espidf_cpp::Task<Runner>`.
-[[noreturn]] void ConsoleRunner::run() noexcept {
+[[noreturn]] void ConsoleRunner::run() noexcept
+{
     std::array<char, kLineCapacity> buffer{};
 
     while (true) {
@@ -341,7 +351,9 @@ ConsoleRunner::ConsoleRunner(BoardSimulator& board) noexcept : board_(board) {}
 }
 
 ConsoleTask::ConsoleTask(simulator::BoardSimulator& board)
-    : espidf_cpp::Task<ConsoleRunner>(
-          ConsoleRunner(board), espidf_cpp::TaskParams{.name = "console"}) {}
+    : espidf_cpp::Task<ConsoleRunner>(ConsoleRunner(board),
+                                      espidf_cpp::TaskParams{.name = "console"})
+{
+}
 
 }  // namespace thermo::simulator

@@ -1,10 +1,8 @@
 # clang-format configuration for the ESP32 sensors firmware.
 #
-# Style: Google base, 4-space indent, 80-column limit. This mirrors the way the
-# firmware is already written — reformatting the existing sources with this
-# file should be (near) a no-op. Verify with:
-#
-#   clang-format --dry-run --Werror main/*.cpp main/include/*.hpp test/main/*.cpp
+# Style: Google base, 4-space indent, 80-column limit. Function definitions
+# whose body does not fit on one line put the opening brace on its own line;
+# every other brace stays attached. Verify with `./scripts/dev.py format-check`.
 #
 # See https://clang.llvm.org/docs/ClangFormatStyleOptions.html for the full set
 # of options.
@@ -19,10 +17,12 @@ UseTab: Never
 ColumnLimit: 80
 AccessModifierOffset: -2
 
-# Long function calls/decls, initializer lists and string literals: wrap rather
-# than overflow the column limit. `Always` keeps wrapped continuation lines
-# distinct from the block body.
-BreakBeforeBraces: Attach
+# Function definitions that do not fit on one line wrap the opening brace onto
+# its own line. Short inline functions still fit on one line. All other braces
+# stay attached, as in the Google base style.
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterFunction: true
 AllowShortFunctionsOnASingleLine: Inline
 AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false

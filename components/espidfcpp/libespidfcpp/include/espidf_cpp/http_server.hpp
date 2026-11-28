@@ -128,7 +128,8 @@ class HttpServer {
 
     // Content type sent for responses that do not set one (default
     // "text/plain"). Not copied, so pass a string literal.
-    void set_content_type(std::string_view content_type) noexcept {
+    void set_content_type(std::string_view content_type) noexcept
+    {
         content_type_ = content_type;
     }
 
@@ -176,7 +177,8 @@ class HttpServer {
         static_string<BodyCapacity> response{};
         httpd_req_t* req = nullptr;
 
-        [[nodiscard]] HttpFields& fields() noexcept {
+        [[nodiscard]] HttpFields& fields() noexcept
+        {
             return *std::launder(
                 reinterpret_cast<HttpFields*>(&fields_storage));
         }

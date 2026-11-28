@@ -26,7 +26,8 @@ struct HandleDeleter {
     // Constexpr deleter, constant-evaluable on the null path only (the
     // FreeRTOS `CleanupFn` is not constexpr), which is enough to allow a
     // `unique_ptr` holding a null handle to be destroyed at compile time.
-    constexpr void operator()(Handle_t handle) const noexcept {
+    constexpr void operator()(Handle_t handle) const noexcept
+    {
         if (handle != nullptr) {
             CleanupFn(handle);
         }

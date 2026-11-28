@@ -57,7 +57,8 @@ static_assert(std::atomic<HandlerState>::is_always_lock_free,
 // Registered Interupt Service Routine handlers
 std::array<IsrSlot, static_cast<std::size_t>(GPIO_NUM_MAX)> g_slots{};
 
-gpio_config_t input_config(espidf_cpp::Gpio gpio) {
+gpio_config_t input_config(espidf_cpp::Gpio gpio)
+{
     gpio_config_t cfg = {};
     cfg.pin_bit_mask = 1ULL << gpio.as_gpio_num_t();
     cfg.mode = GPIO_MODE_INPUT;
@@ -70,13 +71,15 @@ gpio_config_t input_config(espidf_cpp::Gpio gpio) {
 }
 
 // Maps a raw pin level to a state (active-low: low == closed).
-IRAM_ATTR SwitchState state_from_level(int level) noexcept {
+IRAM_ATTR SwitchState state_from_level(int level) noexcept
+{
     return level == 0 ? SwitchState::kOn : SwitchState::kOff;
 }
 
 // GPIO ISR: on any edge, sample the pin and, if the state actually changed,
 // invoke the registered callback. The callback reads the new state itself.
-void IRAM_ATTR switch_isr(void* arg) noexcept {
+void IRAM_ATTR switch_isr(void* arg) noexcept
+{
     auto& slot = *static_cast<IsrSlot*>(arg);
     const SwitchState state =
         state_from_level(gpio_get_level(slot.gpio.as_gpio_num_t()));
@@ -98,12 +101,14 @@ void IRAM_ATTR switch_isr(void* arg) noexcept {
 
 }  // namespace
 
-Switch::Switch(Gpio gpio) noexcept : gpio_(gpio) {
+Switch::Switch(Gpio gpio) noexcept : gpio_(gpio)
+{
     auto cfg = input_config(gpio_);
     ESP_ERROR_CHECK(gpio_config(&cfg));
 }
 
-Switch::Switch(Switch&& other) noexcept : gpio_(other.gpio_) {
+Switch::Switch(Switch&& other) noexcept : gpio_(other.gpio_)
+{
     assert(gpio_.as_gpio_num_t() >= 0);
     assert(gpio_.as_gpio_num_t() < GPIO_NUM_MAX);
 
@@ -113,17 +118,20 @@ Switch::Switch(Switch&& other) noexcept : gpio_(other.gpio_) {
     std::swap(interrupt_handle_, other.interrupt_handle_);
 }
 
-Switch::~Switch() noexcept {
+Switch::~Switch() noexcept
+{
     remove_interrupt();
 }
 
-SwitchState Switch::read() const noexcept {
+SwitchState Switch::read() const noexcept
+{
     // Active-low wiring: the pin reads low while the switch is closed, so map
     // that to `kOn` (closed) and the open high to `kOff`.
     return state_from_level(gpio_get_level(gpio_.as_gpio_num_t()));
 }
 
-void Switch::set_interrupt(SwitchCallback handler) noexcept {
+void Switch::set_interrupt(SwitchCallback handler) noexcept
+{
     if (!handler) {
         // An empty callback is the same request as remove_interrupt().
         remove_interrupt();
@@ -149,7 +157,8 @@ void Switch::set_interrupt(SwitchCallback handler) noexcept {
     interrupt_handle_ = InterruptHandle{gpio_};
 }
 
-void Switch::remove_interrupt() noexcept {
+void Switch::remove_interrupt() noexcept
+{
     // A moved-from switch owns no registration and must not touch the slot:
     // that slot now belongs to the moved-to switch.
     if (interrupt_handle_.engaged() == InterruptHandle::Engaged::kIdle) {

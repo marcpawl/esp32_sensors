@@ -23,7 +23,8 @@ void setUp(void) {}
 
 void tearDown(void) {}
 
-extern "C" void app_main(void) {
+extern "C" void app_main(void)
+{
     const esp_err_t early = esp_timer_early_init();
     if (early != ESP_OK) {
         std::printf("esp_timer_early_init failed: %d\n", early);

@@ -53,7 +53,8 @@ constexpr int kMethodPost = static_cast<int>(HTTP_POST);
 
 // Builds an HTTP status line ("404 Not Found") in `out`.
 void make_status_line(static_string<kMaxStatusLine>& out,
-                      HttpStatus status) noexcept {
+                      HttpStatus status) noexcept
+{
     out.clear();
     int code = to_code(status);
     char digits[8];
@@ -74,7 +75,8 @@ void make_status_line(static_string<kMaxStatusLine>& out,
 // "text/plain".
 esp_err_t send_response(httpd_req_t* req, HttpStatus status,
                         std::string_view content_type,
-                        std::string_view body) noexcept {
+                        std::string_view body) noexcept
+{
     static_string<kMaxStatusLine> status_line;
     make_status_line(status_line, status);
     httpd_resp_set_status(req, status_line.c_str());
@@ -98,7 +100,8 @@ esp_err_t send_response(httpd_req_t* req, HttpStatus status,
 // Case-insensitive ASCII compare of the media type in `header` with
 // `kFormContentType`, ignoring parameters ("; charset=UTF-8") and surrounding
 // whitespace.
-bool is_form_content_type(std::string_view header) noexcept {
+bool is_form_content_type(std::string_view header) noexcept
+{
     std::string_view media = header.substr(0, header.find(';'));
     while (!media.empty() && (media.back() == ' ' || media.back() == '\t')) {
         media.remove_suffix(1);
@@ -122,7 +125,8 @@ bool is_form_content_type(std::string_view header) noexcept {
     return true;
 }
 
-constexpr int hex_digit(char h) noexcept {
+constexpr int hex_digit(char h) noexcept
+{
     if (h >= '0' && h <= '9') {
         return h - '0';
     }
@@ -146,7 +150,8 @@ enum class DecodeResult : std::uint8_t {
 // kept literally. Never aborts: failures are reported through the result.
 template<std::size_t FieldCapacity>
 DecodeResult url_decode(std::string_view in, bool plus_as_space,
-                        static_string<FieldCapacity>& out) noexcept {
+                        static_string<FieldCapacity>& out) noexcept
+{
     out.clear();
     // A component can never decode to more characters than it has bytes.
     if (in.size() > FieldCapacity) {
@@ -182,7 +187,8 @@ DecodeResult url_decode(std::string_view in, bool plus_as_space,
 //   fields that did fit.
 // * Any malformed '%' escape makes the whole form invalid (returns false).
 bool parse_form(std::string_view data, bool plus_as_space, HttpFields& fields,
-                bool& truncated) noexcept {
+                bool& truncated) noexcept
+{
     HttpField field{};
     std::size_t pos = 0;
     while (pos < data.size()) {
@@ -230,7 +236,8 @@ bool parse_form(std::string_view data, bool plus_as_space, HttpFields& fields,
 
 template<std::size_t BodyCapacity>
 bool HttpServer<BodyCapacity>::matches(std::string_view prefix,
-                                       std::string_view path) noexcept {
+                                       std::string_view path) noexcept
+{
     if (prefix.empty()) {
         return true;  // The root route covers everything.
     }
@@ -246,12 +253,14 @@ bool HttpServer<BodyCapacity>::matches(std::string_view prefix,
 // --- Construction / destruction ----------------------------------------------
 
 template<std::size_t BodyCapacity>
-HttpServer<BodyCapacity>::~HttpServer() {
+HttpServer<BodyCapacity>::~HttpServer()
+{
     stop();
 }
 
 template<std::size_t BodyCapacity>
-void HttpServer<BodyCapacity>::destroy_context() noexcept {
+void HttpServer<BodyCapacity>::destroy_context() noexcept
+{
     if (context_) {
         context_->fields().~HttpFields();
         context_.reset();
@@ -263,7 +272,8 @@ void HttpServer<BodyCapacity>::destroy_context() noexcept {
 
 template<std::size_t BodyCapacity>
 esp_err_t HttpServer<BodyCapacity>::register_route(
-    std::string_view prefix, HttpHandler<BodyCapacity> handler) noexcept {
+    std::string_view prefix, HttpHandler<BodyCapacity> handler) noexcept
+{
     if (handle_ != nullptr) {
         ESP_LOGW(kTag, "register_route: server is running");
         return ESP_ERR_INVALID_STATE;
@@ -304,7 +314,8 @@ esp_err_t HttpServer<BodyCapacity>::register_route(
 
 template<std::size_t BodyCapacity>
 esp_err_t HttpServer<BodyCapacity>::unregister_route(
-    std::string_view prefix) noexcept {
+    std::string_view prefix) noexcept
+{
     if (handle_ != nullptr) {
         ESP_LOGW(kTag, "unregister_route: server is running");
         return ESP_ERR_INVALID_STATE;
@@ -343,14 +354,16 @@ esp_err_t HttpServer<BodyCapacity>::unregister_route(
 // --- Server lifecycle --------------------------------------------------------
 
 template<std::size_t BodyCapacity>
-HttpServer<BodyCapacity>::RequestContext::RequestContext() {
+HttpServer<BodyCapacity>::RequestContext::RequestContext()
+{
     // The field vector lives in raw storage; construct it once, in place. It
     // is destroyed by destroy_context().
     new (&fields_storage) HttpFields();
 }
 
 template<std::size_t BodyCapacity>
-esp_err_t HttpServer<BodyCapacity>::start() noexcept {
+esp_err_t HttpServer<BodyCapacity>::start() noexcept
+{
     if (handle_ != nullptr) {
         return ESP_OK;
     }
@@ -417,7 +430,8 @@ esp_err_t HttpServer<BodyCapacity>::start() noexcept {
 }
 
 template<std::size_t BodyCapacity>
-esp_err_t HttpServer<BodyCapacity>::stop() noexcept {
+esp_err_t HttpServer<BodyCapacity>::stop() noexcept
+{
     if (handle_ == nullptr) {
         return ESP_OK;
     }
@@ -433,7 +447,8 @@ esp_err_t HttpServer<BodyCapacity>::stop() noexcept {
 
 template<std::size_t BodyCapacity>
 esp_err_t HttpServer<BodyCapacity>::send_error(httpd_req_t* req,
-                                               HttpStatus status) noexcept {
+                                               HttpStatus status) noexcept
+{
     // Generated errors carry the status text as their body, so a client (or
     // `curl`) shows something useful.
     const char* reason = to_reason(status);
@@ -442,7 +457,8 @@ esp_err_t HttpServer<BodyCapacity>::send_error(httpd_req_t* req,
 }
 
 template<std::size_t BodyCapacity>
-esp_err_t HttpServer<BodyCapacity>::handle_request(httpd_req_t* req) noexcept {
+esp_err_t HttpServer<BodyCapacity>::handle_request(httpd_req_t* req) noexcept
+{
     auto* self = static_cast<HttpServer*>(req->user_ctx);
     if (self == nullptr || self->context_ == nullptr) {
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
@@ -452,7 +468,8 @@ esp_err_t HttpServer<BodyCapacity>::handle_request(httpd_req_t* req) noexcept {
 }
 
 template<std::size_t BodyCapacity>
-esp_err_t HttpServer<BodyCapacity>::serve(httpd_req_t* req) noexcept {
+esp_err_t HttpServer<BodyCapacity>::serve(httpd_req_t* req) noexcept
+{
     RequestContext& ctx = *context_;
     ctx.req = req;
 

@@ -10,7 +10,8 @@
 
 namespace thermo {
 
-const char* to_string(PowerSource source) noexcept {
+const char* to_string(PowerSource source) noexcept
+{
     switch (source) {
         case PowerSource::kSolarBattery:
             return "solar battery";

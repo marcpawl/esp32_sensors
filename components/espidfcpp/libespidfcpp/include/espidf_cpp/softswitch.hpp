@@ -22,7 +22,8 @@ class SoftSwitch : public Switch {
     // immediately, and a registered handler sees the edge just as it would
     // from hardware. Re-setting the current state is a no-op; no other setting
     // (pin config, interrupt registration, handler) is touched either way.
-    void set(SwitchState new_state) noexcept {
+    void set(SwitchState new_state) noexcept
+    {
         if (read() == new_state) {
             return;
         }

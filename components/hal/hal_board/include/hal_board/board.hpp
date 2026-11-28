@@ -53,7 +53,8 @@ class Board {
 
     // Builds a board for the given wiring. Same signature for the hardware and
     // stub implementations; call init_all() before using the devices.
-    [[nodiscard]] static Board create(BoardPins pins) noexcept {
+    [[nodiscard]] static Board create(BoardPins pins) noexcept
+    {
         return Board(pins);
     }
 
@@ -62,11 +63,13 @@ class Board {
     esp_err_t init_all() noexcept;
 
     // The on-die chip temperature sensor.
-    [[nodiscard]] ChipTemperature& chip_temperature() noexcept {
+    [[nodiscard]] ChipTemperature& chip_temperature() noexcept
+    {
         return chip_temperature_;
     }
 
-    [[nodiscard]] ChipTemperature const& chip_temperature() const noexcept {
+    [[nodiscard]] ChipTemperature const& chip_temperature() const noexcept
+    {
         return chip_temperature_;
     }
 

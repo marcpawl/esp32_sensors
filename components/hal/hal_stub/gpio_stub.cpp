@@ -29,20 +29,24 @@ struct PinState {
     void* arg = nullptr;
 };
 
-std::array<PinState, GPIO_NUM_MAX>& pin_states() {
+std::array<PinState, GPIO_NUM_MAX>& pin_states()
+{
     static std::array<PinState, GPIO_NUM_MAX> states;
     return states;
 }
 
-bool valid(gpio_num_t pin) {
+bool valid(gpio_num_t pin)
+{
     return pin >= GPIO_NUM_0 && pin < GPIO_NUM_MAX;
 }
 
-PinState& state_for(gpio_num_t pin) {
+PinState& state_for(gpio_num_t pin)
+{
     return pin_states()[static_cast<std::size_t>(pin)];
 }
 
-bool edge_matches(gpio_int_type_t type, int level) {
+bool edge_matches(gpio_int_type_t type, int level)
+{
     if (type == GPIO_INTR_ANYEDGE) {
         return true;
     }
@@ -57,12 +61,14 @@ bool edge_matches(gpio_int_type_t type, int level) {
 
 }  // namespace
 
-extern "C" esp_err_t gpio_install_isr_service(int intr_alloc_flags) {
+extern "C" esp_err_t gpio_install_isr_service(int intr_alloc_flags)
+{
     (void)intr_alloc_flags;
     return ESP_OK;
 }
 
-extern "C" esp_err_t gpio_config(const gpio_config_t* config) {
+extern "C" esp_err_t gpio_config(const gpio_config_t* config)
+{
     if (config == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -77,7 +83,8 @@ extern "C" esp_err_t gpio_config(const gpio_config_t* config) {
     return ESP_OK;
 }
 
-extern "C" esp_err_t gpio_reset_pin(gpio_num_t pin) {
+extern "C" esp_err_t gpio_reset_pin(gpio_num_t pin)
+{
     if (!valid(pin)) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -85,7 +92,8 @@ extern "C" esp_err_t gpio_reset_pin(gpio_num_t pin) {
     return ESP_OK;
 }
 
-extern "C" esp_err_t gpio_set_level(gpio_num_t pin, uint32_t level) {
+extern "C" esp_err_t gpio_set_level(gpio_num_t pin, uint32_t level)
+{
     if (!valid(pin)) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -100,7 +108,8 @@ extern "C" esp_err_t gpio_set_level(gpio_num_t pin, uint32_t level) {
     return ESP_OK;
 }
 
-extern "C" int gpio_get_level(gpio_num_t pin) {
+extern "C" int gpio_get_level(gpio_num_t pin)
+{
     if (!valid(pin)) {
         return 0;
     }
@@ -108,7 +117,8 @@ extern "C" int gpio_get_level(gpio_num_t pin) {
 }
 
 extern "C" esp_err_t gpio_set_intr_type(gpio_num_t pin,
-                                        gpio_int_type_t intr_type) {
+                                        gpio_int_type_t intr_type)
+{
     if (!valid(pin)) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -116,7 +126,8 @@ extern "C" esp_err_t gpio_set_intr_type(gpio_num_t pin,
     return ESP_OK;
 }
 
-extern "C" esp_err_t gpio_intr_enable(gpio_num_t pin) {
+extern "C" esp_err_t gpio_intr_enable(gpio_num_t pin)
+{
     if (!valid(pin)) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -125,7 +136,8 @@ extern "C" esp_err_t gpio_intr_enable(gpio_num_t pin) {
 }
 
 extern "C" esp_err_t gpio_isr_handler_add(gpio_num_t pin, gpio_isr_t handler,
-                                          void* arg) {
+                                          void* arg)
+{
     if (!valid(pin)) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -136,7 +148,8 @@ extern "C" esp_err_t gpio_isr_handler_add(gpio_num_t pin, gpio_isr_t handler,
     return ESP_OK;
 }
 
-extern "C" esp_err_t gpio_isr_handler_remove(gpio_num_t pin) {
+extern "C" esp_err_t gpio_isr_handler_remove(gpio_num_t pin)
+{
     if (!valid(pin)) {
         return ESP_ERR_INVALID_ARG;
     }

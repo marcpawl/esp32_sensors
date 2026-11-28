@@ -13,7 +13,8 @@
 
 namespace thermo::espidf_cpp {
 
-void vTaskDelay(std::chrono::milliseconds delay) {
+void vTaskDelay(std::chrono::milliseconds delay)
+{
     // Add one tick so wall-clock delay is not shorter than requested.
     ::vTaskDelay(pdMS_TO_TICKS(static_cast<std::uint32_t>(delay.count())) + 1U);
 }

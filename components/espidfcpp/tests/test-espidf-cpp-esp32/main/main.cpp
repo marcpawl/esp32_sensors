@@ -14,7 +14,8 @@ void setUp(void) {}
 
 void tearDown(void) {}
 
-extern "C" void app_main(void) {
+extern "C" void app_main(void)
+{
     unity_run_all_tests();
 
     const int failures = static_cast<int>(Unity.TestFailures);

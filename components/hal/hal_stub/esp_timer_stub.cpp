@@ -82,7 +82,8 @@ std::vector<struct esp_timer*> g_timers;
 
 // Monotonic origin for `esp_timer_get_time()`. The first call establishes it,
 // so the returned value is small and relative, like microseconds since boot.
-Microseconds now() {
+Microseconds now()
+{
     static const std::chrono::steady_clock::time_point origin =
         std::chrono::steady_clock::now();
     const auto elapsed = std::chrono::steady_clock::now() - origin;
@@ -97,13 +98,15 @@ constexpr Microseconds kPastTolerance{1000};
 
 // The non-negative delay to arm, clamped when the alarm is within the tolerance
 // above (and therefore marginally in the past).
-Microseconds relative_delay(Microseconds alarm, Microseconds current) {
+Microseconds relative_delay(Microseconds alarm, Microseconds current)
+{
     return alarm > current ? alarm - current : Microseconds{0};
 }
 
 // Rounds a microsecond delay up to whole FreeRTOS ticks, with a minimum of one
 // tick because a zero period is rejected by FreeRTOS.
-TickType_t us_to_ticks(Microseconds delay) {
+TickType_t us_to_ticks(Microseconds delay)
+{
     // Round up: a positive delay shorter than one millisecond must still arm.
     const int64_t delay_ms =
         std::chrono::ceil<std::chrono::milliseconds>(delay).count();
@@ -112,12 +115,14 @@ TickType_t us_to_ticks(Microseconds delay) {
     return ticks == 0 ? 1 : ticks;
 }
 
-bool is_timer_service_task() {
+bool is_timer_service_task()
+{
     return xTaskGetCurrentTaskHandle() == xTimerGetTimerDaemonTaskHandle();
 }
 
 // Whether `handle` is one this library created and has not deleted yet.
-bool is_known(esp_timer_handle_t handle) {
+bool is_known(esp_timer_handle_t handle)
+{
     return std::find(g_timers.begin(), g_timers.end(), handle) !=
            g_timers.end();
 }
@@ -125,7 +130,8 @@ bool is_known(esp_timer_handle_t handle) {
 // Arms already-recorded state on the FreeRTOS timer. Called with the mutex
 // released, because the timer service task may need it while it drains the
 // command queue.
-bool arm_rtos_timer(struct esp_timer* timer, Microseconds delay) {
+bool arm_rtos_timer(struct esp_timer* timer, Microseconds delay)
+{
     return xTimerChangePeriod(timer->rtos_timer, us_to_ticks(delay),
                               kCommandWait) == pdPASS;
 }
@@ -138,14 +144,16 @@ void timer_callback(TimerHandle_t rtos_timer);
 
 // Creates the FreeRTOS timer for a new handle. The timer is created disarmed
 // with a one-tick period; every start changes the period.
-bool create_rtos_timer(struct esp_timer* timer) {
+bool create_rtos_timer(struct esp_timer* timer)
+{
     timer->rtos_timer =
         xTimerCreate("esp_timer", 1, pdFALSE, timer, &timer_callback);
     return timer->rtos_timer != nullptr;
 }
 
 // The callback FreeRTOS runs in the timer service task.
-void timer_callback(TimerHandle_t rtos_timer) {
+void timer_callback(TimerHandle_t rtos_timer)
+{
     auto* const timer =
         static_cast<struct esp_timer*>(pvTimerGetTimerID(rtos_timer));
 
@@ -188,13 +196,15 @@ void timer_callback(TimerHandle_t rtos_timer) {
 
 extern "C" {
 
-esp_err_t esp_timer_early_init(void) {
+esp_err_t esp_timer_early_init(void)
+{
     // Nothing to do on the host: the time origin is established lazily and the
     // FreeRTOS timer service is started by the scheduler.
     return ESP_OK;
 }
 
-esp_err_t esp_timer_init(void) {
+esp_err_t esp_timer_init(void)
+{
     std::lock_guard<std::mutex> const lock(g_mutex);
     if (g_initialized) {
         return ESP_ERR_INVALID_STATE;
@@ -203,7 +213,8 @@ esp_err_t esp_timer_init(void) {
     return ESP_OK;
 }
 
-esp_err_t esp_timer_deinit(void) {
+esp_err_t esp_timer_deinit(void)
+{
     std::lock_guard<std::mutex> const lock(g_mutex);
     if (!g_initialized) {
         return ESP_ERR_INVALID_STATE;
@@ -220,7 +231,8 @@ esp_err_t esp_timer_deinit(void) {
 }
 
 esp_err_t esp_timer_create(const esp_timer_create_args_t* create_args,
-                           esp_timer_handle_t* out_handle) {
+                           esp_timer_handle_t* out_handle)
+{
     if (!g_initialized) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -256,13 +268,15 @@ esp_err_t esp_timer_create(const esp_timer_create_args_t* create_args,
     return ESP_OK;
 }
 
-esp_err_t esp_timer_start_once(esp_timer_handle_t timer, uint64_t timeout_us) {
+esp_err_t esp_timer_start_once(esp_timer_handle_t timer, uint64_t timeout_us)
+{
     const Microseconds timeout{timeout_us};
     return esp_timer_start_once_at(
         timer, static_cast<uint64_t>((now() + timeout).count()));
 }
 
-esp_err_t esp_timer_start_once_at(esp_timer_handle_t timer, uint64_t alarm_us) {
+esp_err_t esp_timer_start_once_at(esp_timer_handle_t timer, uint64_t alarm_us)
+{
     if (timer == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -300,8 +314,8 @@ esp_err_t esp_timer_start_once_at(esp_timer_handle_t timer, uint64_t alarm_us) {
     return ESP_OK;
 }
 
-esp_err_t esp_timer_start_periodic(esp_timer_handle_t timer,
-                                   uint64_t period_us) {
+esp_err_t esp_timer_start_periodic(esp_timer_handle_t timer, uint64_t period_us)
+{
     // Clamp before computing the first alarm: a zero period would otherwise
     // make the alarm fall in the past between the two clock reads.
     const Microseconds period{period_us == 0 ? 1000 : period_us};
@@ -316,7 +330,8 @@ esp_err_t esp_timer_start_periodic(esp_timer_handle_t timer,
 // on-target tests call the same signature.
 esp_err_t esp_timer_start_periodic_at(esp_timer_handle_t timer,
                                       uint64_t period_us,
-                                      uint64_t first_alarm_us) {
+                                      uint64_t first_alarm_us)
+{
     if (timer == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -355,7 +370,8 @@ esp_err_t esp_timer_start_periodic_at(esp_timer_handle_t timer,
     return ESP_OK;
 }
 
-esp_err_t esp_timer_restart(esp_timer_handle_t timer, uint64_t timeout_us) {
+esp_err_t esp_timer_restart(esp_timer_handle_t timer, uint64_t timeout_us)
+{
     const Microseconds timeout{timeout_us};
     return esp_timer_restart_at(
         timer, timeout_us, static_cast<uint64_t>((now() + timeout).count()));
@@ -365,7 +381,8 @@ esp_err_t esp_timer_restart(esp_timer_handle_t timer, uint64_t timeout_us) {
 // reason: the two microsecond arguments, and their order, come from the chip's
 // API rather than from this stub.
 esp_err_t esp_timer_restart_at(esp_timer_handle_t timer, uint64_t period_us,
-                               uint64_t first_alarm_us) {
+                               uint64_t first_alarm_us)
+{
     if (timer == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -403,7 +420,8 @@ esp_err_t esp_timer_restart_at(esp_timer_handle_t timer, uint64_t period_us,
     return ESP_OK;
 }
 
-esp_err_t esp_timer_stop(esp_timer_handle_t timer) {
+esp_err_t esp_timer_stop(esp_timer_handle_t timer)
+{
     if (timer == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -429,7 +447,8 @@ esp_err_t esp_timer_stop(esp_timer_handle_t timer) {
 }
 
 esp_err_t esp_timer_stop_blocking(esp_timer_handle_t timer,
-                                  uint32_t timeout_ticks) {
+                                  uint32_t timeout_ticks)
+{
     if (timer == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -489,7 +508,8 @@ esp_err_t esp_timer_stop_blocking(esp_timer_handle_t timer,
     }
 }
 
-esp_err_t esp_timer_delete(esp_timer_handle_t timer) {
+esp_err_t esp_timer_delete(esp_timer_handle_t timer)
+{
     if (timer == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -532,11 +552,13 @@ esp_err_t esp_timer_delete(esp_timer_handle_t timer) {
     return ESP_OK;
 }
 
-int64_t esp_timer_get_time(void) {
+int64_t esp_timer_get_time(void)
+{
     return static_cast<int64_t>(now().count());
 }
 
-int64_t esp_timer_get_next_alarm(void) {
+int64_t esp_timer_get_next_alarm(void)
+{
     std::lock_guard<std::mutex> const lock(g_mutex);
     Microseconds next = Microseconds::max();
     for (struct esp_timer* const timer : g_timers) {
@@ -548,7 +570,8 @@ int64_t esp_timer_get_next_alarm(void) {
                                        : static_cast<int64_t>(next.count());
 }
 
-int64_t esp_timer_get_next_alarm_for_wake_up(void) {
+int64_t esp_timer_get_next_alarm_for_wake_up(void)
+{
     std::lock_guard<std::mutex> const lock(g_mutex);
     Microseconds next = Microseconds::max();
     for (struct esp_timer* const timer : g_timers) {
@@ -560,7 +583,8 @@ int64_t esp_timer_get_next_alarm_for_wake_up(void) {
                                        : static_cast<int64_t>(next.count());
 }
 
-esp_err_t esp_timer_get_period(esp_timer_handle_t timer, uint64_t* period) {
+esp_err_t esp_timer_get_period(esp_timer_handle_t timer, uint64_t* period)
+{
     if (timer == nullptr || period == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -573,8 +597,8 @@ esp_err_t esp_timer_get_period(esp_timer_handle_t timer, uint64_t* period) {
     return ESP_OK;
 }
 
-esp_err_t esp_timer_get_expiry_time(esp_timer_handle_t timer,
-                                    uint64_t* expiry) {
+esp_err_t esp_timer_get_expiry_time(esp_timer_handle_t timer, uint64_t* expiry)
+{
     if (timer == nullptr || expiry == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -589,7 +613,8 @@ esp_err_t esp_timer_get_expiry_time(esp_timer_handle_t timer,
     return ESP_OK;
 }
 
-esp_err_t esp_timer_dump(FILE* stream) {
+esp_err_t esp_timer_dump(FILE* stream)
+{
     // Match the chip implementation: a null stream is not an error, it only
     // asks for no output. Rejecting it here made the shared dump case pass on
     // the host and fail on the board.
@@ -621,7 +646,8 @@ esp_err_t esp_timer_dump(FILE* stream) {
 // A timer stopped while its callback is still executing stays active until the
 // callback returns, matching the chip implementation. A handle that was created
 // but never started, or one that is not known to this library, is inactive.
-bool esp_timer_is_active(esp_timer_handle_t timer) {
+bool esp_timer_is_active(esp_timer_handle_t timer)
+{
     if (timer == nullptr) {
         return false;
     }
@@ -632,7 +658,8 @@ bool esp_timer_is_active(esp_timer_handle_t timer) {
     return timer->armed || timer->callback_running;
 }
 
-esp_err_t esp_timer_new_etm_alarm_event(esp_etm_event_handle_t* out_event) {
+esp_err_t esp_timer_new_etm_alarm_event(esp_etm_event_handle_t* out_event)
+{
     if (out_event == nullptr) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -641,7 +668,8 @@ esp_err_t esp_timer_new_etm_alarm_event(esp_etm_event_handle_t* out_event) {
 }
 
 #if CONFIG_ESP_TIMER_SUPPORTS_ISR_DISPATCH_METHOD
-void esp_timer_isr_dispatch_need_yield(void) {
+void esp_timer_isr_dispatch_need_yield(void)
+{
     // Callbacks are dispatched from the FreeRTOS timer task on the host, so
     // there is never an ISR context that could request a yield.
 }

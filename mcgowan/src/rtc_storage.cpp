@@ -23,7 +23,8 @@ RTC_DATA_ATTR logic::RtcState g_rtc_state;
 
 }  // namespace
 
-logic::RtcState& rtc_state() {
+logic::RtcState& rtc_state()
+{
     return g_rtc_state;
 }
 

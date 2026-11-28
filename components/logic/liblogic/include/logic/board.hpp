@@ -34,7 +34,8 @@ class Board
     Board()
         // : BoardBase({}),
         : config_switch_(espidf_cpp::Gpio{GPIO_NUM_1}),
-          run_switch_(espidf_cpp::Gpio{GPIO_NUM_2}) {
+          run_switch_(espidf_cpp::Gpio{GPIO_NUM_2})
+    {
         (void)gpio_install_isr_service(0);
     }
 
@@ -49,16 +50,19 @@ class Board
     // The Configure-mode sense switch (one pole of the 3-position switch).
     [[nodiscard]] Switch& config_switch() noexcept { return config_switch_; }
 
-    [[nodiscard]] espidf_cpp::Switch const& config_switch() const noexcept {
+    [[nodiscard]] espidf_cpp::Switch const& config_switch() const noexcept
+    {
         return config_switch_;
     }
 
     // The Run-mode sense switch (one pole of the 3-position switch).
-    [[nodiscard]] espidf_cpp::Switch& run_switch() noexcept {
+    [[nodiscard]] espidf_cpp::Switch& run_switch() noexcept
+    {
         return run_switch_;
     }
 
-    [[nodiscard]] Switch const& run_switch() const noexcept {
+    [[nodiscard]] Switch const& run_switch() const noexcept
+    {
         return run_switch_;
     }
 

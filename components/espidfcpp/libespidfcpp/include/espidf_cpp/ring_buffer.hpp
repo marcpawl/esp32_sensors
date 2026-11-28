@@ -61,7 +61,8 @@ class RingBuffer {
     // Aborts if the capacity is too small or FreeRTOS cannot allocate it:
     // without storage the buffer could never deliver an item, so there is no
     // useful way to continue.
-    explicit RingBuffer(std::size_t capacity) {
+    explicit RingBuffer(std::size_t capacity)
+    {
         if (capacity < kMinimumCapacity) {
             ESP_LOGE(kTag, "ring buffer capacity must be at least %u",
                      static_cast<unsigned>(kMinimumCapacity));
@@ -86,7 +87,8 @@ class RingBuffer {
     // the item was stored, false on timeout or when the buffer cannot hold an
     // item of this size (which cannot happen for a buffer created for exactly
     // this element type).
-    bool send(ElementType const& item, TickType_t timeout) noexcept {
+    bool send(ElementType const& item, TickType_t timeout) noexcept
+    {
         return xRingbufferSend(buffer_.get(), &item, sizeof(ElementType),
                                timeout) == pdTRUE;
     }
@@ -94,14 +96,16 @@ class RingBuffer {
     // Convenience overload for callers that prefer a `std::chrono` duration
     // over raw FreeRTOS ticks.
     bool send(ElementType const& item,
-              std::chrono::milliseconds timeout) noexcept {
+              std::chrono::milliseconds timeout) noexcept
+    {
         return send(item, to_ticks(timeout));
     }
 
     // ISR-safe variant of send(). May only be called from an interrupt
     // handler. Returns true when the item was stored, false when the buffer is
     // full (an ISR never blocks).
-    bool sendFromIsr(ElementType const& item) noexcept {
+    bool sendFromIsr(ElementType const& item) noexcept
+    {
         BaseType_t higher_priority_task_woken = pdFALSE;
         const BaseType_t sent =
             xRingbufferSendFromISR(buffer_.get(), &item, sizeof(ElementType),
@@ -114,7 +118,8 @@ class RingBuffer {
 
     // Receives, blocking up to `timeout` ticks. Returns the item, or
     // `std::nullopt` on timeout.
-    std::optional<ElementType> receive(TickType_t timeout) noexcept {
+    std::optional<ElementType> receive(TickType_t timeout) noexcept
+    {
         size_t size = 0;
         void* storage = xRingbufferReceive(buffer_.get(), &size, timeout);
         if (storage == nullptr) {
@@ -127,13 +132,15 @@ class RingBuffer {
 
     // Receives, blocking up to `timeout` milliseconds.
     std::optional<ElementType> receive(
-        std::chrono::milliseconds timeout) noexcept {
+        std::chrono::milliseconds timeout) noexcept
+    {
         return receive(to_ticks(timeout));
     }
 
     // ISR-safe variant of receive(). May only be called from an interrupt
     // handler. Returns the item, or `std::nullopt` when the buffer is empty.
-    std::optional<ElementType> receiveFromIsr() noexcept {
+    std::optional<ElementType> receiveFromIsr() noexcept
+    {
         size_t size = 0;
         void* storage = xRingbufferReceiveFromISR(buffer_.get(), &size);
         if (storage == nullptr) {
@@ -151,7 +158,8 @@ class RingBuffer {
 
     // Raw FreeRTOS handle, for APIs that need one. It remains owned by this
     // object (`vRingbufferDelete` runs when the buffer is destroyed).
-    [[nodiscard]] RingbufHandle_t handle() const noexcept {
+    [[nodiscard]] RingbufHandle_t handle() const noexcept
+    {
         return buffer_.get();
     }
 
@@ -162,7 +170,8 @@ class RingBuffer {
     // smallest one FreeRTOS accepts holds two items.
     static constexpr std::size_t kMinimumCapacity = 2;
 
-    static TickType_t to_ticks(std::chrono::milliseconds timeout) noexcept {
+    static TickType_t to_ticks(std::chrono::milliseconds timeout) noexcept
+    {
         return pdMS_TO_TICKS(static_cast<std::uint32_t>(timeout.count()));
     }
 
@@ -170,7 +179,8 @@ class RingBuffer {
     // only 32-bit aligned, which may be less strict than the element type, so
     // the bytes are copied into an aligned array and reinterpreted with
     // `std::bit_cast` rather than loaded through a typed pointer.
-    static ElementType copy_item(void* storage, size_t size) noexcept {
+    static ElementType copy_item(void* storage, size_t size) noexcept
+    {
         // A no-split buffer returns an item exactly as it was sent.
         assert(size == sizeof(ElementType) && "ring buffer item size mismatch");
         (void)size;

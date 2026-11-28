@@ -52,14 +52,16 @@ enum class WakeCause : std::uint8_t {
 using WakeCauses = std::uint32_t;
 
 // The bit in a `WakeCauses` bitmap that represents `cause`.
-[[nodiscard]] constexpr WakeCauses wake_cause_bit(WakeCause cause) noexcept {
+[[nodiscard]] constexpr WakeCauses wake_cause_bit(WakeCause cause) noexcept
+{
     return static_cast<WakeCauses>(1u) << static_cast<std::uint32_t>(cause);
 }
 
 // Whether the last wake was caused (at least in part) by `cause`. Wake causes
 // are a bitmap because several sources can fire at once.
 [[nodiscard]] constexpr bool woke_from(WakeCauses causes,
-                                       WakeCause cause) noexcept {
+                                       WakeCause cause) noexcept
+{
     return (causes & wake_cause_bit(cause)) != 0;
 }
 

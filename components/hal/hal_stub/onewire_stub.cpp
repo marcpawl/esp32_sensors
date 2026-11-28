@@ -26,7 +26,8 @@ inline constexpr DS18B20Reading kDefaultSensors[] = {
 
 }  // namespace
 
-OneWire::OneWire(Gpio gpio) noexcept {
+OneWire::OneWire(Gpio gpio) noexcept
+{
     // Accepted for interface parity with the real implementation; unused.
     (void)gpio;
     for (const DS18B20Reading& reading : kDefaultSensors) {
@@ -34,11 +35,13 @@ OneWire::OneWire(Gpio gpio) noexcept {
     }
 }
 
-esp_err_t OneWire::init() noexcept {
+esp_err_t OneWire::init() noexcept
+{
     return ESP_OK;
 }
 
-RomIdList OneWire::discover_sensors() const noexcept {
+RomIdList OneWire::discover_sensors() const noexcept
+{
     RomIdList roms;
     for (const DS18B20Reading& reading : sensors_) {
         roms.push_back(reading.rom);
@@ -46,11 +49,13 @@ RomIdList OneWire::discover_sensors() const noexcept {
     return roms;
 }
 
-ReadingList OneWire::read() const noexcept {
+ReadingList OneWire::read() const noexcept
+{
     return sensors_;
 }
 
-void OneWire::set_sensors(ReadingList readings) noexcept {
+void OneWire::set_sensors(ReadingList readings) noexcept
+{
     sensors_ = readings;
 }
 

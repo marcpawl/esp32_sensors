@@ -40,11 +40,13 @@ constexpr std::uint8_t kOn = 1U;
 constexpr gpio_num_t kConfigPin = kSwitchConfig.as_gpio_num_t();
 constexpr gpio_num_t kRunPin = kSwitchRun.as_gpio_num_t();
 
-void init_nvs() {
+void init_nvs()
+{
     Nvs<NvsMode::ReadWrite>::init_nvs_flash();
 }
 
-void clear_switches() {
+void clear_switches()
+{
     nvs_handle_t handle = 0;
     ESP_ERROR_CHECK(nvs_open(kSwitchNamespace, NVS_READWRITE, &handle));
     ESP_ERROR_CHECK(nvs_erase_all(handle));
@@ -52,26 +54,31 @@ void clear_switches() {
     nvs_close(handle);
 }
 
-void store(gpio_num_t pin, std::uint8_t state) {
+void store(gpio_num_t pin, std::uint8_t state)
+{
     Nvs<NvsMode::ReadWrite> nvs{kSwitchNamespace};
     nvs.write(pin == kConfigPin ? kConfigSwitchKey : kRunSwitchKey, state);
 }
 
-void store_bool(char const* key, bool state) {
+void store_bool(char const* key, bool state)
+{
     Nvs<NvsMode::ReadWrite> nvs{kSwitchNamespace};
     nvs.write(key, state);
 }
 
 // Switch poles are active-low: driving 0 closes one, driving 1 opens it.
-void drive(gpio_num_t pin, SwitchState state) {
+void drive(gpio_num_t pin, SwitchState state)
+{
     (void)gpio_set_level(pin, state == SwitchState::kOn ? 0U : 1U);
 }
 
-SwitchState read(gpio_num_t pin) {
+SwitchState read(gpio_num_t pin)
+{
     return gpio_get_level(pin) == 0 ? SwitchState::kOn : SwitchState::kOff;
 }
 
-void expect_poles(SwitchState config, SwitchState run) {
+void expect_poles(SwitchState config, SwitchState run)
+{
     TEST_ASSERT_EQUAL_INT(static_cast<int>(config),
                           static_cast<int>(read(kConfigPin)));
     TEST_ASSERT_EQUAL_INT(static_cast<int>(run),
@@ -81,7 +88,8 @@ void expect_poles(SwitchState config, SwitchState run) {
 }  // namespace
 
 TEST_CASE("restore_hardware: an empty namespace opens both poles",
-          "[restore_hardware]") {
+          "[restore_hardware]")
+{
     init_nvs();
     clear_switches();
     drive(kConfigPin, SwitchState::kOn);
@@ -93,7 +101,8 @@ TEST_CASE("restore_hardware: an empty namespace opens both poles",
 }
 
 TEST_CASE("restore_hardware: saved positions drive both poles",
-          "[restore_hardware]") {
+          "[restore_hardware]")
+{
     init_nvs();
     clear_switches();
     store(kConfigPin, kOn);
@@ -107,7 +116,8 @@ TEST_CASE("restore_hardware: saved positions drive both poles",
 }
 
 TEST_CASE("restore_hardware: console bool writes drive both poles",
-          "[restore_hardware]") {
+          "[restore_hardware]")
+{
     init_nvs();
     clear_switches();
     store_bool(kConfigSwitchKey, true);
@@ -121,7 +131,8 @@ TEST_CASE("restore_hardware: console bool writes drive both poles",
 }
 
 TEST_CASE("restore_hardware: a missing key opens its own pole only",
-          "[restore_hardware]") {
+          "[restore_hardware]")
+{
     init_nvs();
     clear_switches();
     store(kConfigPin, kOn);
@@ -134,7 +145,8 @@ TEST_CASE("restore_hardware: a missing key opens its own pole only",
 }
 
 TEST_CASE("restore_hardware: repeated calls keep the saved positions",
-          "[restore_hardware]") {
+          "[restore_hardware]")
+{
     init_nvs();
     clear_switches();
     store(kConfigPin, kOff);

@@ -15,27 +15,32 @@ namespace {
 
 constexpr const char* kTag = "hal_led";
 
-const char* state_text(LedState state) noexcept {
+const char* state_text(LedState state) noexcept
+{
     return state == LedState::kOn ? "On" : "Off";
 }
 
 }  // namespace
 
-Led::Led(Gpio gpio, const char* name) noexcept : name_(name) {
+Led::Led(Gpio gpio, const char* name) noexcept : name_(name)
+{
     // Accepted for interface parity with the real implementation; unused.
     (void)gpio;
 }
 
-esp_err_t Led::init() noexcept {
+esp_err_t Led::init() noexcept
+{
     return ESP_OK;
 }
 
-void Led::write(LedState state) noexcept {
+void Led::write(LedState state) noexcept
+{
     state_ = state;
     ESP_LOGI(kTag, "%s: %s", name_, state_text(state));
 }
 
-LedState Led::state() const noexcept {
+LedState Led::state() const noexcept
+{
     return state_;
 }
 

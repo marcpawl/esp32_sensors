@@ -28,8 +28,8 @@ using thermo::logic::limits::kSensorCount;
 
 namespace {
 
-SampleRecord make_record(std::uint32_t age, std::uint16_t batt,
-                         std::int16_t t1) {
+SampleRecord make_record(std::uint32_t age, std::uint16_t batt, std::int16_t t1)
+{
     SampleRecord rec{};
     rec.age_base = age;
     rec.batt_mv = batt;
@@ -43,14 +43,16 @@ SampleRecord make_record(std::uint32_t age, std::uint16_t batt,
 
 // --- Record layout (§4.1) ---------------------------------------------------
 
-TEST_CASE("rtc: SampleRecord layout is stable at 12 bytes", "[rtc_buffer]") {
+TEST_CASE("rtc: SampleRecord layout is stable at 12 bytes", "[rtc_buffer]")
+{
     // §4.1 / §8: the RTC block layout must not drift between firmware
     // versions, or retained state is misinterpreted after an update.
     TEST_ASSERT_EQUAL_UINT(12, sizeof(SampleRecord));
     TEST_ASSERT_EQUAL_UINT(4, alignof(SampleRecord));
 }
 
-TEST_CASE("rtc: RtcState stays trivially copyable", "[rtc_buffer]") {
+TEST_CASE("rtc: RtcState stays trivially copyable", "[rtc_buffer]")
+{
     // §8: the block is restored verbatim from RTC memory, so it is copied with
     // a byte blit. Adding a member with an out-of-line copy (heap storage, a
     // custom copy constructor, a vtable) would silently break that.
@@ -60,7 +62,8 @@ TEST_CASE("rtc: RtcState stays trivially copyable", "[rtc_buffer]") {
 // --- Cold-boot reset (§8) ---------------------------------------------------
 
 TEST_CASE("rtc: state reset clears everything a cold boot must not keep",
-          "[rtc_buffer]") {
+          "[rtc_buffer]")
+{
     // §8: retained state is only valid across a deep-sleep wake. A power cycle
     // must start clean, or a stale buffer/cache from the previous power-on
     // would be uploaded.
@@ -91,7 +94,8 @@ TEST_CASE("rtc: state reset clears everything a cold boot must not keep",
         static_cast<std::uint8_t>(thermo::logic::TxState::kTxOk), st.tx_state);
 }
 
-TEST_CASE("rtc: state reset leaves the block reusable", "[rtc_buffer]") {
+TEST_CASE("rtc: state reset leaves the block reusable", "[rtc_buffer]")
+{
     RtcState st{};
     rtc_buffer_push(st, make_record(1, 3000, 1));
     rtc_state_reset(st);
@@ -103,7 +107,8 @@ TEST_CASE("rtc: state reset leaves the block reusable", "[rtc_buffer]") {
 
 // --- Cached ROM IDs (§3.4, §8) ---------------------------------------------
 
-TEST_CASE("rtc: rom_ids holds up to kSensorCount ids", "[rtc_buffer]") {
+TEST_CASE("rtc: rom_ids holds up to kSensorCount ids", "[rtc_buffer]")
+{
     RtcState st{};
     TEST_ASSERT_EQUAL_size_t(0, st.rom_ids.size());
     TEST_ASSERT_EQUAL_size_t(kSensorCount, st.rom_ids.capacity());
@@ -128,7 +133,8 @@ TEST_CASE("rtc: rom_ids holds up to kSensorCount ids", "[rtc_buffer]") {
 
 // --- Appending --------------------------------------------------------------
 
-TEST_CASE("rtc: push appends and grows the buffer", "[rtc_buffer]") {
+TEST_CASE("rtc: push appends and grows the buffer", "[rtc_buffer]")
+{
     RtcState st{};
     TEST_ASSERT_EQUAL_size_t(0, st.buffer.size());
 
@@ -144,7 +150,8 @@ TEST_CASE("rtc: push appends and grows the buffer", "[rtc_buffer]") {
     TEST_ASSERT_EQUAL_INT16(200, st.buffer[1].t1);
 }
 
-TEST_CASE("rtc: records are retained field-for-field", "[rtc_buffer]") {
+TEST_CASE("rtc: records are retained field-for-field", "[rtc_buffer]")
+{
     RtcState st{};
     SampleRecord rec = make_record(123, 3950, -437);
     rec.t2 = 2315;
@@ -160,7 +167,8 @@ TEST_CASE("rtc: records are retained field-for-field", "[rtc_buffer]") {
 
 // --- FIFO overflow (§4.2) ---------------------------------------------------
 
-TEST_CASE("rtc: buffer fills to capacity exactly", "[rtc_buffer]") {
+TEST_CASE("rtc: buffer fills to capacity exactly", "[rtc_buffer]")
+{
     RtcState st{};
     for (std::size_t i = 0; i < kMaxBufferRecords; ++i) {
         rtc_buffer_push(st, make_record(static_cast<std::uint32_t>(i), 3000,
@@ -173,7 +181,8 @@ TEST_CASE("rtc: buffer fills to capacity exactly", "[rtc_buffer]") {
                              st.buffer[kMaxBufferRecords - 1].age_base);
 }
 
-TEST_CASE("rtc: overflow evicts the oldest sample (FIFO)", "[rtc_buffer]") {
+TEST_CASE("rtc: overflow evicts the oldest sample (FIFO)", "[rtc_buffer]")
+{
     RtcState st{};
     for (std::size_t i = 0; i < kMaxBufferRecords; ++i) {
         rtc_buffer_push(st,
@@ -188,7 +197,8 @@ TEST_CASE("rtc: overflow evicts the oldest sample (FIFO)", "[rtc_buffer]") {
 }
 
 TEST_CASE("rtc: continued pushes stay at capacity and keep newest",
-          "[rtc_buffer]") {
+          "[rtc_buffer]")
+{
     RtcState st{};
     for (std::uint32_t i = 0; i < kMaxBufferRecords * 2; ++i) {
         rtc_buffer_push(st, make_record(i, 3000, 0));
@@ -200,7 +210,8 @@ TEST_CASE("rtc: continued pushes stay at capacity and keep newest",
                              st.buffer[kMaxBufferRecords - 1].age_base);
 }
 
-TEST_CASE("rtc: overflow preserves field integrity", "[rtc_buffer]") {
+TEST_CASE("rtc: overflow preserves field integrity", "[rtc_buffer]")
+{
     RtcState st{};
     for (std::size_t i = 0; i < kMaxBufferRecords; ++i) {
         rtc_buffer_push(st, make_record(0, 0, 0));
@@ -220,7 +231,8 @@ TEST_CASE("rtc: overflow preserves field integrity", "[rtc_buffer]") {
 
 // --- Clearing ---------------------------------------------------------------
 
-TEST_CASE("rtc: clear empties the buffer but keeps capacity", "[rtc_buffer]") {
+TEST_CASE("rtc: clear empties the buffer but keeps capacity", "[rtc_buffer]")
+{
     RtcState st{};
     rtc_buffer_push(st, make_record(1, 3000, 1));
     rtc_buffer_push(st, make_record(2, 3000, 2));
@@ -235,8 +247,8 @@ TEST_CASE("rtc: clear empties the buffer but keeps capacity", "[rtc_buffer]") {
 
 // --- Wi-Fi cache invalidation (§3.10) --------------------------------------
 
-TEST_CASE("rtc: wifi cache clear zeroes the cache and validity",
-          "[rtc_buffer]") {
+TEST_CASE("rtc: wifi cache clear zeroes the cache and validity", "[rtc_buffer]")
+{
     RtcState st{};
     st.wifi.bssid[0] = 0xAA;
     st.wifi.bssid[5] = 0xBB;

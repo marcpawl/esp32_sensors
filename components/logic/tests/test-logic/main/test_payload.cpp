@@ -25,7 +25,8 @@ using thermo::logic::payload::SensorNames;
 namespace {
 
 NamedSample make_sample(std::uint32_t age_s, std::uint16_t batt_mv,
-                        std::int16_t t1, std::int16_t t2, std::int16_t t3) {
+                        std::int16_t t1, std::int16_t t2, std::int16_t t3)
+{
     NamedSample s{};
     s.age_s = age_s;
     s.batt_mv = batt_mv;
@@ -33,7 +34,8 @@ NamedSample make_sample(std::uint32_t age_s, std::uint16_t batt_mv,
     return s;
 }
 
-SensorNames names(const char* a, const char* b, const char* c) {
+SensorNames names(const char* a, const char* b, const char* c)
+{
     SensorNames list;
     list.push_back(a);
     list.push_back(b);
@@ -45,7 +47,8 @@ SensorNames names(const char* a, const char* b, const char* c) {
 
 // --- Structure with no samples ---------------------------------------------
 
-TEST_CASE("payload: empty batch has zero size and empty array", "[payload]") {
+TEST_CASE("payload: empty batch has zero size and empty array", "[payload]")
+{
     const auto json = build_batch_json("greenhouse", names("a", "b", "c"), {});
 
     TEST_ASSERT_EQUAL_STRING(
@@ -56,7 +59,8 @@ TEST_CASE("payload: empty batch has zero size and empty array", "[payload]") {
 
 // --- Single sample, fully populated ----------------------------------------
 
-TEST_CASE("payload: single sample with names and values", "[payload]") {
+TEST_CASE("payload: single sample with names and values", "[payload]")
+{
     const std::vector<NamedSample> samples{
         make_sample(120, 3900, 2315, -437, 8500)};
 
@@ -72,7 +76,8 @@ TEST_CASE("payload: single sample with names and values", "[payload]") {
 
 // --- batch_size tracks the number of samples -------------------------------
 
-TEST_CASE("payload: batch_size equals sample count", "[payload]") {
+TEST_CASE("payload: batch_size equals sample count", "[payload]")
+{
     const std::vector<NamedSample> samples{
         make_sample(60, 3800, 100, 200, 300),
         make_sample(120, 3810, 110, 210, 310),
@@ -85,7 +90,8 @@ TEST_CASE("payload: batch_size equals sample count", "[payload]") {
 }
 
 TEST_CASE("payload: multiple samples are comma-separated oldest-first",
-          "[payload]") {
+          "[payload]")
+{
     const std::vector<NamedSample> samples{
         make_sample(60, 3800, 100, 0, 0),
         make_sample(120, 3810, 200, 0, 0),
@@ -103,7 +109,8 @@ TEST_CASE("payload: multiple samples are comma-separated oldest-first",
 
 // --- Null temperature handling (§4.1, §9.3) --------------------------------
 
-TEST_CASE("payload: missing reading serializes as null", "[payload]") {
+TEST_CASE("payload: missing reading serializes as null", "[payload]")
+{
     const std::vector<NamedSample> samples{
         make_sample(30, 3700, kTempNull, 1234, kTempNull)};
 
@@ -116,7 +123,8 @@ TEST_CASE("payload: missing reading serializes as null", "[payload]") {
 
 // --- Missing / empty names get synthesized keys (§9.1) ---------------------
 
-TEST_CASE("payload: empty name falls back to sensorN key", "[payload]") {
+TEST_CASE("payload: empty name falls back to sensorN key", "[payload]")
+{
     const std::vector<NamedSample> samples{
         make_sample(30, 3700, 1000, 2000, 3000)};
 
@@ -127,7 +135,8 @@ TEST_CASE("payload: empty name falls back to sensorN key", "[payload]") {
     TEST_ASSERT_NOT_NULL(strstr(json.c_str(), "\"sensor3\":30.0"));
 }
 
-TEST_CASE("payload: short names vector pads with sensorN keys", "[payload]") {
+TEST_CASE("payload: short names vector pads with sensorN keys", "[payload]")
+{
     const std::vector<NamedSample> samples{
         make_sample(30, 3700, 1000, 2000, 3000)};
 
@@ -144,13 +153,15 @@ TEST_CASE("payload: short names vector pads with sensorN keys", "[payload]") {
 
 // --- Untrusted names must be escaped ---------------------------------------
 
-TEST_CASE("payload: device name is JSON-escaped", "[payload]") {
+TEST_CASE("payload: device name is JSON-escaped", "[payload]")
+{
     const auto json = build_batch_json("a\"b\\c", names("x", "y", "z"), {});
 
     TEST_ASSERT_NOT_NULL(strstr(json.c_str(), "\"device\":\"a\\\"b\\\\c\""));
 }
 
-TEST_CASE("payload: control characters are escaped as \\u00XX", "[payload]") {
+TEST_CASE("payload: control characters are escaped as \\u00XX", "[payload]")
+{
     // NOTE: "\x01" "ctrl" uses literal concatenation so the hex escape does
     // not swallow the following 'c' (a hex escape consumes all hex digits).
     std::string name =
@@ -168,7 +179,8 @@ TEST_CASE("payload: control characters are escaped as \\u00XX", "[payload]") {
 
 // --- Document is well-formed at the edges ----------------------------------
 
-TEST_CASE("payload: every sample has exactly the expected keys", "[payload]") {
+TEST_CASE("payload: every sample has exactly the expected keys", "[payload]")
+{
     const std::vector<NamedSample> samples{make_sample(5, 3750, 111, 222, 333)};
     const auto json = build_batch_json("d", names("a", "b", "c"), samples);
 
@@ -178,7 +190,8 @@ TEST_CASE("payload: every sample has exactly the expected keys", "[payload]") {
     }
 }
 
-TEST_CASE("payload: zero-age and zero-battery sample is valid", "[payload]") {
+TEST_CASE("payload: zero-age and zero-battery sample is valid", "[payload]")
+{
     const std::vector<NamedSample> samples{make_sample(0, 0, 0, 0, 0)};
     const auto json = build_batch_json("d", names("a", "b", "c"), samples);
 

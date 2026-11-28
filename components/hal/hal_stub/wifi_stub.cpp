@@ -19,13 +19,15 @@ constexpr const char* kTag = "hal_wifi";
 
 }  // namespace
 
-esp_err_t WifiRadioStub::init() noexcept {
+esp_err_t WifiRadioStub::init() noexcept
+{
     initialized_ = true;
     ESP_LOGI(kTag, "stub initialized");
     return ESP_OK;
 }
 
-esp_err_t WifiRadioStub::start_ap(AccessPointConfig const& config) noexcept {
+esp_err_t WifiRadioStub::start_ap(AccessPointConfig const& config) noexcept
+{
     if (!initialized_) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -35,7 +37,8 @@ esp_err_t WifiRadioStub::start_ap(AccessPointConfig const& config) noexcept {
     return ESP_OK;
 }
 
-esp_err_t WifiRadioStub::stop_ap() noexcept {
+esp_err_t WifiRadioStub::stop_ap() noexcept
+{
     if (!initialized_) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -44,7 +47,8 @@ esp_err_t WifiRadioStub::stop_ap() noexcept {
     return ESP_OK;
 }
 
-esp_err_t WifiRadioStub::start_station(StationConfig const& config) noexcept {
+esp_err_t WifiRadioStub::start_station(StationConfig const& config) noexcept
+{
     if (!initialized_) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -57,7 +61,8 @@ esp_err_t WifiRadioStub::start_station(StationConfig const& config) noexcept {
     return ESP_OK;
 }
 
-esp_err_t WifiRadioStub::stop_station() noexcept {
+esp_err_t WifiRadioStub::stop_station() noexcept
+{
     if (!initialized_) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -66,25 +71,30 @@ esp_err_t WifiRadioStub::stop_station() noexcept {
     return ESP_OK;
 }
 
-bool WifiRadioStub::initialized() const noexcept {
+bool WifiRadioStub::initialized() const noexcept
+{
     return initialized_;
 }
 
-bool WifiRadioStub::ap_running() const noexcept {
+bool WifiRadioStub::ap_running() const noexcept
+{
     return ap_running_;
 }
 
-bool WifiRadioStub::station_running() const noexcept {
+bool WifiRadioStub::station_running() const noexcept
+{
     return station_running_;
 }
 
 std::optional<AccessPointConfig> const& WifiRadioStub::ap_config()
-    const noexcept {
+    const noexcept
+{
     return ap_config_;
 }
 
 std::optional<StationConfig> const& WifiRadioStub::station_config()
-    const noexcept {
+    const noexcept
+{
     return station_config_;
 }
 
