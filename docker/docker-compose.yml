@@ -82,7 +82,13 @@ services:
 
     device_cgroup_rules:
       - 'c *:* rmw' # Essential: Allows container to read/write/make new char devices
-        
+
+    # Let gdb inside this container attach to a process it did not start.
+    # Without SYS_PTRACE, the host's Yama ptrace_scope=1 rejects attaching to
+    # an already-running sibling such as donny.elf.
+    cap_add:
+      - SYS_PTRACE
+
     volumes:
       # Project source is bind-mounted so edits on the host are visible live.
       - ..:/project
