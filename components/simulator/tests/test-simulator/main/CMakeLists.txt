@@ -1,17 +1,21 @@
-# `libsimulator` is the component under test. It is empty today, so there is
-# nothing to exercise yet: this suite exists so the component is genuinely
-# linked (not just named) and the first test has a home. `WHOLE_ARCHIVE` is
-# required once tests are added, so their `TEST_CASE` registrations are linked
-# into the final executable even though nothing references them.
+# The component under test is `libsimulator`; these cases exercise its
+# NVS-backed switch restore. `WHOLE_ARCHIVE` keeps their `TEST_CASE`
+# registrations linked into the final executable even though nothing
+# references them directly. `hal_stub` supplies the GPIO mock, `libespidfcpp`
+# the NVS and switch wrappers, and `liblogic` the shared pin map.
 
 idf_component_register(
     SRCS
         "test_main.cpp"
+        "test_restore_hardware.cpp"
     INCLUDE_DIRS
         "."
     REQUIRES
         libsimulator
     PRIV_REQUIRES
+        libespidfcpp
+        liblogic
+        hal_stub
         unity
     WHOLE_ARCHIVE
 )

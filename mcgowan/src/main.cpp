@@ -65,8 +65,8 @@ extern "C" void app_main(void) {
     // last wake happened (§3.8) and `read_mode()` reads the switch poles. It is
     // shared: `LedTask` holds a `std::shared_ptr` to it instead of owning it,
     // so it cannot be destroyed while the task still uses it.
-    auto board = std::make_shared<thermo::logic::Board>();
-    ESP_ERROR_CHECK(board->init_all());
+    thermo::logic::Board board;
+    // ESP_ERROR_CHECK(board->init_all());
 
     thermo::logic::Application app(board);
     app.application_main();

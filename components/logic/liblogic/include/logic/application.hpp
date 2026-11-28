@@ -28,7 +28,7 @@ class Application {
     constexpr static char const* const kTag = "Application";
 
   public:
-    explicit Application(std::shared_ptr<Board> board);
+    explicit Application(Board& board);
     Application(Application const&) = delete;
     Application(Application&&) = delete;
     ~Application() = default;
@@ -38,24 +38,7 @@ class Application {
     void application_main(void);
 
   private:
-    std::shared_ptr<logic::Board> board_;
+    Board& board_;
 };
-
-Application::Application(std::shared_ptr<logic::Board> board)
-    : board_(std::move(board)) {}
-
-void Application::application_main(void) {
-    ESP_LOGI(kTag, "Starting application");
-
-    // Delay to allow switches to stabilize.
-    // Instead of debouncing, we will stabilize, and just reboot
-    // when there is a change between run and config.
-    constexpr std::chrono::milliseconds stabilization_delay{200};
-    espidf_cpp::vTaskDelay(stabilization_delay);
-
-    while (true) {
-        vTaskDelay(1000);
-    }
-}
 
 }  // namespace thermo::logic

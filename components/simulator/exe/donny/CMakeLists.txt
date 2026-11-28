@@ -62,11 +62,11 @@ list(APPEND EXTRA_COMPONENT_DIRS
 # Restrict the component set to `main` (and its requirements) plus `hal_stub`.
 # Without this the `linux` target also tries to build chip-specific components
 # such as esp_driver_ana_cmpr, which have no linux implementation and fail to
-# resolve. `hal_stub` and `libsimulator` are listed explicitly because they are
-# requirements of `main`; `hal_board` is deliberately excluded (the two HAL
-# implementations are mutually exclusive, and the GPIO-backed drivers are not
-# linkable on linux).
-set(COMPONENTS main hal_stub libsimulator)
+# resolve. `hal_stub`, `liblogic`, and `libsimulator` are listed explicitly
+# because they are requirements of `main`; `hal_board` is deliberately excluded
+# (the two HAL implementations are mutually exclusive, and the GPIO-backed
+# drivers are not linkable on linux).
+set(COMPONENTS main hal_stub liblogic libsimulator)
 
 # This project links `hal_stub`. `hal_board` exposes the same headers and
 # defines the same symbols, so exclude it to keep exactly one implementation in

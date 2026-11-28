@@ -1,7 +1,8 @@
 // Entry point for the `donny` linux-emulated application.
 //
 // Builds for the ESP-IDF `linux` target and runs natively on the host. It links
-// the pin-free HAL (`hal_stub`), `libespidfcpp`, and `liblogic`.
+// the pin-free HAL (`hal_stub`), `libespidfcpp`, `liblogic`, and
+// `libsimulator`.
 //
 // Boot order matters: the interactive console task (`console_task.hpp`) starts
 // *before* the `Application` is constructed, so a test driver can already drive
@@ -25,6 +26,8 @@
 #include "hal/board_types.hpp"
 #include "logic/application.hpp"
 #include "logic/board.hpp"
+#include "simulator/board_simulator.hpp"
+#include "simulator/restore_hardware.hpp"
 
 namespace {
 
@@ -56,23 +59,18 @@ struct LogRedirect {
 extern "C" void app_main(void) {
     ESP_LOGI(kTag, "donny running (linux emulation)");
 
-    // The board is shared: it is heap-allocated and held by a `std::shared_ptr`
-    // so it can be handed to the console task and the application
-    // (`logic/led_task.hpp` takes a `std::shared_ptr<Board>` for any
-    // `hal::BoardLike` board and does not own it) without the board being
-    // destroyed while either still uses it.
-    auto board = std::make_shared<thermo::logic::Board>();
-    ESP_ERROR_CHECK(board->init_all());
-    ESP_LOGI(kTag, "board initialized");
+    thermo::simulator::restore_hardware();
+
+    thermo::simulator::BoardSimulator board;
 
     // Started before the application, so a driver can set up the board while
     // the application boots.
-    thermo::ConsoleTask console(board);
+    thermo::simulator::ConsoleTask console(board);
 
     thermo::logic::Application app(board);
 
     // Wait until the power is turned on.
-    while (board->power() == thermo::logic::Board::Power::Off) {
+    while (board.power_ == thermo::simulator::BoardSimulator::Power::Off) {
         thermo::espidf_cpp::vTaskDelay(std::chrono::seconds{1});
     }
 

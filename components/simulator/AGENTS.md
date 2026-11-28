@@ -8,11 +8,11 @@ root `AGENTS.md`; the layering rules are in the `platform_layers` skill
 
 ## Layout
 
-- `libsimulator/` — the simulator component. It is **empty on purpose**: it
-  exists so the simulator tree has a component of its own that the executable
-  and its tests can require, and so new simulator code has one obvious home.
-  Add `.cpp` files to its `SRCS` (and public headers to `INCLUDE_DIRS`);
-  consumers already name the component, so nothing else changes.
+- `libsimulator/` — the simulator component. It holds the simulated board and
+  the switch-restore support that stands in for hardware state a reboot would
+  otherwise keep. Add further `.cpp` files to its `SRCS` (and public headers
+  to `INCLUDE_DIRS` and `target_sources()`); consumers already name the
+  component, so nothing else changes.
 - `exe/donny/` — the `linux`-emulated application. It is a standalone ESP-IDF
   project (`project(donny)`), so its ELF is `donny.elf`.
 - `tests/test-simulator/` — the component's host test project: an ESP-IDF
@@ -32,8 +32,29 @@ tree.
 so it must never be built into the chip firmware: `mcgowan` does not put
 `components/simulator` on its component search path, and the component's
 `CMakeLists.txt` fails at configure time if `IDF_TARGET` is anything but
-`linux`. It has no requirements today; when it gains `.cpp` files it should
-require only lower layers.
+`linux`. It requires only lower layers. `liblogic` is public because
+`simulator/board_simulator.hpp` derives from `logic::Board`; `libespidfcpp`
+is private because only the source names `SoftSwitch` and `Nvs` directly.
+
+### `simulator/board_simulator.hpp`
+
+`thermo::simulator::BoardSimulator` derives from `logic::Board` so simulator
+code can use the same board interface as the firmware. It adds a public
+`Power` enum (`kOff = 0`, `kOn`) and a public `power_` member, initialised to
+`Power::kOff`. It is header-only: it adds no behaviour yet.
+
+### `simulator/restore_hardware.hpp`
+
+`thermo::simulator::restore_hardware()` reads the two mode-sense pole positions
+from NVS and drives the matching `SoftSwitch`es to them. Their GPIOs come from
+`logic/pin_map.hpp` (§2.4, pins 1 and 2), so the restore side and the rest of
+the application agree on the wiring. It calls
+`Nvs<NvsMode::ReadWrite>::init_nvs_flash()` before opening the namespace, so it
+is safe to call early in `app_main`. A key that has never been written restores
+as an open pole, the centre/Off position of the mode switch. The namespace and
+key names are public constants, so the save side can use the same ones. The
+console writes those keys as `bool` values; the wrapper stores bools as uint8
+0/1, which is what the restore side reads back.
 
 ## `donny`
 
@@ -41,6 +62,11 @@ A plain (non-test) `linux`-target application that constructs
 `thermo::logic::Application<thermo::hal::stub::BoardStub>`. It requires `hal_stub`,
 `liblogic`, `libespidfcpp`, `libsimulator`, and the vendored `json` component
 (its layer requirements are in the `platform_layers` skill).
+
+`app_main` calls `restore_hardware()` before the board is constructed and
+before either task starts. The firmware's poles are physical and keep their
+positions across a reboot; here they are GPIO levels, so without the call a
+restarted `donny` would report different switches than before.
 
 `hal_board` cannot be linked on the linux target: it requires
 `esp_driver_tsens`, whose Kconfig needs `CONFIG_SOC_TEMP_SENSOR_SUPPORTED`, so
@@ -138,11 +164,16 @@ resulting state back as one JSON line on stdout.
 ## The host tests
 
 `tests/test-simulator/` is a standalone `linux` project whose `main` requires
-`libsimulator` (and privately `unity`). The component is empty today, so
-`test_main.cpp` registers no cases; `unity_run_all_tests()` handles the empty
-set and the suite passes. Add `TEST_CASE`s in new `main/*.cpp` sources and list
-them in `main/CMakeLists.txt`; `WHOLE_ARCHIVE` keeps their registrations linked
-into the ELF.
+`libsimulator` and privately requires `libespidfcpp`, `liblogic`, `hal_stub`,
+and `unity`. The project puts `components/espidfcpp/`, `components/hal/`, and
+`components/logic/` on its component search path, and links `hal_stub` so the
+GPIO mock is available. `test_restore_hardware.cpp` writes pole positions
+through `Nvs`, runs `restore_hardware()`, and reads the resulting pin levels.
+Its pin numbers come from `logic/pin_map.hpp`, as the component's do.
+
+Add further `TEST_CASE`s in new `main/*.cpp` sources and list them in
+`main/CMakeLists.txt`; `WHOLE_ARCHIVE` keeps their registrations linked into
+the ELF.
 
 Build and run the suite with
 `scripts/dev.py test-linux components/simulator/tests/test-simulator`, or
