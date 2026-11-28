@@ -6,7 +6,8 @@
 //
 // The switch itself is not a HAL device: the board exposes its two mode-sense
 // poles as independent switches, and `logic/mode_selection.hpp` maps that
-// pair onto these values.
+// pair onto these values. Both poles on at once has no healthy switch position,
+// so it maps to `kInvalid` (a bounce or a wiring fault).
 #pragma once
 
 // NOLINTBEGIN
@@ -23,6 +24,7 @@ enum class Mode : std::uint8_t {
                      // only observable transiently.
     kConfigure = 1,  // Left position: HTTPS config server.
     kRun = 2,        // Right position: sample/upload/deep-sleep loop.
+    kInvalid = 3,    // Both sense poles on: switch bouncing or a wiring fault.
 };
 
 constexpr const char* to_string(Mode mode) {
@@ -33,6 +35,8 @@ constexpr const char* to_string(Mode mode) {
             return "Configure";
         case Mode::kRun:
             return "Run";
+        case Mode::kInvalid:
+            return "Invalid";
     }
     return "Unknown";
 }

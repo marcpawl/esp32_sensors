@@ -19,7 +19,7 @@ instead.
 | Area | Files |
 |---|---|
 | Entry point | `main.cpp` (`extern "C" void app_main`), `constants.hpp` |
-| Mode switching | `main.cpp` (`read_mode()` reads the poles and applies the reboot-on-fault policy); mapping in `logic/mode_selection.hpp` |
+| Mode switching | `main.cpp` (`read_mode()` reads the poles and applies the reboot-on-invalid policy); mapping in `logic/mode_selection.hpp` |
 | Sensors | `onewire_bus.cpp` (bit-banged 1-Wire), `ds18b20.cpp`, `sensor_manager.cpp`, `sensor.hpp` |
 | RTC state / buffer | `rtc_storage.cpp` (the `RTC_DATA_ATTR` block + `rtc_state()`) and `rtc_storage.hpp` (`rtc_state_init(board)`). The block shape and operations live in `logic/rtc_state.hpp` / `logic/src/rtc_buffer.cpp` |
 | Power / battery | `battery_monitor.cpp`, `power_manager.cpp`, `power_source.cpp` |

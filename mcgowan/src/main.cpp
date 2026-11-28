@@ -31,17 +31,17 @@ constexpr const char* kTag = "app_main";
 
 // Reads the two mode-sense poles and maps them to a mode (§3). The mapping
 // itself is pure and host-tested (`logic/mode_selection.hpp`); this wrapper
-// only turns its hardware-fault result into the firmware's fail-loudly policy.
+// only turns its invalid result into the firmware's fail-loudly policy.
 thermo::logic::Mode read_mode(thermo::hal::board::Board& board) {
-    const thermo::logic::ModeSelection selection = thermo::logic::mode_from_switches(
+    const thermo::logic::Mode mode = thermo::logic::mode_from_switches(
         board.config_switch().read(), board.run_switch().read());
-    if (!selection.has_value()) {
-        // Both poles energized: the switch is miswired or shorted. Fail loudly
-        // rather than guess a mode.
+    if (mode == thermo::logic::Mode::kInvalid) {
+        // Both poles energized: the switch is bouncing or miswired. Fail
+        // loudly rather than guess a mode.
         ESP_LOGE(kTag, "switch fault: both sense pins on");
         thermo::logic::reboot();
     }
-    return *selection;
+    return mode;
 }
 
 // Initializes NVS, erasing and retrying if the partition is full or had a
@@ -103,6 +103,10 @@ extern "C" void app_main(void) {
             // means the sense pins read low transiently. Nothing to do; the
             // device will power down.
             ESP_LOGI(kTag, "Off position (no power path); idling");
+            break;
+
+        case thermo::logic::Mode::kInvalid:
+            // `read_mode()` already reboots on this value.
             break;
     }
 #endif

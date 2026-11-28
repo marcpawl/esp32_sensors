@@ -131,10 +131,14 @@ collection the same way, and its `set_sensors()` takes the same list type.
 
 ESP-IDF has no direct notion of a DPDT switch, so the board models each of its
 two mode-sense poles as an independent `Switch` — `board.config_switch()` and
-`board.run_switch()` — and the DPDT knowledge (both poles on is a hardware
-fault, both off is the center/Off position, one of them selects Configure or
-Run) lives in the logic layer. The stub's `Switch::set()` simulates the poles,
-so bad hardware is reproducible in tests.
+`board.run_switch()`. The DPDT knowledge lives in the logic layer:
+
+- both poles on is invalid (a bounce or a wiring fault);
+- both off is the center/Off position;
+- one pole on selects Configure or Run.
+
+The stub's `Switch::set()` simulates the poles, so bad hardware is reproducible
+in tests.
 
 ## The WiFi radio
 
